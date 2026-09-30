@@ -1,0 +1,218 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0a09;
+  --surface: #171512;
+  --border: #34302a;
+  --text: #f2f0ea;
+  --text-muted: #9c9a92;
+  --accent: #e0a86a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px 60px;
+}
+
+header {
+  margin-bottom: 20px;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+header p {
+  color: var(--text-muted);
+  margin: 0;
+  font-size: 0.95rem;
+  max-width: 68ch;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 18px 0;
+}
+
+.controls input[type="text"] {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  width: 110px;
+}
+
+.controls button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.controls .spacer {
+  flex: 1;
+}
+
+#system-info {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+#time-label {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.views {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 800px) {
+  .views {
+    grid-template-columns: 1fr;
+  }
+}
+
+.view-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.view-panel h2 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+#orrery {
+  width: 100%;
+  height: 360px;
+}
+
+#orrery canvas {
+  display: block;
+}
+
+#chart {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+}
+
+.chart-svg {
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+}
+
+.chart-ring {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-tick {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-aspect {
+  stroke-width: 1.25;
+  opacity: 0.75;
+}
+
+.chart-planet-bg {
+  fill: var(--bg);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-planet-glyph {
+  fill: var(--accent);
+  font-size: 14px;
+}
+
+.aspects {
+  margin-top: 16px;
+}
+
+.aspects h2 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+#aspect-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.aspect-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--aspect-color, var(--accent));
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+.aspect-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}

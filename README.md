@@ -13,7 +13,7 @@ workflow then deploys it automatically on every push).
 
 | Sketch | Description | Status | Demo |
 | --- | --- | --- | --- |
-| _none yet_ | | | |
+| [xenoscope](sketches/xenoscope/) | Procedurally generated exoplanet systems with an invented astrological aspect chart. | prototype | [Live](sketches/xenoscope/index.html) |
 
 Each row links to `sketches/<slug>/`, which has its own `README.md` and
 `CHANGELOG.md`. This table (and the `sketches.json` manifest that drives the
