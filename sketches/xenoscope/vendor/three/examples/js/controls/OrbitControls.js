@@ -1,4 +1,8 @@
-import {
+// Converted from the upstream ES module to a classic script: only this
+// import line (now a destructure off the global THREE, set by three.min.js)
+// and the export line at the end of the file were changed — the control
+// logic below is untouched. See ../../../../README.md.
+const {
 	EventDispatcher,
 	MOUSE,
 	Quaternion,
@@ -9,7 +13,7 @@ import {
 	Plane,
 	Ray,
 	MathUtils
-} from 'three';
+} = THREE;
 
 // OrbitControls performs orbiting, dollying (zooming), and panning.
 // Unlike TrackballControls, it maintains the "up" direction object.up (+Y by default).
@@ -1414,4 +1418,4 @@ class OrbitControls extends EventDispatcher {
 
 }
 
-export { OrbitControls };
+window.OrbitControls = OrbitControls;

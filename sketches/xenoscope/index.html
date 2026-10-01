@@ -6,14 +6,6 @@
 <title>Xenoscope</title>
 <meta name="description" content="Procedurally generated exoplanet systems with an invented astrological aspect chart." />
 <link rel="stylesheet" href="ui/styles.css" />
-<script type="importmap">
-{
-  "imports": {
-    "three": "./vendor/three/build/three.module.min.js",
-    "three/addons/": "./vendor/three/examples/jsm/"
-  }
-}
-</script>
 </head>
 <body>
   <main>
@@ -60,6 +52,16 @@
     </section>
   </main>
 
-  <script type="module" src="ui/app.js"></script>
+  <script src="vendor/three/build/three.min.js"></script>
+  <script src="vendor/three/examples/js/controls/OrbitControls.js"></script>
+  <script src="engine/rng.js"></script>
+  <script src="engine/names.js"></script>
+  <script src="engine/symbols.js"></script>
+  <script src="engine/generate.js"></script>
+  <script src="engine/ephemeris.js"></script>
+  <script src="engine/aspects.js"></script>
+  <script src="ui/scene3d.js"></script>
+  <script src="ui/chart.js"></script>
+  <script src="ui/app.js"></script>
 </body>
 </html>

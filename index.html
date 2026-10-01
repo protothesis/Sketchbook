@@ -189,11 +189,10 @@
         for details.
       </p>
     </header>
-    <div id="grid" class="grid" aria-live="polite">
-      <p class="empty">Loading sketches…</p>
-    </div>
+    <div id="grid" class="grid" aria-live="polite"></div>
   </main>
 
+  <script src="sketches.data.js"></script>
   <script>
     const STATUS_LABEL = {
       seed: "Seed",
@@ -203,7 +202,7 @@
     };
 
     function cardFor(sketch) {
-      const href = sketch.demo || `sketches/${sketch.slug}/`;
+      const href = sketch.demo || `sketches/${sketch.slug}/README.md`;
       const status = (sketch.status || "seed").toLowerCase();
       const tags = Array.isArray(sketch.tags) ? sketch.tags : [];
 
@@ -261,33 +260,32 @@
       return card;
     }
 
-    async function render() {
+    function render() {
       const grid = document.getElementById("grid");
-      try {
-        const res = await fetch("sketches.json", { cache: "no-store" });
-        if (!res.ok) throw new Error(`sketches.json: ${res.status}`);
-        const sketches = await res.json();
+      const sketches = Array.isArray(window.SKETCHES) ? window.SKETCHES : null;
 
-        grid.innerHTML = "";
-        if (!Array.isArray(sketches) || sketches.length === 0) {
-          const empty = document.createElement("p");
-          empty.className = "empty";
-          empty.textContent = "No sketches yet — check back soon.";
-          grid.appendChild(empty);
-          return;
-        }
-
-        sketches
-          .slice()
-          .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-          .forEach((sketch) => grid.appendChild(cardFor(sketch)));
-      } catch (err) {
+      if (!sketches) {
         grid.innerHTML = "";
         const errorEl = document.createElement("p");
         errorEl.className = "empty error";
-        errorEl.textContent = "Couldn't load sketches.json: " + err.message;
+        errorEl.textContent = "Couldn't load sketches.data.js.";
         grid.appendChild(errorEl);
+        return;
       }
+
+      grid.innerHTML = "";
+      if (sketches.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "No sketches yet — check back soon.";
+        grid.appendChild(empty);
+        return;
+      }
+
+      sketches
+        .slice()
+        .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+        .forEach((sketch) => grid.appendChild(cardFor(sketch)));
     }
 
     render();
