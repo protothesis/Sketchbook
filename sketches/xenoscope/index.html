@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Xenoscope</title>
+<meta name="description" content="Procedurally generated exoplanet systems with an invented astrological aspect chart." />
+<link rel="stylesheet" href="ui/styles.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Xenoscope</h1>
+      <p>
+        Generate a procedural exoplanet system from a seed, then watch it
+        turn. Every planet carries an invented archetype derived from its own
+        traits — no Earth zodiac, just this system's own sky. The chart on
+        the right marks conjunctions, sextiles, squares, trines, and
+        oppositions as they form and break.
+      </p>
+    </header>
+
+    <div class="controls">
+      <label>Seed <input type="text" id="seed-input" /></label>
+      <button id="generate-btn">Generate</button>
+      <button id="random-seed-btn">Random</button>
+      <span class="spacer"></span>
+      <button id="play-btn">Pause</button>
+      <label>Speed
+        <input type="range" id="speed-input" min="0" max="20" step="0.5" value="1" />
+        <span id="speed-label">1.0&times;</span>
+      </label>
+      <span id="time-label">Cycle 0.00</span>
+    </div>
+
+    <p id="system-info"></p>
+
+    <div class="views">
+      <section class="view-panel">
+        <h2>Orrery</h2>
+        <div id="orrery"></div>
+      </section>
+      <section class="view-panel">
+        <h2>Chart</h2>
+        <div id="chart"></div>
+      </section>
+    </div>
+
+    <section class="aspects">
+      <h2>Active aspects</h2>
+      <ul id="aspect-list"></ul>
+    </section>
+  </main>
+
+  <script src="vendor/three/build/three.min.js"></script>
+  <script src="vendor/three/examples/js/controls/OrbitControls.js"></script>
+  <script src="engine/rng.js"></script>
+  <script src="engine/names.js"></script>
+  <script src="engine/symbols.js"></script>
+  <script src="engine/generate.js"></script>
+  <script src="engine/ephemeris.js"></script>
+  <script src="engine/aspects.js"></script>
+  <script src="ui/scene3d.js"></script>
+  <script src="ui/chart.js"></script>
+  <script src="ui/app.js"></script>
+</body>
+</html>

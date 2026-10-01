@@ -1,0 +1,23 @@
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# common per-sketch tooling — sketches are free to use any stack,
+# but build output / deps should never be committed
+node_modules/
+dist/
+build/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# a sketch's own vendor/ (checked-in third-party libraries) is exempt even
+# though the packages inside it may use dirs named build/dist
+!**/vendor/**
