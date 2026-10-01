@@ -15,6 +15,7 @@ workflow then deploys it automatically on every push).
 | Sketch | Description | Status | Demo |
 | --- | --- | --- | --- |
 | [xenoscope](sketches/xenoscope/) | Procedurally generated exoplanet systems with an invented astrological aspect chart. | prototype | [Live](sketches/xenoscope/index.html) |
+| [archive-curator](sketches/archive-curator/) | Flashcard-style random review and curation for a huge local image archive — a read-only metadata layer of ratings, notes and virtual galleries. | prototype | [Live](sketches/archive-curator/index.html) |
 
 Each row links to `sketches/<slug>/`, which has its own `README.md` and
 `CHANGELOG.md`. This table (and the `sketches.data.js` manifest that drives

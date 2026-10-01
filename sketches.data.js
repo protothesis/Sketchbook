@@ -12,4 +12,13 @@ window.SKETCHES = [
     tags: ["procgen", "astrology", "threejs", "simulation", "worldbuilding"],
     demo: "sketches/xenoscope/index.html",
   },
+  {
+    slug: "archive-curator",
+    title: "Archive Curator",
+    description: "Flashcard-style random review and curation for a huge local image archive (e.g. ComfyUI outputs) — a read-only metadata layer of ratings, notes and virtual galleries.",
+    date: "2026-10-01",
+    status: "prototype",
+    tags: ["images", "curation", "tool", "comfyui", "file-system-access"],
+    demo: "sketches/archive-curator/index.html",
+  },
 ];
