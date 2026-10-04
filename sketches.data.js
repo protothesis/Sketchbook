@@ -12,4 +12,13 @@ window.SKETCHES = [
     tags: ["procgen", "astrology", "threejs", "simulation", "worldbuilding"],
     demo: "sketches/xenoscope/index.html",
   },
+  {
+    slug: "procedural-dungeon-engine",
+    title: "Procedural Dungeon Engine",
+    description: "A House of Leaves–style dungeon that only exists once you open a door: each space's seed is hash-chained from its parent plus fresh entropy, with reroll/accept/revert and exact JSON replay.",
+    date: "2026-10-04",
+    status: "prototype",
+    tags: ["procgen", "dungeon", "canvas", "seeds", "hashing"],
+    demo: "sketches/procedural-dungeon-engine/index.html",
+  },
 ];
