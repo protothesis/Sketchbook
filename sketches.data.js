@@ -12,4 +12,13 @@ window.SKETCHES = [
     tags: ["procgen", "astrology", "threejs", "simulation", "worldbuilding"],
     demo: "sketches/xenoscope/index.html",
   },
+  {
+    slug: "psyche-town",
+    title: "Psyche Town",
+    description: "A Sims-like town where autonomous forces of the psyche (Shadow, Abyss, Guardian…) seize people and, usually, let them go. Click anyone to see who's in charge.",
+    date: "2026-10-04",
+    status: "prototype",
+    tags: ["canvas", "simulation", "psychology", "jung", "agents"],
+    demo: "sketches/psyche-town/index.html",
+  },
 ];

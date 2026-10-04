@@ -15,6 +15,7 @@ workflow then deploys it automatically on every push).
 | Sketch | Description | Status | Demo |
 | --- | --- | --- | --- |
 | [xenoscope](sketches/xenoscope/) | Procedurally generated exoplanet systems with an invented astrological aspect chart. | prototype | [Live](sketches/xenoscope/index.html) |
+| [psyche-town](sketches/psyche-town/) | A Sims-like town where autonomous forces of the psyche seize people and, usually, let them go. | prototype | [Live](sketches/psyche-town/index.html) |
 
 Each row links to `sketches/<slug>/`, which has its own `README.md` and
 `CHANGELOG.md`. This table (and the `sketches.data.js` manifest that drives
