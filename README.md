@@ -15,6 +15,7 @@ workflow then deploys it automatically on every push).
 | Sketch | Description | Status | Demo |
 | --- | --- | --- | --- |
 | [xenoscope](sketches/xenoscope/) | Procedurally generated exoplanet systems with an invented astrological aspect chart. | prototype | [Live](sketches/xenoscope/index.html) |
+| [procedural-dungeon-engine](sketches/procedural-dungeon-engine/) | A dungeon that only exists once you open a door: hash-chained seeds plus fresh entropy, with reroll/accept/revert and exact replay. | prototype | [Live](sketches/procedural-dungeon-engine/index.html) |
 
 Each row links to `sketches/<slug>/`, which has its own `README.md` and
 `CHANGELOG.md`. This table (and the `sketches.data.js` manifest that drives
