@@ -6,13 +6,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # to commit the regenerated gallery index
   pages: write
   id-token: write
 
+# Queue rather than cancel: each run regenerates the index from the latest
+# main, so runs must not race each other's commits.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -23,6 +25,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Sketch branches only add sketches/<slug>/sketch.json; the shared
+      # sketches.data.js and README table are rebuilt here so parallel
+      # branches never conflict on them. A push made with GITHUB_TOKEN
+      # doesn't retrigger this workflow, so there's no loop.
+      - name: Regenerate gallery index
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+          node tools/build-index.js
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+            git commit -am "Regenerate gallery index [skip ci]"
+            git push origin HEAD:main
+          fi
 
       - name: Remove VCS metadata from artifact
         run: rm -rf .git .github
