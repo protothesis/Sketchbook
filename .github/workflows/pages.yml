@@ -6,9 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # to commit the regenerated gallery index
-  pages: write
-  id-token: write
+  contents: read
 
 # Queue rather than cancel: each run regenerates the index from the latest
 # main, so runs must not race each other's commits.
@@ -16,12 +14,16 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Two jobs, as in GitHub's own Pages template: uploading in one job and
+# deploying from another gives the artifact time to become visible.
+# deploy-pages run in the same job as the upload has failed with "No
+# artifacts named github-pages were found" (and a re-run of that run then
+# fails with "Multiple artifacts"; start a fresh run instead).
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write # to commit the regenerated gallery index
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,9 +44,6 @@ jobs:
             git push origin HEAD:main
           fi
 
-      - name: Remove VCS metadata from artifact
-        run: rm -rf .git .github
-
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
@@ -53,6 +52,16 @@ jobs:
         with:
           path: .
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
