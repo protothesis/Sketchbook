@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Archive Curator</title>
+<meta name="description" content="Flashcard-style random review and curation for a huge local image archive. Read-only: a metadata layer over your files." />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">Archive<span>Curator</span></div>
+    <nav class="tabs">
+      <button data-view="review" title="Flashcard review (R)">Review</button>
+      <button data-view="library" title="Library (L)">Library</button>
+    </nav>
+    <div class="stats" id="stats"></div>
+    <div class="source-status" id="source-status"></div>
+    <button class="icon-btn" id="settings-btn" title="Settings">&#9881;</button>
+  </header>
+
+  <!-- First run -->
+  <section class="view" id="view-welcome">
+    <div class="welcome">
+      <h1>Point me at an image archive.</h1>
+      <p>
+        Pick a folder (e.g. your ComfyUI <code>output</code> folder). It's
+        scanned recursively and served back to you ten random images at a
+        time. Rate them, note them, group them into virtual galleries.
+      </p>
+      <p class="muted">
+        Strictly read-only — nothing is ever moved, copied, renamed or
+        deleted. Ratings, notes and galleries live in this browser's storage
+        and can be exported as JSON.
+      </p>
+      <button class="primary big" id="pick-btn">Choose folder&hellip;</button>
+      <input type="file" id="dir-input" webkitdirectory multiple hidden />
+      <p class="muted small" id="browser-note"></p>
+    </div>
+  </section>
+
+  <!-- Flashcard review -->
+  <section class="view" id="view-review">
+    <div class="review-bar">
+      <label>Queue from
+        <select id="queue-source">
+          <option value="unreviewed">Unreviewed</option>
+          <option value="maybe">Maybes (re-rate)</option>
+          <option value="yes">Yeses (re-rate)</option>
+          <option value="no">Nos (second chance)</option>
+        </select>
+      </label>
+      <label>Path contains
+        <input type="search" id="queue-scope" placeholder="e.g. 2024-05" />
+      </label>
+      <span class="spacer"></span>
+      <span class="session-stats" id="session-stats"></span>
+    </div>
+    <div class="review-body">
+      <div class="review-main">
+        <div class="stage" id="review-stage">
+          <img id="review-img" alt="" />
+          <div class="stamp" id="review-stamp"></div>
+          <div class="stage-msg" id="review-msg"></div>
+        </div>
+        <div class="rate-bar" id="rate-bar">
+          <button data-act="back" title="Back (Backspace)">&#8630; Back</button>
+          <span class="spacer"></span>
+          <button class="rate no" data-act="no" title="No (&larr; or N)"><kbd>&larr;</kbd> No</button>
+          <button class="rate maybe" data-act="maybe" title="Maybe (&uarr; or M)"><kbd>&uarr;</kbd> Maybe</button>
+          <button class="rate yes" data-act="yes" title="Yes (&rarr; or Y)"><kbd>&rarr;</kbd> Yes</button>
+          <span class="spacer"></span>
+          <button data-act="skip" title="Skip (&darr; or S)">Skip <kbd>&darr;</kbd></button>
+          <button data-act="info" title="Details & notes (I)">Info <kbd>I</kbd></button>
+        </div>
+        <div class="filmstrip" id="filmstrip"></div>
+      </div>
+      <aside class="details-panel" id="review-details"></aside>
+    </div>
+    <div class="batch-done" id="batch-done">
+      <div class="batch-card">
+        <h2>Batch done</h2>
+        <p id="batch-summary"></p>
+        <div class="batch-grid" id="batch-grid"></div>
+        <div class="batch-actions">
+          <button class="primary big" id="next-batch-btn">Next batch <kbd>Enter</kbd></button>
+          <button class="big" id="to-library-btn">Library <kbd>L</kbd></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Library -->
+  <section class="view" id="view-library">
+    <aside class="sidebar">
+      <h3>Rating</h3>
+      <ul class="nav-list" id="rating-list"></ul>
+      <h3>Galleries <button class="tiny" id="new-gallery-btn" title="New gallery">+</button></h3>
+      <ul class="nav-list" id="gallery-list"></ul>
+      <p class="muted small hint">Ctrl/&#8984;-click or Shift-click thumbnails to select; drag them onto a gallery.</p>
+    </aside>
+    <div class="lib-main">
+      <div class="lib-bar">
+        <input type="search" id="lib-search" placeholder="Search path or notes&hellip;" />
+        <select id="lib-sort">
+          <option value="recent">Recently rated</option>
+          <option value="path">Chronological (path)</option>
+          <option value="path-desc">Reverse chronological</option>
+          <option value="shuffle">Shuffle</option>
+        </select>
+        <button id="fit-btn">Fit</button>
+        <label class="size">&#9638;
+          <input type="range" id="thumb-size" min="80" max="520" step="10" />
+        </label>
+        <span class="muted" id="lib-count"></span>
+      </div>
+      <div class="select-bar" id="select-bar">
+        <span id="select-count"></span>
+        <select id="select-gallery"></select>
+        <button id="select-add">Add to gallery</button>
+        <button id="select-remove">Remove from this gallery</button>
+        <span class="divider"></span>
+        <button class="rate yes" data-rate="yes">Yes</button>
+        <button class="rate maybe" data-rate="maybe">Maybe</button>
+        <button class="rate no" data-rate="no">No</button>
+        <span class="spacer"></span>
+        <button id="select-clear">Clear <kbd>Esc</kbd></button>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="empty" id="lib-empty"></div>
+    </div>
+  </section>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox">
+    <div class="lb-main">
+      <div class="lb-stage" id="lb-stage"><img id="lb-img" alt="" /></div>
+      <button class="lb-nav prev" id="lb-prev" title="Previous (&larr;)">&#8249;</button>
+      <button class="lb-nav next" id="lb-next" title="Next (&rarr;)">&#8250;</button>
+      <div class="lb-top">
+        <span id="lb-pos"></span>
+        <span class="spacer"></span>
+        <button id="lb-zoom" title="Toggle 100% (Space / click)">1:1</button>
+        <button id="lb-full" title="Fullscreen (F)">&#x26F6;</button>
+        <button id="lb-info" title="Details & notes (I)">Info</button>
+        <button id="lb-close" title="Close (Esc)">&times;</button>
+      </div>
+    </div>
+    <aside class="details-panel" id="lb-details"></aside>
+  </div>
+
+  <!-- Settings -->
+  <dialog id="settings">
+    <form method="dialog" class="settings">
+      <h2>Settings</h2>
+      <section>
+        <h3>Folder</h3>
+        <p id="set-folder"></p>
+        <div class="row">
+          <button type="button" id="set-change">Change folder&hellip;</button>
+          <button type="button" id="set-rescan">Rescan</button>
+        </div>
+        <label>Full path of that folder on disk <span class="muted">(only used to build copyable paths — browsers can't see it)</span>
+          <input type="text" id="set-root-path" placeholder="D:\ComfyUI\output" />
+        </label>
+      </section>
+      <section>
+        <h3>Review</h3>
+        <label>Images per batch <input type="number" id="set-queue-size" min="1" max="200" /></label>
+      </section>
+      <section>
+        <h3>Data</h3>
+        <div class="row">
+          <button type="button" id="set-export">Export JSON</button>
+          <button type="button" id="set-import">Import JSON&hellip;</button>
+          <button type="button" id="set-clear-thumbs">Clear thumbnail cache</button>
+        </div>
+        <input type="file" id="import-input" accept=".json,application/json" hidden />
+      </section>
+      <section>
+        <h3>Keys</h3>
+        <dl class="keys">
+          <dt>&rarr; / Y / P</dt><dd>Yes (review) &middot; in lightbox &larr;&rarr; navigate, Y/M/N rate</dd>
+          <dt>&uarr; / M</dt><dd>Maybe</dd>
+          <dt>&larr; / N / X</dt><dd>No</dd>
+          <dt>&darr; / S</dt><dd>Skip</dd>
+          <dt>Backspace / Z</dt><dd>Back one image</dd>
+          <dt>0 / U</dt><dd>Clear rating</dd>
+          <dt>I</dt><dd>Details, prompt &amp; notes</dd>
+          <dt>F</dt><dd>Fullscreen</dd>
+          <dt>Enter</dt><dd>Open current image in lightbox / next batch</dd>
+          <dt>R / L</dt><dd>Review / Library</dd>
+          <dt>+ / &minus;</dt><dd>Thumbnail size (library)</dd>
+          <dt>Ctrl+A</dt><dd>Select all (library)</dd>
+        </dl>
+      </section>
+      <div class="row end"><button class="primary" value="close">Done</button></div>
+    </form>
+  </dialog>
+
+  <div class="scan-overlay" id="scan-overlay"><div><div class="spinner"></div><p id="scan-text">Scanning&hellip;</p></div></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="src/store.js"></script>
+<script src="src/source.js"></script>
+<script src="src/images.js"></script>
+<script src="src/pngmeta.js"></script>
+<script src="src/markdown.js"></script>
+<script src="src/details.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
