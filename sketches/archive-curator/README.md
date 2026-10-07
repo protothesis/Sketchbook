@@ -87,6 +87,25 @@ src/app.js        views, lightbox, settings, keyboard, wiring
 
 Everything attaches to `window.Curator`.
 
+## Direction notes (from first use, 2026-10-07)
+
+None of this is implemented yet. It's captured here to steer the next round.
+
+- **General-purpose viewer first, review as a mode.** With small changes
+  this could be a slick, minimal media viewer at its core. Flashcard review
+  would then be one tab/plugin you can turn on, not the whole app.
+- **Browse by folder/day.** From any image, jump to everything else in its
+  directory or day. More broadly: a thumbnail view of a whole folder's
+  contents with filter and sort options. That doesn't need all ~20k
+  images in the DOM at once.
+- **Video** support matters once it's a general viewer (there's a little
+  in the archive).
+- **Rating UX needs rethinking.** Arrow keys read as "navigate", not
+  "rate". A continual cull/re-rate loop feels promising, but the design is
+  still open.
+- **"More like this"** is only worth doing if it's content-aware (colour,
+  composition, semantic similarity), not exact-prompt matching.
+
 ## Open questions / next steps
 
 - **Reveal in Explorer** for real would need a tiny local helper, e.g. a

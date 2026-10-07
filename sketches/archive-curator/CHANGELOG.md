@@ -5,6 +5,22 @@ All notable changes to this sketch are logged here, per
 
 ## [Unreleased]
 
+### Fixed
+
+- 2026-10-07 — Library grid: rows could collapse while cells stayed square,
+  so thumbnails overlapped and drifted out of alignment when scrolling or
+  resizing. This came from relying on CSS `aspect-ratio` in auto-sized grid
+  rows. Columns and cell size are now computed from the container width
+  (re-run on resize), with fixed-pixel rows, and the first visible row stays
+  in view when the size changes. The size slider now sets the *minimum* cell
+  size, and cells stretch to fill the row.
+
+### Changed
+
+- 2026-10-07 — Thumbnails default to **Fit** (whole image, true aspect
+  ratio, letterboxed in a square cell, like Lightroom's grid). **Crop** is
+  the opt-in toggle. The button's tooltip now explains which mode is active.
+
 ### Added
 
 - 2026-10-01 — Initial sketch created.

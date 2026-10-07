@@ -14,7 +14,7 @@
     rootPath: "",
     queueSource: "unreviewed",
     scope: "",
-    fit: "cover",
+    thumbFit: "contain", // "contain" = whole image letterboxed, "cover" = cropped squares
     view: "review",
     libFilter: "yes",
     libSort: "recent",
@@ -463,9 +463,7 @@
     const keep = new Set(items);
     for (const p of [...state.lib.selected]) if (!keep.has(p)) state.lib.selected.delete(p);
     state.lib.anchor = -1;
-    grid.style.setProperty("--thumb", state.settings.thumbSize + "px");
-    grid.classList.toggle("fit", state.settings.fit === "contain");
-    $("fit-btn").textContent = state.settings.fit === "contain" ? "Fit" : "Crop";
+    applyThumbFit();
     if (io) io.disconnect();
     io = new IntersectionObserver(
       (entries) => {
@@ -493,6 +491,7 @@
     });
     grid.appendChild(frag);
     grid.scrollTop = 0;
+    layoutGrid();
     $("lib-count").textContent = `${fmt(items.length)} image${items.length === 1 ? "" : "s"}`;
     const empty = $("lib-empty");
     empty.hidden = items.length > 0;
@@ -579,12 +578,45 @@
     renderSelectBar();
   }
 
+  // The grid is laid out explicitly: column count and square cell size are
+  // computed from the container width, with fixed-pixel rows. (Relying on
+  // CSS aspect-ratio + auto-fill rows let rows collapse and cells overlap.)
+  // The size slider sets the *minimum* cell size; cells stretch to fill the row.
+  const GRID_GAP = 8;
+  const gridGeom = { cols: 1, size: 0 };
+  function layoutGrid() {
+    const grid = $("grid");
+    const cs = getComputedStyle(grid);
+    const avail = grid.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (avail <= 0) return; // hidden view
+    const min = state.settings.thumbSize;
+    const cols = Math.max(1, Math.floor((avail + GRID_GAP) / (min + GRID_GAP)));
+    const size = Math.floor((avail - GRID_GAP * (cols - 1)) / cols);
+    if (cols === gridGeom.cols && size === gridGeom.size) return;
+    // Keep the first visible row's images in view across the re-layout.
+    const firstVisible = gridGeom.size ? Math.floor(grid.scrollTop / (gridGeom.size + GRID_GAP)) * gridGeom.cols : 0;
+    gridGeom.cols = cols;
+    gridGeom.size = size;
+    grid.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
+    grid.style.gridAutoRows = size + "px";
+    grid.style.gap = GRID_GAP + "px";
+    grid.scrollTop = Math.floor(firstVisible / cols) * (size + GRID_GAP);
+  }
+
   function setThumbSize(px) {
     px = Math.max(80, Math.min(520, px));
     state.settings.thumbSize = px;
     $("thumb-size").value = px;
-    $("grid").style.setProperty("--thumb", px + "px");
+    layoutGrid();
     saveSettings();
+  }
+
+  function applyThumbFit() {
+    const fit = state.settings.thumbFit === "contain";
+    $("grid").classList.toggle("fit", fit);
+    const b = $("fit-btn");
+    b.textContent = fit ? "Fit" : "Crop";
+    b.title = fit ? "Showing whole images — click to crop thumbnails to fill squares" : "Showing cropped squares — click to show whole images";
   }
 
   // --------------------------------------------------------- lightbox
@@ -1090,11 +1122,11 @@
     };
     $("thumb-size").value = state.settings.thumbSize;
     $("thumb-size").oninput = (e) => setThumbSize(+e.target.value);
+    new ResizeObserver(layoutGrid).observe(grid);
     $("fit-btn").onclick = () => {
-      state.settings.fit = state.settings.fit === "contain" ? "cover" : "contain";
+      state.settings.thumbFit = state.settings.thumbFit === "contain" ? "cover" : "contain";
       saveSettings();
-      grid.classList.toggle("fit", state.settings.fit === "contain");
-      $("fit-btn").textContent = state.settings.fit === "contain" ? "Fit" : "Crop";
+      applyThumbFit();
     };
     $("select-add").onclick = () => {
       let id = $("select-gallery").value;
