@@ -16,6 +16,7 @@ workflow then deploys it automatically on every push).
 | Sketch | Description | Status | Demo |
 | --- | --- | --- | --- |
 | [xenoscope](sketches/xenoscope/) | Procedurally generated exoplanet systems with an invented astrological aspect chart. | prototype | [Live](sketches/xenoscope/index.html) |
+| [archive-curator](sketches/archive-curator/) | Flashcard-style random review and curation for a huge local image archive — ratings, notes and virtual galleries over read-only files. | prototype | [Live](sketches/archive-curator/index.html) |
 | [procedural-dungeon-engine](sketches/procedural-dungeon-engine/) | A dungeon that only exists once you open a door: hash-chained seeds plus fresh entropy, with reroll/accept/revert and exact replay. | prototype | [Live](sketches/procedural-dungeon-engine/index.html) |
 | [psyche-town](sketches/psyche-town/) | A Sims-like town where autonomous forces of the psyche seize people and, usually, let them go. | prototype | [Live](sketches/psyche-town/index.html) |
 <!-- sketches:end -->

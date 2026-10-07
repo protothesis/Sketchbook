@@ -17,6 +17,15 @@ window.SKETCHES = [
     demo: "sketches/xenoscope/index.html",
   },
   {
+    slug: "archive-curator",
+    title: "Archive Curator",
+    description: "Flashcard-style random review and curation for a huge local image archive (e.g. ComfyUI outputs) — a read-only metadata layer of ratings, notes and virtual galleries.",
+    date: "2026-10-01",
+    status: "prototype",
+    tags: ["images","curation","tool","comfyui","file-system-access"],
+    demo: "sketches/archive-curator/index.html",
+  },
+  {
     slug: "procedural-dungeon-engine",
     title: "Procedural Dungeon Engine",
     description: "A House of Leaves–style dungeon that only exists once you open a door: each space's seed is hash-chained from its parent plus fresh entropy, with reroll/accept/revert and exact JSON replay.",
