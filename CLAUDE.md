@@ -50,66 +50,78 @@ automatically, without asking permission first:
      actually being built — a single HTML file for a visual toy, a script
      for a data experiment, etc. Don't over-scaffold (no build tooling,
      package.json, linters, etc.) unless the idea actually needs it.
-3. **Add a row to the root `README.md`** table of contents (the `## Sketches`
-   table), linking to the new folder.
-4. **Add an entry to `sketches.data.js`** (the manifest the gallery reads) —
-   see schema below.
-5. **Commit** with a clear message once the scaffold is in place.
+   - `sketch.json` — the sketch's metadata (see schema below). This is the
+     *only* way a sketch gets listed in the gallery and README.
+3. **Don't touch the shared index files** — the root `README.md` sketches
+   table and `sketches.data.js` are generated from every `sketch.json` by
+   `tools/build-index.js`, which CI runs on each push to `main`. Editing
+   them on a branch (by hand *or* by running the script and committing the
+   output) brings back the merge conflicts this setup exists to prevent.
+   Running `node tools/build-index.js` locally to preview the gallery is
+   fine; just don't commit the result.
+4. **Commit** with a clear message once the scaffold is in place.
 
 ## Working on an existing sketch
 
 - Log meaningful changes in the sketch's own `CHANGELOG.md`
   (Added/Changed/Fixed/Removed).
-- Update the sketch's status in both the root README table and
-  `sketches.data.js` as it matures (see Lifecycle below).
+- Update the sketch's status in its own `sketch.json` as it matures (see
+  Lifecycle below). The README table and gallery pick it up after merge.
 - If the sketch grows an interactive or visual artifact (an HTML page, a
   notebook export, a small canvas/WebGL toy, etc.), give it a browsable
-  entry point at `sketches/<slug>/index.html` and set `demo` in its
-  `sketches.data.js` entry to that path (relative to repo root) so it shows up
-  as a live link in the gallery. If the demo lives somewhere else in the
-  folder, point `demo` at that path instead.
+  entry point at `sketches/<slug>/index.html` and set `"demo": "index.html"`
+  in its `sketch.json` so it shows up as a live link in the gallery. If the
+  demo lives somewhere else in the folder, point `demo` at that path
+  (relative to the sketch folder) instead.
 
 ## Lifecycle status labels
 
-Keep it to these four so the README table and gallery stay simple:
+Keep it to these four so the README table and gallery stay simple
+(`tools/build-index.js` rejects anything else):
 
 - `seed` — just captured, not yet run/tested.
 - `prototype` — working, still rough.
 - `active` — being iterated on.
 - `archived` — parked; kept for reference.
 
-## `sketches.data.js` schema
+## `sketch.json` schema
 
-A classic script (not JSON — see the `file://` constraint above) that sets
-`window.SKETCHES` to an array of objects, one per sketch, kept in sync with
-`sketches/`:
+One per sketch at `sketches/<slug>/sketch.json`. The slug is the folder
+name.
 
-```js
+```json
 {
-  slug: "boids-flocking-sim",
-  title: "Boids Flocking Sim",
-  description: "One-line summary of the idea.",
-  date: "2026-09-28",
-  status: "seed",
-  tags: ["canvas", "simulation"],
-  demo: "sketches/boids-flocking-sim/index.html",
+  "title": "Boids Flocking Sim",
+  "description": "One or two sentences for the gallery card.",
+  "summary": "Optional shorter line for the README table (defaults to description).",
+  "date": "2026-09-28",
+  "status": "seed",
+  "tags": ["canvas", "simulation"],
+  "demo": "index.html"
 }
 ```
 
-`demo` is optional — omit it (or use `null`) if the sketch has no
-browsable artifact yet.
+`demo` is optional and relative to the sketch folder. Omit it (or use
+`null`) if the sketch has no browsable artifact yet.
+
+`tools/build-index.js` turns these into `sketches.data.js`, a classic script
+(not JSON, because of the `file://` constraint above) that sets
+`window.SKETCHES`, plus the README table between the
+`<!-- sketches:start -->`/`<!-- sketches:end -->` markers. On a branch, the
+root gallery won't list the new sketch until it's merged. Open the sketch's
+own `index.html` to try it in the meantime.
 
 ## Gallery (root `index.html`)
 
 - A static, data-driven gallery page that reads `window.SKETCHES` (set by
-  `sketches.data.js`, loaded via a plain `<script>` tag) and renders a card
+  the generated `sketches.data.js`, loaded via a plain `<script>` tag) and renders a card
   per sketch, linking to the sketch's demo when present and to its
   `README.md` otherwise.
 - Don't hand-edit per-sketch rendering into `index.html` — it should stay
-  generic and driven entirely by `sketches.data.js`.
+  generic and driven entirely by the generated manifest.
 - Works identically opened directly (`file://`) or via GitHub Pages.
   Deployment to Pages is handled by `.github/workflows/pages.yml` on pushes
-  to the default branch. No manual dashboard steps required.
+  to the default branch, which first regenerates and commits the index. No manual dashboard steps required.
 
 ## General conventions
 

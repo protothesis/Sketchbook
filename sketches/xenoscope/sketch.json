@@ -1,0 +1,15 @@
+{
+  "title": "Xenoscope",
+  "description": "Procedurally generated exoplanet systems with an invented astrological aspect chart — a horoscope for a sky that only exists because you seeded it.",
+  "summary": "Procedurally generated exoplanet systems with an invented astrological aspect chart.",
+  "date": "2026-09-30",
+  "status": "prototype",
+  "tags": [
+    "procgen",
+    "astrology",
+    "threejs",
+    "simulation",
+    "worldbuilding"
+  ],
+  "demo": "index.html"
+}

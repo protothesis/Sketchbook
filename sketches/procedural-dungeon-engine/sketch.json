@@ -1,0 +1,15 @@
+{
+  "title": "Procedural Dungeon Engine",
+  "description": "A House of Leaves–style dungeon that only exists once you open a door: each space's seed is hash-chained from its parent plus fresh entropy, with reroll/accept/revert and exact JSON replay.",
+  "summary": "A dungeon that only exists once you open a door: hash-chained seeds plus fresh entropy, with reroll/accept/revert and exact replay.",
+  "date": "2026-10-04",
+  "status": "prototype",
+  "tags": [
+    "procgen",
+    "dungeon",
+    "canvas",
+    "seeds",
+    "hashing"
+  ],
+  "demo": "index.html"
+}

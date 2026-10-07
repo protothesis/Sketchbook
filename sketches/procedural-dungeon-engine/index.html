@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Dungeon Engine</title>
+<meta name="description" content="A procedural dungeon where exploring is generating: each door's space comes from a hash-chained seed plus fresh entropy, and the map is the record of the expedition." />
+<link rel="stylesheet" href="app/styles.css" />
+</head>
+<body>
+  <div class="layout">
+    <div class="map-wrap">
+      <canvas id="map" aria-label="Expedition map"></canvas>
+      <div class="map-buttons">
+        <button id="fit-btn" title="Fit whole map">Fit</button>
+        <button id="zoom-in-btn" title="Zoom in">+</button>
+        <button id="zoom-out-btn" title="Zoom out">&minus;</button>
+      </div>
+      <div id="candidate-bar" class="candidate-bar" hidden>
+        <span id="candidate-text"></span>
+        <button id="accept-btn" class="primary">Accept</button>
+        <button id="reroll-btn">Reroll</button>
+        <button id="cancel-btn">Cancel</button>
+      </div>
+      <p id="status" class="status"></p>
+    </div>
+
+    <aside class="panel">
+      <header>
+        <h1>Dungeon Engine</h1>
+        <p>Space only exists once you open a door into it. Tap a glowing doorway
+        to preview what's beyond, then <b>Accept</b> or <b>Reroll</b>.</p>
+      </header>
+
+      <section>
+        <h2>Expedition</h2>
+        <div class="row">
+          <label class="grow">Root seed <input type="text" id="seed-input" spellcheck="false" /></label>
+        </div>
+        <div class="row">
+          <button id="new-btn">New</button>
+          <button id="random-btn">Random seed</button>
+        </div>
+        <div class="row caps">
+          <label>Max spaces <input type="number" id="cap-spaces" min="1" placeholder="&infin;" /></label>
+          <label>Max cells <input type="number" id="cap-area" min="1" placeholder="&infin;" /></label>
+          <label>Max depth <input type="number" id="cap-depth" min="1" placeholder="&infin;" /></label>
+        </div>
+        <div class="row">
+          <button id="caps-btn">Apply caps</button>
+          <button id="export-btn">Export JSON</button>
+          <label class="button">Import JSON<input type="file" id="import-input" accept=".json,application/json" hidden /></label>
+        </div>
+        <p id="stats" class="muted"></p>
+      </section>
+
+      <section>
+        <h2>Inspector</h2>
+        <dl id="inspector" class="inspector"></dl>
+        <div class="row">
+          <button id="revert-btn">Revert space</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Debug</h2>
+        <div class="toggles">
+          <label><input type="checkbox" id="t-grid" checked /> Grid</label>
+          <label><input type="checkbox" id="t-labels" /> Seed labels</label>
+          <label><input type="checkbox" id="t-occupancy" /> Registry occupancy</label>
+          <label><input type="checkbox" id="t-path" checked /> Path to root</label>
+        </div>
+        <p class="muted small">Keys: <kbd>Enter</kbd> accept · <kbd>R</kbd> reroll · <kbd>Esc</kbd> cancel · <kbd>Del</kbd> revert · <kbd>F</kbd> fit</p>
+      </section>
+    </aside>
+  </div>
+
+  <script src="engine/rng.js"></script>
+  <script src="engine/shapes.js"></script>
+  <script src="engine/expedition.js"></script>
+  <script src="app/renderer.js"></script>
+  <script src="app/app.js"></script>
+</body>
+</html>

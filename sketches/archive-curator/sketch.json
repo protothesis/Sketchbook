@@ -1,0 +1,15 @@
+{
+  "title": "Archive Curator",
+  "description": "Flashcard-style random review and curation for a huge local image archive (e.g. ComfyUI outputs) — a read-only metadata layer of ratings, notes and virtual galleries.",
+  "summary": "Flashcard-style random review and curation for a huge local image archive — ratings, notes and virtual galleries over read-only files.",
+  "date": "2026-10-01",
+  "status": "prototype",
+  "tags": [
+    "images",
+    "curation",
+    "tool",
+    "comfyui",
+    "file-system-access"
+  ],
+  "demo": "index.html"
+}
