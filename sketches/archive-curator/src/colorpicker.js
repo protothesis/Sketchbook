@@ -423,5 +423,14 @@
     if (el && el.classList.contains("open")) renderBody();
   }
 
-  C.colorPicker = { open, close, addProfile, hsvToRgb, hex, isOpen: () => !!el && el.classList.contains("open") };
+  // Restore from a backup: adds palettes/profiles not already here (by id).
+  async function importData(d) {
+    await load();
+    for (const p of d.palettes || []) if (!data.palettes.some((x) => x.id === p.id)) data.palettes.push(p);
+    for (const p of d.profiles || []) if (!data.profiles.some((x) => x.id === p.id)) data.profiles.push(p);
+    saveData();
+    if (el && el.classList.contains("open")) renderBody();
+  }
+
+  C.colorPicker = { open, close, addProfile, importData, hsvToRgb, hex, isOpen: () => !!el && el.classList.contains("open") };
 })();

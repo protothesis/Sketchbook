@@ -7,6 +7,12 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-08 — **Full backup**: Export now saves every store (ratings, notes,
+  galleries incl. smart/history/notes, groups, colour palettes and
+  profiles, the search index, folder file lists, settings). Only thumbnails
+  and folder permissions are left out. **Restore** rebuilds folders as
+  offline entries plus palettes, profiles and the index in a fresh browser.
+
 - 2026-10-08 — **Image viewer zoom**: images open in Fit (scaled up or down
   to the screen); **Fit / 1:1** radio buttons (1:1 = actual device pixels);
   scroll-to-zoom around the cursor; drag to move at any scale; a % readout;

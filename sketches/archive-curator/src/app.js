@@ -2523,22 +2523,40 @@
 
   // ------------------------------------------------------ import/export
 
-  function exportData() {
+  // A full backup: every store except thumbnails (binary, and rebuilt
+  // from the originals) and folder handles (browser-only objects; you
+  // re-pick folders instead). Whatever gets added to IndexedDB later is
+  // included automatically, since the whole kv store goes in.
+  async function exportData() {
+    await store.put("kv", state.settings, "settings"); // flush pending settings
+    const kv = {};
+    for (const k of await store.keys("kv")) kv[k] = await store.get("kv", k);
+    const [roots, records, galleries, feats] = await Promise.all([
+      store.getAll("roots"),
+      store.getAll("records"),
+      store.getAll("galleries"),
+      store.getAll("features"),
+    ]);
     const data = {
       app: "archive-curator",
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
-      roots: state.roots.filter((r) => !r.virtual).map(({ id, name, rootPath, added }) => ({ id, name, rootPath, added })),
+      note: "Everything except cached thumbnails and folder permissions.",
+      contents: { roots: roots.length, records: records.length, galleries: galleries.length, features: feats.length, kvKeys: Object.keys(kv).length },
+      roots: roots.map(({ handle, ...r }) => r),
+      records,
+      galleries,
       galleryGroups: state.groups,
-      galleries: state.galleries,
-      records: [...state.records.values()],
+      features: feats,
+      kv,
     };
-    const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `archive-curator-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast(`Exported ${plural(records.length, "record")}, ${plural(galleries.length, "gallery")}, ${plural(feats.length, "indexed image")}`);
   }
 
   async function importData(file) {
@@ -2555,20 +2573,38 @@
     saveGroups();
     for (const g of data.galleries || []) {
       if (!gallery(g.id)) {
-        const copy = { group: null, pos: topLevel().length, order: [], ...g };
+        const copy = { group: null, pos: topLevel().length, order: [], ...g, kind: g.kind || "static" };
         if (copy.group && !group(copy.group)) copy.group = null;
         if (prefix) copy.order = (copy.order || []).map((k) => prefix + k);
         state.galleries.push(copy);
         store.put("galleries", copy);
       }
     }
+    const kv = data.kv || {};
     for (const r of data.roots || []) {
       const mine = rootById(r.id);
       if (mine && !mine.rootPath && r.rootPath) {
         mine.rootPath = r.rootPath;
         store.put("roots", mine);
       }
+      // A full (v3) backup restores folders too — offline until reconnected —
+      // so their images, thumbnails-to-be and metadata line up again.
+      const files = kv["files:" + r.id];
+      if (!mine && files) {
+        const root = { id: r.id, name: r.name || r.id, handle: null, rootPath: r.rootPath || "", added: r.added || Date.now() };
+        state.roots.push(root);
+        await store.put("roots", root);
+        await saveFiles(r.id, files);
+      } else if (mine && files && !(state.files.get(r.id) || []).length) await saveFiles(r.id, files);
     }
+    const orphanFiles = kv["files:" + ORPHAN];
+    if (orphanFiles && orphanFiles.length) {
+      const rels = new Set([...(state.files.get(ORPHAN) || []), ...orphanFiles]);
+      await saveFiles(ORPHAN, [...rels].sort(C.collator.compare));
+      if (!rootById(ORPHAN)) state.roots.push(orphanRoot());
+    }
+    if (kv.colorPalettes || kv.colorProfiles) await C.colorPicker.importData({ palettes: kv.colorPalettes, profiles: kv.colorProfiles });
+    if (data.features) await features.importMany(data.features);
     const changedRecs = [];
     for (const inc of data.records || []) {
       const path = prefix + inc.path;
@@ -2594,6 +2630,7 @@
       await saveFiles(ORPHAN, [...rels].sort(C.collator.compare));
       if (!rootById(ORPHAN)) state.roots.push(orphanRoot());
     }
+    state.roots.sort((a, b) => (a.virtual ? 1 : 0) - (b.virtual ? 1 : 0) || a.added - b.added);
     toast(`Imported ${fmt(changedRecs.length)} records, ${fmt((data.galleries || []).length)} galleries`);
     state.srcKeys = null;
     indexChanged(true);
