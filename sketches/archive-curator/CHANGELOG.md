@@ -23,6 +23,10 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-07 — `docs/face-recognition-brief.md`: concept brief for a local face
+  recognition "People" layer (how it works, model options, browser-first
+  implementation path, data model, open questions). Design notes only; no
+  code yet.
 - 2026-10-01 — Initial sketch created.
 - Read-only folder access via the File System Access API, with the handle
   persisted for one-click reconnect, and an `<input webkitdirectory>`

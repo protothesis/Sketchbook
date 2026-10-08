@@ -108,6 +108,10 @@ None of this is implemented yet. It's captured here to steer the next round.
 
 ## Open questions / next steps
 
+- **People / face recognition layer**: a local, background face index with a
+  People gallery you can fully reorder, merge, split and categorize. Design
+  notes, model options and a browser-first plan are in
+  [`docs/face-recognition-brief.md`](docs/face-recognition-brief.md).
 - **Reveal in Explorer** for real would need a tiny local helper, e.g. a
   ~30-line Python/Node script the page can ping. Another route is wrapping
   the whole thing in Tauri/Electron. That would also make the metadata a
