@@ -62,8 +62,19 @@ stay in date order and the sort applies *within* each folder, so shuffle
 shuffles each day's images separately. Turn them off for one continuous
 feed shuffled across everything.
 
-In the lightbox: `←`/`→` navigate, `Space` or click for 100% zoom, `F`
-fullscreen, `Y`/`M`/`N` rate, `I` details.
+In the lightbox, images open in **Fit**: the whole image scaled up or down
+to the screen. **1:1** shows actual pixels, even on high-DPI screens. Fit
+and 1:1 work like radio buttons; `Space` or double-click toggles between
+them. **Scroll** zooms around the cursor, and you can **drag** the image at
+any size. While it runs off the screen, a small **navigator** in the
+bottom-left shows which part you're looking at (click or drag in it to move
+there). Zoomed well in, pixels stay crisp instead of blurring.
+
+The left and right fifth of the screen are **previous / next** click zones,
+lit up with an arrow while the pointer is over them. A drag that starts
+there still moves the image instead. `←`/`→` also navigate, `Y`/`M`/`N`
+rate, `I` shows details and `Esc` closes. `F` (or ⛶ in the top bar)
+makes the whole app fullscreen.
 
 ### Search
 

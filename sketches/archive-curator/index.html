@@ -17,6 +17,7 @@
     <div class="stats" id="stats"></div>
     <span class="index-status" id="index-status" hidden></span>
     <div class="source-status" id="source-status"></div>
+    <button class="icon-btn" id="fullscreen-btn" title="Fullscreen (F)">&#x26F6;</button>
     <button class="icon-btn" id="settings-btn" title="Settings">&#9881;</button>
   </header>
 
@@ -111,14 +112,19 @@
   <!-- Lightbox -->
   <div class="lightbox" id="lightbox">
     <div class="lb-main">
-      <div class="lb-stage" id="lb-stage"><img id="lb-img" alt="" /></div>
-      <button class="lb-nav prev" id="lb-prev" title="Previous (&larr;)">&#8249;</button>
-      <button class="lb-nav next" id="lb-next" title="Next (&rarr;)">&#8250;</button>
+      <div class="lb-stage" id="lb-stage"><img id="lb-img" alt="" draggable="false" /></div>
+      <!-- Click zones (the stage handles the clicks; these only show where they are) -->
+      <div class="lb-zone prev" id="lb-prev"><span>&#8249;</span></div>
+      <div class="lb-zone next" id="lb-next"><span>&#8250;</span></div>
+      <div class="lb-mini" id="lb-mini" hidden title="Click or drag to move around"><img alt="" draggable="false" /><div class="lb-mini-rect"></div></div>
       <div class="lb-top">
         <span id="lb-pos"></span>
         <span class="spacer"></span>
-        <button id="lb-zoom" title="Toggle 100% (Space / click)">1:1</button>
-        <button id="lb-full" title="Fullscreen (F)">&#x26F6;</button>
+        <span class="lb-scale" id="lb-scale" title="Scroll to zoom, drag to move"></span>
+        <div class="seg lb-modes">
+          <button id="lb-fit" title="Fit the whole image to the screen (Space / double-click)">Fit</button>
+          <button id="lb-one" title="Actual pixels (Space / double-click)">1:1</button>
+        </div>
         <button id="lb-info" title="Details & notes (I)">Info</button>
         <button id="lb-close" title="Close (Esc)">&times;</button>
       </div>
@@ -171,7 +177,9 @@
           <dt>F</dt><dd>Fullscreen</dd>
           <dt>B</dt><dd>Add/remove current image or selection to the target gallery</dd>
           <dt>Y / M / N, 0</dt><dd>Rate yes / maybe / no, clear (selection or lightbox)</dd>
-          <dt>&larr; &rarr;</dt><dd>Previous / next (lightbox)</dd>
+          <dt>&larr; &rarr;</dt><dd>Previous / next (lightbox; or click the left/right fifth of the screen)</dd>
+          <dt>Scroll, drag</dt><dd>Zoom around the cursor, move the image (lightbox)</dd>
+          <dt>Space / dbl-click</dt><dd>Fit &harr; 1:1 actual pixels (lightbox); + / &minus; zoom</dd>
           <dt>+ / &minus;</dt><dd>Thumbnail size (library; also Ctrl+scroll)</dd>
           <dt>Ctrl+A / Esc</dt><dd>Select all / clear selection (library)</dd>
         </dl>

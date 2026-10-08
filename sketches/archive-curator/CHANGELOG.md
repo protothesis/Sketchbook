@@ -7,6 +7,15 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-08 — **Image viewer zoom**: images open in Fit (scaled up or down
+  to the screen); **Fit / 1:1** radio buttons (1:1 = actual device pixels);
+  scroll-to-zoom around the cursor; drag to move at any scale; a % readout;
+  a corner **navigator** showing the visible region (click or drag to
+  move); crisp pixels when zoomed well in.
+- 2026-10-08 — Lightbox **click zones**: the left and right 20% of the
+  screen go to the previous / next image, highlighted on hover. Drags that
+  start there move the image instead.
+
 - 2026-10-08 — **Smart galleries**: ☆ Save keeps the current search (where,
   rating filter, words, colour/similar/profile match) and its results as a
   baseline. The sidebar shows whether the results have changed (green dot,
@@ -68,6 +77,10 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-10-08 — Fullscreen is an app-level control (⛶ in the top bar, `F`)
+  instead of a lightbox button. Clicking the lightbox background no longer
+  closes it (`Esc` or × does).
+
 - 2026-10-08 — Toolbar grouped into where / filter / sort / view with
   separators. The image count sits next to the folder name. The rating
   filter collapses into a ★ button (collapsed by default).
@@ -106,6 +119,9 @@ All notable changes to this sketch are logged here, per
   Exports are v2; v1 exports still import.
 
 ### Fixed
+
+- 2026-10-08 — Lightbox "1:1" just scrolled the image to the top-left and
+  never showed whether it was on.
 
 - 2026-10-08 — With the folder-input fallback (non-Chromium browsers),
   re-picking a folder that's already connected refreshes it instead of

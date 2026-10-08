@@ -66,7 +66,7 @@
       fresh: null, // Set of those new results
       gone: null, // saved results that no longer match
     },
-    lb: { items: [], index: 0, open: false, zoom: false },
+    lb: { items: [], index: 0, open: false },
   };
 
   // ------------------------------------------------------------ modules
@@ -1848,7 +1848,6 @@
   function closeLightbox() {
     state.lb.open = false;
     $("lightbox").classList.remove("open");
-    if (document.fullscreenElement === $("lightbox")) document.exitFullscreen();
     details.render($("lb-details"), null);
     // Leave the library's cursor on the last image viewed.
     if (state.view === "library") {
@@ -1870,8 +1869,12 @@
     const path = items[index];
     const img = $("lb-img");
     const t = ++lbToken;
-    setZoom(false);
+    // A new image starts in Fit (or stays 1:1 if that's what you were in).
+    if (view.mode === "free") view.mode = "fit";
+    view.natW = view.natH = 0;
     img.removeAttribute("src");
+    $("lb-mini").hidden = true;
+    img.onload = () => t === lbToken && onViewImageLoad();
     // Show the cached thumbnail instantly, then swap in the full-size file.
     images.thumb(path).then((u) => {
       if (t === lbToken && u && !img.dataset.full) img.src = u;
@@ -1886,6 +1889,7 @@
       })
       .catch(() => {});
     renderLbPos();
+    renderZones();
     if (state.settings.detailsOpen) details.render($("lb-details"), path);
     images.preload([items[index + 1], items[index - 1]].filter(Boolean));
   }
@@ -1906,22 +1910,234 @@
     renderLightbox();
   }
 
-  function setZoom(on, e) {
-    const stage = $("lb-stage");
+  // ------------------------------------------------------- image view
+  //
+  // The lightbox image is positioned by hand: view.x/y is its top-left in
+  // stage pixels and view.scale its size. Modes: "fit" (whole image, scaled
+  // up or down to the screen — the default), "1:1" (one image pixel per
+  // screen pixel) and "free" (wherever wheel-zoom or dragging left it).
+  // You can always drag it; the wheel zooms around the cursor.
+  const view = { mode: "fit", scale: 1, x: 0, y: 0, natW: 0, natH: 0 };
+  const ZOOM_MIN = 0.02;
+  const ZOOM_MAX = 40;
+  const ZONE = 0.2; // prev/next click zones: this share of the width on each side
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const dpr = () => window.devicePixelRatio || 1;
+
+  function stageSize() {
+    const st = $("lb-stage");
+    return { W: st.clientWidth, H: st.clientHeight };
+  }
+
+  // Lay the image out for a mode without changing view.mode (used to show
+  // a fitted thumbnail while the full file for 1:1 is still loading).
+  function layout(mode, cx, cy) {
+    const { W, H } = stageSize();
+    if (mode === "fit") {
+      view.scale = Math.min(W / view.natW, H / view.natH);
+      view.x = (W - view.natW * view.scale) / 2;
+      view.y = (H - view.natH * view.scale) / 2;
+    } else if (mode === "1:1") {
+      if (cx === undefined) {
+        // centred
+        view.scale = 1 / dpr();
+        view.x = (W - view.natW * view.scale) / 2;
+        view.y = (H - view.natH * view.scale) / 2;
+      } else zoomAround(1 / dpr(), cx, cy);
+    }
+  }
+
+  function setViewMode(mode, cx, cy) {
+    view.mode = mode;
+    if (!view.natW) return applyView();
+    layout(mode, cx, cy);
+    view.mode = mode;
+    applyView();
+  }
+
+  function zoomAround(s, cx, cy) {
+    s = clamp(s, ZOOM_MIN, ZOOM_MAX);
+    view.x = cx - (cx - view.x) * (s / view.scale);
+    view.y = cy - (cy - view.y) * (s / view.scale);
+    view.scale = s;
+    keepOnScreen();
+  }
+
+  function zoomBy(factor, cx, cy) {
+    if (!view.natW) return;
+    if (cx === undefined) {
+      const { W, H } = stageSize();
+      cx = W / 2;
+      cy = H / 2;
+    }
+    zoomAround(view.scale * factor, cx, cy);
+    view.mode = "free";
+    applyView();
+  }
+
+  // However far it's dragged, keep a bit of the image on screen.
+  function keepOnScreen() {
+    const { W, H } = stageSize();
+    const w = view.natW * view.scale;
+    const h = view.natH * view.scale;
+    const m = 60;
+    view.x = clamp(view.x, Math.min(0, m - w), Math.max(W - w, W - m));
+    view.y = clamp(view.y, Math.min(0, m - h), Math.max(H - h, H - m));
+  }
+
+  function applyView() {
     const img = $("lb-img");
-    let fx = 0.5;
-    let fy = 0.5;
-    if (on && e) {
-      const r = img.getBoundingClientRect();
-      fx = (e.clientX - r.left) / r.width;
-      fy = (e.clientY - r.top) / r.height;
-    }
-    state.lb.zoom = on;
-    stage.classList.toggle("zoom", on);
-    if (on) {
-      stage.scrollLeft = fx * img.naturalWidth - stage.clientWidth / 2;
-      stage.scrollTop = fy * img.naturalHeight - stage.clientHeight / 2;
-    }
+    img.style.width = view.natW * view.scale + "px";
+    img.style.height = view.natH * view.scale + "px";
+    img.style.transform = `translate(${view.x}px, ${view.y}px)`;
+    // Zoomed well in (not just fitted): show crisp pixels rather than blur.
+    img.classList.toggle("pixelated", view.mode !== "fit" && view.scale * dpr() >= 3);
+    $("lb-fit").classList.toggle("on", view.mode === "fit");
+    $("lb-one").classList.toggle("on", view.mode === "1:1");
+    $("lb-scale").textContent = view.natW && img.dataset.full ? Math.round(view.scale * dpr() * 100) + "%" : "";
+    renderMini();
+  }
+
+  function onViewImageLoad() {
+    const img = $("lb-img");
+    const prevW = view.natW;
+    view.natW = img.naturalWidth;
+    view.natH = img.naturalHeight;
+    $("lb-mini").querySelector("img").src = img.src;
+    if (view.mode === "free" && prevW) {
+      view.scale *= prevW / view.natW; // thumbnail -> full file: keep the same on-screen size
+      applyView();
+    } else if (view.mode === "1:1" && !img.dataset.full) {
+      layout("fit"); // just the thumbnail so far
+      applyView();
+    } else setViewMode(view.mode);
+  }
+
+  // Navigator: where the visible part sits in the whole image, shown only
+  // while the image runs off the screen. Click or drag in it to move there.
+  function renderMini() {
+    const mini = $("lb-mini");
+    const { W, H } = stageSize();
+    const w = view.natW * view.scale;
+    const h = view.natH * view.scale;
+    const over = view.natW && (view.x < -1 || view.y < -1 || view.x + w > W + 1 || view.y + h > H + 1);
+    mini.hidden = !over;
+    if (!over) return;
+    const ms = Math.min(150 / view.natW, 150 / view.natH);
+    mini.style.width = view.natW * ms + "px";
+    mini.style.height = view.natH * ms + "px";
+    const x0 = clamp(-view.x / view.scale, 0, view.natW);
+    const y0 = clamp(-view.y / view.scale, 0, view.natH);
+    const x1 = clamp((W - view.x) / view.scale, 0, view.natW);
+    const y1 = clamp((H - view.y) / view.scale, 0, view.natH);
+    const r = mini.querySelector(".lb-mini-rect").style;
+    r.left = x0 * ms + "px";
+    r.top = y0 * ms + "px";
+    r.width = (x1 - x0) * ms + "px";
+    r.height = (y1 - y0) * ms + "px";
+  }
+
+  function miniJump(e) {
+    const mini = $("lb-mini");
+    const r = mini.getBoundingClientRect();
+    const ms = r.width / view.natW;
+    const ix = (e.clientX - r.left) / ms;
+    const iy = (e.clientY - r.top) / ms;
+    const { W, H } = stageSize();
+    view.x = W / 2 - ix * view.scale;
+    view.y = H / 2 - iy * view.scale;
+    keepOnScreen();
+    applyView();
+  }
+
+  // Which click zone (if any) a pointer position is in: -1 prev, 1 next.
+  function zoneAt(e) {
+    const r = $("lb-stage").getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width;
+    if (fx < ZONE && state.lb.index > 0) return -1;
+    if (fx > 1 - ZONE && state.lb.index < state.lb.items.length - 1) return 1;
+    return 0;
+  }
+
+  function renderZones() {
+    $("lb-prev").classList.toggle("off", state.lb.index <= 0);
+    $("lb-next").classList.toggle("off", state.lb.index >= state.lb.items.length - 1);
+  }
+
+  function bindView() {
+    const st = $("lb-stage");
+    let drag = null;
+    st.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      drag = { sx: e.clientX, sy: e.clientY, x: view.x, y: view.y, moved: false };
+      st.setPointerCapture(e.pointerId);
+    });
+    st.addEventListener("pointermove", (e) => {
+      if (!drag) {
+        const z = zoneAt(e);
+        st.dataset.zone = z < 0 ? "prev" : z > 0 ? "next" : "";
+        return;
+      }
+      const dx = e.clientX - drag.sx;
+      const dy = e.clientY - drag.sy;
+      if (!drag.moved && Math.hypot(dx, dy) > 4) {
+        drag.moved = true; // a drag, not a click: never navigates
+        st.classList.add("panning");
+        st.dataset.zone = "";
+      }
+      if (!drag.moved || !view.natW) return;
+      view.x = drag.x + dx;
+      view.y = drag.y + dy;
+      keepOnScreen();
+      if (view.mode === "fit") view.mode = "free";
+      applyView();
+    });
+    const end = (e) => {
+      const d = drag;
+      drag = null;
+      st.classList.remove("panning");
+      if (!d || d.moved || e.type === "pointercancel") return;
+      const z = zoneAt(e);
+      if (z) lbStep(z);
+    };
+    st.addEventListener("pointerup", end);
+    st.addEventListener("pointercancel", end);
+    st.addEventListener("pointerleave", () => !drag && (st.dataset.zone = ""));
+    st.addEventListener("dblclick", (e) => {
+      if (zoneAt(e)) return;
+      const r = st.getBoundingClientRect();
+      setViewMode(view.mode === "1:1" ? "fit" : "1:1", e.clientX - r.left, e.clientY - r.top);
+    });
+    st.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const r = st.getBoundingClientRect();
+        zoomBy(Math.pow(1.0015, -e.deltaY * (e.deltaMode === 1 ? 33 : 1)), e.clientX - r.left, e.clientY - r.top);
+      },
+      { passive: false }
+    );
+    new ResizeObserver(() => {
+      if (!state.lb.open || !view.natW) return;
+      if (view.mode === "free") {
+        keepOnScreen();
+        applyView();
+      } else setViewMode(view.mode);
+    }).observe(st);
+
+    const mini = $("lb-mini");
+    let miniDrag = false;
+    mini.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      miniDrag = true;
+      mini.setPointerCapture(e.pointerId);
+      miniJump(e);
+    });
+    mini.addEventListener("pointermove", (e) => miniDrag && miniJump(e));
+    mini.addEventListener("pointerup", () => (miniDrag = false));
+
+    $("lb-fit").onclick = () => setViewMode("fit");
+    $("lb-one").onclick = () => setViewMode("1:1");
   }
 
   // ------------------------------------------------------- shared UI
@@ -1964,8 +2180,9 @@
     b.title = open ? "Hide rating filters" : "Rating filters" + (label ? ` (showing: ${label})` : "");
   }
 
+  // The whole app (lightbox included) goes fullscreen.
   function toggleFullscreen() {
-    const el = state.lb.open ? $("lightbox") : document.documentElement;
+    const el = document.documentElement;
     if (document.fullscreenElement) document.exitFullscreen();
     else if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
   }
@@ -2459,7 +2676,9 @@
       else if (k === "Home") ((state.lb.index = 0), renderLightbox());
       else if (k === "End") ((state.lb.index = state.lb.items.length - 1), renderLightbox());
       else if (k === "Escape" || k === "Enter") closeLightbox();
-      else if (k === " ") setZoom(!state.lb.zoom);
+      else if (k === " ") setViewMode(view.mode === "1:1" ? "fit" : "1:1");
+      else if (k === "+" || k === "=") zoomBy(1.25);
+      else if (k === "-") zoomBy(0.8);
       else if (k in RATE_KEYS) setRating(path, RATE_KEYS[k]);
       else if (k === "i") toggleDetails();
       else if (k === "f") toggleFullscreen();
@@ -2829,16 +3048,10 @@
     $("select-clear").onclick = clearSelection;
 
     // lightbox
-    $("lb-prev").onclick = () => lbStep(-1);
-    $("lb-next").onclick = () => lbStep(1);
     $("lb-close").onclick = closeLightbox;
-    $("lb-full").onclick = toggleFullscreen;
     $("lb-info").onclick = () => toggleDetails();
-    $("lb-zoom").onclick = () => setZoom(!state.lb.zoom);
-    $("lb-stage").onclick = (e) => {
-      if (e.target.id === "lb-img") setZoom(!state.lb.zoom, e);
-      else if (!state.lb.zoom) closeLightbox();
-    };
+    $("fullscreen-btn").onclick = toggleFullscreen;
+    bindView();
 
     // settings
     $("set-add").onclick = () => {
