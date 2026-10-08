@@ -7,6 +7,28 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-07 — **Colour search**: a colour wheel (`C`) finds images where a
+  noticeable share of the picture is near the chosen colour, best match
+  first, with a Range slider and neutral presets. The details panel shows
+  each image's palette; click a swatch to search for it, or **Similar
+  colours** to rank by overall colour make-up.
+- 2026-10-07 — **Background indexer** (`src/features.js`): an OKLab k-means
+  palette and the prompt/model text for every image, stored in IndexedDB
+  (database v3), current folder first, pausing while you scroll. Progress
+  shows in the top bar.
+- 2026-10-07 — **Search** now also covers prompts and model/LoRA names.
+  Every word must match somewhere. Results are tagged with the fields that
+  matched, and hovering shows the matching text highlighted.
+- 2026-10-07 — **Folder headers** (`G`): one section per folder, with a
+  clickable header. Sorting (including shuffle) applies within each folder.
+- 2026-10-07 — **Seeded shuffle**: 🎲 / `D` rerolls; typing a seed restores
+  that exact order.
+- 2026-10-07 — **Gallery custom order**: drag images within a gallery to
+  arrange them; the order is saved.
+- 2026-10-07 — **Gallery groups**, plus drag-to-reorder of galleries and
+  groups in the sidebar.
+- 2026-10-07 — Library details panel that follows the selected image.
+
 - 2026-10-07 — **Multiple folders.** Add any number of folders; each keeps
   its own remembered handle, file list and disk path, and reconnects
   independently ("Reconnect" in the top bar tries them all). Picking an
@@ -22,6 +44,13 @@ All notable changes to this sketch are logged here, per
   from; **Show in folder** from any image's details.
 
 ### Changed
+
+- 2026-10-07 — Library click now selects and double-click opens, instead of
+  click opening. Arrow keys move the cursor, `Enter` opens it, and
+  `Y`/`M`/`N`/`0` rate the selection. The bulk-action bar appears for 2+
+  selected images.
+- 2026-10-07 — The PNG metadata reader reads chunk by chunk and stops at the
+  image data once it has found text, instead of loading whole files.
 
 - 2026-10-07 — The app is now viewer-first: the **Library** is the default
   tab and shows every image in the selected folder, not just rated ones,

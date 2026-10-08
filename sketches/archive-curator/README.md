@@ -40,24 +40,65 @@ folders**, one folder, or any subfolder (it includes everything below it).
 Clicking a **gallery** shows that gallery instead. The same choice scopes
 the Review module.
 
-The filter bar narrows by All / Unrated / Yes / Maybe / No / With notes;
-search matches paths and notes. Sort by name (chronological for dated
-folders), newest first, recently rated, or shuffle. Use the slider (or
-`+`/`−`, or Ctrl+scroll) to size thumbnails, and toggle crop/fit. The grid
-is virtualized, so 100k-image folders scroll like 100-image ones.
+**Click** a thumbnail to select it, Ctrl/⌘-click or Shift-click to select
+more, and **double-click** (or `Enter`) to open it in the lightbox. Arrow
+keys move the cursor (Shift extends the selection), `Y`/`M`/`N`/`0` rate
+the selection, and `I` shows the details panel for the current image.
 
-Click an image for the lightbox (`←`/`→` navigate, `Space` or click for
-100% zoom, `F` fullscreen, `Y`/`M`/`N` rate, `I` details).
+The filter bar narrows by All / Unrated / Yes / Maybe / No / With notes.
+Sort by name (chronological for dated folders), newest first, recently
+rated, or **shuffle**. Shuffle is seeded: 🎲 (or `D`) rerolls, and typing
+a seed into the box next to it brings that exact order back. Use the
+slider (or `+`/`−`, or Ctrl+scroll) to size thumbnails, and toggle
+crop/fit. The grid is virtualized, so 100k-image folders scroll like
+100-image ones.
+
+**Folder headers** (`G`) split the grid into one section per folder, with
+a header you can click to go into that folder. With headers on, folders
+stay in date order and the sort applies *within* each folder, so shuffle
+shuffles each day's images separately. Turn them off for one continuous
+feed shuffled across everything.
+
+In the lightbox: `←`/`→` navigate, `Space` or click for 100% zoom, `F`
+fullscreen, `Y`/`M`/`N` rate, `I` details.
+
+### Search
+
+The search box (`/`) matches the **file path and name**, your **notes**,
+the **prompt** and the **model/LoRA names** read from the PNG. Every word
+must match somewhere, but not necessarily in the same place. Each result
+gets small tags saying which fields matched, and hovering over it shows the
+matching text, highlighted.
+
+**Colour** (`C`) opens a colour wheel. Results are images where a
+noticeable share of the picture is near that colour, best match first. The
+**Range** slider sets how near counts, and neutrals are one click away. In
+the details panel, an image's palette swatches start a colour search, and
+**Similar colours** ranks everything by how close its colour make-up is to
+that image. Both combine with folders, filters and text search.
+
+Prompts and palettes come from a **background indexer** that works through
+every image once, current folder first. Its progress shows in the top bar
+("Indexing 1,234 / 20,000"), and search covers whatever's indexed so far.
+Palettes come from the cached thumbnail when there is one, so they work
+for disconnected folders too. Prompts need the folder connected.
+
+There's no AI here. Colour search is plain maths: a k-means palette in
+OKLab, a colour space built so that distance matches what looks different.
 
 ### Galleries
 
 An image can be in any number of galleries.
 
-- Ctrl/⌘-click or Shift-click to select, then drag onto a gallery, or onto
-  **+ New gallery** to create one from the selection in one step.
+- Select images, then drag them onto a gallery, or onto **+ New gallery**
+  to create one from the selection in one step.
 - **Target gallery**: click ◉ on a gallery, then press `B` to add/remove
   the current image (lightbox, review) or the selection (library). With no
   target set, `B` makes a new gallery and targets it.
+- **Custom order**: drag images within a gallery to arrange them. The
+  gallery switches to "Custom order (drag)", and its order is saved.
+- **Groups**: **+ Group** makes a group. Drag galleries onto it to file
+  them, and drag galleries or groups to reorder the sidebar.
 - **Show in folder** (details panel) jumps from any image, e.g. one in a
   gallery, back to its original folder with it selected.
 
@@ -108,7 +149,9 @@ styles.css
 src/store.js      IndexedDB wrapper (kv, roots, records, galleries, thumbs)
 src/source.js     read-only access to several folders: File System Access API + <input webkitdirectory> fallback
 src/images.js     thumbnail generation/cache (LIFO pool) + full-size object-URL LRU
-src/pngmeta.js    PNG tEXt/iTXt/zTXt reader + ComfyUI graph summarizer
+src/pngmeta.js    PNG tEXt/iTXt/zTXt reader (reads only up to the image data) + ComfyUI graph summarizer
+src/features.js   background indexer: OKLab colour palettes + prompt/model text per image
+src/colorpicker.js  the colour-search wheel
 src/markdown.js   tiny escape-first markdown renderer for notes
 src/details.js    the side panel (path, rating, galleries, notes, metadata)
 src/app.js        core: folders + tree, virtualized library, galleries, lightbox, settings, keys, module host
@@ -131,9 +174,8 @@ Everything attaches to `window.Curator`.
   computed once by a background indexer. All search modes should combine,
   and any combination should be saveable as a **smart gallery** next to
   the hand-made ones.
-- **Plan:** (1) this sketch: multi-folder viewer core, galleries, modules
-  (done 2026-10-07); colour palettes + colour-wheel search next, since
-  that's pure JS. (2) Graduate to its own repo with a local Python backend
+- **Plan:** (1) this sketch: multi-folder viewer core, galleries, modules,
+  colour search, prompt search (done 2026-10-07). (2) Graduate to its own repo with a local Python backend
   (SQLite, GPU models) serving this UI. In-browser ML fights this repo's
   `file://` rule (no workers or `.wasm` fetches from `file://`). (3) People
   first, then CLIP search / similar images, smart galleries, and the UMAP
@@ -143,6 +185,28 @@ Everything attaches to `window.Curator`.
   still open.
 - **"More like this"** is only worth doing if it's content-aware (colour,
   composition, semantic similarity), not exact-prompt matching.
+
+## Wishlist: semantic search
+
+The dream: search "death" and get skulls, even when no prompt says
+"death". That means matching by meaning, not by characters. It needs a
+model, so it belongs to the local-backend phase. There are two halves:
+
+- **Image content (CLIP / SigLIP).** One model embeds both images and text
+  into the same space. "death" lands near pictures that *look* like it,
+  whatever the prompt said or whether there's a prompt at all, so it
+  works on photos too. The same vectors power "similar to this image"
+  (by content, not just colour) and the UMAP map.
+- **Prompt meaning (a sentence-embedding model).** Embeds the prompt text,
+  so "death" finds prompts about skulls, graves or reapers. It's cheaper
+  than CLIP and specific to generated images.
+
+Both slot into the existing search box as another field, next to the
+plain word match, and their results can be pinned as smart galleries.
+Running them in this page is possible in principle (onnxruntime-web,
+transformers.js), but they fetch model and `.wasm` files and want Web
+Workers, which `file://` blocks. A Python sidecar on the GPU is the
+straightforward route.
 
 ## Open questions / next steps
 
@@ -164,8 +228,13 @@ Everything attaches to `window.Curator`.
   for GIF. They'd be easy to add to the review stage.
 - **Pairwise "tournament" mode** for narrowing a big Yes pile down to
   favourites.
-- **Gallery organizing**: manual ordering inside a gallery, cover images,
-  gallery groups (Lightroom's collection sets), sorting the gallery list.
+- **Gallery organizing**: cover images; nested groups (groups are one
+  level for now).
+- **Smart galleries**: save a search (folder + filter + words + colour)
+  as a sidebar entry that stays live.
+- **Colour search quality** on real archives is untested. Colour is
+  measured on a 64px version, and the match threshold (8% of the image)
+  may need tuning.
 - **Very large libraries**: thumbnails are ~30 KB each in IndexedDB, so
   100k images is a few GB of browser storage. Phone photos in HEIC can't
   be decoded by browsers at all. Both point at the Python backend.

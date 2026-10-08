@@ -8,12 +8,15 @@
 //              (directory handles are structured-cloneable)
 //   records    one row per image you've touched, keyed by "<rootId>/<path>":
 //              { path, rating, reviewedAt, notes, galleries }
-//   galleries  virtual galleries: { id, name, created }
+//   galleries  virtual galleries: { id, name, created, group, pos, order[] }
+//              (gallery groups live in kv "galleryGroups")
 //   thumbs     cached thumbnail blobs keyed by "<rootId>/<path>"
+//   features   background-index results per image (features.js):
+//              { k, v, pal, prompt, model }
 (function () {
   const C = (window.Curator = window.Curator || {});
   const DB_NAME = "archive-curator";
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   let dbPromise = null;
 
   function open() {
@@ -27,6 +30,7 @@
         if (!db.objectStoreNames.contains("galleries")) db.createObjectStore("galleries", { keyPath: "id" });
         if (!db.objectStoreNames.contains("thumbs")) db.createObjectStore("thumbs");
         if (!db.objectStoreNames.contains("roots")) db.createObjectStore("roots", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("features")) db.createObjectStore("features", { keyPath: "k" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);

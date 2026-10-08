@@ -14,6 +14,7 @@
     <div class="brand">Archive<span>Curator</span></div>
     <nav class="tabs" id="tabs"></nav>
     <div class="stats" id="stats"></div>
+    <span class="index-status" id="index-status" hidden></span>
     <div class="source-status" id="source-status"></div>
     <button class="icon-btn" id="settings-btn" title="Settings">&#9881;</button>
   </header>
@@ -23,12 +24,13 @@
     <aside class="sidebar" id="sidebar">
       <h3>Folders <button class="tiny" id="add-folder-btn" title="Add another folder">+ Add</button></h3>
       <div class="tree" id="folder-tree"></div>
-      <h3>Galleries</h3>
+      <h3>Galleries <button class="tiny" id="new-group-btn" title="New group of galleries">+ Group</button></h3>
       <ul class="nav-list" id="gallery-list"></ul>
       <p class="muted small hint">
-        Ctrl/&#8984;-click or Shift-click thumbnails to select, then drag onto a
-        gallery, or onto <b>+ New gallery</b> to make one. <kbd>B</kbd> adds to
-        the target gallery (&#9673;).
+        Click to select (Ctrl/&#8984; or Shift for more), double-click to open.
+        Drag a selection onto a gallery, or onto <b>+ New gallery</b> to make
+        one. <kbd>B</kbd> adds to the target gallery (&#9673;). Drag galleries
+        to reorder them or file them into a group.
       </p>
     </aside>
 
@@ -54,16 +56,19 @@
 
       <!-- Library (core) -->
       <section class="view" id="view-library">
+       <div class="lib-main">
         <div class="lib-bar">
           <span class="lib-title" id="lib-title"></span>
           <div class="seg filter" id="lib-filter"></div>
-          <input type="search" id="lib-search" placeholder="Search path or notes&hellip;" />
-          <select id="lib-sort">
-            <option value="path">Name / date</option>
-            <option value="path-desc">Name / date, newest first</option>
-            <option value="recent">Recently rated</option>
-            <option value="shuffle">Shuffle</option>
-          </select>
+          <input type="search" id="lib-search" placeholder="Search names, notes, prompts&hellip; ( / )" title="Matches file path and name, notes, prompts and model names. Every word must match somewhere." />
+          <button id="color-btn" title="Search by colour (C)"><span class="sw"></span> Colour</button>
+          <span class="match-chip" id="match-chip" hidden></span>
+          <select id="lib-sort" title="Sort"></select>
+          <span class="shuffle-ctl" id="shuffle-ctl" hidden>
+            <button id="reroll-btn" title="Reroll the shuffle (D)">&#127922;</button>
+            <input type="text" id="shuffle-seed" size="6" spellcheck="false" title="Shuffle seed — type one to get the same order back" />
+          </span>
+          <button id="group-btn" title="Folder headers (G)">&#9636; Folders</button>
           <button id="fit-btn">Fit</button>
           <label class="size">&#9638;
             <input type="range" id="thumb-size" min="80" max="520" step="10" />
@@ -84,6 +89,8 @@
         </div>
         <div class="grid" id="grid"><div class="grid-inner" id="grid-inner"></div></div>
         <div class="empty" id="lib-empty"></div>
+       </div>
+       <aside class="details-panel" id="lib-details"></aside>
       </section>
       <!-- Modules (src/modules/*.js) add their own views here. -->
     </div>
@@ -134,16 +141,23 @@
           <button type="button" id="set-import">Import JSON&hellip;</button>
           <button type="button" id="set-clear-thumbs">Clear thumbnail cache</button>
         </div>
+        <p class="muted small" id="set-index"></p>
         <input type="file" id="import-input" accept=".json,application/json" hidden />
       </section>
       <section>
         <h3>Keys</h3>
         <dl class="keys" id="set-keys">
           <dt>L</dt><dd>Library</dd>
+          <dt>Click / dbl-click</dt><dd>Select / open (library); Ctrl/&#8984; and Shift add to the selection</dd>
+          <dt>Arrows, Enter</dt><dd>Move the cursor (Shift extends), open it (library)</dd>
+          <dt>G</dt><dd>Folder headers on/off</dd>
+          <dt>D</dt><dd>Reroll the shuffle</dd>
+          <dt>C</dt><dd>Search by colour</dd>
+          <dt>/</dt><dd>Search box</dd>
           <dt>I</dt><dd>Details, prompt &amp; notes</dd>
           <dt>F</dt><dd>Fullscreen</dd>
           <dt>B</dt><dd>Add/remove current image or selection to the target gallery</dd>
-          <dt>Y / M / N, 0</dt><dd>Rate yes / maybe / no, clear (lightbox)</dd>
+          <dt>Y / M / N, 0</dt><dd>Rate yes / maybe / no, clear (selection or lightbox)</dd>
           <dt>&larr; &rarr;</dt><dd>Previous / next (lightbox)</dd>
           <dt>+ / &minus;</dt><dd>Thumbnail size (library; also Ctrl+scroll)</dd>
           <dt>Ctrl+A / Esc</dt><dd>Select all / clear selection (library)</dd>
@@ -162,6 +176,8 @@
 <script src="src/source.js"></script>
 <script src="src/images.js"></script>
 <script src="src/pngmeta.js"></script>
+<script src="src/features.js"></script>
+<script src="src/colorpicker.js"></script>
 <script src="src/markdown.js"></script>
 <script src="src/details.js"></script>
 <script src="src/app.js"></script>

@@ -1,17 +1,19 @@
-// Core: folders, folder tree, library grid, galleries, lightbox, settings,
-// keys — and the module host. Everything optional (flashcard review, and
-// later things like people or colour search) is a module in src/modules/
-// that registers itself with Curator.registerModule() and gets its own tab.
+// Core: folders, folder tree, library grid, galleries, search, lightbox,
+// settings, keys — and the module host. Everything optional (flashcard
+// review, and later things like people) is a module in src/modules/ that
+// registers itself with Curator.registerModule() and gets its own tab.
 //
 // All state about images is metadata keyed by "<rootId>/<path>" — see
-// store.js and source.js.
+// store.js and source.js. Colour palettes and prompt text come from the
+// background indexer in features.js.
 (function () {
   const C = window.Curator;
-  const { store, source, images, details, markdown } = C;
+  const { store, source, images, details, markdown, features } = C;
   const $ = (id) => document.getElementById(id);
   const esc = (s) => markdown.esc(String(s));
   const fmt = (n) => n.toLocaleString();
   const RATINGS = ["yes", "maybe", "no"];
+  const RATE_KEYS = { y: "yes", p: "yes", m: "maybe", n: "no", x: "no", 0: null, u: null };
   // Pseudo-folder for metadata from before multi-folder support whose
   // original folder hasn't been re-added yet. Re-adding it reattaches them.
   const ORPHAN = "~unattached";
@@ -22,7 +24,11 @@
     view: "library",
     src: { type: "folder", path: "" }, // what's being looked at: a folder (""=all) or a gallery
     filter: "all",
-    sort: "path",
+    sort: "path", // folders: path | path-desc | recent | shuffle
+    gallerySort: "custom", // galleries: the same, plus custom (drag to arrange)
+    groupFolders: false, // folder headers in the grid
+    shuffleSeed: "",
+    lastColor: null, // the colour picker's last { h, s, v, tol }
     detailsOpen: false,
     expanded: [], // folder-tree nodes that are open
     targetGallery: null,
@@ -38,9 +44,20 @@
     srcKeys: null, // cache of keys in the current source
     scanning: new Set(),
     records: new Map(), // key -> { path, rating, reviewedAt, notes, galleries[] }
-    galleries: [], // { id, name, created }
+    galleries: [], // { id, name, created, group, pos, order[] }
+    groups: [], // gallery groups: { id, name, pos, collapsed }
     view: null,
-    lib: { search: "", items: [], selected: new Set(), anchor: -1, shuffled: null },
+    lib: {
+      search: "",
+      items: [],
+      groups: null, // [{ dir, start, end }] when folder headers are on
+      hits: null, // key -> matched search fields
+      match: null, // { type: "color", lab, hex, tol } | { type: "similar", key }
+      matchSort: false, // sort by best match while a match is active
+      scores: null,
+      selected: new Set(),
+      focus: null, // key of the "current" image (keyboard cursor, details panel)
+    },
     lb: { items: [], index: 0, open: false, zoom: false },
   };
 
@@ -98,10 +115,31 @@
     updateCell(path);
   }
 
+  // ------------------------------------------------------------ galleries
+
+  const gallery = (id) => state.galleries.find((x) => x.id === id);
+  const group = (id) => state.groups.find((x) => x.id === id);
+  const plural = (n, w) => `${fmt(n)} ${w}${n === 1 ? "" : "s"}`;
+  const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const saveGroups = () => store.put("kv", state.groups, "galleryGroups");
+
   function galleryChanged() {
     if (state.settings.src.type === "gallery") state.srcKeys = null;
     renderSidebar();
     refreshPanels();
+  }
+
+  // Keep a gallery's custom order in step with its members.
+  function noteOrder(g, paths, remove) {
+    const order = g.order || [];
+    if (remove) {
+      const drop = new Set(paths);
+      g.order = order.filter((k) => !drop.has(k));
+    } else {
+      const have = new Set(order);
+      g.order = order.concat(paths.filter((k) => !have.has(k)));
+    }
+    store.put("galleries", g);
   }
 
   function toggleGallery(path, id) {
@@ -109,6 +147,7 @@
     const has = r.galleries.includes(id);
     r.galleries = has ? r.galleries.filter((g) => g !== id) : [...r.galleries, id];
     saveRecord(r);
+    if (gallery(id)) noteOrder(gallery(id), [path], has);
     galleryChanged();
     changed(path);
   }
@@ -122,20 +161,18 @@
       saveRecord(r);
     }
     const g = gallery(id);
+    if (g) noteOrder(g, paths, remove);
     toast(`${remove ? "Removed" : "Added"} ${plural(paths.length, "image")} ${remove ? "from" : "to"} “${g ? g.name : "gallery"}”`);
     galleryChanged();
     paths.forEach(updateCell);
   }
-
-  const gallery = (id) => state.galleries.find((x) => x.id === id);
-  const plural = (n, w) => `${fmt(n)} ${w}${n === 1 ? "" : "s"}`;
 
   // Optionally seeded with images (dropping a selection on "+ New gallery").
   function newGallery(paths) {
     const suggested = paths && paths.length ? suggestGalleryName(paths) : "";
     const name = (prompt(paths && paths.length ? `New gallery with ${plural(paths.length, "image")}:` : "New gallery name:", suggested) || "").trim();
     if (!name) return null;
-    const g = { id: "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, created: Date.now() };
+    const g = { id: newId("g"), name, created: Date.now(), group: null, pos: topLevel().length, order: [] };
     state.galleries.push(g);
     store.put("galleries", g);
     if (paths && paths.length) addToGallery(paths, g.id);
@@ -145,7 +182,7 @@
 
   // Shared folder name of the paths, if any, as a starting point.
   function suggestGalleryName(paths) {
-    const dirs = new Set(paths.map((p) => p.slice(0, Math.max(0, p.lastIndexOf("/")))));
+    const dirs = new Set(paths.map(dirname));
     if (dirs.size !== 1) return "";
     const d = [...dirs][0];
     return d.slice(d.lastIndexOf("/") + 1);
@@ -177,6 +214,61 @@
     else galleryChanged();
   }
 
+  // Top-level sidebar entries (ungrouped galleries and groups), in order.
+  function topLevel() {
+    return [...state.galleries.filter((g) => !g.group).map((g) => ({ kind: "g", item: g })), ...state.groups.map((gr) => ({ kind: "group", item: gr }))].sort(
+      (a, b) => a.item.pos - b.item.pos
+    );
+  }
+  const inGroup = (gid) => state.galleries.filter((g) => g.group === gid).sort((a, b) => a.pos - b.pos);
+
+  function newGroup() {
+    const name = (prompt("New gallery group:") || "").trim();
+    if (!name) return;
+    state.groups.push({ id: newId("grp"), name, pos: topLevel().length, collapsed: false });
+    saveGroups();
+    renderGalleries();
+  }
+
+  function renameGroup(id) {
+    const gr = group(id);
+    const name = gr && (prompt("Rename group:", gr.name) || "").trim();
+    if (!name) return;
+    gr.name = name;
+    saveGroups();
+    renderGalleries();
+  }
+
+  // The group goes; its galleries move to the top level.
+  function deleteGroup(id) {
+    const gr = group(id);
+    if (!gr || !confirm(`Remove group “${gr.name}”? Its galleries move to the top level.`)) return;
+    let pos = topLevel().length;
+    for (const g of inGroup(id)) {
+      g.group = null;
+      g.pos = pos++;
+      store.put("galleries", g);
+    }
+    state.groups = state.groups.filter((x) => x !== gr);
+    saveGroups();
+    renderGalleries();
+  }
+
+  // Move a gallery or group to `groupId` (null = top level), before `before`
+  // (a gallery or group object; null = at the end). Renumbers positions.
+  function placeEntity(kind, item, groupId, before) {
+    if (kind === "group") groupId = null; // groups only nest one level
+    const siblings = (groupId ? inGroup(groupId).map((g) => ({ kind: "g", item: g })) : topLevel()).filter((e) => e.item !== item);
+    let at = before ? siblings.findIndex((e) => e.item === before) : -1;
+    if (at < 0) at = siblings.length;
+    siblings.splice(at, 0, { kind, item });
+    if (kind === "g") item.group = groupId;
+    siblings.forEach((e, i) => (e.item.pos = i));
+    siblings.filter((e) => e.kind === "g").forEach((e) => store.put("galleries", e.item));
+    saveGroups();
+    renderGalleries();
+  }
+
   function setTarget(id) {
     state.settings.targetGallery = state.settings.targetGallery === id ? null : id;
     saveSettings();
@@ -189,7 +281,7 @@
   function targetToggle() {
     const paths = currentPaths();
     if (!paths.length) return toast("Nothing selected");
-    let id = state.settings.targetGallery;
+    const id = state.settings.targetGallery;
     if (!gallery(id)) {
       const g = newGallery(paths);
       if (!g) return;
@@ -201,6 +293,39 @@
     const all = paths.every((p) => (record(p) || { galleries: [] }).galleries.includes(id));
     addToGallery(paths, id, all);
     if (all && state.settings.src.type === "gallery" && state.settings.src.id === id && state.view === "library") rebuildLibrary(true);
+  }
+
+  // Custom order: the saved order, then any members it doesn't know yet.
+  function customOrder(g, keys) {
+    const set = new Set(keys);
+    const out = [];
+    for (const k of g.order || []) if (set.delete(k)) out.push(k);
+    return out.concat(keys.filter((k) => set.has(k)));
+  }
+
+  // Drag-to-arrange inside a gallery (switches it to custom order).
+  function moveInGallery(id, moving, beforeKey) {
+    const g = gallery(id);
+    if (!g) return;
+    const members = [];
+    for (const r of state.records.values()) if (r.galleries.includes(id)) members.push(r.path);
+    members.sort(C.collator.compare);
+    // Start from what's on screen if it isn't custom yet, so the drop lands where it looks like it should.
+    const base = effectiveSort() === "custom" ? customOrder(g, members) : state.lib.items.concat(customOrder(g, members).filter((k) => !state.lib.items.includes(k)));
+    const mv = new Set(moving);
+    const rest = base.filter((k) => !mv.has(k));
+    let at = beforeKey ? rest.indexOf(beforeKey) : rest.length;
+    if (at < 0) at = rest.length;
+    rest.splice(at, 0, ...base.filter((k) => mv.has(k)));
+    g.order = rest;
+    store.put("galleries", g);
+    state.lib.matchSort = false;
+    if (state.settings.gallerySort !== "custom") {
+      state.settings.gallerySort = "custom";
+      saveSettings();
+      toast("Switched this gallery to custom order");
+    }
+    rebuildLibrary(true);
   }
 
   // The image(s) the user is acting on right now.
@@ -318,6 +443,33 @@
     });
   }
 
+  // cyrb53: a fast, well-mixed string hash. Shuffle order = hash(seed|key),
+  // so a seed always reproduces the same order, whatever the filter.
+  function hash(str) {
+    let h1 = 0xdeadbeef ^ 0,
+      h2 = 0x41c6ce57 ^ 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+  }
+  const randomSeed = () => Math.random().toString(36).slice(2, 7);
+
+  function rgbToHsv(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const max = Math.max(r, g, b);
+    const d = max - Math.min(r, g, b);
+    let h = 0;
+    if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return { h: (h * 60 + 360) % 360, s: max ? d / max : 0, v: max };
+  }
+
   // ------------------------------------------------- index & folder tree
 
   function rebuildIndex() {
@@ -325,7 +477,6 @@
     for (const r of state.roots) for (const rel of state.files.get(r.id) || []) all.push(r.id + "/" + rel);
     state.all = all;
     state.srcKeys = null;
-    state.lib.shuffled = null;
     state.tree = buildTree();
     // A folder that disappeared (removed, renamed) falls back to "all".
     const s = state.settings.src;
@@ -390,12 +541,13 @@
   function setSource(src, opts) {
     state.settings.src = src;
     state.srcKeys = null;
-    state.lib.shuffled = null;
     state.lib.selected.clear();
+    state.lib.focus = null;
     saveSettings();
     renderSidebar();
     renderStats();
     if (state.view === "library") rebuildLibrary();
+    startIndexing();
     if (!(opts && opts.quiet)) emit("onSource");
   }
 
@@ -452,17 +604,28 @@
     for (const r of state.records.values()) for (const g of r.galleries) gCounts.set(g, (gCounts.get(g) || 0) + 1);
     const s = state.settings.src;
     const target = state.settings.targetGallery;
-    $("gallery-list").innerHTML =
-      state.galleries
-        .map(
-          (g) => `<li class="${s.type === "gallery" && s.id === g.id ? "on" : ""} ${target === g.id ? "target" : ""}" data-gallery="${esc(g.id)}">
-            <span class="gname">${esc(g.name)}</span>
-            <button class="tiny hov tgt" data-g-act="target" title="${target === g.id ? "Target gallery (B adds to it) — click to clear" : "Make this the target gallery (B adds to it)"}">&#9673;</button>
-            <button class="tiny hov" data-g-act="rename" title="Rename">&#9998;</button><button class="tiny hov" data-g-act="delete" title="Delete gallery">&times;</button>
-            <span class="n">${fmt(gCounts.get(g.id) || 0)}</span>
-          </li>`
-        )
-        .join("") + `<li class="new-gallery" data-new-gallery="1" title="Click to create, or drop images here to create a gallery with them">+ New gallery</li>`;
+    const li = (g, nested) => `<li draggable="true" class="${nested ? "nested" : ""} ${s.type === "gallery" && s.id === g.id ? "on" : ""} ${target === g.id ? "target" : ""}" data-gallery="${esc(g.id)}">
+        <span class="gname">${esc(g.name)}</span>
+        <button class="tiny hov tgt" data-g-act="target" title="${target === g.id ? "Target gallery (B adds to it) — click to clear" : "Make this the target gallery (B adds to it)"}">&#9673;</button>
+        <button class="tiny hov" data-g-act="rename" title="Rename">&#9998;</button><button class="tiny hov" data-g-act="delete" title="Delete gallery">&times;</button>
+        <span class="n">${fmt(gCounts.get(g.id) || 0)}</span>
+      </li>`;
+    const rows = [];
+    for (const e of topLevel()) {
+      if (e.kind === "g") {
+        rows.push(li(e.item, false));
+        continue;
+      }
+      const gr = e.item;
+      const kids = inGroup(gr.id);
+      rows.push(`<li draggable="true" class="gal-group" data-group="${esc(gr.id)}" title="Drag galleries here to file them">
+          <span class="caret" data-gr-act="toggle">${gr.collapsed ? "&#9656;" : "&#9662;"}</span><span class="gname">${esc(gr.name)}</span>
+          <button class="tiny hov" data-gr-act="rename" title="Rename group">&#9998;</button><button class="tiny hov" data-gr-act="delete" title="Remove group (keeps its galleries)">&times;</button>
+          <span class="n">${kids.length}</span></li>`);
+      if (!gr.collapsed) kids.forEach((g) => rows.push(li(g, true)));
+    }
+    rows.push(`<li class="new-gallery" data-new-gallery="1" title="Click to create, or drop images here to create a gallery with them">+ New gallery</li>`);
+    $("gallery-list").innerHTML = rows.join("");
   }
 
   // --------------------------------------------------------- top bar
@@ -504,6 +667,15 @@
     document.body.classList.toggle("no-roots", !state.roots.length);
   }
 
+  function renderIndexStatus(st) {
+    const el = $("index-status");
+    el.hidden = !st.running;
+    if (st.running) {
+      el.textContent = `Indexing ${fmt(st.done)} / ${fmt(st.total)}`;
+      el.title = "Working out colour palettes and reading prompts, in the background. Colour and prompt search cover what's indexed so far.";
+    }
+  }
+
   // ------------------------------------------------------------ views
 
   function showView(view) {
@@ -519,6 +691,103 @@
     if (view === "library") rebuildLibrary();
     const m = activeModule();
     if (m && m.show) m.show();
+  }
+
+  // ------------------------------------------------------- search & match
+
+  const FIELD_LABEL = { path: "path", notes: "notes", prompt: "prompt", model: "model" };
+  const lcCache = new WeakMap(); // features entry -> lowercased text
+
+  function searchTerms() {
+    return state.lib.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  }
+
+  function fieldsOf(k) {
+    const r = state.records.get(k);
+    const f = features.get(k);
+    let lc = f && lcCache.get(f);
+    if (f && !lc) lcCache.set(f, (lc = { prompt: (f.prompt || "").toLowerCase(), model: (f.model || "").toLowerCase() }));
+    return [
+      ["path", k.toLowerCase(), k],
+      ["notes", ((r && r.notes) || "").toLowerCase(), (r && r.notes) || ""],
+      ["prompt", lc ? lc.prompt : "", (f && f.prompt) || ""],
+      ["model", lc ? lc.model : "", (f && f.model) || ""],
+    ];
+  }
+
+  // Every term must appear somewhere; returns the fields that matched.
+  function matchSearch(k, terms) {
+    const fields = fieldsOf(k);
+    const hit = new Set();
+    for (const t of terms) {
+      let found = false;
+      for (const [name, lc] of fields) {
+        if (lc.includes(t)) {
+          hit.add(name);
+          found = true;
+        }
+      }
+      if (!found) return null;
+    }
+    return hit;
+  }
+
+  function setMatch(m) {
+    state.lib.match = m;
+    state.lib.matchSort = !!m;
+    renderMatchChip();
+    if (state.view === "library") rebuildLibrary();
+  }
+
+  function colorMatch(c) {
+    state.settings.lastColor = { h: c.h, s: c.s, v: c.v, tol: c.tol };
+    saveSettings();
+    const m = { type: "color", lab: c.lab, hex: c.hex, tol: c.tol };
+    // Keep the scroll position stable while dragging around the wheel.
+    const was = state.lib.match && state.lib.match.type === "color";
+    state.lib.match = m;
+    if (!was) state.lib.matchSort = true;
+    renderMatchChip();
+    scheduleRebuild(was);
+  }
+
+  let rebuildTimer = 0;
+  function scheduleRebuild(keepScroll) {
+    clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(() => state.view === "library" && rebuildLibrary(keepScroll), 120);
+  }
+
+  // From the details panel's palette swatches.
+  function searchColor(lab) {
+    const rgb = features.labToRgb(...lab);
+    const hsv = rgbToHsv(...rgb);
+    const tol = (state.settings.lastColor || {}).tol || 0.14;
+    if (state.lb.open) closeLightbox();
+    if (state.view !== "library") showView("library");
+    colorMatch({ ...hsv, tol, lab, hex: C.colorPicker.hex(rgb) });
+  }
+
+  function findSimilar(key) {
+    if (!features.get(key)) return toast("Still indexing this image — try again in a moment");
+    if (state.lb.open) closeLightbox();
+    if (state.view !== "library") showView("library");
+    setMatch({ type: "similar", key });
+  }
+
+  function renderMatchChip() {
+    const m = state.lib.match;
+    const btn = $("color-btn");
+    btn.classList.toggle("on", !!(m && m.type === "color"));
+    btn.querySelector(".sw").style.background = m && m.type === "color" ? m.hex : "";
+    const chip = $("match-chip");
+    if (m && m.type === "similar") {
+      chip.hidden = false;
+      chip.innerHTML = `<img alt="" /> Similar colours <button class="tiny" data-clear-match title="Clear">&times;</button>`;
+      images.thumb(m.key).then((u) => u && (chip.querySelector("img").src = u));
+    } else if (m && m.type === "color") {
+      chip.hidden = false;
+      chip.innerHTML = `<span class="sw" style="background:${m.hex}"></span> Colour <button class="tiny" data-clear-match title="Clear">&times;</button>`;
+    } else chip.hidden = true;
   }
 
   // ---------------------------------------------------------- library
@@ -545,6 +814,53 @@
     $("lib-title").textContent = srcLabel();
   }
 
+  const inGallerySrc = () => state.settings.src.type === "gallery";
+  function baseSort() {
+    if (inGallerySrc()) return state.settings.gallerySort;
+    return state.settings.sort === "custom" ? "path" : state.settings.sort;
+  }
+  const effectiveSort = () => (state.lib.match && state.lib.matchSort ? "match" : baseSort());
+
+  function renderSortBar() {
+    const opts = [
+      ["path", "Name / date"],
+      ["path-desc", "Name / date, newest first"],
+      ["recent", "Recently rated"],
+      ["shuffle", "Shuffle"],
+    ];
+    if (inGallerySrc()) opts.unshift(["custom", "Custom order (drag)"]);
+    if (state.lib.match) opts.unshift(["match", state.lib.match.type === "color" ? "Best colour match" : "Most similar"]);
+    const eff = effectiveSort();
+    $("lib-sort").innerHTML = opts.map(([v, l]) => `<option value="${v}" ${v === eff ? "selected" : ""}>${l}</option>`).join("");
+    $("shuffle-ctl").hidden = eff !== "shuffle";
+    $("shuffle-seed").value = state.settings.shuffleSeed;
+    const gb = $("group-btn");
+    gb.classList.toggle("on", state.settings.groupFolders);
+    gb.disabled = eff === "custom";
+    gb.title = eff === "custom" ? "Folder headers are off in custom order" : "Folder headers (G)";
+  }
+
+  function setSort(v) {
+    if (v === "match") state.lib.matchSort = true;
+    else {
+      state.lib.matchSort = false;
+      if (inGallerySrc()) state.settings.gallerySort = v;
+      else state.settings.sort = v;
+      if (v === "shuffle" && !state.settings.shuffleSeed) state.settings.shuffleSeed = randomSeed();
+      saveSettings();
+    }
+    rebuildLibrary();
+  }
+
+  function reroll(seed) {
+    state.settings.shuffleSeed = seed || randomSeed();
+    state.lib.matchSort = false;
+    if (inGallerySrc()) state.settings.gallerySort = "shuffle";
+    else state.settings.sort = "shuffle";
+    saveSettings();
+    rebuildLibrary();
+  }
+
   function libraryItems() {
     const f = state.settings.filter;
     let keys = srcKeys();
@@ -556,69 +872,186 @@
         return r && r.rating === f;
       });
     }
-    const q = state.lib.search.trim().toLowerCase();
-    if (q)
+    const terms = searchTerms();
+    state.lib.hits = null;
+    if (terms.length) {
+      const hits = new Map();
       keys = keys.filter((k) => {
-        if (k.toLowerCase().includes(q)) return true;
-        const r = state.records.get(k);
-        return r && (r.notes || "").toLowerCase().includes(q);
+        const h = matchSearch(k, terms);
+        if (h) hits.set(k, h);
+        return !!h;
       });
-    const sort = state.settings.sort;
+      state.lib.hits = hits;
+    }
+    const m = state.lib.match;
+    state.lib.scores = null;
+    if (m) {
+      const scores = new Map();
+      if (m.type === "color") {
+        for (const k of keys) {
+          const e = features.get(k);
+          if (!e || !e.pal) continue;
+          const s = features.colorScore(e.pal, m.lab, m.tol);
+          if (s >= 0.08) scores.set(k, s);
+        }
+      } else {
+        const ref = features.get(m.key);
+        for (const k of keys) {
+          const e = features.get(k);
+          if (e && e.pal && ref) scores.set(k, -features.paletteDistance(ref.pal, e.pal));
+        }
+      }
+      keys = keys.filter((k) => scores.has(k));
+      state.lib.scores = scores;
+    }
+    const sort = effectiveSort();
     if (sort === "path-desc") keys = keys.slice().reverse();
     else if (sort === "recent") {
       const t = (k) => (state.records.get(k) || {}).reviewedAt || 0;
       keys = keys.slice().sort((a, b) => t(b) - t(a));
     } else if (sort === "shuffle") {
-      // Stable until the source changes, so rating in place doesn't reshuffle.
-      if (!state.lib.shuffled) {
-        state.lib.shuffled = new Map();
-        sample(state.all, state.all.length).forEach((k, i) => state.lib.shuffled.set(k, i));
+      const seed = state.settings.shuffleSeed + "|";
+      const rank = new Map(keys.map((k) => [k, hash(seed + k)]));
+      keys = keys.slice().sort((a, b) => rank.get(a) - rank.get(b));
+    } else if (sort === "match") {
+      const sc = state.lib.scores;
+      keys = keys.slice().sort((a, b) => sc.get(b) - sc.get(a));
+    } else if (sort === "custom") {
+      const g = gallery(state.settings.src.id);
+      if (g) keys = customOrder(g, keys);
+    }
+    // Folder headers: keep folders in path order and the chosen order
+    // *within* each folder (so shuffle shuffles inside each day, etc.).
+    state.lib.groups = null;
+    if (state.settings.groupFolders && sort !== "custom") {
+      const byDir = new Map();
+      for (const k of keys) {
+        const d = dirname(k);
+        if (!byDir.has(d)) byDir.set(d, []);
+        byDir.get(d).push(k);
       }
-      const order = state.lib.shuffled;
-      keys = keys.slice().sort((a, b) => order.get(a) - order.get(b));
+      if (byDir.size > 1) {
+        const dirs = [...byDir.keys()].sort(C.collator.compare);
+        if (baseSort() === "path-desc") dirs.reverse();
+        keys = [];
+        state.lib.groups = dirs.map((d) => {
+          const start = keys.length;
+          keys.push(...byDir.get(d));
+          return { dir: d, start, end: keys.length };
+        });
+      }
     }
     return keys;
   }
 
-  // The grid is virtualized: only the rows in (or near) view exist as DOM
-  // nodes, absolutely positioned inside a spacer as tall as the whole grid.
-  // That's what keeps 100k-image folders as fast as 100-image ones.
+  // The grid is virtualized: only rows in (or near) view exist as DOM nodes,
+  // absolutely positioned inside a spacer as tall as the whole grid. Rows are
+  // either a folder header or a strip of cells; that's what keeps 100k-image
+  // folders as fast as 100-image ones.
   const GRID_GAP = 8;
   const GRID_PAD = 12; // matches .grid padding-top in styles.css
-  const OVERSCAN = 3; // rows rendered above/below the viewport
-  const grid = { cols: 1, size: 0, cells: new Map() }; // cells: index -> element
+  const HEAD_H = 34;
+  const OVERSCAN = 600; // px rendered above/below the viewport
+  const grid = { cols: 1, size: 0, rows: [], cellRows: [], cells: new Map(), heads: new Map() };
 
   function rebuildLibrary(keepScroll) {
+    hideHoverCard();
     const items = libraryItems();
     state.lib.items = items;
     const keep = new Set(items);
     for (const p of [...state.lib.selected]) if (!keep.has(p)) state.lib.selected.delete(p);
-    state.lib.anchor = -1;
+    if (state.lib.focus && !keep.has(state.lib.focus)) state.lib.focus = null;
     applyThumbFit();
     clearCells();
     if (!keepScroll) $("grid").scrollTop = 0;
     layoutGrid(true);
     $("lib-count").textContent = plural(items.length, "image");
+    $("grid").classList.toggle("searching", !!state.lib.hits);
     const empty = $("lib-empty");
     empty.hidden = items.length > 0;
     const s = state.settings.src;
+    const indexing = features.stats.running && (state.lib.match || state.lib.hits);
     empty.innerHTML =
       s.type === "gallery" && !srcKeys().length
-        ? "This gallery is empty. Select images (Ctrl/⌘-click) and drag them onto it, or set it as the target and press B."
-        : state.lib.search
-          ? "Nothing matches that search."
-          : state.settings.filter !== "all"
-            ? "Nothing here with this filter."
-            : "No images in this folder.";
+        ? "This gallery is empty. Select images and drag them onto it, or set it as the target and press B."
+        : state.lib.match
+          ? "No matches" + (indexing ? " yet — still indexing." : ". Try a wider range in the colour picker.")
+          : state.lib.search
+            ? "Nothing matches that search" + (indexing ? " yet — prompts are still being indexed." : ".")
+            : state.settings.filter !== "all"
+              ? "Nothing here with this filter."
+              : "No images in this folder.";
     renderLibTitle();
     renderFilterBar();
+    renderSortBar();
     renderSelectBar();
+    renderLibDetails();
   }
 
   function clearCells() {
     for (const cell of grid.cells.values()) images.cancel(cell.dataset.path);
     grid.cells.clear();
-    $("grid-inner").innerHTML = "";
+    grid.heads.clear();
+    const inner = $("grid-inner");
+    inner.innerHTML = "";
+    inner.appendChild(dropMarker);
+  }
+
+  function buildRows() {
+    const { cols, size } = grid;
+    const step = size + GRID_GAP;
+    const rows = [];
+    const cellRows = [];
+    const segs = state.lib.groups || [{ dir: null, start: 0, end: state.lib.items.length }];
+    let y = 0;
+    for (const seg of segs) {
+      if (seg.dir !== null) {
+        rows.push({ type: "head", y, h: HEAD_H, seg });
+        y += HEAD_H;
+      }
+      for (let s = seg.start; s < seg.end; s += cols) {
+        const row = { type: "cells", y, h: size, start: s, end: Math.min(s + cols, seg.end) };
+        rows.push(row);
+        cellRows.push(row);
+        y += step;
+      }
+      if (seg.dir !== null) y += 10;
+    }
+    grid.rows = rows;
+    grid.cellRows = cellRows;
+    $("grid-inner").style.height = Math.max(0, y - GRID_GAP) + "px";
+  }
+
+  // Last row starting at or above y.
+  function rowAt(rows, y) {
+    let lo = 0,
+      hi = rows.length - 1,
+      ans = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (rows[mid].y <= y) {
+        ans = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    return ans;
+  }
+  // The cell row holding item i.
+  function cellRowOf(i) {
+    const rows = grid.cellRows;
+    let lo = 0,
+      hi = rows.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (rows[mid].end <= i) lo = mid + 1;
+      else if (rows[mid].start > i) hi = mid - 1;
+      else return mid;
+    }
+    return -1;
+  }
+  function posOf(i) {
+    const r = grid.cellRows[cellRowOf(i)];
+    return r ? { x: (i - r.start) * (grid.size + GRID_GAP), y: r.y } : { x: 0, y: 0 };
   }
 
   function layoutGrid(force) {
@@ -630,59 +1063,106 @@
     const cols = Math.max(1, Math.floor((avail + GRID_GAP) / (min + GRID_GAP)));
     const size = Math.floor((avail - GRID_GAP * (cols - 1)) / cols);
     if (!force && cols === grid.cols && size === grid.size) return;
-    // Keep the first visible row's images in view across the re-layout.
-    const firstVisible = grid.size && !force ? Math.floor(Math.max(0, el.scrollTop - GRID_PAD) / (grid.size + GRID_GAP)) * grid.cols : -1;
+    // Keep the first visible image in view across the re-layout.
+    let anchor = -1;
+    if (!force && grid.rows.length) {
+      const r = grid.rows[rowAt(grid.rows, Math.max(0, el.scrollTop - GRID_PAD))];
+      anchor = r.type === "cells" ? r.start : r.seg.start;
+    }
     const changedGeom = cols !== grid.cols || size !== grid.size;
     grid.cols = cols;
     grid.size = size;
-    const rows = Math.ceil(state.lib.items.length / cols);
-    $("grid-inner").style.height = Math.max(0, rows * (size + GRID_GAP) - GRID_GAP) + "px";
     if (changedGeom) clearCells();
-    if (firstVisible >= 0) el.scrollTop = Math.floor(firstVisible / cols) * (size + GRID_GAP);
+    buildRows();
+    if (anchor >= 0) el.scrollTop = posOf(anchor).y;
     renderVisible();
   }
 
   function renderVisible() {
     const el = $("grid");
-    const { cols, size, cells } = grid;
+    const { size, cells, heads } = grid;
     if (!size) return;
     const step = size + GRID_GAP;
-    const n = state.lib.items.length;
-    const top = Math.max(0, el.scrollTop - GRID_PAD);
-    const firstRow = Math.max(0, Math.floor(top / step) - OVERSCAN);
-    const lastRow = Math.floor((top + el.clientHeight) / step) + OVERSCAN;
-    const lo = firstRow * cols;
-    const hi = Math.min(n, (lastRow + 1) * cols);
+    const top = Math.max(0, el.scrollTop - GRID_PAD - OVERSCAN);
+    const bottom = el.scrollTop + el.clientHeight + OVERSCAN;
+    const want = new Set();
+    const wantHeads = new Set();
+    const vis = [];
+    for (let ri = rowAt(grid.rows, top); ri < grid.rows.length && grid.rows[ri].y < bottom; ri++) {
+      const r = grid.rows[ri];
+      if (r.type === "head") {
+        wantHeads.add(r.seg.dir);
+        vis.push(r);
+      } else for (let i = r.start; i < r.end; i++) want.add(i);
+      if (r.type === "cells") vis.push(r);
+    }
     for (const [i, cell] of cells) {
-      if (i < lo || i >= hi) {
+      if (!want.has(i)) {
         images.cancel(cell.dataset.path);
         cell.remove();
         cells.delete(i);
       }
     }
-    const inner = $("grid-inner");
-    const frag = document.createDocumentFragment();
-    for (let i = lo; i < hi; i++) {
-      if (cells.has(i)) continue;
-      const p = state.lib.items[i];
-      const cell = document.createElement("div");
-      cell.className = "cell";
-      cell.draggable = true;
-      cell.dataset.i = i;
-      cell.dataset.path = p;
-      cell.title = p;
-      cell.style.cssText = `left:${(i % cols) * step}px;top:${Math.floor(i / cols) * step}px;width:${size}px;height:${size}px`;
-      cell.innerHTML = `<img draggable="false" alt="" /><span class="badge"></span><span class="note-dot" title="Has notes">&#9998;</span>`;
-      decorateCell(cell);
-      setThumb(cell.firstChild, p, cell);
-      cells.set(i, cell);
-      frag.appendChild(cell);
+    for (const [d, h] of heads) {
+      if (!wantHeads.has(d)) {
+        h.remove();
+        heads.delete(d);
+      }
     }
-    inner.appendChild(frag);
+    const frag = document.createDocumentFragment();
+    for (const r of vis) {
+      if (r.type === "head") {
+        if (heads.has(r.seg.dir)) continue;
+        const h = document.createElement("div");
+        h.className = "group-head";
+        h.dataset.dir = r.seg.dir;
+        h.style.top = r.y + "px";
+        h.innerHTML = `<span class="gh-name">${esc(groupLabel(r.seg.dir))}</span><span class="muted">${plural(r.seg.end - r.seg.start, "image")}</span>`;
+        h.title = "Open this folder";
+        heads.set(r.seg.dir, h);
+        frag.appendChild(h);
+        continue;
+      }
+      for (let i = r.start; i < r.end; i++) {
+        if (cells.has(i)) continue;
+        const p = state.lib.items[i];
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.draggable = true;
+        cell.dataset.i = i;
+        cell.dataset.path = p;
+        if (!state.lib.hits) cell.title = p;
+        cell.style.cssText = `left:${(i - r.start) * step}px;top:${r.y}px;width:${size}px;height:${size}px`;
+        cell.innerHTML = `<img draggable="false" alt="" /><span class="badge"></span><span class="note-dot" title="Has notes">&#9998;</span>${hitTags(p)}`;
+        decorateCell(cell);
+        setThumb(cell.firstChild, p, cell);
+        cells.set(i, cell);
+        frag.appendChild(cell);
+      }
+    }
+    $("grid-inner").appendChild(frag);
+  }
+
+  // Folder header text, relative to the folder being viewed.
+  function groupLabel(dir) {
+    const s = state.settings.src;
+    if (s.type === "folder" && s.path) {
+      if (dir === s.path) return "(this folder)";
+      if (dir.startsWith(s.path + "/")) return dir.slice(s.path.length + 1);
+    }
+    return dir;
+  }
+
+  function hitTags(p) {
+    const h = state.lib.hits && state.lib.hits.get(p);
+    if (!h) return "";
+    return `<span class="hit-tags">${[...h].map((f) => `<i class="${f}">${FIELD_LABEL[f]}</i>`).join("")}</span>`;
   }
 
   let scrollRaf = 0;
   function onGridScroll() {
+    features.busy(600);
+    hideHoverCard();
     if (scrollRaf) return;
     scrollRaf = requestAnimationFrame(() => {
       scrollRaf = 0;
@@ -692,17 +1172,19 @@
 
   function scrollToItem(i) {
     const el = $("grid");
-    const step = grid.size + GRID_GAP;
-    el.scrollTop = Math.max(0, Math.floor(i / grid.cols) * step - el.clientHeight / 3);
+    const { y } = posOf(i);
+    if (y < el.scrollTop - GRID_PAD || y + grid.size > el.scrollTop + el.clientHeight - GRID_PAD) el.scrollTop = Math.max(0, y - el.clientHeight / 3);
     renderVisible();
   }
 
   function decorateCell(cell) {
-    const r = record(cell.dataset.path) || {};
+    const p = cell.dataset.path;
+    const r = record(p) || {};
     cell.classList.remove("yes", "maybe", "no");
     if (r.rating) cell.classList.add(r.rating);
     cell.classList.toggle("has-notes", !!(r.notes || "").trim());
-    cell.classList.toggle("selected", state.lib.selected.has(cell.dataset.path));
+    cell.classList.toggle("selected", state.lib.selected.has(p));
+    cell.classList.toggle("focus", state.lib.focus === p);
   }
   const decorateAll = () => grid.cells.forEach(decorateCell);
 
@@ -716,7 +1198,7 @@
     const sel = state.lib.selected;
     const s = state.settings.src;
     const inGallery = s.type === "gallery" ? s.id : null;
-    $("select-bar").classList.toggle("show", sel.size > 0);
+    $("select-bar").classList.toggle("show", sel.size > 1);
     $("select-count").textContent = `${fmt(sel.size)} selected`;
     const pick = inGallery || state.settings.targetGallery;
     $("select-gallery").innerHTML =
@@ -725,26 +1207,73 @@
     $("select-remove").hidden = !inGallery;
   }
 
+  // Click = select just this; Ctrl/⌘ = toggle; Shift = range from the focus.
   function selectCell(i, e) {
     const sel = state.lib.selected;
     const items = state.lib.items;
-    if (e.shiftKey && state.lib.anchor >= 0) {
-      const [a, b] = [Math.min(state.lib.anchor, i), Math.max(state.lib.anchor, i)];
+    const p = items[i];
+    const anchor = state.lib.focus ? items.indexOf(state.lib.focus) : -1;
+    if (e.shiftKey && anchor >= 0) {
+      if (!(e.ctrlKey || e.metaKey)) sel.clear();
+      const [a, b] = [Math.min(anchor, i), Math.max(anchor, i)];
       for (let k = a; k <= b; k++) sel.add(items[k]);
-    } else {
-      const p = items[i];
+      decorateAll();
+      renderSelectBar();
+      return; // keep the anchor where it was
+    }
+    if (e.ctrlKey || e.metaKey) {
       if (sel.has(p)) sel.delete(p);
       else sel.add(p);
-      state.lib.anchor = i;
+    } else {
+      sel.clear();
+      sel.add(p);
     }
+    setFocus(p);
+  }
+
+  function setFocus(p) {
+    state.lib.focus = p;
     decorateAll();
     renderSelectBar();
+    renderLibDetails();
+  }
+
+  // Arrow keys: move the cursor (Shift extends the selection).
+  function moveCursor(dx, dy, extend) {
+    const items = state.lib.items;
+    if (!items.length) return;
+    let i = state.lib.focus ? items.indexOf(state.lib.focus) : -1;
+    if (i < 0) i = 0;
+    else if (dx) i = Math.max(0, Math.min(items.length - 1, i + dx));
+    else {
+      const ri = cellRowOf(i);
+      const r = grid.cellRows[ri];
+      const t = grid.cellRows[ri + dy];
+      if (t) i = Math.min(t.start + (i - r.start), t.end - 1);
+    }
+    const p = items[i];
+    if (extend) state.lib.selected.add(p);
+    else {
+      state.lib.selected.clear();
+      state.lib.selected.add(p);
+    }
+    scrollToItem(i);
+    setFocus(p);
   }
 
   function clearSelection() {
     state.lib.selected.clear();
+    state.lib.focus = null;
     decorateAll();
     renderSelectBar();
+    renderLibDetails();
+  }
+
+  function renderLibDetails() {
+    if (!state.settings.detailsOpen || state.view !== "library") return;
+    const panel = $("lib-details");
+    const p = state.lib.focus;
+    if (panel.dataset.path !== (p || "")) details.render(panel, p || null);
   }
 
   function setThumbSize(px) {
@@ -763,6 +1292,19 @@
     b.title = fit ? "Showing whole images — click to crop thumbnails to fill squares" : "Showing cropped squares — click to show whole images";
   }
 
+  function toggleGroupFolders() {
+    if (effectiveSort() === "custom") return;
+    state.settings.groupFolders = !state.settings.groupFolders;
+    saveSettings();
+    const keep = state.lib.focus;
+    rebuildLibrary();
+    if (keep) {
+      const i = state.lib.items.indexOf(keep);
+      if (i >= 0) scrollToItem(i);
+    }
+    toast(state.settings.groupFolders ? "Folder headers on (G)" : "Folder headers off — one continuous feed");
+  }
+
   // Jump from any image (e.g. one in a gallery) to its folder in the library.
   function showInFolder(path) {
     const dir = dirname(path);
@@ -771,7 +1313,9 @@
     for (let i = 1; i < segs.length; i++) toggleExpanded(segs.slice(0, i).join("/"), true);
     state.settings.filter = "all";
     state.lib.search = "";
+    state.lib.match = null;
     $("lib-search").value = "";
+    renderMatchChip();
     if (state.view !== "library") {
       state.settings.src = { type: "folder", path: dir };
       state.srcKeys = null;
@@ -783,16 +1327,82 @@
     const i = state.lib.items.indexOf(path);
     if (i < 0) return;
     state.lib.selected = new Set([path]);
-    state.lib.anchor = i;
     scrollToItem(i);
-    decorateAll();
-    renderSelectBar();
+    setFocus(path);
+  }
+
+  // ------------------------------------------------- search hover card
+
+  let hoverTimer = 0;
+  function showHoverCard(cell) {
+    const p = cell.dataset.path;
+    const terms = searchTerms();
+    const hit = state.lib.hits && state.lib.hits.get(p);
+    if (!hit || !terms.length) return;
+    const rows = fieldsOf(p)
+      .filter(([name]) => hit.has(name))
+      .map(([name, lc, raw]) => `<div class="hc-row"><span class="hc-field ${name}">${FIELD_LABEL[name]}</span><span class="hc-text">${snippet(raw, lc, terms)}</span></div>`);
+    const card = $("hovercard");
+    card.innerHTML = rows.join("");
+    const r = cell.getBoundingClientRect();
+    card.classList.add("show");
+    const w = card.offsetWidth;
+    const h = card.offsetHeight;
+    let x = r.right + 8;
+    if (x + w > window.innerWidth - 8) x = r.left - w - 8;
+    if (x < 8) x = Math.min(window.innerWidth - w - 8, r.left);
+    const y = Math.max(8, Math.min(window.innerHeight - h - 8, r.top));
+    card.style.left = x + "px";
+    card.style.top = y + "px";
+  }
+  function hideHoverCard() {
+    clearTimeout(hoverTimer);
+    $("hovercard").classList.remove("show");
+  }
+
+  // Text around the first match of each term, with matches highlighted.
+  function snippet(raw, lc, terms) {
+    const ranges = [];
+    for (const t of terms) {
+      let from = 0;
+      let idx;
+      while ((idx = lc.indexOf(t, from)) >= 0) {
+        ranges.push([idx, idx + t.length]);
+        from = idx + t.length;
+      }
+    }
+    if (!ranges.length) return esc(raw.slice(0, 120));
+    ranges.sort((a, b) => a[0] - b[0]);
+    const CTX = 60;
+    const windows = [];
+    for (const [a, b] of ranges) {
+      const w = windows[windows.length - 1];
+      if (w && a - CTX <= w[1]) w[1] = Math.max(w[1], b + CTX);
+      else windows.push([Math.max(0, a - CTX), b + CTX]);
+      if (windows.length > 3) break;
+    }
+    return windows
+      .slice(0, 3)
+      .map(([ws, we]) => {
+        we = Math.min(raw.length, we);
+        let out = "";
+        let pos = ws;
+        for (const [a, b] of ranges) {
+          if (b <= ws || a >= we || a < pos) continue;
+          out += esc(raw.slice(pos, a)) + "<mark>" + esc(raw.slice(a, b)) + "</mark>";
+          pos = b;
+        }
+        out += esc(raw.slice(pos, we));
+        return (ws > 0 ? "&hellip;" : "") + out + (we < raw.length ? "&hellip;" : "");
+      })
+      .join(" ");
   }
 
   // --------------------------------------------------------- lightbox
 
   function openLightbox(items, index) {
     if (!items.length) return;
+    hideHoverCard();
     const lb = state.lb;
     lb.items = items.slice();
     lb.index = Math.max(0, Math.min(index, items.length - 1));
@@ -806,6 +1416,16 @@
     $("lightbox").classList.remove("open");
     if (document.fullscreenElement === $("lightbox")) document.exitFullscreen();
     details.render($("lb-details"), null);
+    // Leave the library's cursor on the last image viewed.
+    if (state.view === "library") {
+      const p = state.lb.items[state.lb.index];
+      const i = state.lib.items.indexOf(p);
+      if (i >= 0) {
+        state.lib.selected = new Set([p]);
+        scrollToItem(i);
+        setFocus(p);
+      }
+    }
     const m = activeModule();
     if (m && m.show) m.show();
   }
@@ -878,6 +1498,11 @@
     saveSettings();
     document.body.classList.toggle("details-open", open);
     if (open && state.lb.open) details.render($("lb-details"), state.lb.items[state.lb.index]);
+    if (open) {
+      $("lib-details").dataset.path = "\0"; // force a render
+      renderLibDetails();
+    }
+    layoutGrid();
     emit("onDetails", open);
   }
 
@@ -914,7 +1539,14 @@
     renderSourceStatus();
     if (state.view === "welcome" || state.view === null) showView(state.settings.view);
     else if (state.view === "library") rebuildLibrary(keepScroll);
+    startIndexing();
     emit("onFiles");
+  }
+
+  let indexTimer = 0;
+  function startIndexing() {
+    clearTimeout(indexTimer);
+    indexTimer = setTimeout(() => features.start(state.all, srcKeys()), 400);
   }
 
   async function applyScan(id, rels) {
@@ -1075,6 +1707,7 @@
 
   function afterConnect() {
     if (state.view === "library") rebuildLibrary(true);
+    startIndexing();
     emit("onFiles");
   }
 
@@ -1085,15 +1718,17 @@
       ? "Forget these unattached ratings, notes and thumbnails for good?"
       : `Remove “${root.name}” from the library?\n\nThe folder itself is untouched. Its ratings, notes and gallery entries are kept and come back if you add it again.`;
     if (!confirm(msg)) return;
+    const pre = id + "/";
+    const keys = (state.files.get(id) || []).map((rel) => pre + rel);
     state.roots = state.roots.filter((r) => r !== root);
     state.files.delete(id);
     source.disconnect(id);
     await store.del("roots", id);
     await store.del("kv", "files:" + id);
-    const pre = id + "/";
     const thumbKeys = (await store.keys("thumbs")).filter((k) => k.startsWith(pre));
     images.forget(thumbKeys);
     await store.delMany("thumbs", thumbKeys);
+    await features.forget(keys);
     if (root.virtual) {
       const dead = [...state.records.keys()].filter((k) => k.startsWith(pre));
       dead.forEach((k) => state.records.delete(k));
@@ -1154,7 +1789,7 @@
     }
     delete state.settings.rootPath;
     delete state.settings.libFilter;
-    if (state.settings.libSort) state.settings.sort = state.settings.libSort === "recent" ? "recent" : state.settings.libSort;
+    if (state.settings.libSort) state.settings.sort = state.settings.libSort;
     delete state.settings.libSort;
     await store.put("kv", state.settings, "settings");
     await store.delMany("kv", ["files", "rootName", "rootHandle"]);
@@ -1192,6 +1827,13 @@
     const pairs = moved.map((rel) => [ORPHAN + "/" + rel, id + "/" + rel]);
     images.forget(pairs.map((p) => p[0]));
     await store.rekey("thumbs", pairs);
+    await features.rekey(pairs);
+    const renamed = new Map(pairs);
+    for (const g of state.galleries) {
+      if (!g.order || !g.order.some((k) => renamed.has(k))) continue;
+      g.order = g.order.map((k) => renamed.get(k) || k);
+      store.put("galleries", g);
+    }
     const left = orphans.filter((r) => !rels.has(r));
     if (left.length) await saveFiles(ORPHAN, left);
     else {
@@ -1210,6 +1852,7 @@
       version: 2,
       exportedAt: new Date().toISOString(),
       roots: state.roots.filter((r) => !r.virtual).map(({ id, name, rootPath, added }) => ({ id, name, rootPath, added })),
+      galleryGroups: state.groups,
       galleries: state.galleries,
       records: [...state.records.values()],
     };
@@ -1231,10 +1874,15 @@
     if (!data || data.app !== "archive-curator") return toast("Not an Archive Curator export");
     // v1 exports had paths relative to a single folder.
     const prefix = data.version === 1 ? (rootById(data.rootName) ? data.rootName : ORPHAN) + "/" : "";
+    for (const gr of data.galleryGroups || []) if (!group(gr.id)) state.groups.push(gr);
+    saveGroups();
     for (const g of data.galleries || []) {
       if (!gallery(g.id)) {
-        state.galleries.push(g);
-        store.put("galleries", g);
+        const copy = { group: null, pos: topLevel().length, order: [], ...g };
+        if (copy.group && !group(copy.group)) copy.group = null;
+        if (prefix) copy.order = (copy.order || []).map((k) => prefix + k);
+        state.galleries.push(copy);
+        store.put("galleries", copy);
       }
     }
     for (const r of data.roots || []) {
@@ -1315,7 +1963,14 @@
   function openSettings() {
     renderSettingsFolders();
     renderSettingsModules();
+    $("set-index").textContent = `${fmt(features.count())} of ${fmt(state.all.length)} images indexed for colour and prompt search.`;
     $("settings").showModal();
+  }
+
+  // Opening the picker starts a colour search with its current colour.
+  function openColorPicker() {
+    if (state.view !== "library") showView("library");
+    C.colorPicker.open($("color-btn"), state.settings.lastColor || undefined, colorMatch, () => setMatch(null));
   }
 
   // -------------------------------------------------------------- keys
@@ -1336,7 +1991,6 @@
       }
       return;
     }
-    const rateKeys = { y: "yes", p: "yes", m: "maybe", n: "no", x: "no", 0: null, u: null };
 
     if (state.lb.open) {
       const path = state.lb.items[state.lb.index];
@@ -1346,7 +2000,7 @@
       else if (k === "End") ((state.lb.index = state.lb.items.length - 1), renderLightbox());
       else if (k === "Escape" || k === "Enter") closeLightbox();
       else if (k === " ") setZoom(!state.lb.zoom);
-      else if (k in rateKeys) setRating(path, rateKeys[k]);
+      else if (k in RATE_KEYS) setRating(path, RATE_KEYS[k]);
       else if (k === "i") toggleDetails();
       else if (k === "f") toggleFullscreen();
       else if (k === "b") targetToggle();
@@ -1367,10 +2021,23 @@
     if (m) {
       if (m.onKey && m.onKey(e, k)) e.preventDefault();
     } else if (state.view === "library") {
+      const sel = [...state.lib.selected];
       if (k === "+" || k === "=") setThumbSize(state.settings.thumbSize + 40);
       else if (k === "-") setThumbSize(state.settings.thumbSize - 40);
-      else if (k === "Escape") clearSelection();
-      else return;
+      else if (k === "ArrowRight") moveCursor(1, 0, e.shiftKey);
+      else if (k === "ArrowLeft") moveCursor(-1, 0, e.shiftKey);
+      else if (k === "ArrowDown") moveCursor(0, 1, e.shiftKey);
+      else if (k === "ArrowUp") moveCursor(0, -1, e.shiftKey);
+      else if ((k === "Enter" || k === " ") && state.lib.focus) openLightbox(state.lib.items, state.lib.items.indexOf(state.lib.focus));
+      else if (k in RATE_KEYS && sel.length) sel.forEach((p) => setRating(p, RATE_KEYS[k]));
+      else if (k === "g") toggleGroupFolders();
+      else if (k === "d") reroll();
+      else if (k === "c") openColorPicker();
+      else if (k === "/") $("lib-search").focus();
+      else if (k === "Escape") {
+        if (state.lib.selected.size) clearSelection();
+        else if (state.lib.match) setMatch(null);
+      } else return;
       e.preventDefault();
     }
   }
@@ -1378,6 +2045,26 @@
   // ------------------------------------------------------------- bind
 
   const DRAG_TYPE = "application/x-curator-paths";
+  const GALLERY_DRAG = "application/x-curator-gallery";
+  let dragPaths = null; // images being dragged from the grid
+  let dragEntity = null; // { kind, item } being dragged in the gallery list
+  const dropMarker = document.createElement("div");
+  dropMarker.className = "drop-marker";
+
+  // Where a drop at (x, y) would insert, in a gallery's grid.
+  function dropIndexAt(clientX, clientY) {
+    const inner = $("grid-inner").getBoundingClientRect();
+    const x = clientX - inner.left;
+    const y = clientY - inner.top;
+    const rows = grid.cellRows;
+    if (!rows.length) return { index: 0, row: null };
+    const row = rows[rowAt(rows, y)];
+    const step = grid.size + GRID_GAP;
+    const rel = x / step;
+    let index = row.start + Math.floor(rel) + (rel - Math.floor(rel) > 0.5 ? 1 : 0);
+    index = Math.max(row.start, Math.min(row.end, index));
+    return { index, row };
+  }
 
   function bind() {
     $("tabs").onclick = (e) => {
@@ -1416,8 +2103,19 @@
 
     // galleries
     const gl = $("gallery-list");
+    $("new-group-btn").onclick = newGroup;
     gl.onclick = (e) => {
       if (e.target.closest("[data-new-gallery]")) return newGallery();
+      const gh = e.target.closest("li[data-group]");
+      if (gh) {
+        const gr = group(gh.dataset.group);
+        const a = (e.target.closest("[data-gr-act]") || {}).dataset;
+        if (a && a.grAct === "rename") return renameGroup(gr.id);
+        if (a && a.grAct === "delete") return deleteGroup(gr.id);
+        gr.collapsed = !gr.collapsed;
+        saveGroups();
+        return renderGalleries();
+      }
       const li = e.target.closest("li[data-gallery]");
       if (!li) return;
       const id = li.dataset.gallery;
@@ -1428,23 +2126,62 @@
       }
       setSource({ type: "gallery", id });
     };
-    const dropTarget = (e) => e.target.closest("li[data-gallery], li[data-new-gallery]");
+    gl.addEventListener("dragstart", (e) => {
+      const li = e.target.closest("li[data-gallery], li[data-group]");
+      if (!li) return;
+      dragEntity = li.dataset.group ? { kind: "group", item: group(li.dataset.group) } : { kind: "g", item: gallery(li.dataset.gallery) };
+      e.dataTransfer.setData(GALLERY_DRAG, "1");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    gl.addEventListener("dragend", () => {
+      dragEntity = null;
+      gl.querySelectorAll(".drop, .drop-before").forEach((x) => x.classList.remove("drop", "drop-before"));
+    });
+    const dropTarget = (e) => e.target.closest("li[data-gallery], li[data-new-gallery], li[data-group]");
+    // Images: onto a gallery (add) or + New gallery. Galleries/groups: reorder or file into a group.
+    const dropKind = (e, li) => {
+      const t = e.dataTransfer.types;
+      if (t.includes(DRAG_TYPE)) return li.dataset.group ? null : "drop";
+      if (t.includes(GALLERY_DRAG) && dragEntity) {
+        if (li.dataset.group && dragEntity.kind === "g") return "drop";
+        if (li.dataset.gallery && li.dataset.gallery === (dragEntity.item || {}).id) return null;
+        return "drop-before";
+      }
+      return null;
+    };
     gl.addEventListener("dragover", (e) => {
       const li = dropTarget(e);
-      if (!li || !e.dataTransfer.types.includes(DRAG_TYPE)) return;
+      const kind = li && dropKind(e, li);
+      if (!kind) return;
       e.preventDefault();
-      gl.querySelectorAll(".drop").forEach((x) => x !== li && x.classList.remove("drop"));
-      li.classList.add("drop");
+      gl.querySelectorAll(".drop, .drop-before").forEach((x) => x !== li && x.classList.remove("drop", "drop-before"));
+      li.classList.add(kind);
     });
     gl.addEventListener("dragleave", (e) => {
       const li = dropTarget(e);
-      if (li && !li.contains(e.relatedTarget)) li.classList.remove("drop");
+      if (li && !li.contains(e.relatedTarget)) li.classList.remove("drop", "drop-before");
     });
     gl.addEventListener("drop", (e) => {
       const li = dropTarget(e);
       if (!li) return;
       e.preventDefault();
-      li.classList.remove("drop");
+      li.classList.remove("drop", "drop-before");
+      if (e.dataTransfer.types.includes(GALLERY_DRAG) && dragEntity) {
+        const { kind, item } = dragEntity;
+        dragEntity = null;
+        if (li.dataset.newGallery) return placeEntity(kind, item, null, null);
+        if (li.dataset.group) {
+          const gr = group(li.dataset.group);
+          if (kind === "g") {
+            gr.collapsed = false;
+            return placeEntity("g", item, gr.id, null);
+          }
+          return placeEntity("group", item, null, gr);
+        }
+        const target = gallery(li.dataset.gallery);
+        if (kind === "group") return placeEntity("group", item, null, target.group ? group(target.group) : target);
+        return placeEntity("g", item, target.group || null, target);
+      }
       const paths = JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || "[]");
       if (!paths.length) return;
       if (li.dataset.newGallery) newGallery(paths);
@@ -1452,7 +2189,7 @@
       renderSelectBar();
     });
 
-    // library
+    // library bar
     $("lib-filter").onclick = (e) => {
       const b = e.target.closest("button[data-filter]");
       if (!b) return;
@@ -1460,23 +2197,92 @@
       saveSettings();
       rebuildLibrary();
     };
+    $("lib-sort").onchange = (e) => setSort(e.target.value);
+    $("reroll-btn").onclick = () => reroll();
+    $("shuffle-seed").onchange = (e) => reroll(e.target.value.trim() || randomSeed());
+    $("group-btn").onclick = toggleGroupFolders;
+    $("color-btn").onclick = openColorPicker;
+    $("match-chip").onclick = (e) => {
+      if (e.target.closest("[data-clear-match]")) return setMatch(null);
+      if (state.lib.match && state.lib.match.type === "color") openColorPicker();
+    };
+
+    // grid
     const gridEl = $("grid");
     gridEl.addEventListener("scroll", onGridScroll, { passive: true });
     gridEl.onclick = (e) => {
+      const head = e.target.closest(".group-head");
+      if (head) return setSource({ type: "folder", path: head.dataset.dir });
       const cell = e.target.closest(".cell");
-      if (!cell) return;
-      const i = +cell.dataset.i;
-      if (e.ctrlKey || e.metaKey || e.shiftKey) selectCell(i, e);
-      else openLightbox(state.lib.items, i);
+      if (!cell) {
+        if (e.target === gridEl || e.target.id === "grid-inner") clearSelection();
+        return;
+      }
+      selectCell(+cell.dataset.i, e);
     };
+    gridEl.ondblclick = (e) => {
+      const cell = e.target.closest(".cell");
+      if (cell) openLightbox(state.lib.items, +cell.dataset.i);
+    };
+    gridEl.addEventListener("mouseover", (e) => {
+      const cell = e.target.closest(".cell");
+      clearTimeout(hoverTimer);
+      if (!cell || !state.lib.hits) return hideHoverCard();
+      hoverTimer = setTimeout(() => showHoverCard(cell), 250);
+    });
+    gridEl.addEventListener("mouseleave", hideHoverCard);
     gridEl.addEventListener("dragstart", (e) => {
       const cell = e.target.closest(".cell");
       if (!cell) return;
+      hideHoverCard();
       const p = cell.dataset.path;
-      const paths = state.lib.selected.has(p) ? [...state.lib.selected] : [p];
-      e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(paths));
-      e.dataTransfer.setData("text/plain", paths.map(fullPath).join("\n"));
-      e.dataTransfer.effectAllowed = "copy";
+      if (!state.lib.selected.has(p)) {
+        state.lib.selected = new Set([p]);
+        setFocus(p);
+      }
+      dragPaths = state.lib.items.filter((k) => state.lib.selected.has(k));
+      e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(dragPaths));
+      e.dataTransfer.setData("text/plain", dragPaths.map(fullPath).join("\n"));
+      e.dataTransfer.effectAllowed = "copyMove";
+    });
+    gridEl.addEventListener("dragend", () => {
+      dragPaths = null;
+      dropMarker.classList.remove("show");
+    });
+    // Arrange by dragging, inside a gallery.
+    gridEl.addEventListener("dragover", (e) => {
+      if (!dragPaths || !inGallerySrc() || state.lib.groups) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const r = gridEl.getBoundingClientRect();
+      if (e.clientY < r.top + 40) gridEl.scrollTop -= 20;
+      else if (e.clientY > r.bottom - 40) gridEl.scrollTop += 20;
+      const { index, row } = dropIndexAt(e.clientX, e.clientY);
+      if (!row) return;
+      const step = grid.size + GRID_GAP;
+      dropMarker.style.left = (index - row.start) * step - GRID_GAP / 2 - 1 + "px";
+      dropMarker.style.top = row.y + "px";
+      dropMarker.style.height = grid.size + "px";
+      dropMarker.classList.add("show");
+    });
+    gridEl.addEventListener("dragleave", (e) => {
+      if (!gridEl.contains(e.relatedTarget)) dropMarker.classList.remove("show");
+    });
+    gridEl.addEventListener("drop", (e) => {
+      if (!dragPaths || !inGallerySrc() || state.lib.groups) return;
+      e.preventDefault();
+      dropMarker.classList.remove("show");
+      const { index } = dropIndexAt(e.clientX, e.clientY);
+      const moving = new Set(dragPaths);
+      let before = null;
+      for (let i = index; i < state.lib.items.length; i++) {
+        if (!moving.has(state.lib.items[i])) {
+          before = state.lib.items[i];
+          break;
+        }
+      }
+      moveInGallery(state.settings.src.id, dragPaths, before);
+      dragPaths = null;
     });
     gridEl.addEventListener(
       "wheel",
@@ -1492,14 +2298,7 @@
     $("lib-search").oninput = (e) => {
       state.lib.search = e.target.value;
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => rebuildLibrary(), 200);
-    };
-    $("lib-sort").value = state.settings.sort;
-    $("lib-sort").onchange = (e) => {
-      state.settings.sort = e.target.value;
-      state.lib.shuffled = null;
-      saveSettings();
-      rebuildLibrary();
+      searchTimer = setTimeout(() => rebuildLibrary(), 220);
     };
     $("thumb-size").value = state.settings.thumbSize;
     $("thumb-size").oninput = (e) => setThumbSize(+e.target.value);
@@ -1593,7 +2392,13 @@
     state.settings.src = state.settings.src || { type: "folder", path: "" };
     await migrateV1();
 
-    const [roots, recs, gals] = await Promise.all([store.getAll("roots"), store.getAll("records"), store.getAll("galleries")]);
+    const [roots, recs, gals, groups] = await Promise.all([
+      store.getAll("roots"),
+      store.getAll("records"),
+      store.getAll("galleries"),
+      store.get("kv", "galleryGroups"),
+      features.load(),
+    ]);
     state.roots = roots.sort((a, b) => a.added - b.added);
     await Promise.all(state.roots.map(async (r) => state.files.set(r.id, (await store.get("kv", "files:" + r.id)) || [])));
     const orphans = await store.get("kv", "files:" + ORPHAN);
@@ -1602,7 +2407,15 @@
       state.roots.push(orphanRoot());
     }
     for (const r of recs) state.records.set(r.path, r);
+    state.groups = groups || [];
     state.galleries = gals.sort((a, b) => a.created - b.created);
+    // Galleries from before groups/ordering: give them a place in the list.
+    state.galleries.forEach((g, i) => {
+      if (g.pos === undefined) g.pos = i;
+      if (g.group === undefined) g.group = null;
+      if (g.group && !group(g.group)) g.group = null;
+    });
+    if (!state.settings.shuffleSeed) state.settings.shuffleSeed = randomSeed();
     document.body.classList.toggle("details-open", !!state.settings.detailsOpen);
 
     const api = {
@@ -1627,6 +2440,13 @@
     };
     for (const m of modules) if (m.init) m.init(api);
 
+    $("app").appendChild(Object.assign(document.createElement("div"), { id: "hovercard", className: "hovercard" }));
+    features.on("progress", renderIndexStatus);
+    features.on("batch", () => {
+      // New palettes/prompts can change what a colour or prompt search shows.
+      if (state.view === "library" && (state.lib.match || state.lib.hits)) rebuildLibrary(true);
+    });
+
     bind();
     rebuildIndex();
 
@@ -1643,7 +2463,9 @@
     renderSidebar();
     renderStats();
     renderSourceStatus();
+    renderMatchChip();
     showView(state.settings.view);
+    startIndexing();
     // Pick up new images in the background, one folder at a time.
     for (const r of state.roots) if (source.isConnected(r.id)) await scanRoot(r.id, false);
   }
@@ -1659,6 +2481,8 @@
     copyText,
     openOriginal,
     showInFolder,
+    searchColor,
+    findSimilar,
     toggleDetails,
     state,
   };
