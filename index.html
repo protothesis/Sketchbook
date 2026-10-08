@@ -20,6 +20,7 @@
     --status-prototype: #a3762b;
     --status-active: #2f7d4f;
     --status-archived: #8b8a84;
+    --status-graduated: #5b5fc7;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -35,6 +36,7 @@
       --status-prototype: #d4a349;
       --status-active: #4fae7c;
       --status-archived: #6f6d67;
+      --status-graduated: #9a9cf0;
     }
   }
   :root[data-theme="dark"] {
@@ -50,6 +52,7 @@
     --status-prototype: #d4a349;
     --status-active: #4fae7c;
     --status-archived: #6f6d67;
+    --status-graduated: #9a9cf0;
   }
 
   * { box-sizing: border-box; }
@@ -132,6 +135,24 @@
   .status[data-status="prototype"] { color: var(--status-prototype); }
   .status[data-status="active"] { color: var(--status-active); }
   .status[data-status="archived"] { color: var(--status-archived); }
+  .status[data-status="graduated"] { color: var(--status-graduated); }
+
+  /* Closed sketches (archived / graduated): quieter, with what became of them. */
+  .card.closed { background: transparent; box-shadow: none; }
+  .card.closed h2, .card.closed p.description { opacity: 0.75; }
+  .closing {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    border-left: 3px solid var(--status-graduated);
+  }
+  .card.closed[data-status="archived"] .closing { border-left-color: var(--status-archived); }
+  .closing .successor { font-weight: 600; color: var(--status-graduated); }
+  .closing a.successor { text-decoration: underline; }
+  .closing .when { display: block; color: var(--text-muted); font-size: 0.75rem; margin-top: 2px; }
 
   .card p.description {
     margin: 0;
@@ -199,6 +220,7 @@
       prototype: "Prototype",
       active: "Active",
       archived: "Archived",
+      graduated: "Graduated",
     };
 
     function cardFor(sketch) {
@@ -230,6 +252,45 @@
         desc.className = "description";
         desc.textContent = sketch.description;
         card.appendChild(desc);
+      }
+
+      // Closed sketches say what became of them (and link the successor
+      // once it has a public URL; the card itself still opens the demo).
+      if (sketch.status === "archived" || sketch.status === "graduated") {
+        card.classList.add("closed");
+        card.dataset.status = sketch.status;
+        const box = document.createElement("p");
+        box.className = "closing";
+        const s = sketch.successor;
+        if (s) {
+          box.append("Graduated → ");
+          const name = document.createElement(s.url ? "span" : "span");
+          name.className = "successor";
+          name.textContent = s.title;
+          if (s.url) {
+            name.setAttribute("role", "link");
+            name.tabIndex = 0;
+            name.style.cursor = "pointer";
+            const go = (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              window.open(s.url, "_blank", "noopener");
+            };
+            name.addEventListener("click", go);
+            name.addEventListener("keydown", (e) => e.key === "Enter" && go(e));
+          }
+          box.appendChild(name);
+          if (!s.url && s.repo) box.append(" (private)");
+        } else if (sketch.outcome) {
+          box.append(sketch.outcome);
+        }
+        if (sketch.closed || (s && sketch.outcome)) {
+          const when = document.createElement("span");
+          when.className = "when";
+          when.textContent = [s && sketch.outcome, sketch.closed && `Closed ${sketch.closed}`].filter(Boolean).join(" · ");
+          box.appendChild(when);
+        }
+        card.appendChild(box);
       }
 
       const meta = document.createElement("div");

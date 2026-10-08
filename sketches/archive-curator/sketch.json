@@ -3,7 +3,7 @@
   "description": "A fast, minimal viewer and organizer for big local image archives (ComfyUI outputs, photos): multi-folder tree, virtual galleries, ratings and notes over read-only files, with optional modules like flashcard review.",
   "summary": "Fast multi-folder image viewer/organizer with Lightroom-style virtual galleries and optional modules (flashcard review).",
   "date": "2026-10-01",
-  "status": "active",
+  "status": "graduated",
   "tags": [
     "images",
     "viewer",
@@ -12,5 +12,12 @@
     "comfyui",
     "file-system-access"
   ],
-  "demo": "index.html"
+  "demo": "index.html",
+  "closed": "2026-10-08",
+  "outcome": "Proved the viewer, galleries and colour/prompt search; continues as Insight.",
+  "successor": {
+    "title": "Insight",
+    "repo": "protothesis/insight",
+    "url": null
+  }
 }

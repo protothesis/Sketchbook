@@ -10,6 +10,12 @@
 </head>
 <body>
 <div id="app">
+  <div class="graduated-banner" id="graduated-banner">
+    <b>Graduated to Insight</b> on 2026-10-08. This prototype is no longer developed; it stays as a
+    working reference. Use Settings &rarr; <b>Export full backup</b> to move your data across.
+    <button class="icon-btn" title="Hide for this session" onclick="this.parentNode.hidden=true;try{sessionStorage.setItem('ac-banner','off')}catch(e){}">&times;</button>
+  </div>
+  <script>try{if(sessionStorage.getItem('ac-banner')==='off')document.getElementById('graduated-banner').hidden=true}catch(e){}</script>
   <header class="topbar">
     <button class="icon-btn" id="sidebar-btn" title="Show/hide folders &amp; galleries ([)">&#9776;</button>
     <div class="brand">Archive<span>Curator</span></div>

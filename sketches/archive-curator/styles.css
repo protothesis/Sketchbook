@@ -417,3 +417,12 @@ body:not([data-view="review"]) .stats > * { display: none; }
 .hit-tags i.new { background: #c8463c; color: #fff; }
 .g-log { list-style: none; padding: 0; margin: 0; font-size: 12px; }
 .g-log li { padding: 4px 0; border-bottom: 1px solid #2c2c2c; }
+
+/* Closed sketch: see "Closing a sketch" in the repo's CLAUDE.md. */
+.graduated-banner {
+  flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 8px 5px 14px;
+  background: #24254a; color: #c9cbf5; font-size: 12px; border-bottom: 1px solid #000;
+}
+.graduated-banner b { color: #fff; }
+.graduated-banner .icon-btn { margin-left: auto; font-size: 15px; color: #c9cbf5; }
+.graduated-banner[hidden] { display: none; }
