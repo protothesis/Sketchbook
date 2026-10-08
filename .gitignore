@@ -21,3 +21,7 @@ __pycache__/
 # a sketch's own vendor/ (checked-in third-party libraries) is exempt even
 # though the packages inside it may use dirs named build/dist
 !**/vendor/**
+
+# local-only reference material (screenshots, sample images, docs, etc.)
+# — any folder named _reference/, at the root or inside a sketch
+_reference/
