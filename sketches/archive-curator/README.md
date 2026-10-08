@@ -14,8 +14,17 @@ is flashcard **Review**.
 **Strictly read-only.** Source images are never moved, copied, renamed or
 deleted. Everything the app knows is a metadata layer: ratings, notes,
 galleries and cached thumbnails. That layer is kept in the browser's
-IndexedDB, keyed by `<folder name>/<path inside the folder>`. You can
-export it to JSON from Settings and import it back.
+IndexedDB, keyed by `<folder name>/<path inside the folder>`.
+
+**Back it up.** Clearing the browser's site data erases that layer.
+Settings → **Export full backup** saves everything as one JSON file:
+ratings, notes, galleries (including smart ones, their history and notes),
+gallery groups, colour palettes and profiles, the search index (palettes
+and prompts), folder file lists and settings. The only things left out are
+cached thumbnails (rebuilt from the originals) and folder permissions (you
+re-pick folders). **Restore / import** merges a backup into what's there.
+In a fresh browser it brings the folders back as offline entries, ready to
+reconnect.
 
 ## Try it
 
@@ -249,6 +258,29 @@ Everything attaches to `window.Curator`.
   still open.
 - **"More like this"** is only worth doing if it's content-aware (colour,
   composition, semantic similarity), not exact-prompt matching.
+
+## Successor: Insight
+
+This prototype is considered feature-complete as a browser sketch. Its
+successor is **Insight**, its own repo with a local backend, where the
+AI-dependent features below get built. Planning lives there. Export a
+full backup to carry your data across.
+
+## Design backlog (needs design before building)
+
+- **Rating & culling module.** The current yes/maybe/no + flashcards is a
+  placeholder. Rating and culling deserve their own module, designed from
+  scratch (continual cull/re-rate loops, comparisons, keyboard model).
+- **Colour search, next round:**
+  - Multiple colours at once (primary + secondary + more), each with its
+    own weight/range, so you can search for colour *combinations*.
+  - Saturation / colourfulness as its own control. Today the disc's centre
+    is low saturation, but there's no way to ask for "black and white
+    only". A colourfulness filter (from each palette's average chroma)
+    would give a clean grayscale filter, and "muted" to "vivid" as a range.
+  - How colour match ranks against, and combines with, the other sorts.
+- **AI features as modules**, like Review: People (faces), Map (UMAP), and
+  Semantic search each as optional tabs/plugins on the lean core.
 
 ## Wishlist: semantic search
 

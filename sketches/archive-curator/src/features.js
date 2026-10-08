@@ -339,7 +339,16 @@
     await C.store.delMany("features", keys);
   }
 
+  // Restore from a backup: only fills in images not already indexed.
+  async function importMany(entries) {
+    const add = (entries || []).filter((e) => e && e.k && !data.has(e.k));
+    add.forEach((e) => data.set(e.k, e));
+    if (add.length) await C.store.putMany("features", add);
+    return add.length;
+  }
+
   C.features = {
+    importMany,
     load,
     start,
     analyzeNow,
