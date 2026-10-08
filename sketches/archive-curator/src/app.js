@@ -29,7 +29,10 @@
     groupFolders: false, // folder headers in the grid
     shuffleSeed: "",
     lastColor: null, // the colour picker's last { h, s, v, tol }
-    detailsOpen: false,
+    detailsOpen: false, // details panel in the lightbox and modules
+    libDetails: false, // details panel in the library (I)
+    sidebarHidden: false, // [ hides the folders/galleries panel
+    ratingBar: false, // rating filter buttons shown (otherwise one icon)
     expanded: [], // folder-tree nodes that are open
     targetGallery: null,
     modules: {}, // id -> enabled
@@ -52,7 +55,7 @@
       items: [],
       groups: null, // [{ dir, start, end }] when folder headers are on
       hits: null, // key -> matched search fields
-      match: null, // { type: "color", lab, hex, tol } | { type: "similar", key }
+      match: null, // { type: "color", lab, hex, tol } | { type: "similar", pal, key?, name? }
       matchSort: false, // sort by best match while a match is active
       scores: null,
       selected: new Set(),
@@ -682,6 +685,7 @@
     if (!state.roots.length) view = "welcome";
     else if (view !== "library" && !enabledModules().some((m) => m.id === view)) view = "library";
     state.view = view;
+    document.body.dataset.view = view;
     if (view !== "welcome") {
       state.settings.view = view;
       saveSettings();
@@ -768,10 +772,24 @@
   }
 
   function findSimilar(key) {
-    if (!features.get(key)) return toast("Still indexing this image — try again in a moment");
+    const e = features.get(key);
+    if (!e || !e.pal) return toast("Still indexing this image — try again in a moment");
     if (state.lb.open) closeLightbox();
     if (state.view !== "library") showView("library");
-    setMatch({ type: "similar", key });
+    setMatch({ type: "similar", key, pal: e.pal });
+  }
+
+  // A saved colour profile (Colour → Profiles): rank by that make-up.
+  function matchProfile(p) {
+    if (!p) return;
+    setMatch({ type: "similar", key: p.key || null, pal: p.pal, name: p.name });
+  }
+
+  function saveProfile(key) {
+    const e = features.get(key);
+    if (!e || !e.pal || !e.pal.length) return toast("No palette for this image yet");
+    C.colorPicker.addProfile({ name: key.slice(key.lastIndexOf("/") + 1), pal: e.pal, key });
+    toast("Saved colour profile — find it under Colour → Profiles");
   }
 
   function renderMatchChip() {
@@ -782,8 +800,9 @@
     const chip = $("match-chip");
     if (m && m.type === "similar") {
       chip.hidden = false;
-      chip.innerHTML = `<img alt="" /> Similar colours <button class="tiny" data-clear-match title="Clear">&times;</button>`;
-      images.thumb(m.key).then((u) => u && (chip.querySelector("img").src = u));
+      const bar = `<span class="prof-bar mini">${m.pal.map((c) => `<i style="background:${features.labHex(c)};flex-grow:${c[3]}"></i>`).join("")}</span>`;
+      chip.innerHTML = `${m.key ? `<img alt="" />` : ""}${bar} ${m.name ? "Like “" + esc(m.name) + "”" : "Similar colours"} <button class="tiny" data-clear-match title="Clear">&times;</button>`;
+      if (m.key) images.thumb(m.key).then((u) => u && chip.querySelector("img") && (chip.querySelector("img").src = u));
     } else if (m && m.type === "color") {
       chip.hidden = false;
       chip.innerHTML = `<span class="sw" style="background:${m.hex}"></span> Colour <button class="tiny" data-clear-match title="Clear">&times;</button>`;
@@ -802,6 +821,8 @@
   ];
 
   function renderFilterBar() {
+    renderRatingToggle();
+    if (!state.settings.ratingBar) return;
     const c = counts();
     const f = state.settings.filter;
     $("lib-filter").innerHTML = FILTERS.map(
@@ -836,8 +857,8 @@
     $("shuffle-seed").value = state.settings.shuffleSeed;
     const gb = $("group-btn");
     gb.classList.toggle("on", state.settings.groupFolders);
-    gb.disabled = eff === "custom";
-    gb.title = eff === "custom" ? "Folder headers are off in custom order" : "Folder headers (G)";
+    gb.disabled = eff === "custom" || eff === "match";
+    gb.title = gb.disabled ? `Folder headers are off while sorting by ${eff === "custom" ? "custom order" : "best match"}` : "Folder headers (G)";
   }
 
   function setSort(v) {
@@ -895,10 +916,9 @@
           if (s >= 0.08) scores.set(k, s);
         }
       } else {
-        const ref = features.get(m.key);
         for (const k of keys) {
           const e = features.get(k);
-          if (e && e.pal && ref) scores.set(k, -features.paletteDistance(ref.pal, e.pal));
+          if (e && e.pal && e.pal.length) scores.set(k, -features.paletteDistance(m.pal, e.pal));
         }
       }
       keys = keys.filter((k) => scores.has(k));
@@ -923,7 +943,7 @@
     // Folder headers: keep folders in path order and the chosen order
     // *within* each folder (so shuffle shuffles inside each day, etc.).
     state.lib.groups = null;
-    if (state.settings.groupFolders && sort !== "custom") {
+    if (state.settings.groupFolders && sort !== "custom" && sort !== "match") {
       const byDir = new Map();
       for (const k of keys) {
         const d = dirname(k);
@@ -954,7 +974,15 @@
   const OVERSCAN = 600; // px rendered above/below the viewport
   const grid = { cols: 1, size: 0, rows: [], cellRows: [], cells: new Map(), heads: new Map() };
 
+  let rebuildPending = false;
   function rebuildLibrary(keepScroll) {
+    // Rebuilding mid-drag would remove the element being dragged and
+    // silently cancel the drag; do it when the drag ends instead.
+    if (dragPaths) {
+      rebuildPending = true;
+      return;
+    }
+    rebuildPending = false;
     hideHoverCard();
     const items = libraryItems();
     state.lib.items = items;
@@ -965,7 +993,7 @@
     clearCells();
     if (!keepScroll) $("grid").scrollTop = 0;
     layoutGrid(true);
-    $("lib-count").textContent = plural(items.length, "image");
+    $("lib-count").textContent = plural(items.length, "image") + (items.length !== srcKeys().length ? ` of ${fmt(srcKeys().length)}` : "");
     $("grid").classList.toggle("searching", !!state.lib.hits);
     const empty = $("lib-empty");
     empty.hidden = items.length > 0;
@@ -1097,7 +1125,7 @@
       if (r.type === "cells") vis.push(r);
     }
     for (const [i, cell] of cells) {
-      if (!want.has(i)) {
+      if (!want.has(i) && cell !== dragCell) {
         images.cancel(cell.dataset.path);
         cell.remove();
         cells.delete(i);
@@ -1224,6 +1252,9 @@
     if (e.ctrlKey || e.metaKey) {
       if (sel.has(p)) sel.delete(p);
       else sel.add(p);
+    } else if (sel.size === 1 && sel.has(p)) {
+      sel.clear(); // clicking the only selected image deselects it
+      return setFocus(null);
     } else {
       sel.clear();
       sel.add(p);
@@ -1270,10 +1301,15 @@
   }
 
   function renderLibDetails() {
-    if (!state.settings.detailsOpen || state.view !== "library") return;
+    if (!state.settings.libDetails || state.view !== "library") return;
     const panel = $("lib-details");
     const p = state.lib.focus;
-    if (panel.dataset.path !== (p || "")) details.render(panel, p || null);
+    if (panel.dataset.path === (p || "")) return;
+    if (p) details.render(panel, p);
+    else {
+      panel.dataset.path = "";
+      panel.innerHTML = `<p class="muted">Select an image to see its details. <kbd>I</kbd> hides this panel.</p>`;
+    }
   }
 
   function setThumbSize(px) {
@@ -1293,7 +1329,7 @@
   }
 
   function toggleGroupFolders() {
-    if (effectiveSort() === "custom") return;
+    if (effectiveSort() === "custom" || effectiveSort() === "match") return;
     state.settings.groupFolders = !state.settings.groupFolders;
     saveSettings();
     const keep = state.lib.focus;
@@ -1492,18 +1528,42 @@
 
   // ------------------------------------------------------- shared UI
 
+  // The library has its own details panel, opened only with I (or Info).
   function toggleDetails(force) {
+    if (state.view === "library" && !state.lb.open) {
+      const open = force === undefined ? !state.settings.libDetails : force;
+      state.settings.libDetails = open;
+      saveSettings();
+      document.body.classList.toggle("lib-details", open);
+      if (open) {
+        $("lib-details").dataset.path = "\0"; // force a render
+        renderLibDetails();
+      }
+      return layoutGrid();
+    }
     const open = force === undefined ? !state.settings.detailsOpen : force;
     state.settings.detailsOpen = open;
     saveSettings();
     document.body.classList.toggle("details-open", open);
     if (open && state.lb.open) details.render($("lb-details"), state.lb.items[state.lb.index]);
-    if (open) {
-      $("lib-details").dataset.path = "\0"; // force a render
-      renderLibDetails();
-    }
-    layoutGrid();
     emit("onDetails", open);
+  }
+
+  function toggleSidebar() {
+    state.settings.sidebarHidden = !state.settings.sidebarHidden;
+    saveSettings();
+    document.body.classList.toggle("sidebar-hidden", state.settings.sidebarHidden);
+  }
+
+  function renderRatingToggle() {
+    const open = state.settings.ratingBar;
+    const f = state.settings.filter;
+    $("lib-filter").hidden = !open;
+    const b = $("rating-toggle");
+    b.classList.toggle("on", open || f !== "all");
+    const label = f === "all" ? "" : (FILTERS.find((x) => x[0] === f) || [])[3] || "Unrated";
+    b.innerHTML = `&#9733;${!open && label ? " " + label : ""}`;
+    b.title = open ? "Hide rating filters" : "Rating filters" + (label ? ` (showing: ${label})` : "");
   }
 
   function toggleFullscreen() {
@@ -1970,7 +2030,7 @@
   // Opening the picker starts a colour search with its current colour.
   function openColorPicker() {
     if (state.view !== "library") showView("library");
-    C.colorPicker.open($("color-btn"), state.settings.lastColor || undefined, colorMatch, () => setMatch(null));
+    C.colorPicker.open($("color-btn"), state.settings.lastColor || undefined, { onChange: colorMatch, onClear: () => setMatch(null), onProfile: matchProfile });
   }
 
   // -------------------------------------------------------------- keys
@@ -2014,6 +2074,7 @@
     if (k === "f") return toggleFullscreen();
     if (k === "b") return targetToggle();
     if (k === "l") return showView("library");
+    if (k === "[") return toggleSidebar();
     const tab = enabledModules().find((m) => m.key && m.key === k);
     if (tab) return showView(tab.id);
 
@@ -2047,6 +2108,7 @@
   const DRAG_TYPE = "application/x-curator-paths";
   const GALLERY_DRAG = "application/x-curator-gallery";
   let dragPaths = null; // images being dragged from the grid
+  let dragCell = null; // its element, kept alive while scrolling
   let dragEntity = null; // { kind, item } being dragged in the gallery list
   const dropMarker = document.createElement("div");
   dropMarker.className = "drop-marker";
@@ -2198,6 +2260,12 @@
       rebuildLibrary();
     };
     $("lib-sort").onchange = (e) => setSort(e.target.value);
+    $("rating-toggle").onclick = () => {
+      state.settings.ratingBar = !state.settings.ratingBar;
+      saveSettings();
+      renderFilterBar();
+    };
+    $("sidebar-btn").onclick = toggleSidebar;
     $("reroll-btn").onclick = () => reroll();
     $("shuffle-seed").onchange = (e) => reroll(e.target.value.trim() || randomSeed());
     $("group-btn").onclick = toggleGroupFolders;
@@ -2241,13 +2309,17 @@
         setFocus(p);
       }
       dragPaths = state.lib.items.filter((k) => state.lib.selected.has(k));
+      dragCell = cell;
       e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(dragPaths));
       e.dataTransfer.setData("text/plain", dragPaths.map(fullPath).join("\n"));
       e.dataTransfer.effectAllowed = "copyMove";
     });
     gridEl.addEventListener("dragend", () => {
       dragPaths = null;
+      dragCell = null;
       dropMarker.classList.remove("show");
+      if (rebuildPending) rebuildLibrary(true);
+      else renderVisible();
     });
     // Arrange by dragging, inside a gallery.
     gridEl.addEventListener("dragover", (e) => {
@@ -2281,8 +2353,10 @@
           break;
         }
       }
-      moveInGallery(state.settings.src.id, dragPaths, before);
+      const moving2 = dragPaths;
       dragPaths = null;
+      dragCell = null;
+      moveInGallery(state.settings.src.id, moving2, before);
     });
     gridEl.addEventListener(
       "wheel",
@@ -2417,6 +2491,8 @@
     });
     if (!state.settings.shuffleSeed) state.settings.shuffleSeed = randomSeed();
     document.body.classList.toggle("details-open", !!state.settings.detailsOpen);
+    document.body.classList.toggle("lib-details", !!state.settings.libDetails);
+    document.body.classList.toggle("sidebar-hidden", !!state.settings.sidebarHidden);
 
     const api = {
       state,
@@ -2483,6 +2559,7 @@
     showInFolder,
     searchColor,
     findSimilar,
+    saveProfile,
     toggleDetails,
     state,
   };

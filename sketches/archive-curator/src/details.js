@@ -51,7 +51,7 @@
       <h4>Notes <span class="seg mini"><button data-d="write">Write</button><button data-d="preview">Preview</button></span></h4>
       <textarea class="d-notes" placeholder="Markdown notes&hellip;"></textarea>
       <div class="md d-preview" title="Click to edit"></div>
-      <h4>Colours <button class="tiny" data-d="similar" title="Images with a similar colour make-up">Similar colours</button></h4>
+      <h4>Colours <button class="tiny" data-d="save-profile" title="Save this colour make-up (Colour → Profiles)">&#9734; Save</button><button class="tiny" data-d="similar" title="Images with a similar colour make-up">Similar colours</button></h4>
       <div class="d-palette muted small">Analysing&hellip;</div>
       <h4>Generation</h4>
       <div class="d-meta muted">Reading&hellip;</div>`;
@@ -89,6 +89,7 @@
         case "open": return app.openOriginal(path);
         case "show-folder": return app.showInFolder(path);
         case "similar": return app.findSimilar(path);
+        case "save-profile": return app.saveProfile(path);
         case "swatch": return app.searchColor(JSON.parse(b.dataset.lab));
         case "write": setNotesMode(panel, "write"); return ta.focus();
         case "preview": save(); return setNotesMode(panel, "preview");

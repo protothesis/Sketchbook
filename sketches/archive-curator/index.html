@@ -11,6 +11,7 @@
 <body>
 <div id="app">
   <header class="topbar">
+    <button class="icon-btn" id="sidebar-btn" title="Show/hide folders &amp; galleries ([)">&#9776;</button>
     <div class="brand">Archive<span>Curator</span></div>
     <nav class="tabs" id="tabs"></nav>
     <div class="stats" id="stats"></div>
@@ -58,22 +59,31 @@
       <section class="view" id="view-library">
        <div class="lib-main">
         <div class="lib-bar">
-          <span class="lib-title" id="lib-title"></span>
-          <div class="seg filter" id="lib-filter"></div>
-          <input type="search" id="lib-search" placeholder="Search names, notes, prompts&hellip; ( / )" title="Matches file path and name, notes, prompts and model names. Every word must match somewhere." />
-          <button id="color-btn" title="Search by colour (C)"><span class="sw"></span> Colour</button>
-          <span class="match-chip" id="match-chip" hidden></span>
-          <select id="lib-sort" title="Sort"></select>
-          <span class="shuffle-ctl" id="shuffle-ctl" hidden>
-            <button id="reroll-btn" title="Reroll the shuffle (D)">&#127922;</button>
-            <input type="text" id="shuffle-seed" size="6" spellcheck="false" title="Shuffle seed — type one to get the same order back" />
-          </span>
-          <button id="group-btn" title="Folder headers (G)">&#9636; Folders</button>
-          <button id="fit-btn">Fit</button>
-          <label class="size">&#9638;
-            <input type="range" id="thumb-size" min="80" max="520" step="10" />
-          </label>
-          <span class="muted" id="lib-count"></span>
+          <div class="lb-group lb-where">
+            <span class="lib-title" id="lib-title"></span>
+            <span class="muted" id="lib-count"></span>
+          </div>
+          <div class="lb-group" title="Filter">
+            <button id="rating-toggle" title="Rating filters">&#9733;</button>
+            <div class="seg filter" id="lib-filter" hidden></div>
+            <input type="search" id="lib-search" placeholder="Search names, notes, prompts&hellip; ( / )" title="Matches file path and name, notes, prompts and model names. Every word must match somewhere." />
+            <button id="color-btn" title="Search by colour (C)"><span class="sw"></span> Colour</button>
+            <span class="match-chip" id="match-chip" hidden></span>
+          </div>
+          <div class="lb-group" title="Sort">
+            <select id="lib-sort" title="Sort"></select>
+            <span class="shuffle-ctl" id="shuffle-ctl" hidden>
+              <button id="reroll-btn" title="Reroll the shuffle (D)">&#127922;</button>
+              <input type="text" id="shuffle-seed" spellcheck="false" title="Shuffle seed — type one to get the same order back" />
+            </span>
+          </div>
+          <div class="lb-group" title="View">
+            <button id="group-btn" title="Folder headers (G)">&#9636; Folders</button>
+            <button id="fit-btn">Fit</button>
+            <label class="size" title="Thumbnail size (+ / &minus;, Ctrl+scroll)">&#9638;
+              <input type="range" id="thumb-size" min="80" max="520" step="10" />
+            </label>
+          </div>
         </div>
         <div class="select-bar" id="select-bar">
           <span id="select-count"></span>
@@ -148,6 +158,7 @@
         <h3>Keys</h3>
         <dl class="keys" id="set-keys">
           <dt>L</dt><dd>Library</dd>
+          <dt>[</dt><dd>Show/hide the folders &amp; galleries panel</dd>
           <dt>Click / dbl-click</dt><dd>Select / open (library); Ctrl/&#8984; and Shift add to the selection</dd>
           <dt>Arrows, Enter</dt><dd>Move the cursor (Shift extends), open it (library)</dd>
           <dt>G</dt><dd>Folder headers on/off</dd>

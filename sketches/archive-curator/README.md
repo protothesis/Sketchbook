@@ -40,12 +40,15 @@ folders**, one folder, or any subfolder (it includes everything below it).
 Clicking a **gallery** shows that gallery instead. The same choice scopes
 the Review module.
 
-**Click** a thumbnail to select it, Ctrl/⌘-click or Shift-click to select
-more, and **double-click** (or `Enter`) to open it in the lightbox. Arrow
-keys move the cursor (Shift extends the selection), `Y`/`M`/`N`/`0` rate
-the selection, and `I` shows the details panel for the current image.
+**Click** a thumbnail to select it (click it again to deselect),
+Ctrl/⌘-click or Shift-click to select more, and **double-click** (or
+`Enter`) to open it in the lightbox. Arrow keys move the cursor (Shift
+extends the selection), `Y`/`M`/`N`/`0` rate the selection, and `I`
+toggles the details panel. `[` hides the folders & galleries panel.
 
-The filter bar narrows by All / Unrated / Yes / Maybe / No / With notes.
+The toolbar is grouped: where you are (folder and image count) | filter |
+sort | view. ★ expands the rating filter (All / Unrated / Yes / Maybe / No
+/ With notes); collapsed, it shows which filter is active.
 Sort by name (chronological for dated folders), newest first, recently
 rated, or **shuffle**. Shuffle is seeded: 🎲 (or `D`) rerolls, and typing
 a seed into the box next to it brings that exact order back. Use the
@@ -71,11 +74,31 @@ gets small tags saying which fields matched, and hovering over it shows the
 matching text, highlighted.
 
 **Colour** (`C`) opens a colour wheel. Results are images where a
-noticeable share of the picture is near that colour, best match first. The
-**Range** slider sets how near counts, and neutrals are one click away. In
-the details panel, an image's palette swatches start a colour search, and
-**Similar colours** ranks everything by how close its colour make-up is to
-that image. Both combine with folders, filters and text search.
+noticeable share of the picture is near that colour, best match first.
+Everything is on the wheel itself:
+
+- **Disc**: hue around, saturation outward. Colours outside the search
+  range are dimmed, so what's still lit is what counts as a match.
+- **Outer ring**: full-strength hues with a marker, so you can see where
+  you are in the spectrum even at brightness 0. Drag it to change hue only.
+- **Left arc** (☀): brightness, or scroll over the wheel.
+- **Right arc** (◎): range, i.e. how close counts, or Shift+scroll.
+
+Below the wheel:
+
+- **Swatches**: your own palettes, any number, any size. Click the colour
+  preview (or a palette's **+**) to add the current colour, click a swatch
+  to use it, right-click a swatch to remove it, right-click empty space for
+  a new palette, double-click a name to rename it.
+- **Profiles**: saved colour make-ups of images. **☆ Save** next to
+  Colours in the details panel keeps one, with its proportions. Click a
+  profile to rank images by how closely they match it.
+
+In the details panel, an image's palette swatches start a colour search,
+and **Similar colours** ranks everything by how close its colour make-up is
+to that image. All of these combine with folders, filters and text search.
+While sorting by best match, folder headers are off, so the ranking reads
+straight down.
 
 Prompts and palettes come from a **background indexer** that works through
 every image once, current folder first. Its progress shows in the top bar

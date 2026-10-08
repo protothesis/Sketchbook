@@ -7,6 +7,17 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-08 — Colour wheel v2: every control lives on the wheel. Colours
+  outside the search range are dimmed on the disc. An outer hue ring never
+  dims and marks the current hue. Brightness (left arc, or scroll) and
+  range (right arc, or Shift+scroll) replace the sliders.
+- 2026-10-08 — **Swatches**: user palettes of any size and number below the
+  wheel (add from the colour preview or **+**, right-click to remove or to
+  start a palette). **Profiles**: save an image's colour make-up (☆ Save
+  in details) and rank images against it later.
+- 2026-10-08 — `[` hides the folders & galleries panel (also ☰ in the top
+  bar).
+
 - 2026-10-07 — **Colour search**: a colour wheel (`C`) finds images where a
   noticeable share of the picture is near the chosen colour, best match
   first, with a Range slider and neutral presets. The details panel shows
@@ -45,6 +56,21 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-10-08 — Toolbar grouped into where / filter / sort / view with
+  separators. The image count sits next to the folder name. The rating
+  filter collapses into a ★ button (collapsed by default).
+- 2026-10-08 — Selection is now a brighter cell, with no outline or
+  checkmark. In Crop mode, where the image covers the cell, an outline and
+  light wash are drawn on top; hover shows there too. Clicking the only
+  selected image deselects it.
+- 2026-10-08 — The library details panel opens only with `I`, independently
+  of the lightbox's. With nothing selected it says so, instead of popping
+  in on the first click.
+- 2026-10-08 — The rated-count banner shows only on the Review tab.
+- 2026-10-08 — Opening the colour picker no longer starts a search by
+  itself; picking something does. Folder headers are off while sorting by
+  best match.
+
 - 2026-10-07 — Library click now selects and double-click opens, instead of
   click opening. Arrow keys move the cursor, `Enter` opens it, and
   `Y`/`M`/`N`/`0` rate the selection. The bulk-action bar appears for 2+
@@ -68,6 +94,14 @@ All notable changes to this sketch are logged here, per
   Exports are v2; v1 exports still import.
 
 ### Fixed
+
+- 2026-10-08 — Picking a colour on the wheel at low brightness no longer
+  resets brightness.
+- 2026-10-08 — Dragging a selection to a gallery could silently cancel: a
+  background refresh (e.g. indexing while searching) rebuilt the grid and
+  removed the element being dragged. Refreshes now wait until the drag
+  ends. The grid and sidebar no longer highlight text while dragging.
+- 2026-10-08 — The shuffle seed box was too narrow to show the seed.
 
 - 2026-10-07 — Library grid: rows could collapse while cells stayed square,
   so thumbnails overlapped and drifted out of alignment when scrolling or
