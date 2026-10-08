@@ -76,13 +76,43 @@ automatically, without asking permission first:
 
 ## Lifecycle status labels
 
-Keep it to these four so the README table and gallery stay simple
+Keep it to these five so the README table and gallery stay simple
 (`tools/build-index.js` rejects anything else):
 
 - `seed` — just captured, not yet run/tested.
 - `prototype` — working, still rough.
 - `active` — being iterated on.
-- `archived` — parked; kept for reference.
+- `archived` — closed: parked, or the experiment served its purpose; kept
+  for reference.
+- `graduated` — closed: promoted to its own project. Development continues
+  in the successor, not here.
+
+## Closing a sketch (archived / graduated)
+
+A closed sketch is finished. That has to be obvious, so nobody (the user or
+Claude) keeps tinkering with it. To close one:
+
+1. Set `status` to `archived` or `graduated` in its `sketch.json`, and add
+   `closed` (the date), `outcome` (one short factual line: why it ended or
+   what it became) and, for a graduated sketch, `successor` (see the schema
+   below). `tools/build-index.js` requires `closed` for both and `successor`
+   for `graduated`.
+2. Put a banner at the very top of the sketch's `README.md`, and of its demo
+   page if it has one:
+   - graduated: "**Graduated to <Successor> on <date>.** No further
+     development here; it continues in <repo>."
+   - archived: "**Archived on <date>:** <outcome>"
+3. Add a CHANGELOG entry for the closing.
+
+Keep a closed sketch's demo working and linked: it's the reference, and for
+a graduated sketch it may be how data moves to the successor.
+
+**Rule: before editing a sketch whose status is `archived` or `graduated`,
+stop and ask the user first,** and point to the successor if there is one.
+This applies even to small fixes, and even when the edit was asked for
+indirectly (e.g. a repo-wide change). It's "ask first", not "never": a fix
+the user explicitly OKs (say, a bug in a graduated sketch's export that
+blocks migrating to the successor) is fine.
 
 ## `sketch.json` schema
 
@@ -103,6 +133,21 @@ name.
 
 `demo` is optional and relative to the sketch folder. Omit it (or use
 `null`) if the sketch has no browsable artifact yet.
+
+Closed sketches (`archived` / `graduated`) add:
+
+```json
+{
+  "closed": "2026-10-08",
+  "outcome": "One short line: why it ended, or what it became.",
+  "successor": { "title": "Insight", "repo": "protothesis/insight", "url": null }
+}
+```
+
+`successor` is for graduated sketches. `repo` is informational; `url` stays
+`null` while the successor isn't publicly reachable (e.g. a private repo).
+The gallery card and README table show "→ <title>", which becomes a link
+once `url` is set.
 
 `tools/build-index.js` turns these into `sketches.data.js`, a classic script
 (not JSON, because of the `file://` constraint above) that sets

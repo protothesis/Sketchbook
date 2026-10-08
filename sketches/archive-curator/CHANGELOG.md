@@ -5,6 +5,13 @@ All notable changes to this sketch are logged here, per
 
 ## [Unreleased]
 
+### Changed
+
+- 2026-10-08 — **Graduated to Insight** (`protothesis/insight`). Status is
+  now `graduated` and the sketch is closed: no further development here.
+  README and the demo page carry a banner, and the demo stays working as
+  the reference and the way to export data for Insight.
+
 ### Added
 
 - 2026-10-08 — **Full backup**: Export now saves every store (ratings, notes,

@@ -1,7 +1,12 @@
 # Archive Curator
 
+> **Graduated to Insight on 2026-10-08.** No further development here; it
+> continues in [protothesis/insight](https://github.com/protothesis/insight)
+> (private for now). This prototype stays as the working reference, and its
+> **Export full backup** is how your data moves to Insight.
+
 **Started:** 2026-10-01
-**Status:** prototype
+**Status:** graduated (closed 2026-10-08)
 
 A fast, minimal viewer and organizer for big local image archives — a
 ComfyUI `output` folder full of dated subfolders, or a photo archive. Add
@@ -261,10 +266,11 @@ Everything attaches to `window.Curator`.
 
 ## Successor: Insight
 
-This prototype is considered feature-complete as a browser sketch. Its
-successor is **Insight**, its own repo with a local backend, where the
-AI-dependent features below get built. Planning lives there. Export a
-full backup to carry your data across.
+This prototype is finished and closed (status `graduated`). Its successor
+is **Insight** (`protothesis/insight`), its own repo with a local backend,
+where everything below gets built. Planning and design live there. Export
+a full backup to carry your data across. The design backlog and wishlist
+below are kept as a record of where things stood at graduation.
 
 ## Design backlog (needs design before building)
 
