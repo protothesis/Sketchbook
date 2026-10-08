@@ -37,6 +37,7 @@
       <div class="d-actions">
         <button data-d="copy" title="Copy full file path — paste into Explorer's address bar">Copy path</button>
         <button data-d="copy-folder" title="Copy the containing folder's path">Copy folder</button>
+        <button data-d="show-folder" title="Browse this image's folder in the library">Show in folder</button>
         <button data-d="open" title="Open the original in a new tab">Open &#8599;</button>
       </div>
       <div class="seg d-rating">
@@ -84,6 +85,7 @@
         case "copy": return app.copyPath(path, false);
         case "copy-folder": return app.copyPath(path, true);
         case "open": return app.openOriginal(path);
+        case "show-folder": return app.showInFolder(path);
         case "write": setNotesMode(panel, "write"); return ta.focus();
         case "preview": save(); return setNotesMode(panel, "preview");
         case "new-gallery": {
@@ -133,7 +135,7 @@
     }
     if (panel.dataset.path !== path) return;
     if (meta === undefined) {
-      box.textContent = C.source.connected ? "Couldn't read file." : "Reconnect the folder to read metadata.";
+      box.textContent = C.source.isConnected(path) ? "Couldn't read file." : "Reconnect the folder to read metadata.";
       return;
     }
     if (!meta) {

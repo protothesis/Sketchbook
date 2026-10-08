@@ -1,11 +1,12 @@
 {
   "title": "Archive Curator",
-  "description": "Flashcard-style random review and curation for a huge local image archive (e.g. ComfyUI outputs) — a read-only metadata layer of ratings, notes and virtual galleries.",
-  "summary": "Flashcard-style random review and curation for a huge local image archive — ratings, notes and virtual galleries over read-only files.",
+  "description": "A fast, minimal viewer and organizer for big local image archives (ComfyUI outputs, photos): multi-folder tree, virtual galleries, ratings and notes over read-only files, with optional modules like flashcard review.",
+  "summary": "Fast multi-folder image viewer/organizer with Lightroom-style virtual galleries and optional modules (flashcard review).",
   "date": "2026-10-01",
-  "status": "prototype",
+  "status": "active",
   "tags": [
     "images",
+    "viewer",
     "curation",
     "tool",
     "comfyui",
