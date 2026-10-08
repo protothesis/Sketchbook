@@ -43,4 +43,13 @@ window.SKETCHES = [
     tags: ["canvas","simulation","psychology","jung","agents"],
     demo: "sketches/psyche-town/index.html",
   },
+  {
+    slug: "village-gen",
+    title: "Village Generator",
+    description: "Seeded, organic settlements from a hamlet of a dozen people to a city of 15,000: winding roads, lots, buildings with floor plans and occupancy, strip fields and woodland on hillshaded terrain. Pan and zoom the map, click anything, export it all as JSON.",
+    date: "2026-10-08",
+    status: "prototype",
+    tags: ["procgen","map","canvas","worldbuilding","simulation"],
+    demo: "sketches/village-gen/index.html",
+  },
 ];
