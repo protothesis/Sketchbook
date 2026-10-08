@@ -10,7 +10,7 @@
     return {
       ground: v("--town-ground"), place: v("--town-place"), park: v("--town-park"),
       house: v("--town-house"), line: v("--border"), text: v("--text"), muted: v("--text-muted"),
-      night: v("--town-night"), body: v("--town-body"),
+      night: v("--town-night"), body: v("--town-body"), surface: v("--surface"), shield: v("--shield"),
     };
   }
 
@@ -55,7 +55,7 @@
 
     // Homes, outlined in the owner's current colour
     world.agents.forEach(function (a) {
-      var c = a.lost ? colors.muted : a.psyche.ruler === "ego" ? colors.line : PT.COMPLEX[a.psyche.ruler].color;
+      var c = a.lost ? colors.muted : a.psyche.ruler === "ego" ? colors.line : PT.colorOf(a.psyche.ruler);
       g.fillStyle = colors.house;
       g.strokeStyle = c;
       g.lineWidth = a.psyche.ruler === "ego" || a.lost ? 1 : 2;
@@ -71,7 +71,7 @@
     world.agents.forEach(function (s) {
       if (!s.encounter || s.lost) return;
       var o = world.agents[s.encounter.with];
-      g.strokeStyle = PT.COMPLEX.guardian.color;
+      g.strokeStyle = PT.ARCH.guardian.color;
       g.globalAlpha = 0.5 + 0.5 * Math.sin(world.time * 12);
       g.lineWidth = 2;
       g.setLineDash([3, 3]);
@@ -101,7 +101,7 @@
         return;
       }
       var r = a.psyche.ruler;
-      var col = r === "ego" ? colors.body : PT.COMPLEX[r].color;
+      var col = r === "ego" ? colors.body : PT.colorOf(r);
       if (r !== "ego") {
         var pulse = 0.5 + 0.5 * Math.sin(world.time * 4 + a.id);
         g.fillStyle = col;
@@ -110,7 +110,7 @@
         g.globalAlpha = 1;
       }
       if (a.userCare > 0) {
-        g.strokeStyle = PT.COMPLEX.caretaker.color;
+        g.strokeStyle = PT.ARCH.caretaker.color;
         g.lineWidth = 1.5;
         g.setLineDash([2, 3]);
         g.beginPath(); g.arc(a.x, a.y, 16, 0, Math.PI * 2); g.stroke();

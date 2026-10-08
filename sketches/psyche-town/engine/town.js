@@ -1,7 +1,7 @@
 // The town: homes, a few shared places, and the townspeople moving between
-// them. Whoever rules a person's psyche decides where they walk. Gripped
-// people also radiate: the Shadow frightens its neighbours, fear calls out the
-// Caretaker in others, and the Caretaker soothes everyone close by.
+// them. Whichever archetype rules a person decides how they move (its
+// `verb`), and gripped people radiate their archetype's `aura` into the
+// psyches of everyone nearby.
 (function () {
   var PT = (window.PsycheTown = window.PsycheTown || {});
   var P = PT.psyche, clamp = PT.clamp;
@@ -19,6 +19,11 @@
     park: { name: "Park", kind: "rect", x: 70, y: 400, w: 200, h: 130 },
     market: { name: "Market", kind: "rect", x: 110, y: 90, w: 170, h: 80 },
   };
+
+  // Rulers that defend against a Shadow, and rulers that de-escalate.
+  var DEFENDERS = { guardian: true, hero: true };
+  var HELPERS = { caretaker: true, martyr: true, sage: true };
+  var CARERS = { caretaker: true, martyr: true };
 
   function rng(seed) {
     var s = seed >>> 0;
@@ -65,7 +70,7 @@
         y: home.y + (home.y < H / 2 ? 16 : -16),
         target: null,
         wait: rand() * 4,
-        psyche: P.create(rand, opts.care),
+        psyche: P.create(rand, { care: opts.care }),
         rulerSince: 0,
         grievance: null,
         threat: null,
@@ -85,7 +90,7 @@
       agents: agents,
       time: 0,
       opts: opts,
-      stats: { weathered: 0, lost: 0, defused: 0, scuffles: 0, longestGrip: 0 },
+      stats: { weathered: 0, lost: 0, defused: 0, scuffles: 0 },
       log: [],
       flashes: [],
     };
@@ -119,18 +124,19 @@
     return best;
   }
 
-  function routineTarget(a, world) {
+  function doorstep(a) { return { x: a.home.x, y: a.home.y + (a.home.y < H / 2 ? 14 : -14) }; }
+
+  function routineTarget(a, world, strict) {
     var h = hourOf(world), r = world.rand();
     var place;
-    if (h >= 21 || h < 6) return { x: a.home.x, y: a.home.y + (a.home.y < H / 2 ? 14 : -14) };
-    if (h < 9) place = r < 0.5 ? null : r < 0.8 ? "market" : "works";
+    if (h >= 21 || h < 6) return doorstep(a);
+    if (strict) place = h < 17 ? "works" : null;
+    else if (h < 9) place = r < 0.5 ? null : r < 0.8 ? "market" : "works";
     else if (h < 17) place = r < 0.55 ? "works" : r < 0.75 ? "market" : r < 0.9 ? "plaza" : null;
     else place = r < 0.4 ? "plaza" : r < 0.65 ? "park" : r < 0.8 ? "market" : null;
-    if (!place) return { x: a.home.x, y: a.home.y + (a.home.y < H / 2 ? 14 : -14) };
+    if (!place) return doorstep(a);
     return pointIn(PLACES[place], world.rand);
   }
-
-  function doorstep(a) { return { x: a.home.x, y: a.home.y + (a.home.y < H / 2 ? 14 : -14) }; }
 
   function inPlace(a) {
     for (var k in PLACES) {
@@ -140,44 +146,79 @@
     return null;
   }
 
+  function isGripped(b) { return b.psyche.ruler !== "ego"; }
+  function inDistress(b) { var r = b.psyche.ruler; return r !== "ego" && PT.ARCH[r].tone !== "light"; }
+
+  // A wandering target that gets refreshed when reached.
+  function wanderIn(a, world, placeKey, speed) {
+    if (!a.target || a.targetKind !== placeKey || (a.arrived && a.wait <= 0)) {
+      a.target = placeKey === "anywhere"
+        ? { x: 60 + world.rand() * (W - 120), y: 60 + world.rand() * (H - 120) }
+        : pointIn(PLACES[placeKey], world.rand);
+      a.targetKind = placeKey;
+      a.arrived = false;
+    }
+    return { pt: a.target, speed: speed };
+  }
+
   // Where does whoever is in charge want this body to go?
   function steer(a, world) {
     var r = a.psyche.ruler;
-    if (r === "shadow") {
-      var g = a.grievance != null ? world.agents[a.grievance] : null;
-      if (g && !g.lost) return { pt: doorstep(g), speed: 48 };
-      var prey = nearest(a, world, function (b) { return b.psyche.ruler === "ego"; }, 260);
-      if (prey) return { pt: prey, speed: 44 };
-      return { pt: a.target || routineTarget(a, world), speed: 40 };
-    }
-    if (r === "child") return { pt: doorstep(a), speed: 55 };
-    if (r === "abyss") {
-      if (!a.edgeSpot) {
-        var side = world.rand();
-        a.edgeSpot = side < 0.5
-          ? { x: 80 + world.rand() * (W - 160), y: side < 0.25 ? 70 : H - 70 }
-          : { x: side < 0.75 ? 70 : W - 70, y: 120 + world.rand() * (H - 240) };
+    var verb = r === "ego" ? "routine" : PT.ARCH[r].verb;
+    switch (verb) {
+      case "prowl": {
+        var g = a.grievance != null ? world.agents[a.grievance] : null;
+        if (g && !g.lost) return { pt: doorstep(g), speed: 48 };
+        var prey = nearest(a, world, function (b) { return !isGripped(b); }, 260);
+        if (prey) return { pt: prey, speed: 44 };
+        return wanderIn(a, world, "anywhere", 40);
       }
-      return { pt: a.edgeSpot, speed: 14 };
+      case "flee": return { pt: doorstep(a), speed: 55 };
+      case "withdraw": return { pt: doorstep(a), speed: 26 };
+      case "isolate":
+        if (!a.edgeSpot) {
+          var side = world.rand();
+          a.edgeSpot = side < 0.5
+            ? { x: 80 + world.rand() * (W - 160), y: side < 0.25 ? 70 : H - 70 }
+            : { x: side < 0.75 ? 70 : W - 70, y: 120 + world.rand() * (H - 240) };
+        }
+        return { pt: a.edgeSpot, speed: 14 };
+      case "guard": {
+        var t = a.threat != null ? world.agents[a.threat] : null;
+        if (t && !t.lost && t.psyche.ruler === "shadow" && dist(a, t) < 160) return { pt: t, speed: 46 };
+        var any = nearest(a, world, function (b) { return b.psyche.ruler === "shadow"; }, 110);
+        if (any) return { pt: any, speed: 42 };
+        return { pt: doorstep(a), speed: 40 };
+      }
+      case "confront": {
+        var foe = nearest(a, world, function (b) { return b.psyche.ruler === "shadow"; }, 400);
+        if (foe) return { pt: foe, speed: 50 };
+        return wanderIn(a, world, "plaza", 40);
+      }
+      case "tend": {
+        var fight = nearest(a, world, function (b) { return !!b.encounter; }, 300);
+        if (fight) return { pt: fight, speed: 50, stopShort: 12 };
+        var hurt = nearest(a, world, inDistress, 240);
+        if (hurt) return { pt: hurt, speed: 38, stopShort: 14 };
+        return wanderIn(a, world, "plaza", 30);
+      }
+      case "approach": {
+        var mark = nearest(a, world, function (b) { return b.psyche.ruler === "ego"; }, 300);
+        if (mark) return { pt: mark, speed: 36, stopShort: 12 };
+        return wanderIn(a, world, "plaza", 34);
+      }
+      case "roam": return wanderIn(a, world, world.rand() < 0.5 ? "plaza" : "market", 42);
+      case "crowd": return wanderIn(a, world, "plaza", 34);
+      case "agitate": return wanderIn(a, world, "plaza", 44);
+      case "market": return wanderIn(a, world, "market", 40);
+      case "retreat": return wanderIn(a, world, "park", 22);
+      case "linger": return wanderIn(a, world, "park", 12);
+      case "wander": return wanderIn(a, world, "anywhere", 18);
     }
-    if (r === "guardian") {
-      var t = a.threat != null ? world.agents[a.threat] : null;
-      if (t && !t.lost && t.psyche.ruler === "shadow" && dist(a, t) < 160) return { pt: t, speed: 46 };
-      var any = nearest(a, world, function (b) { return b.psyche.ruler === "shadow"; }, 110);
-      if (any) return { pt: any, speed: 42 };
-      return { pt: doorstep(a), speed: 40 };
-    }
-    if (r === "caretaker") {
-      var fight = nearest(a, world, function (b) { return !!b.encounter; }, 300);
-      if (fight) return { pt: fight, speed: 50, stopShort: 12 };
-      var hurt = nearest(a, world, function (b) {
-        var br = b.psyche.ruler;
-        return br !== "ego" && br !== "caretaker";
-      }, 240);
-      if (hurt) return { pt: hurt, speed: 38, stopShort: 14 };
-    }
-    if (!a.target || a.arrived && a.wait <= 0) {
-      a.target = routineTarget(a, world);
+    // "routine": ordinary life (the Senex keeps a stricter one)
+    if (!a.target || a.targetKind !== "routine" || (a.arrived && a.wait <= 0)) {
+      a.target = routineTarget(a, world, r === "senex");
+      a.targetKind = "routine";
       a.arrived = false;
     }
     return { pt: a.target, speed: 30 };
@@ -195,8 +236,9 @@
       if (!a.arrived) { a.arrived = true; a.wait = 3 + world.rand() * 8; }
       a.wait -= dt;
     }
-    if (a.psyche.ruler === "child") { a.x += (world.rand() - 0.5) * 1.2; a.y += (world.rand() - 0.5) * 1.2; }
-    // Soft separation so people don't stack.
+    var r = a.psyche.ruler;
+    var jitter = r === "child" ? 1.2 : r === "trickster" ? 2.2 : 0;
+    if (jitter) { a.x += (world.rand() - 0.5) * jitter; a.y += (world.rand() - 0.5) * jitter; }
     world.agents.forEach(function (b) {
       if (b === a || b.lost) return;
       var ex = a.x - b.x, ey = a.y - b.y, e = Math.sqrt(ex * ex + ey * ey);
@@ -206,15 +248,17 @@
     a.y = clamp(a.y, 8, H - 8);
   }
 
-  function lifeEvent(a, world) {
-    var evs = PT.EVENTS, total = 0;
-    var care = world.opts.care;
-    evs.forEach(function (e) { total += e.kind ? e.w * (0.4 + care * 1.6) : e.w; });
-    var r = world.rand() * total, ev = evs[0];
-    for (var i = 0; i < evs.length; i++) {
-      r -= evs[i].kind ? evs[i].w * (0.4 + care * 1.6) : evs[i].w;
-      if (r <= 0) { ev = evs[i]; break; }
-    }
+  function pickEvent(world) {
+    var evs = PT.EVENTS, care = world.opts.care, total = 0;
+    function w(e) { return e.kind ? e.w * (0.4 + care * 1.6) : e.w; }
+    evs.forEach(function (e) { total += w(e); });
+    var r = world.rand() * total;
+    for (var i = 0; i < evs.length; i++) { r -= w(evs[i]); if (r <= 0) return evs[i]; }
+    return evs[0];
+  }
+
+  function lifeEvent(a, world, ev) {
+    ev = ev || pickEvent(world);
     var text = ev.text;
     if (ev.grievance) {
       var others = world.agents.filter(function (b) { return b !== a && !b.lost; });
@@ -223,8 +267,9 @@
       text = text.replace("{other}", o.name);
       a.grievance = o.id;
     }
-    P.applyEvent(a.psyche, ev);
-    note(world, a.name + " " + text + ".", ev.kind ? "good" : "event", [a]);
+    var mult = P.applyEvent(a.psyche, ev);
+    var cut = mult > 1 ? " It cut deep for a Type " + a.psyche.type + "." : "";
+    note(world, a.name + " " + text + "." + cut, ev.kind ? "good" : "event", [a]);
   }
 
   function lose(world, a, how, others) {
@@ -232,7 +277,7 @@
     var hours = secs / (DAY / 24);
     a.lost = { t: world.time, how: how, ruler: a.psyche.ruler, wouldPass: hours };
     world.stats.lost++;
-    flash(world, a.x, a.y, PT.COMPLEX[a.psyche.ruler].color, true);
+    flash(world, a.x, a.y, PT.colorOf(a.psyche.ruler), true);
     var passTxt = hours >= 119 ? "" : " Left alone and safe, this grip would likely have released within ~" +
       Math.max(1, Math.round(hours)) + " hour" + (Math.round(hours) === 1 ? "" : "s") + ".";
     note(world, a.name + " " + how + "." + passTxt, "loss", [a].concat(others || []));
@@ -242,9 +287,12 @@
     var agents = world.agents, opts = world.opts;
     agents.forEach(function (a) { a.careNear = a.userCare > 0; });
 
+    // Auras: a gripped person radiates their ruler's aura into neighbours.
     for (var i = 0; i < agents.length; i++) {
       var a = agents[i];
-      if (a.lost) continue;
+      if (a.lost || !isGripped(a)) continue;
+      var ar = a.psyche.ruler, aura = PT.ARCH[ar].aura;
+      var soothing = CARERS[ar] ? 0.5 + opts.care : 1;
       for (var j = 0; j < agents.length; j++) {
         if (i === j) continue;
         var b = agents[j];
@@ -252,22 +300,14 @@
         var d = dist(a, b);
         if (d > 90) continue;
         var prox = 1 - d / 90;
-        var ar = a.psyche.ruler, bc = b.psyche.charge;
-        if (ar === "shadow") {
-          bc.child = clamp(bc.child + 0.05 * prox * dt, 0, 1);
-          var nearHome = dist(b, b.home) < 50 ? 1.8 : 1;
-          bc.guardian = clamp(bc.guardian + 0.05 * prox * nearHome * dt, 0, 1);
-          if (b.threat == null || bc.guardian > 0.5) b.threat = a.id;
-        } else if (ar === "caretaker") {
-          var k = 0.06 * prox * (0.5 + opts.care) * dt;
-          bc.shadow = clamp(bc.shadow - k, 0, 1);
-          bc.child = clamp(bc.child - k, 0, 1);
-          bc.abyss = clamp(bc.abyss - k, 0, 1);
-          if (d < 80) b.careNear = true;
-        } else if ((ar === "child" || ar === "abyss") && b.psyche.ruler === "ego") {
-          // Suffering moves those already inclined to tend.
-          bc.caretaker = clamp(bc.caretaker + 0.05 * prox * b.psyche.base.caretaker * (0.5 + opts.care) * dt * 3, 0, 1);
+        for (var k in aura) {
+          var amt = aura[k] * 0.05 * prox * dt;
+          if (amt < 0) amt *= soothing * b.psyche.careMult;
+          if (k === "guardian" && ar === "shadow" && dist(b, b.home) < 50) amt *= 1.8;
+          P.addCharge(b.psyche, k, amt);
         }
+        if (ar === "shadow" && (b.threat == null || P.chargeOf(b.psyche, "guardian") > 0.5)) b.threat = a.id;
+        if (CARERS[ar] && d < 80) b.careNear = true;
       }
     }
 
@@ -278,66 +318,69 @@
       if (g.lost || a.brokeInto[g.id]) return;
       if (dist(a, doorstep(g)) < 16) {
         a.brokeInto[g.id] = true;
-        P.applyEvent(g.psyche, { fx: { guardian: 0.5, child: 0.3 } });
+        P.applyEvent(g.psyche, PT.BREAKIN);
         g.threat = a.id;
-        flash(world, g.home.x, g.home.y, PT.COMPLEX.shadow.color);
+        flash(world, g.home.x, g.home.y, PT.ARCH.shadow.color);
         note(world, a.name + ", gripped by the Shadow, broke into " + g.name + "'s home.", "event", [a, g]);
       }
     });
 
-    // Confrontations: a Guardian meeting a Shadow up close.
+    // Confrontations: a Guardian or Hero meeting a Shadow up close.
     agents.forEach(function (s) {
       if (s.lost) return;
       if (s.psyche.ruler !== "shadow") { s.encounter = null; return; }
-      var g = nearest(s, world, function (b) { return b.psyche.ruler === "guardian"; }, 20);
+      var g = nearest(s, world, function (b) { return DEFENDERS[b.psyche.ruler]; }, 20);
       if (!g) { if (s.encounter) s.encounter.t = Math.max(0, s.encounter.t - dt); return; }
+      var gr = g.psyche.ruler;
       if (!s.encounter || s.encounter.with !== g.id) {
         s.encounter = { with: g.id, t: 0 };
-        note(world, g.name + " (Guardian) confronted " + s.name + " (Shadow).", "event", [s, g]);
+        note(world, g.name + " (" + PT.nameOf(gr) + ") confronted " + s.name + " (Shadow).", "event", [s, g]);
       }
-      var sc = s.psyche.charge, gc = g.psyche.charge;
-      var helper = nearest(s, world, function (b) { return b !== g && b.psyche.ruler === "caretaker"; }, 90);
+      var helper = nearest(s, world, function (b) { return b !== g && HELPERS[b.psyche.ruler]; }, 90);
       if (helper || s.userCare > 0 || g.userCare > 0) {
-        sc.shadow = clamp(sc.shadow - 0.3 * dt, 0, 1);
-        gc.guardian = clamp(gc.guardian - 0.3 * dt, 0, 1);
+        P.addCharge(s.psyche, "shadow", -0.3 * dt);
+        P.addCharge(g.psyche, gr, -0.3 * dt);
         s.encounter.t = Math.max(0, s.encounter.t - 2 * dt);
         if (!s.encounter.helped) {
           s.encounter.helped = true;
           world.stats.defused++;
-          var who = helper ? helper.name : "You";
+          var who = helper ? helper.name + " (" + PT.nameOf(helper.psyche.ruler) + ")" : "You";
           note(world, who + " stepped between " + g.name + " and " + s.name + ".", "good", [s, g].concat(helper ? [helper] : []));
         }
         return;
       }
-      sc.shadow = clamp(sc.shadow + 0.1 * dt, 0, 1);
-      gc.guardian = clamp(gc.guardian + 0.1 * dt, 0, 1);
+      P.addCharge(s.psyche, "shadow", 0.1 * dt);
+      P.addCharge(g.psyche, gr, 0.1 * dt);
       s.encounter.t += dt;
       if (s.encounter.t > 4) {
-        if (opts.armed) {
+        // Only a frightened Guardian at home with a gun kills. Heroes fight.
+        var athome = dist(g, g.home) < 60;
+        if (opts.armed && gr === "guardian" && athome) {
           lose(world, s, "was killed by " + g.name + " while gripped by the Shadow", [g]);
-          P.applyEvent(g.psyche, { fx: { abyss: 0.5, child: 0.3, guardian: -0.3 } });
+          P.applyEvent(g.psyche, { fx: { abyss: 0.5, child: 0.3, mourner: 0.3, guardian: -0.3 } });
           g.threat = null;
           note(world, g.name + " will carry this for the rest of their life.", "event", [g]);
         } else {
           world.stats.scuffles++;
-          P.applyEvent(s.psyche, { fx: { shadow: -0.35, abyss: 0.25 } });
-          P.applyEvent(g.psyche, { fx: { guardian: -0.25, child: 0.1 } });
+          P.applyEvent(s.psyche, { fx: { shadow: -0.35, abyss: 0.25, critic: 0.2 } });
+          P.addCharge(g.psyche, gr, -0.25);
+          P.addCharge(g.psyche, "child", 0.1);
           var ax = s.x - g.x, ay = s.y - g.y, m = Math.hypot(ax, ay) || 1;
           s.x += (ax / m) * 30; s.y += (ay / m) * 30;
-          flash(world, s.x, s.y, PT.COMPLEX.guardian.color);
+          flash(world, s.x, s.y, PT.colorOf(gr));
           note(world, g.name + " and " + s.name + " fought. It was ugly, but both lived.", "event", [s, g]);
           s.encounter = null;
         }
       }
     });
 
-    // The Abyss, unanswered for long enough.
+    // The Abyss, unanswered and alone for long enough.
     agents.forEach(function (a) {
       if (a.lost) return;
       var alone = !nearest(a, world, function () { return true; }, 70);
       if (a.psyche.ruler === "abyss" && alone && !a.careNear) a.abyssT += dt;
       else a.abyssT = Math.max(0, a.abyssT - 2 * dt);
-      if (a.abyssT > 20 && a.psyche.charge.abyss > 0.6) lose(world, a, "was lost to the Abyss, alone", []);
+      if (a.abyssT > 20 && P.chargeOf(a.psyche, "abyss") > 0.5) lose(world, a, "was lost to the Abyss, alone", []);
     });
   }
 
@@ -353,10 +396,9 @@
       if (a.userCare > 0) a.userCare = Math.max(0, a.userCare - dt);
       if (world.rand() < opts.hardship * 0.011 * dt) lifeEvent(a, world);
 
-      var place = inPlace(a);
       var change = P.step(a.psyche, dt, {
         night: night,
-        inPublic: !!place,
+        inPublic: !!inPlace(a),
         atHome: dist(a, a.home) < 30,
         cared: a.careNear,
       });
@@ -365,19 +407,19 @@
         if (to !== "ego") {
           if (from === "ego") { a.rulerSince = world.time; a.gripCount++; }
           a.edgeSpot = null;
-          note(world, a.name + " is in the grip of the " + PT.COMPLEX[to].name + ".", "grip", [a]);
+          a.target = null;
+          note(world, a.name + " is in the grip of the " + PT.nameOf(to) + ".", "grip", [a]);
         } else {
           var dur = world.time - a.rulerSince;
           var hrs = Math.max(1, Math.round(dur / (DAY / 24)));
-          if (from !== "caretaker") {
-            world.stats.weathered++;
-            world.stats.longestGrip = Math.max(world.stats.longestGrip, hrs);
-          }
+          var light = PT.ARCH[from].tone === "light";
+          if (!light) world.stats.weathered++;
           a.brokeInto = {};
           a.edgeSpot = null;
+          a.target = null;
           if (from === "shadow") a.grievance = null;
-          if (from === "guardian") a.threat = null;
-          note(world, a.name + " came back to themselves after ~" + hrs + "h in the grip of the " + PT.COMPLEX[from].name + ".", from === "caretaker" ? "info" : "good", [a]);
+          if (DEFENDERS[from]) a.threat = null;
+          note(world, a.name + " came back to themselves after ~" + hrs + "h in the grip of the " + PT.nameOf(from) + ".", light ? "info" : "good", [a]);
         }
       }
       move(a, world, dt);
@@ -388,7 +430,7 @@
 
   function provoke(world, a) {
     if (a.lost) return;
-    P.applyEvent(a.psyche, { fx: { shadow: 0.3, child: 0.15, guardian: 0.15 } });
+    P.applyEvent(a.psyche, { fx: { shadow: 0.3, child: 0.15, guardian: 0.15, rebel: 0.2, critic: 0.1 } });
     note(world, "You confronted " + a.name + ".", "event", [a]);
   }
   function sitWith(world, a) {
@@ -398,7 +440,9 @@
   }
   function hardDay(world, a) {
     if (a.lost) return;
-    lifeEvent(a, world);
+    var ev;
+    do { ev = pickEvent(world); } while (ev.kind);
+    lifeEvent(a, world, ev);
   }
 
   PT.town = {
@@ -409,6 +453,5 @@
     provoke: provoke,
     sitWith: sitWith,
     hardDay: hardDay,
-    doorstep: doorstep,
   };
 })();

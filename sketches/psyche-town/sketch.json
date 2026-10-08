@@ -1,14 +1,16 @@
 {
   "title": "Psyche Town",
-  "description": "A Sims-like town where autonomous forces of the psyche (Shadow, Abyss, Guardian…) seize people and, usually, let them go. Click anyone to see who's in charge.",
-  "summary": "A Sims-like town where autonomous forces of the psyche seize people and, usually, let them go.",
+  "description": "Each person's psyche is a little orrery: the ego as a sun (shaped by an Enneagram type) inside a persona shield, archetypes as planets whose pull decides who's in charge, aspects as psychological weather. Plus a town where those forces play out, a lab, and a wiki.",
+  "summary": "Psyches as little orreries (archetypes as planets, aspects as weather) in a town where those forces seize people and, usually, let them go.",
   "date": "2026-10-04",
-  "status": "prototype",
+  "status": "active",
   "tags": [
     "canvas",
     "simulation",
     "psychology",
     "jung",
+    "enneagram",
+    "astrology",
     "agents"
   ],
   "demo": "index.html"

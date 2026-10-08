@@ -1,13 +1,25 @@
 # Psyche Town
 
 **Started:** 2026-10-04
-**Status:** prototype
+**Status:** active
 
-A Sims-like little town where each person is quietly contested by
-autonomous forces of the psyche (Jungian-flavoured complexes). When one of
-them overpowers the ego, the person changes colour and starts behaving
-differently. Click anyone to see their inner "constellation" and the chain
-of events that got them there.
+Each person's psyche is a little orrery. The ego is the sun, shaped by an
+Enneagram type and wrapped in the persona's shield. Archetypes are planets
+on their own orbits, swelling and shrinking on their own rhythms. Whichever
+planet pulls hardest on the sun, if it out-pulls the ego's hold, is in
+charge. The angles between planets make the person's psychological weather.
+
+Three pages:
+
+- **Town** (`index.html`): a Sims-like town of people seized, and usually
+  released, by these forces. Click anyone to see their orrery and the
+  chain of events that got them there.
+- **Lab** (`lab.html`): one psyche up close. Throw life events at them,
+  sit with them, let them sleep, reroll their type and chart.
+- **Wiki** (`wiki.html`): every archetype, Enneagram type, named weather
+  and concept, generated from the same data the sim runs on. Tapping
+  anything in an orrery, a tug-of-war bar or a weather chip opens the
+  same entries in a side drawer.
 
 ## The idea
 
@@ -32,43 +44,68 @@ The long-term hope is to also model how people *typically* respond to these
 forces, and to let the user practise better responses (sitting with
 someone, not escalating, stepping between people).
 
-## How it works (first pass)
+## How it works
 
-- **Complexes** (`engine/psyche.js`): Ego, Persona, Shadow, Frightened
-  Child, Abyss, Guardian, Caretaker. Each autonomous complex has a charge
-  (0–1) that decays toward the person's temperament. Charge above a
-  threshold leaks along affinity links (fear → rage, fear → despair, rage ↔
-  despair, Caretaker soothes the rest).
-- **Who's in charge**: the Ego keeps the wheel while its *hold* (resilience,
-  worn down by fatigue and night, propped up by the Persona and by being
-  cared for) beats every complex. When a complex exceeds the hold it takes
-  over, and it feeds on itself a little so grips have momentum.
-- **Behaviour** (`engine/town.js`): the ruling complex steers. The Shadow
-  goes to its grievance's door (a break-in) or prowls. The Child runs home.
-  The Abyss drifts to the edge of town, away from everyone. The Guardian
-  holds the doorstep and confronts nearby Shadows. The Caretaker rushes to
-  fights and to whoever is suffering.
-- **Contagion**: the Shadow raises fear and Guardian charge in people
-  nearby. Suffering moves people inclined to tend toward the Caretaker. A
-  gripped Caretaker drains rage, fear and despair from everyone around them.
-- **Life events** arrive at random (job loss, break-ups, humiliation,
-  grief, eviction, sleeplessness, kindness) and are logged per person, so
-  "how they got here" is always readable.
-- **Inspector** (`ui/constellation.js`): an Obsidian-style force graph of
-  the person's complexes. Node size is charge, flowing links show where
-  charge is currently leaking, and the ruler gets the "in charge" ring while
-  the Ego is pulled off-centre toward it.
-- **You can intervene**: *Sit with them* (sustained care), *Confront*
-  (watch it escalate), or *Give them a hard day*.
-- Controls: Hardship, Care, Armed homes, speed, new town.
+**The psyche** (`engine/psyche.js`, data in `engine/archetypes.js`):
 
-Open `index.html` directly. There's no build step or server.
+- **Planets.** Everyone carries a Shadow. Beyond that, each person draws 3
+  to 12 of 20 archetypes, weighted toward the ones their Enneagram type
+  keeps close. The 20 are Shadow, Frightened Child, Abyss, Guardian,
+  Caretaker, Trickster, Lover, Hero, Martyr, Inner Critic, Hermit, Puer,
+  Senex, Hungry Ghost, Rebel, Tyrant, Mourner, Innocent, Sage and Fool.
+- **Orbits.** Each planet has a distance from the ego, an eccentricity, a
+  period, and a *breath*: its own slow cycle of swelling and shrinking.
+- **Mass and pull.** mass = resting size × breath + charge from life
+  events. pull ≈ mass / distance². Charge also drags a planet's orbit
+  inward, so the same blow lands harder when that planet happens to be
+  near its closest point.
+- **Hold and the shield.** The ego's hold starts from its Enneagram
+  baseline. Fatigue and night wear it down; company, being cared for and
+  an at-ease "growth" lean firm it up. It's drawn as the persona shield
+  ring, whose thickness is the hold, and it cracks when a planet captures
+  the sun. Capture uses hysteresis, and a ruling planet feeds itself a
+  little, so grips have momentum but decay.
+- **Weather.** Aspects between weighty planets (conjunction ☌, square □,
+  trine △, opposition ☍) change how charge flows between them. Twelve
+  pairings are named, such as Cornered (Shadow ☌ Child), The Verdict
+  (Critic ☌ Abyss), Tenderness (Lover △ Caretaker) and Integration
+  (Sage △ Shadow). Every other pair gets a generic effect: fusion,
+  friction, ease or a tug of war.
+- **Enneagram.** The type sets the baseline hold, which events cut deepest
+  (×1.5), and which planets orbit close. Under stress the ego leans toward
+  its disintegration point, and that type's sore spots start to hurt too.
+  At ease it leans toward its growth point, and its hold firms up.
+
+**The town** (`engine/town.js`):
+
+- **Movement.** Whoever rules a person picks how they move. The Shadow
+  goes to its grievance's door (a break-in), the Child runs home, the
+  Abyss drifts to the edge of town, the Guardian holds its doorstep, the
+  Caretaker goes to fights and suffering, the Hungry Ghost goes back to
+  the market, the Rebel agitates in the plaza, and so on.
+- **Auras.** A gripped person radiates their archetype's aura into the
+  psyches of people nearby (only into archetypes those people actually
+  have). The Shadow frightens, the Caretaker and Sage calm, the Fool
+  deflates Inner Critics, and the Rebel spreads.
+- **Irreversible outcomes.**
+  - A Guardian at home who confronts a Shadow for too long with
+    **Armed homes** on kills them. Heroes, and unarmed Guardians, fight
+    instead, and both people live.
+  - The Abyss is lethal only when its host is left alone, unattended, for
+    long enough.
+  - Every loss reports how long the grip would likely have taken to pass.
+- **Controls.** Hardship, Care (how common and heavy the caring
+  archetypes are, and how strongly care soothes), Armed homes, and the
+  per-person actions: sit with them, confront, give them a hard day.
+
+Everything opens directly from disk; there's no build step or server.
 
 ## Possible directions
 
 - Teach responses: scenarios where you have to de-escalate, with feedback.
-- More complexes (Trickster, Lover, the Puer, Hero), and relationships
-  (bonds, grudges, family) so contagion follows real ties.
+- Relationships (bonds, grudges, family) so contagion follows real ties.
+- Tuning and robustness: the town's Shadow ⇄ Child ⇄ Guardian loops run a
+  little hot, and the Care slider still has only a modest effect.
 - Personal history/trauma that makes particular events hit harder.
 - An LLM "inner voice" per complex, so clicking someone also shows what
   each force is *saying* to them.

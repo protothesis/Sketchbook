@@ -7,7 +7,9 @@
   var world, selected = null, hover = null, paused = false, speed = 1;
   var colors = PT.render.themeColors();
   var townCanvas = $("town"), view;
-  var constellation = new PT.Constellation($("constellation"));
+  var orrery = new PT.Orrery($("orrery"));
+  var drawer = new PT.wiki.Drawer("wiki.html");
+  $("orrery").addEventListener("click", function (e) { var k = orrery.hit(e); if (k) drawer.open(k); });
 
   function newTown() {
     world = PT.town.create(opts);
@@ -65,7 +67,8 @@
   }
   function hoursSince(t) { return Math.max(0, Math.round((world.time - t) / (world.DAY / 24))); }
 
-  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+  var esc = PT.wiki.esc;
+  function hrs(secs) { return Math.max(1, Math.round(secs / (world.DAY / 24))) + "h"; }
 
   function logHtml(items, limit) {
     return items.slice(0, limit).map(function (l) {
@@ -74,18 +77,22 @@
   }
 
   function legendHtml(counts) {
-    return PT.COMPLEXES.map(function (c) {
-      var n = counts[c.id];
-      var badge = c.autonomous ? '<span class="count">' + (n || 0) + "</span>" : "";
-      return '<li><span class="dot" style="background:' + c.color + '"></span><div><strong>' + c.name +
-        "</strong>" + badge + "<p>" + c.blurb + "</p></div></li>";
+    return PT.ARCHETYPES.map(function (a) {
+      var n = counts[a.id] || 0;
+      return '<li><a href="#" data-wiki="arch-' + a.id + '"' + (n ? ' class="active"' : "") + '><span class="dot" style="background:' +
+        a.color + '"></span>' + esc(a.name) + (n ? '<span class="count">' + n + "</span>" : "") + "</a></li>";
     }).join("");
   }
 
-  var lastPanel = 0;
+  // Don't swap panel HTML out from under a press, or the click gets lost.
+  var pressing = false;
+  document.addEventListener("pointerdown", function () { pressing = true; });
+  document.addEventListener("pointerup", function () { setTimeout(function () { pressing = false; }, 0); });
+
+  var lastPanel = 0, lastWeather = "";
   function renderPanel(force) {
     var now = performance.now();
-    if (!force && now - lastPanel < 250) return;
+    if (!force && (pressing || now - lastPanel < 250)) return;
     lastPanel = now;
     $("clock").textContent = fmtTime(world.time);
 
@@ -113,27 +120,24 @@
     $("overview").hidden = true;
     $("inspector").hidden = false;
     var a = world.agents[selected], p = a.psyche;
-    var ctx = { night: PT.town.isNight(world), cared: a.careNear };
-    var hold = PT.psyche.hold(p, ctx);
+    var hold = PT.psyche.hold(p, { night: PT.town.isNight(world), cared: a.careNear });
     $("who").textContent = a.name;
+    $("type").innerHTML = PT.panel.typeHtml(p);
     var state;
     if (a.lost) {
-      var c0 = PT.COMPLEX[a.lost.ruler];
-      state = '<span class="pill" style="--c:' + c0.color + '">Lost</span> ' + esc(a.name) + " " + esc(a.lost.how) + ".";
+      state = '<span class="pill" style="--c:' + PT.colorOf(a.lost.ruler) + '">Lost</span> ' + esc(a.name) + " " + esc(a.lost.how) + ".";
       if (a.lost.wouldPass < 119) state += " If they'd been kept safe, the grip would likely have passed within about <b>" + Math.max(1, Math.round(a.lost.wouldPass)) + "h</b>.";
-    } else if (p.ruler === "ego") {
-      state = '<span class="pill" style="--c:' + PT.COMPLEX.ego.color + '">Composed</span> Ego has the wheel. Strongest pull: <b>' +
-        PT.COMPLEX[PT.psyche.strongest(p)].name + "</b>.";
     } else {
-      var c = PT.COMPLEX[p.ruler];
-      var eta = PT.psyche.timeToRelease(p) / (world.DAY / 24);
-      state = '<span class="pill" style="--c:' + c.color + '">' + c.name + "</span> In its grip for " + hoursSince(a.rulerSince) +
-        "h, " + c.verb + ". " + esc(c.blurb) +
-        (eta < 119 ? ' <span class="muted">Left safe and alone, it would likely let go in ~' + Math.max(1, Math.round(eta)) + "h.</span>" : "");
+      state = PT.panel.rulerHtml(p, hrs);
+      if (p.ruler !== "ego") state += ' <span class="muted">(' + hoursSince(a.rulerSince) + "h so far)</span>";
     }
     $("state").innerHTML = state;
     $("hold").style.width = Math.round(hold * 100) + "%";
     $("fatigue").style.width = Math.round(p.fatigue * 100) + "%";
+    $("tug").innerHTML = PT.panel.tugHtml(p, hold, 6);
+    var wx = PT.panel.weatherHtml(p);
+    if (wx !== lastWeather) { $("weather").innerHTML = wx; lastWeather = wx; }
+    $("chart").textContent = p.planets.length;
     $("grips").textContent = a.gripCount;
     $("story").innerHTML = logHtml(a.story, 20);
     ["act-sit", "act-confront", "act-hard"].forEach(function (id) { $(id).disabled = !!a.lost; });
@@ -154,7 +158,7 @@
     if (selected != null) {
       var a = world.agents[selected];
       var hold = PT.psyche.hold(a.psyche, { night: PT.town.isNight(world), cared: a.careNear });
-      constellation.draw(a, hold, colors, dt);
+      orrery.draw(a.psyche, hold, colors, dt, { lostRuler: a.lost ? a.lost.ruler : null, compact: true });
     }
     renderPanel(false);
     requestAnimationFrame(frame);
