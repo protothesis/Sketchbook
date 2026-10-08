@@ -387,3 +387,24 @@ body:not([data-view="review"]) .stats > * { display: none; }
 .prof-bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; margin-top: 3px; }
 .prof-bar i { display: block; min-width: 2px; }
 .prof-bar.mini { width: 46px; height: 10px; margin: 0; display: inline-flex; }
+
+/* ------------------------------------------------------- smart galleries */
+.coll-bar { display: flex; align-items: center; gap: 8px; padding: 6px 14px; flex: none; flex-wrap: wrap;
+  background: #1c1c1c; border-bottom: 1px solid #000; font-size: 12px; }
+.coll-bar[hidden] { display: none; }
+.coll-bar b { color: #eee; font-size: 13px; }
+.coll-bar .sw, .details-panel .sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; box-shadow: 0 0 0 1px #0008; }
+.cb-kind { color: var(--accent); }
+.cb-sep { width: 1px; height: 16px; background: var(--line); }
+.cb-ok { color: var(--yes); }
+.cb-new { color: #ff8a7a; font-weight: 600; }
+.cb-gone { color: var(--maybe); }
+.cb-dirty { color: var(--maybe); font-style: italic; }
+.nav-list li.smart .sicon { color: var(--accent); flex: none; }
+.sstat { flex: none; font-size: 10px; font-weight: 700; }
+.sstat.ok { width: 7px; height: 7px; border-radius: 50%; background: var(--yes); }
+.sstat.changed { color: #fff; background: #c8463c; border-radius: 8px; padding: 0 5px; line-height: 15px; }
+.group-head.new .gh-name { color: #ff8a7a; }
+.hit-tags i.new { background: #c8463c; color: #fff; }
+.g-log { list-style: none; padding: 0; margin: 0; font-size: 12px; }
+.g-log li { padding: 4px 0; border-bottom: 1px solid #2c2c2c; }

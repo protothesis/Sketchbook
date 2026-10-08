@@ -124,6 +124,36 @@ An image can be in any number of galleries.
   them, and drag galleries or groups to reorder the sidebar.
 - **Show in folder** (details panel) jumps from any image, e.g. one in a
   gallery, back to its original folder with it selected.
+- **Notes and history**: with a gallery open and nothing selected, the
+  details panel (`I`, or **Info** in the gallery bar) shows the gallery's
+  own markdown notes and a log of its history: created, renamed, images
+  added/removed/rearranged.
+
+### Smart galleries (saved searches)
+
+**☆ Save** in the filter section saves what's on screen as a smart
+gallery: where you are (folder or gallery), the rating filter, the search
+words, and any colour / similar / profile match. It also records the
+results at that moment as its **baseline**.
+
+Smart galleries (⌕) live in the gallery list and keep checking themselves
+as the library changes (new images scanned, ratings, indexing). A green
+dot means the results are the same as the baseline. A red badge like
+`+29 −3` means 29 new images now match and 3 saved ones no longer do.
+
+Opening one puts its search back in the toolbar and adds a bar under it:
+
+- New matches appear on top under **New since saved**, tagged NEW.
+  **Hide new** hides them. **Accept all**, or **Accept N selected**, adds
+  them to the baseline.
+- **−N gone**, then **Forget**, drops saved results the search no longer
+  finds.
+- Change the search while one is open and the bar offers **Update** (save
+  it, re-baselining) or **Revert**. ☆ Save makes it a new smart gallery
+  instead.
+- **Make gallery** creates an ordinary gallery from the selection, or else
+  from the saved results. That gallery remembers the search it came from:
+  its bar says "made from search …" with **Show the search**.
 
 ### Modules
 

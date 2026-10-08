@@ -7,6 +7,18 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-08 — **Smart galleries**: ☆ Save keeps the current search (where,
+  rating filter, words, colour/similar/profile match) and its results as a
+  baseline. The sidebar shows whether the results have changed (green dot,
+  or a red `+new −gone` badge). Opening one splits new matches out on top,
+  with hide / accept all / accept selected / forget gone, and Update or
+  Revert after editing the search. **Make gallery** turns the selection or
+  saved results into an ordinary gallery that remembers its search.
+- 2026-10-08 — Galleries keep a **history log** (created, renamed,
+  added/removed, rearranged, accepted...) and their own **markdown notes**,
+  shown in the details panel when a gallery is open and nothing is
+  selected.
+
 - 2026-10-08 — Colour wheel v2: every control lives on the wheel. Colours
   outside the search range are dimmed on the disc. An outer hue ring never
   dims and marks the current hue. Brightness (left arc, or scroll) and
@@ -94,6 +106,10 @@ All notable changes to this sketch are logged here, per
   Exports are v2; v1 exports still import.
 
 ### Fixed
+
+- 2026-10-08 — With the folder-input fallback (non-Chromium browsers),
+  re-picking a folder that's already connected refreshes it instead of
+  adding a duplicate "name (2)".
 
 - 2026-10-08 — Picking a colour on the wheel at low brightness no longer
   resets brightness.

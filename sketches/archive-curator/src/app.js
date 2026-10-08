@@ -35,6 +35,7 @@
     ratingBar: false, // rating filter buttons shown (otherwise one icon)
     expanded: [], // folder-tree nodes that are open
     targetGallery: null,
+    activeSmart: null, // smart gallery open in the library (restored on reload)
     modules: {}, // id -> enabled
   };
 
@@ -47,7 +48,7 @@
     srcKeys: null, // cache of keys in the current source
     scanning: new Set(),
     records: new Map(), // key -> { path, rating, reviewedAt, notes, galleries[] }
-    galleries: [], // { id, name, created, group, pos, order[] }
+    galleries: [], // { id, kind: "static"|"smart", name, created, group, pos, order[], notes, log[], query?, baseline?, fromSmart? }
     groups: [], // gallery groups: { id, name, pos, collapsed }
     view: null,
     lib: {
@@ -60,6 +61,10 @@
       scores: null,
       selected: new Set(),
       focus: null, // key of the "current" image (keyboard cursor, details panel)
+      smart: null, // id of the smart gallery being viewed
+      hideNew: false, // hide results that arrived since it was saved
+      fresh: null, // Set of those new results
+      gone: null, // saved results that no longer match
     },
     lb: { items: [], index: 0, open: false, zoom: false },
   };
@@ -130,6 +135,18 @@
     if (state.settings.src.type === "gallery") state.srcKeys = null;
     renderSidebar();
     refreshPanels();
+    refreshSmartStatus();
+  }
+
+  const isSmart = (g) => !!g && g.kind === "smart";
+  const staticGalleries = () => state.galleries.filter((g) => !isSmart(g));
+
+  // Every gallery keeps a small history: created, renamed, added/removed...
+  function logGallery(g, type, extra) {
+    if (!g) return;
+    g.log = g.log || [];
+    g.log.push({ t: Date.now(), type, ...(extra || {}) });
+    if (g.log.length > 500) g.log.splice(0, g.log.length - 500);
   }
 
   // Keep a gallery's custom order in step with its members.
@@ -150,20 +167,27 @@
     const has = r.galleries.includes(id);
     r.galleries = has ? r.galleries.filter((g) => g !== id) : [...r.galleries, id];
     saveRecord(r);
-    if (gallery(id)) noteOrder(gallery(id), [path], has);
+    if (gallery(id)) {
+      logGallery(gallery(id), has ? "removed" : "added", { n: 1 });
+      noteOrder(gallery(id), [path], has);
+    }
     galleryChanged();
     changed(path);
   }
 
   function addToGallery(paths, id, remove) {
+    let n = 0;
     for (const p of paths) {
       const r = ensureRecord(p);
       const has = r.galleries.includes(id);
       if (remove && has) r.galleries = r.galleries.filter((g) => g !== id);
       else if (!remove && !has) r.galleries.push(id);
+      else continue;
+      n++;
       saveRecord(r);
     }
     const g = gallery(id);
+    if (g && n) logGallery(g, remove ? "removed" : "added", { n });
     if (g) noteOrder(g, paths, remove);
     toast(`${remove ? "Removed" : "Added"} ${plural(paths.length, "image")} ${remove ? "from" : "to"} “${g ? g.name : "gallery"}”`);
     galleryChanged();
@@ -175,7 +199,8 @@
     const suggested = paths && paths.length ? suggestGalleryName(paths) : "";
     const name = (prompt(paths && paths.length ? `New gallery with ${plural(paths.length, "image")}:` : "New gallery name:", suggested) || "").trim();
     if (!name) return null;
-    const g = { id: newId("g"), name, created: Date.now(), group: null, pos: topLevel().length, order: [] };
+    const g = { id: newId("g"), kind: "static", name, created: Date.now(), group: null, pos: topLevel().length, order: [], notes: "", log: [] };
+    logGallery(g, "created");
     state.galleries.push(g);
     store.put("galleries", g);
     if (paths && paths.length) addToGallery(paths, g.id);
@@ -194,16 +219,18 @@
   function renameGallery(id) {
     const g = gallery(id);
     const name = g && (prompt("Rename gallery:", g.name) || "").trim();
-    if (!name) return;
+    if (!name || name === g.name) return;
+    logGallery(g, "renamed", { from: g.name, to: name });
     g.name = name;
     store.put("galleries", g);
     galleryChanged();
     renderLibTitle();
+    renderCollBar();
   }
 
   function deleteGallery(id) {
     const g = gallery(id);
-    if (!g || !confirm(`Delete gallery “${g.name}”? (Only the grouping is removed — images and ratings stay.)`)) return;
+    if (!g || !confirm(isSmart(g) ? `Delete smart gallery “${g.name}”? (The saved search goes; images are untouched.)` : `Delete gallery “${g.name}”? (Only the grouping is removed — images and ratings stay.)`)) return;
     state.galleries = state.galleries.filter((x) => x.id !== id);
     store.del("galleries", id);
     for (const r of [...state.records.values()]) {
@@ -213,6 +240,7 @@
       }
     }
     if (state.settings.targetGallery === id) state.settings.targetGallery = null;
+    if (state.lib.smart === id) state.lib.smart = null;
     if (state.settings.src.type === "gallery" && state.settings.src.id === id) setSource({ type: "folder", path: "" });
     else galleryChanged();
   }
@@ -321,6 +349,7 @@
     if (at < 0) at = rest.length;
     rest.splice(at, 0, ...base.filter((k) => mv.has(k)));
     g.order = rest;
+    logGallery(g, "reordered", { n: moving.length });
     store.put("galleries", g);
     state.lib.matchSort = false;
     if (state.settings.gallerySort !== "custom") {
@@ -329,6 +358,345 @@
       toast("Switched this gallery to custom order");
     }
     rebuildLibrary(true);
+  }
+
+
+  // ------------------------------------------------------ smart galleries
+  //
+  // A smart gallery is a saved library state — where (folder or gallery),
+  // rating filter, search words, colour/similar match — plus a baseline:
+  // the results it had when saved (or last accepted). Its status compares
+  // what the search finds now against that baseline, so the sidebar can say
+  // "+29 new / −3 gone", and opening it splits new arrivals out on top.
+
+  const smartStatus = new Map(); // id -> { count, added, gone }
+
+  function currentQuery() {
+    const m = state.lib.match;
+    return {
+      src: { ...state.settings.src },
+      filter: state.settings.filter,
+      search: state.lib.search.trim(),
+      match: m ? JSON.parse(JSON.stringify(m)) : null,
+    };
+  }
+
+  function sameQuery(a, b) {
+    const norm = (q) => {
+      const m = q.match;
+      return JSON.stringify({
+        src: q.src,
+        filter: q.filter,
+        search: (q.search || "").toLowerCase(),
+        match: !m ? null : m.type === "color" ? ["c", m.hex, Math.round(m.tol * 1000)] : ["s", m.key || "", m.name || "", m.pal.length],
+      });
+    };
+    return norm(a) === norm(b);
+  }
+
+  // Same filtering as the library, for any query (no sorting/grouping).
+  function runQuery(q, keys) {
+    const f = q.filter;
+    if (f !== "all") {
+      keys = keys.filter((k) => {
+        const r = state.records.get(k);
+        if (f === "unrated") return !r || !r.rating;
+        if (f === "notes") return r && (r.notes || "").trim();
+        return r && r.rating === f;
+      });
+    }
+    let hits = null;
+    const terms = (q.search || "").toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length) {
+      hits = new Map();
+      keys = keys.filter((k) => {
+        const h = matchSearch(k, terms);
+        if (h) hits.set(k, h);
+        return !!h;
+      });
+    }
+    let scores = null;
+    const m = q.match;
+    if (m) {
+      scores = new Map();
+      for (const k of keys) {
+        const e = features.get(k);
+        if (!e || !e.pal || !e.pal.length) continue;
+        if (m.type === "color") {
+          const sc = features.colorScore(e.pal, m.lab, m.tol);
+          if (sc >= 0.08) scores.set(k, sc);
+        } else scores.set(k, -features.paletteDistance(m.pal, e.pal));
+      }
+      keys = keys.filter((k) => scores.has(k));
+    }
+    return { keys, hits, scores };
+  }
+
+  let statusTimer = 0;
+  function refreshSmartStatus(soon) {
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => {
+      for (const g of state.galleries) {
+        if (!isSmart(g)) continue;
+        const cur = new Set(runQuery(g.query, srcKeysFor(g.query.src)).keys);
+        const base = new Set(g.baseline);
+        let added = 0;
+        let gone = 0;
+        for (const k of cur) if (!base.has(k)) added++;
+        for (const k of base) if (!cur.has(k)) gone++;
+        smartStatus.set(g.id, { count: cur.size, added, gone });
+      }
+      renderGalleries();
+      renderCollBar();
+    }, soon ? 30 : 1200);
+  }
+
+  function describeQuery(q, html) {
+    const parts = [];
+    parts.push(q.src.type === "gallery" ? "in “" + ((gallery(q.src.id) || {}).name || "deleted gallery") + "”" : "in " + labelFor(q.src));
+    if (q.search) parts.push("“" + q.search + "”");
+    if (q.match && q.match.type === "color")
+      parts.push(html ? `<span class="sw" style="background:${esc(q.match.hex)}"></span> colour` : "colour " + q.match.hex);
+    if (q.match && q.match.type === "similar") parts.push(q.match.name ? "like “" + q.match.name + "”" : "similar colours");
+    if (q.filter !== "all") parts.push(q.filter === "notes" ? "with notes" : q.filter);
+    return html ? parts.map((x) => (x.startsWith("<") ? x : esc(x))).join(" · ") : parts.join(" · ");
+  }
+
+  function saveSmart() {
+    const q = currentQuery();
+    const suggested = q.search || (q.match && q.match.type === "similar" && q.match.name ? "Like " + q.match.name : q.match ? "Colour " + (q.match.hex || "") : labelFor(q.src));
+    const name = (prompt(`Save this search as a smart gallery (${plural(state.lib.items.length, "result")}):`, suggested) || "").trim();
+    if (!name) return;
+    const keys = runQuery(q, srcKeysFor(q.src)).keys;
+    const g = { id: newId("s"), kind: "smart", name, created: Date.now(), group: null, pos: topLevel().length, order: [], notes: "", log: [], query: q, baseline: keys };
+    logGallery(g, "created", { n: keys.length, query: describeQuery(q) });
+    state.galleries.push(g);
+    store.put("galleries", g);
+    state.lib.smart = g.id;
+    state.settings.activeSmart = g.id;
+    saveSettings();
+    smartStatus.set(g.id, { count: keys.length, added: 0, gone: 0 });
+    renderGalleries();
+    rebuildLibrary(true);
+    toast(`Saved “${name}” — ${plural(keys.length, "image")}`);
+  }
+
+  // Put a query back into the toolbar (and the library), optionally as the
+  // open smart gallery.
+  function applyQuery(q, smartId) {
+    loadQuery(q, smartId);
+    state.lib.selected.clear();
+    state.lib.focus = null;
+    saveSettings();
+    renderMatchChip();
+    renderSidebar();
+    renderStats();
+    if (state.view !== "library") showView("library");
+    else rebuildLibrary();
+    startIndexing();
+    emit("onSource");
+  }
+
+  // Just the state part (also used at startup to reopen a smart gallery).
+  function loadQuery(q, smartId) {
+    const src = q.src.type === "gallery" && !gallery(q.src.id) ? { type: "folder", path: "" } : q.src;
+    state.settings.src = { ...src };
+    state.settings.filter = q.filter;
+    state.lib.search = q.search || "";
+    $("lib-search").value = state.lib.search;
+    state.lib.match = q.match ? JSON.parse(JSON.stringify(q.match)) : null;
+    state.lib.matchSort = !!q.match;
+    if (q.match && q.match.type === "color" && q.match.h !== undefined) state.settings.lastColor = { h: q.match.h, s: q.match.s, v: q.match.v, tol: q.match.tol };
+    state.lib.smart = smartId || null;
+    state.settings.activeSmart = state.lib.smart;
+    state.lib.hideNew = false;
+    state.srcKeys = null;
+  }
+
+  function openSmart(id) {
+    const g = gallery(id);
+    if (g) applyQuery(g.query, id);
+  }
+
+  const activeSmart = () => (state.lib.smart ? gallery(state.lib.smart) : null);
+
+  // Accept new results into the baseline (all of them, or just `only`).
+  function acceptNew(only) {
+    const g = activeSmart();
+    if (!g || !state.lib.fresh) return;
+    const add = [...state.lib.fresh].filter((k) => !only || only.has(k));
+    if (!add.length) return;
+    g.baseline = g.baseline.concat(add);
+    logGallery(g, "accepted", { n: add.length });
+    store.put("galleries", g);
+    toast(`Accepted ${plural(add.length, "new image")}`);
+    refreshSmartStatus(true);
+    rebuildLibrary(true);
+  }
+
+  function forgetGone() {
+    const g = activeSmart();
+    if (!g || !state.lib.gone || !state.lib.gone.length) return;
+    const gone = new Set(state.lib.gone);
+    g.baseline = g.baseline.filter((k) => !gone.has(k));
+    logGallery(g, "dropped", { n: gone.size });
+    store.put("galleries", g);
+    refreshSmartStatus(true);
+    rebuildLibrary(true);
+  }
+
+  // Save the edited search over the smart gallery (results become the new baseline).
+  function updateSmart() {
+    const g = activeSmart();
+    if (!g) return;
+    const q = currentQuery();
+    g.query = q;
+    g.baseline = runQuery(q, srcKeysFor(q.src)).keys;
+    logGallery(g, "search changed", { n: g.baseline.length, query: describeQuery(q) });
+    store.put("galleries", g);
+    toast(`Updated “${g.name}”`);
+    refreshSmartStatus(true);
+    rebuildLibrary(true);
+  }
+
+  // A static gallery from the selection, or else from the saved results.
+  // It remembers the search it came from.
+  function smartToStatic() {
+    const g = activeSmart();
+    if (!g) return;
+    const base = new Set(g.baseline);
+    const sel = state.lib.items.filter((k) => state.lib.selected.has(k));
+    const keys = sel.length ? sel : state.lib.items.filter((k) => base.has(k));
+    const name = (prompt(`New gallery from ${sel.length ? "the selected" : "the saved"} ${plural(keys.length, "image")}:`, g.name) || "").trim();
+    if (!name) return;
+    const s2 = { id: newId("g"), kind: "static", name, created: Date.now(), group: g.group, pos: topLevel().length, order: keys.slice(), notes: "", log: [] };
+    s2.fromSmart = { id: g.id, name: g.name, query: JSON.parse(JSON.stringify(g.query)) };
+    logGallery(s2, "created", { from: g.name, query: describeQuery(g.query) });
+    state.galleries.push(s2);
+    store.put("galleries", s2);
+    addToGallery(keys, s2.id);
+    logGallery(g, "made gallery", { to: name, n: keys.length });
+    store.put("galleries", g);
+  }
+
+  // From a gallery that was made from a search: show that search's results.
+  function openOrigin(g) {
+    const o = g && g.fromSmart;
+    if (!o) return;
+    if (gallery(o.id)) return openSmart(o.id);
+    applyQuery(o.query, null);
+  }
+
+  // Bar under the toolbar for the open gallery / smart gallery.
+  function renderCollBar() {
+    const bar = $("coll-bar");
+    const sg = activeSmart();
+    const s = state.settings.src;
+    const g = sg || (s.type === "gallery" ? gallery(s.id) : null);
+    bar.hidden = !g || state.view !== "library";
+    if (bar.hidden) return;
+    const info = `<button class="tiny" data-c="info" title="Notes and history">&#9432; Info</button>`;
+    if (!sg) {
+      bar.innerHTML =
+        `<span class="cb-kind">&#9638;</span><b>${esc(g.name)}</b>` +
+        (g.fromSmart ? `<span class="muted">made from search ${describeQuery(g.fromSmart.query, true)}</span><button class="tiny" data-c="origin">Show the search</button>` : "") +
+        `<span class="spacer"></span>${info}`;
+      return;
+    }
+    const dirty = !sameQuery(sg.query, currentQuery());
+    const fresh = state.lib.fresh ? state.lib.fresh.size : 0;
+    const gone = state.lib.gone ? state.lib.gone.length : 0;
+    const selFresh = [...state.lib.selected].filter((k) => state.lib.fresh && state.lib.fresh.has(k)).length;
+    const status = dirty
+      ? `<span class="cb-dirty">Search edited</span><button class="tiny" data-c="update" title="Save this search over the smart gallery">Update</button><button class="tiny" data-c="revert">Revert</button>`
+      : !fresh && !gone
+        ? `<span class="cb-ok">&#10003; Up to date</span>`
+        : (fresh
+            ? `<span class="cb-new">+${fmt(fresh)} new</span><button class="tiny" data-c="hide">${state.lib.hideNew ? "Show new" : "Hide new"}</button>` +
+              `<button class="tiny" data-c="accept" title="Add them to the saved results">Accept all</button>` +
+              (selFresh ? `<button class="tiny" data-c="accept-sel">Accept ${fmt(selFresh)} selected</button>` : "")
+            : "") +
+          (gone ? `<span class="cb-gone" title="Saved results the search no longer finds (re-rated, moved or deleted)">&minus;${fmt(gone)} gone</span><button class="tiny" data-c="forget">Forget</button>` : "");
+    bar.innerHTML =
+      `<span class="cb-kind">&#8981;</span><b>${esc(sg.name)}</b><span class="muted">${describeQuery(sg.query, true)}</span>` +
+      `<span class="cb-sep"></span>${status}<span class="spacer"></span>` +
+      `<button class="tiny" data-c="static" title="Make an ordinary gallery from the selection, or from the saved results">Make gallery</button>${info}`;
+  }
+
+  // Details panel with nothing selected, while a gallery is open:
+  // its notes and history.
+  function renderCollectionInfo(panel, g) {
+    panel.dataset.path = "gallery:" + g.id + ":" + (g.log || []).length;
+    const fmtT = (t) => new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    const line = (e) => {
+      const n = (w) => plural(e.n || 0, w);
+      const what = {
+        created: () => (e.from ? `Created from “${e.from}”` : e.n !== undefined ? `Created with ${n("image")}` : "Created"),
+        renamed: () => `Renamed “${e.from}” → “${e.to}”`,
+        added: () => `Added ${n("image")}`,
+        removed: () => `Removed ${n("image")}`,
+        reordered: () => `Rearranged ${n("image")}`,
+        accepted: () => `Accepted ${n("new result")}`,
+        dropped: () => `Forgot ${n("result")} that no longer matched`,
+        "search changed": () => `Search changed (${n("result")})`,
+        "made gallery": () => `Made gallery “${e.to}” (${n("image")})`,
+      }[e.type];
+      return `<li><span class="muted">${fmtT(e.t)}</span> ${esc(what ? what() : e.type)}${e.query ? `<div class="muted small">${esc(e.query)}</div>` : ""}</li>`;
+    };
+    const st = smartStatus.get(g.id);
+    panel.innerHTML = `
+      <div class="d-head"><div><div class="d-name">${isSmart(g) ? "&#8981; " : ""}${esc(g.name)}</div>
+        <div class="d-folder">${isSmart(g) ? "Smart gallery" : "Gallery"} · created ${fmtT(g.created)}</div></div>
+        <button class="icon-btn" data-c="close" title="Hide (I)">&times;</button></div>
+      ${isSmart(g) ? `<h4>Search</h4><div>${describeQuery(g.query, true)}</div><div class="muted small">${plural(g.baseline.length, "saved result")}${st ? ` · finds ${fmt(st.count)} now` : ""}</div>` : ""}
+      ${g.fromSmart ? `<h4>Made from</h4><div>${describeQuery(g.fromSmart.query, true)} <button class="tiny" data-c="origin">Show</button></div>` : ""}
+      <h4>Notes <span class="seg mini"><button data-c="write">Write</button><button data-c="preview">Preview</button></span></h4>
+      <textarea class="d-notes" placeholder="Markdown notes about this gallery&hellip;"></textarea>
+      <div class="md d-preview" title="Click to edit"></div>
+      <h4>History</h4>
+      <ul class="g-log">${(g.log || []).slice().reverse().map(line).join("") || `<li class="muted">Nothing yet.</li>`}</ul>`;
+    const ta = panel.querySelector(".d-notes");
+    const pv = panel.querySelector(".d-preview");
+    ta.value = g.notes || "";
+    const mode = (m) => {
+      if (m === "preview") pv.innerHTML = markdown.render(ta.value) || '<p class="muted">No notes yet — click to write.</p>';
+      ta.hidden = m !== "write";
+      pv.hidden = m !== "preview";
+      panel.querySelectorAll('[data-c="write"],[data-c="preview"]').forEach((b) => b.classList.toggle("on", b.dataset.c === m));
+    };
+    mode((g.notes || "").trim() ? "preview" : "write");
+    let t = 0;
+    const save = () => {
+      clearTimeout(t);
+      if ((g.notes || "") === ta.value) return;
+      g.notes = ta.value;
+      store.put("galleries", g);
+    };
+    ta.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(save, 400);
+    };
+    ta.onblur = save;
+    pv.onclick = (e) => {
+      if (e.target.closest("a")) return;
+      mode("write");
+      ta.focus();
+    };
+    panel.onclick = (e) => {
+      const b = e.target.closest("[data-c]");
+      if (!b) return;
+      if (b.dataset.c === "close") return toggleDetails(false);
+      if (b.dataset.c === "origin") return openOrigin(g);
+      if (b.dataset.c === "write") return mode("write"), ta.focus();
+      if (b.dataset.c === "preview") return save(), mode("preview");
+    };
+  }
+
+  // The gallery (or smart gallery) currently being viewed, if any.
+  function openCollection() {
+    if (state.lib.smart) return activeSmart();
+    const s = state.settings.src;
+    return s.type === "gallery" ? gallery(s.id) : null;
   }
 
   // The image(s) the user is acting on right now.
@@ -357,6 +725,7 @@
 
   // Something about `path` changed — update every place that shows it.
   function changed(path) {
+    refreshSmartStatus();
     renderStats();
     updateCell(path);
     if (state.view === "library") renderFilterBar();
@@ -517,7 +886,10 @@
 
   function srcKeys() {
     if (state.srcKeys) return state.srcKeys;
-    const s = state.settings.src;
+    return (state.srcKeys = srcKeysFor(state.settings.src));
+  }
+
+  function srcKeysFor(s) {
     let keys;
     if (s.type === "gallery") {
       keys = [];
@@ -529,11 +901,15 @@
       const pre = s.path + "/";
       keys = state.all.filter((k) => k.startsWith(pre));
     }
-    return (state.srcKeys = keys);
+    return keys;
   }
 
   function srcLabel() {
-    const s = state.settings.src;
+    const sg = activeSmart();
+    return sg ? "Smart: " + sg.name : labelFor(state.settings.src);
+  }
+
+  function labelFor(s) {
     if (s.type === "gallery") return "Gallery: " + ((gallery(s.id) || {}).name || "?");
     if (!s.path) return state.roots.length > 1 ? "All folders" : (state.roots[0] || {}).name || "";
     const [id, rel] = source.split(s.path);
@@ -542,6 +918,9 @@
   }
 
   function setSource(src, opts) {
+    state.lib.smart = null; // picking a folder or gallery leaves any smart gallery
+    state.settings.activeSmart = null;
+    state.lib.hideNew = false;
     state.settings.src = src;
     state.srcKeys = null;
     state.lib.selected.clear();
@@ -607,7 +986,21 @@
     for (const r of state.records.values()) for (const g of r.galleries) gCounts.set(g, (gCounts.get(g) || 0) + 1);
     const s = state.settings.src;
     const target = state.settings.targetGallery;
-    const li = (g, nested) => `<li draggable="true" class="${nested ? "nested" : ""} ${s.type === "gallery" && s.id === g.id ? "on" : ""} ${target === g.id ? "target" : ""}" data-gallery="${esc(g.id)}">
+    const smartLi = (g, nested) => {
+      const st = smartStatus.get(g.id);
+      const changedBy = st && (st.added || st.gone);
+      const badge = !st
+        ? ""
+        : changedBy
+          ? `<span class="sstat changed" title="Results have changed since saved">${st.added ? "+" + fmt(st.added) : ""}${st.added && st.gone ? " " : ""}${st.gone ? "&minus;" + fmt(st.gone) : ""}</span>`
+          : `<span class="sstat ok" title="Up to date"></span>`;
+      return `<li draggable="true" class="smart ${nested ? "nested" : ""} ${state.lib.smart === g.id ? "on" : ""}" data-gallery="${esc(g.id)}" title="${esc(describeQuery(g.query))}">
+        <span class="sicon">&#8981;</span><span class="gname">${esc(g.name)}</span>${badge}
+        <button class="tiny hov" data-g-act="rename" title="Rename">&#9998;</button><button class="tiny hov" data-g-act="delete" title="Delete smart gallery">&times;</button>
+        <span class="n">${fmt(st ? st.count : g.baseline.length)}</span>
+      </li>`;
+    };
+    const li = (g, nested) => isSmart(g) ? smartLi(g, nested) : `<li draggable="true" class="${nested ? "nested" : ""} ${s.type === "gallery" && s.id === g.id && !state.lib.smart ? "on" : ""} ${target === g.id ? "target" : ""}" data-gallery="${esc(g.id)}">
         <span class="gname">${esc(g.name)}</span>
         <button class="tiny hov tgt" data-g-act="target" title="${target === g.id ? "Target gallery (B adds to it) — click to clear" : "Make this the target gallery (B adds to it)"}">&#9673;</button>
         <button class="tiny hov" data-g-act="rename" title="Rename">&#9998;</button><button class="tiny hov" data-g-act="delete" title="Delete gallery">&times;</button>
@@ -746,7 +1139,7 @@
   function colorMatch(c) {
     state.settings.lastColor = { h: c.h, s: c.s, v: c.v, tol: c.tol };
     saveSettings();
-    const m = { type: "color", lab: c.lab, hex: c.hex, tol: c.tol };
+    const m = { type: "color", lab: c.lab, hex: c.hex, tol: c.tol, h: c.h, s: c.s, v: c.v };
     // Keep the scroll position stable while dragging around the wheel.
     const was = state.lib.match && state.lib.match.type === "color";
     state.lib.match = m;
@@ -883,47 +1276,10 @@
   }
 
   function libraryItems() {
-    const f = state.settings.filter;
-    let keys = srcKeys();
-    if (f !== "all") {
-      keys = keys.filter((k) => {
-        const r = state.records.get(k);
-        if (f === "unrated") return !r || !r.rating;
-        if (f === "notes") return r && (r.notes || "").trim();
-        return r && r.rating === f;
-      });
-    }
-    const terms = searchTerms();
-    state.lib.hits = null;
-    if (terms.length) {
-      const hits = new Map();
-      keys = keys.filter((k) => {
-        const h = matchSearch(k, terms);
-        if (h) hits.set(k, h);
-        return !!h;
-      });
-      state.lib.hits = hits;
-    }
-    const m = state.lib.match;
-    state.lib.scores = null;
-    if (m) {
-      const scores = new Map();
-      if (m.type === "color") {
-        for (const k of keys) {
-          const e = features.get(k);
-          if (!e || !e.pal) continue;
-          const s = features.colorScore(e.pal, m.lab, m.tol);
-          if (s >= 0.08) scores.set(k, s);
-        }
-      } else {
-        for (const k of keys) {
-          const e = features.get(k);
-          if (e && e.pal && e.pal.length) scores.set(k, -features.paletteDistance(m.pal, e.pal));
-        }
-      }
-      keys = keys.filter((k) => scores.has(k));
-      state.lib.scores = scores;
-    }
+    const r = runQuery(currentQuery(), srcKeys());
+    let keys = r.keys;
+    state.lib.hits = r.hits;
+    state.lib.scores = r.scores;
     const sort = effectiveSort();
     if (sort === "path-desc") keys = keys.slice().reverse();
     else if (sort === "recent") {
@@ -940,9 +1296,33 @@
       const g = gallery(state.settings.src.id);
       if (g) keys = customOrder(g, keys);
     }
+    // Smart gallery: results that arrived since it was saved go on top,
+    // under their own header (or are hidden).
+    state.lib.groups = null;
+    state.lib.fresh = null;
+    state.lib.gone = null;
+    const sg = activeSmart();
+    if (sg) {
+      const base = new Set(sg.baseline);
+      const now = new Set(keys);
+      state.lib.gone = sg.baseline.filter((k) => !now.has(k));
+      const fresh = keys.filter((k) => !base.has(k));
+      state.lib.fresh = new Set(fresh);
+      if (fresh.length) {
+        const old = keys.filter((k) => base.has(k));
+        if (state.lib.hideNew) keys = old;
+        else {
+          keys = fresh.concat(old);
+          state.lib.groups = [
+            { label: "New since saved", kind: "new", start: 0, end: fresh.length },
+            { label: "Saved results", kind: "saved", start: fresh.length, end: keys.length },
+          ];
+        }
+        return keys;
+      }
+    }
     // Folder headers: keep folders in path order and the chosen order
     // *within* each folder (so shuffle shuffles inside each day, etc.).
-    state.lib.groups = null;
     if (state.settings.groupFolders && sort !== "custom" && sort !== "match") {
       const byDir = new Map();
       for (const k of keys) {
@@ -1013,7 +1393,17 @@
     renderFilterBar();
     renderSortBar();
     renderSelectBar();
+    renderCollBar();
+    renderSaveSearch();
     renderLibDetails();
+  }
+
+  // ☆ in the filter section: save what's on screen as a smart gallery.
+  function renderSaveSearch() {
+    const b = $("save-search-btn");
+    const sg = activeSmart();
+    b.hidden = !!sg && sameQuery(sg.query, currentQuery());
+    b.title = sg ? "Save this edited search as a new smart gallery" : "Save this search as a smart gallery (keeps watching for new matches)";
   }
 
   function clearCells() {
@@ -1033,7 +1423,7 @@
     const segs = state.lib.groups || [{ dir: null, start: 0, end: state.lib.items.length }];
     let y = 0;
     for (const seg of segs) {
-      if (seg.dir !== null) {
+      if (seg.dir != null || seg.label) {
         rows.push({ type: "head", y, h: HEAD_H, seg });
         y += HEAD_H;
       }
@@ -1043,7 +1433,7 @@
         cellRows.push(row);
         y += step;
       }
-      if (seg.dir !== null) y += 10;
+      if (seg.dir != null || seg.label) y += 10;
     }
     grid.rows = rows;
     grid.cellRows = cellRows;
@@ -1119,7 +1509,7 @@
     for (let ri = rowAt(grid.rows, top); ri < grid.rows.length && grid.rows[ri].y < bottom; ri++) {
       const r = grid.rows[ri];
       if (r.type === "head") {
-        wantHeads.add(r.seg.dir);
+        wantHeads.add(r.seg.dir ?? r.seg.label);
         vis.push(r);
       } else for (let i = r.start; i < r.end; i++) want.add(i);
       if (r.type === "cells") vis.push(r);
@@ -1140,14 +1530,17 @@
     const frag = document.createDocumentFragment();
     for (const r of vis) {
       if (r.type === "head") {
-        if (heads.has(r.seg.dir)) continue;
+        const hk = r.seg.dir ?? r.seg.label;
+        if (heads.has(hk)) continue;
         const h = document.createElement("div");
-        h.className = "group-head";
-        h.dataset.dir = r.seg.dir;
+        h.className = "group-head" + (r.seg.kind ? " " + r.seg.kind : "");
+        if (r.seg.dir != null) {
+          h.dataset.dir = r.seg.dir;
+          h.title = "Open this folder";
+        }
         h.style.top = r.y + "px";
-        h.innerHTML = `<span class="gh-name">${esc(groupLabel(r.seg.dir))}</span><span class="muted">${plural(r.seg.end - r.seg.start, "image")}</span>`;
-        h.title = "Open this folder";
-        heads.set(r.seg.dir, h);
+        h.innerHTML = `<span class="gh-name">${esc(r.seg.label || groupLabel(r.seg.dir))}</span><span class="muted">${plural(r.seg.end - r.seg.start, "image")}</span>`;
+        heads.set(hk, h);
         frag.appendChild(h);
         continue;
       }
@@ -1183,8 +1576,9 @@
 
   function hitTags(p) {
     const h = state.lib.hits && state.lib.hits.get(p);
-    if (!h) return "";
-    return `<span class="hit-tags">${[...h].map((f) => `<i class="${f}">${FIELD_LABEL[f]}</i>`).join("")}</span>`;
+    const isNew = state.lib.fresh && state.lib.fresh.has(p);
+    if (!h && !isNew) return "";
+    return `<span class="hit-tags">${isNew ? `<i class="new">new</i>` : ""}${h ? [...h].map((f) => `<i class="${f}">${FIELD_LABEL[f]}</i>`).join("") : ""}</span>`;
   }
 
   let scrollRaf = 0;
@@ -1230,7 +1624,7 @@
     $("select-count").textContent = `${fmt(sel.size)} selected`;
     const pick = inGallery || state.settings.targetGallery;
     $("select-gallery").innerHTML =
-      state.galleries.map((g) => `<option value="${esc(g.id)}" ${g.id === pick ? "selected" : ""}>${esc(g.name)}</option>`).join("") +
+      staticGalleries().map((g) => `<option value="${esc(g.id)}" ${g.id === pick ? "selected" : ""}>${esc(g.name)}</option>`).join("") +
       `<option value="__new">+ New gallery&hellip;</option>`;
     $("select-remove").hidden = !inGallery;
   }
@@ -1266,6 +1660,7 @@
     state.lib.focus = p;
     decorateAll();
     renderSelectBar();
+    renderCollBar();
     renderLibDetails();
   }
 
@@ -1304,8 +1699,11 @@
     if (!state.settings.libDetails || state.view !== "library") return;
     const panel = $("lib-details");
     const p = state.lib.focus;
-    if (panel.dataset.path === (p || "")) return;
+    const coll = !p && openCollection();
+    if (!coll && panel.dataset.path === (p || "")) return;
+    if (coll && panel.dataset.path === "gallery:" + coll.id + ":" + (coll.log || []).length) return;
     if (p) details.render(panel, p);
+    else if (coll) renderCollectionInfo(panel, coll);
     else {
       panel.dataset.path = "";
       panel.innerHTML = `<p class="muted">Select an image to see its details. <kbd>I</kbd> hides this panel.</p>`;
@@ -1593,6 +1991,7 @@
 
   // After every structural change to the file lists.
   function indexChanged(keepScroll) {
+    refreshSmartStatus();
     rebuildIndex();
     renderSidebar();
     renderStats();
@@ -1669,7 +2068,8 @@
         }
       }
     }
-    const byName = state.roots.find((r) => !r.virtual && r.name === name && !source.isConnected(r.id));
+    // Without handles (folder-input fallback) re-picking a connected folder is how you refresh it.
+    const byName = state.roots.find((r) => !r.virtual && r.name === name && (!source.isConnected(r.id) || !handle));
     if (
       byName &&
       confirm(
@@ -2186,6 +2586,7 @@
         const a = act.dataset.gAct;
         return a === "rename" ? renameGallery(id) : a === "target" ? setTarget(id) : deleteGallery(id);
       }
+      if (isSmart(gallery(id))) return openSmart(id);
       setSource({ type: "gallery", id });
     };
     gl.addEventListener("dragstart", (e) => {
@@ -2203,7 +2604,7 @@
     // Images: onto a gallery (add) or + New gallery. Galleries/groups: reorder or file into a group.
     const dropKind = (e, li) => {
       const t = e.dataTransfer.types;
-      if (t.includes(DRAG_TYPE)) return li.dataset.group ? null : "drop";
+      if (t.includes(DRAG_TYPE)) return li.dataset.group || (li.dataset.gallery && isSmart(gallery(li.dataset.gallery))) ? null : "drop";
       if (t.includes(GALLERY_DRAG) && dragEntity) {
         if (li.dataset.group && dragEntity.kind === "g") return "drop";
         if (li.dataset.gallery && li.dataset.gallery === (dragEntity.item || {}).id) return null;
@@ -2260,6 +2661,31 @@
       rebuildLibrary();
     };
     $("lib-sort").onchange = (e) => setSort(e.target.value);
+    $("save-search-btn").onclick = saveSmart;
+    $("coll-bar").onclick = (e) => {
+      const b = e.target.closest("[data-c]");
+      if (!b) return;
+      const c = b.dataset.c;
+      const sg = activeSmart();
+      if (c === "info") {
+        state.lib.selected.clear();
+        state.lib.focus = null;
+        decorateAll();
+        renderSelectBar();
+        $("lib-details").dataset.path = "\0";
+        if (!state.settings.libDetails) toggleDetails(true);
+        else renderLibDetails();
+      } else if (c === "origin") openOrigin(openCollection());
+      else if (c === "hide") {
+        state.lib.hideNew = !state.lib.hideNew;
+        rebuildLibrary(true);
+      } else if (c === "accept") acceptNew();
+      else if (c === "accept-sel") acceptNew(new Set(state.lib.selected));
+      else if (c === "forget") forgetGone();
+      else if (c === "update") updateSmart();
+      else if (c === "revert" && sg) applyQuery(sg.query, sg.id);
+      else if (c === "static") smartToStatic();
+    };
     $("rating-toggle").onclick = () => {
       state.settings.ratingBar = !state.settings.ratingBar;
       saveSettings();
@@ -2280,7 +2706,7 @@
     gridEl.addEventListener("scroll", onGridScroll, { passive: true });
     gridEl.onclick = (e) => {
       const head = e.target.closest(".group-head");
-      if (head) return setSource({ type: "folder", path: head.dataset.dir });
+      if (head) return head.dataset.dir !== undefined && setSource({ type: "folder", path: head.dataset.dir });
       const cell = e.target.closest(".cell");
       if (!cell) {
         if (e.target === gridEl || e.target.id === "grid-inner") clearSelection();
@@ -2485,6 +2911,7 @@
     state.galleries = gals.sort((a, b) => a.created - b.created);
     // Galleries from before groups/ordering: give them a place in the list.
     state.galleries.forEach((g, i) => {
+      if (!g.kind) g.kind = "static";
       if (g.pos === undefined) g.pos = i;
       if (g.group === undefined) g.group = null;
       if (g.group && !group(g.group)) g.group = null;
@@ -2519,6 +2946,7 @@
     $("app").appendChild(Object.assign(document.createElement("div"), { id: "hovercard", className: "hovercard" }));
     features.on("progress", renderIndexStatus);
     features.on("batch", () => {
+      refreshSmartStatus();
       // New palettes/prompts can change what a colour or prompt search shows.
       if (state.view === "library" && (state.lib.match || state.lib.hits)) rebuildLibrary(true);
     });
@@ -2540,7 +2968,10 @@
     renderStats();
     renderSourceStatus();
     renderMatchChip();
+    const reopen = gallery(state.settings.activeSmart);
+    if (isSmart(reopen)) loadQuery(reopen.query, reopen.id);
     showView(state.settings.view);
+    refreshSmartStatus(true);
     startIndexing();
     // Pick up new images in the background, one folder at a time.
     for (const r of state.roots) if (source.isConnected(r.id)) await scanRoot(r.id, false);
@@ -2548,7 +2979,7 @@
 
   C.app = {
     record,
-    galleries: () => state.galleries,
+    galleries: () => staticGalleries(),
     setRating,
     setNotes,
     toggleGallery,
@@ -2557,6 +2988,7 @@
     copyText,
     openOriginal,
     showInFolder,
+    saveSmart,
     searchColor,
     findSimilar,
     saveProfile,
