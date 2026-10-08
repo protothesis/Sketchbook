@@ -21,9 +21,12 @@ window.SKETCHES = [
     title: "Archive Curator",
     description: "A fast, minimal viewer and organizer for big local image archives (ComfyUI outputs, photos): multi-folder tree, virtual galleries, ratings and notes over read-only files, with optional modules like flashcard review.",
     date: "2026-10-01",
-    status: "active",
+    status: "graduated",
     tags: ["images","viewer","curation","tool","comfyui","file-system-access"],
     demo: "sketches/archive-curator/index.html",
+    closed: "2026-10-08",
+    outcome: "Proved the viewer, galleries and colour/prompt search; continues as Insight.",
+    successor: {"title":"Insight","repo":"protothesis/insight","url":null},
   },
   {
     slug: "procedural-dungeon-engine",
