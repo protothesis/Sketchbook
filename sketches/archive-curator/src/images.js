@@ -2,23 +2,25 @@
 //
 // Thumbnails are generated once (longest edge THUMB_EDGE px, webp) and cached
 // in IndexedDB, so the library grid stays fast — and still renders — even
-// before you've reconnected the folder in a new session. Generation runs
+// before you've reconnected a folder in a new session. Generation runs
 // through a small LIFO pool: the most recently requested thumbs (i.e. the
-// ones currently scrolled into view) are made first.
+// ones currently scrolled into view) are made first, and the grid cancels
+// requests for cells that scroll away before their turn.
 (function () {
   const C = (window.Curator = window.Curator || {});
   const THUMB_EDGE = 512;
   const POOL = 4;
   const FULL_CACHE = 24;
+  const THUMB_URL_CACHE = 3000; // object URLs kept alive; blobs stay in IndexedDB
 
-  const thumbUrls = new Map(); // path -> objectURL
-  const thumbPending = new Map(); // path -> Promise<url|null>
-  const jobs = []; // LIFO
+  const thumbUrls = new Map(); // key -> objectURL (insertion order = LRU)
+  const thumbPending = new Map(); // key -> Promise<url|null>
+  const jobs = []; // LIFO of { key, fn, resolve, reject }
   let active = 0;
 
-  function schedule(fn) {
+  function schedule(key, fn) {
     return new Promise((resolve, reject) => {
-      jobs.push({ fn, resolve, reject });
+      jobs.push({ key, fn, resolve, reject });
       pump();
     });
   }
@@ -36,8 +38,14 @@
     }
   }
 
-  async function makeThumb(path) {
-    const file = await C.source.getFile(path);
+  // Drop a not-yet-started thumbnail job (its cell scrolled out of view).
+  function cancel(key) {
+    const i = jobs.findIndex((j) => j.key === key);
+    if (i >= 0) jobs.splice(i, 1)[0].resolve(null);
+  }
+
+  async function makeThumb(key) {
+    const file = await C.source.getFile(key);
     const bmp = await createImageBitmap(file);
     const scale = Math.min(1, THUMB_EDGE / Math.max(bmp.width, bmp.height));
     const w = Math.max(1, Math.round(bmp.width * scale));
@@ -52,53 +60,76 @@
     return new Promise((res) => canvas.toBlob(res, "image/webp", 0.82));
   }
 
-  function thumb(path) {
-    if (thumbUrls.has(path)) return Promise.resolve(thumbUrls.get(path));
-    if (thumbPending.has(path)) return thumbPending.get(path);
+  function remember(key, url) {
+    thumbUrls.set(key, url);
+    while (thumbUrls.size > THUMB_URL_CACHE) {
+      const [oldKey, oldUrl] = thumbUrls.entries().next().value;
+      thumbUrls.delete(oldKey);
+      URL.revokeObjectURL(oldUrl);
+    }
+  }
+
+  function thumb(key) {
+    if (thumbUrls.has(key)) {
+      const url = thumbUrls.get(key);
+      thumbUrls.delete(key);
+      thumbUrls.set(key, url);
+      return Promise.resolve(url);
+    }
+    if (thumbPending.has(key)) return thumbPending.get(key);
     const p = (async () => {
-      let blob = await C.store.get("thumbs", path).catch(() => null);
+      let blob = await C.store.get("thumbs", key).catch(() => null);
       if (!blob) {
-        if (!C.source.connected) return null;
-        blob = await schedule(() => makeThumb(path)).catch(() => null);
+        if (!C.source.isConnected(key)) return null;
+        blob = await schedule(key, () => makeThumb(key)).catch(() => null);
         if (!blob) return null;
-        C.store.put("thumbs", blob, path).catch(() => {});
+        C.store.put("thumbs", blob, key).catch(() => {});
       }
       const url = URL.createObjectURL(blob);
-      thumbUrls.set(path, url);
+      remember(key, url);
       return url;
-    })().finally(() => thumbPending.delete(path));
-    thumbPending.set(path, p);
+    })().finally(() => thumbPending.delete(key));
+    thumbPending.set(key, p);
     return p;
   }
 
   // Full-size: small LRU of object URLs so flipping back and forth is instant.
-  const full = new Map(); // path -> Promise<url>
-  function fullUrl(path) {
-    if (full.has(path)) {
-      const p = full.get(path);
-      full.delete(path);
-      full.set(path, p);
+  const full = new Map(); // key -> Promise<url>
+  function fullUrl(key) {
+    if (full.has(key)) {
+      const p = full.get(key);
+      full.delete(key);
+      full.set(key, p);
       return p;
     }
-    const p = C.source.getFile(path).then((f) => URL.createObjectURL(f));
-    p.catch(() => full.delete(path));
-    full.set(path, p);
+    const p = C.source.getFile(key).then((f) => URL.createObjectURL(f));
+    p.catch(() => full.delete(key));
+    full.set(key, p);
     while (full.size > FULL_CACHE) {
-      const [oldPath, oldP] = full.entries().next().value;
-      full.delete(oldPath);
+      const [oldKey, oldP] = full.entries().next().value;
+      full.delete(oldKey);
       oldP.then((u) => URL.revokeObjectURL(u), () => {});
     }
     return p;
   }
 
-  function preload(paths) {
-    for (const p of paths) {
-      fullUrl(p)
+  function preload(keys) {
+    for (const k of keys) {
+      fullUrl(k)
         .then((u) => {
           const img = new Image();
           img.src = u;
         })
         .catch(() => {});
+    }
+  }
+
+  // Forget in-memory URLs for keys whose stored thumbs were moved or deleted.
+  function forget(keys) {
+    for (const k of keys) {
+      const u = thumbUrls.get(k);
+      if (u) URL.revokeObjectURL(u);
+      thumbUrls.delete(k);
     }
   }
 
@@ -108,5 +139,5 @@
     await C.store.clear("thumbs");
   }
 
-  C.images = { thumb, fullUrl, preload, clearThumbCache };
+  C.images = { thumb, cancel, fullUrl, preload, forget, clearThumbCache };
 })();

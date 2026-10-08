@@ -37,6 +37,7 @@
       <div class="d-actions">
         <button data-d="copy" title="Copy full file path — paste into Explorer's address bar">Copy path</button>
         <button data-d="copy-folder" title="Copy the containing folder's path">Copy folder</button>
+        <button data-d="show-folder" title="Browse this image's folder in the library">Show in folder</button>
         <button data-d="open" title="Open the original in a new tab">Open &#8599;</button>
       </div>
       <div class="seg d-rating">
@@ -50,6 +51,8 @@
       <h4>Notes <span class="seg mini"><button data-d="write">Write</button><button data-d="preview">Preview</button></span></h4>
       <textarea class="d-notes" placeholder="Markdown notes&hellip;"></textarea>
       <div class="md d-preview" title="Click to edit"></div>
+      <h4>Colours <button class="tiny" data-d="save-profile" title="Save this colour make-up (Colour → Profiles)">&#9734; Save</button><button class="tiny" data-d="similar" title="Images with a similar colour make-up">Similar colours</button></h4>
+      <div class="d-palette muted small">Analysing&hellip;</div>
       <h4>Generation</h4>
       <div class="d-meta muted">Reading&hellip;</div>`;
 
@@ -84,6 +87,10 @@
         case "copy": return app.copyPath(path, false);
         case "copy-folder": return app.copyPath(path, true);
         case "open": return app.openOriginal(path);
+        case "show-folder": return app.showInFolder(path);
+        case "similar": return app.findSimilar(path);
+        case "save-profile": return app.saveProfile(path);
+        case "swatch": return app.searchColor(JSON.parse(b.dataset.lab));
         case "write": setNotesMode(panel, "write"); return ta.focus();
         case "preview": save(); return setNotesMode(panel, "preview");
         case "new-gallery": {
@@ -98,7 +105,24 @@
     };
 
     refresh(panel);
+    renderPalette(panel, path);
     renderMeta(panel, path);
+  }
+
+  // Palette from the background indexer (computed now if it hasn't got
+  // there yet). Click a swatch to search for that colour.
+  async function renderPalette(panel, path) {
+    const e = await C.features.analyzeNow(path);
+    if (panel.dataset.path !== path) return;
+    const box = panel.querySelector(".d-palette");
+    if (!e || !e.pal || !e.pal.length) {
+      box.textContent = C.source.isConnected(path) ? "Couldn't analyse colours." : "Reconnect the folder to analyse colours.";
+      return;
+    }
+    box.classList.remove("muted", "small");
+    box.innerHTML = e.pal
+      .map((c) => `<button class="swatch" data-d="swatch" data-lab="${esc(JSON.stringify(c.slice(0, 3)))}" style="background:${C.features.labHex(c)};flex-grow:${c[3]}" title="${Math.round(c[3] * 100)}% — click to find this colour"></button>`)
+      .join("");
   }
 
   function setNotesMode(panel, mode) {
@@ -133,7 +157,7 @@
     }
     if (panel.dataset.path !== path) return;
     if (meta === undefined) {
-      box.textContent = C.source.connected ? "Couldn't read file." : "Reconnect the folder to read metadata.";
+      box.textContent = C.source.isConnected(path) ? "Couldn't read file." : "Reconnect the folder to read metadata.";
       return;
     }
     if (!meta) {

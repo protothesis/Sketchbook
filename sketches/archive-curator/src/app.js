@@ -1,42 +1,85 @@
-// UI wiring: views (welcome / review / library), lightbox, settings, keys.
-// All state about images is metadata keyed by relative path — see store.js.
+// Core: folders, folder tree, library grid, galleries, search, lightbox,
+// settings, keys — and the module host. Everything optional (flashcard
+// review, and later things like people) is a module in src/modules/ that
+// registers itself with Curator.registerModule() and gets its own tab.
+//
+// All state about images is metadata keyed by "<rootId>/<path>" — see
+// store.js and source.js. Colour palettes and prompt text come from the
+// background indexer in features.js.
 (function () {
   const C = window.Curator;
-  const { store, source, images, details, markdown } = C;
+  const { store, source, images, details, markdown, features } = C;
   const $ = (id) => document.getElementById(id);
   const esc = (s) => markdown.esc(String(s));
   const fmt = (n) => n.toLocaleString();
   const RATINGS = ["yes", "maybe", "no"];
+  const RATE_KEYS = { y: "yes", p: "yes", m: "maybe", n: "no", x: "no", 0: null, u: null };
+  // Pseudo-folder for metadata from before multi-folder support whose
+  // original folder hasn't been re-added yet. Re-adding it reattaches them.
+  const ORPHAN = "~unattached";
 
   const DEFAULT_SETTINGS = {
-    queueSize: 10,
     thumbSize: 200,
-    rootPath: "",
-    queueSource: "unreviewed",
-    scope: "",
     thumbFit: "contain", // "contain" = whole image letterboxed, "cover" = cropped squares
-    view: "review",
-    libFilter: "yes",
-    libSort: "recent",
-    detailsOpen: false,
+    view: "library",
+    src: { type: "folder", path: "" }, // what's being looked at: a folder (""=all) or a gallery
+    filter: "all",
+    sort: "path", // folders: path | path-desc | recent | shuffle
+    gallerySort: "custom", // galleries: the same, plus custom (drag to arrange)
+    groupFolders: false, // folder headers in the grid
+    shuffleSeed: "",
+    lastColor: null, // the colour picker's last { h, s, v, tol }
+    detailsOpen: false, // details panel in the lightbox and modules
+    libDetails: false, // details panel in the library (I)
+    sidebarHidden: false, // [ hides the folders/galleries panel
+    ratingBar: false, // rating filter buttons shown (otherwise one icon)
+    expanded: [], // folder-tree nodes that are open
+    targetGallery: null,
+    activeSmart: null, // smart gallery open in the library (restored on reload)
+    modules: {}, // id -> enabled
   };
 
   const state = {
     settings: { ...DEFAULT_SETTINGS },
-    files: [],
-    fileSet: new Set(),
-    rootName: "",
-    storedHandle: null,
-    scanning: false,
-    records: new Map(), // path -> { path, rating, reviewedAt, notes, galleries[] }
-    galleries: [], // { id, name, created }
+    roots: [], // { id, name, handle, rootPath, added, virtual? }
+    files: new Map(), // rootId -> sorted relative paths
+    all: [], // every key, in folder order
+    tree: null,
+    srcKeys: null, // cache of keys in the current source
+    scanning: new Set(),
+    records: new Map(), // key -> { path, rating, reviewedAt, notes, galleries[] }
+    galleries: [], // { id, kind: "static"|"smart", name, created, group, pos, order[], notes, log[], query?, baseline?, fromSmart? }
+    groups: [], // gallery groups: { id, name, pos, collapsed }
     view: null,
-    queue: [],
-    qi: 0,
-    session: new Map(), // path -> rating given this session
-    lib: { gallery: null, search: "", items: [], selected: new Set(), anchor: -1 },
-    lb: { items: [], index: 0, open: false, zoom: false },
+    lib: {
+      search: "",
+      items: [],
+      groups: null, // [{ dir, start, end }] when folder headers are on
+      hits: null, // key -> matched search fields
+      match: null, // { type: "color", lab, hex, tol } | { type: "similar", pal, key?, name? }
+      matchSort: false, // sort by best match while a match is active
+      scores: null,
+      selected: new Set(),
+      focus: null, // key of the "current" image (keyboard cursor, details panel)
+      smart: null, // id of the smart gallery being viewed
+      hideNew: false, // hide results that arrived since it was saved
+      fresh: null, // Set of those new results
+      gone: null, // saved results that no longer match
+    },
+    lb: { items: [], index: 0, open: false },
   };
+
+  // ------------------------------------------------------------ modules
+
+  const modules = [];
+  C.registerModule = (m) => modules.push(m);
+  const enabledModules = () => modules.filter((m) => moduleEnabled(m));
+  function moduleEnabled(m) {
+    const v = state.settings.modules[m.id];
+    return v === undefined ? m.defaultEnabled !== false : !!v;
+  }
+  const activeModule = () => modules.find((m) => m.id === state.view && moduleEnabled(m));
+  const emit = (hook, ...args) => enabledModules().forEach((m) => m[hook] && m[hook](...args));
 
   // ---------------------------------------------------------------- data
 
@@ -69,8 +112,6 @@
     r.rating = rating || null;
     r.reviewedAt = rating ? Date.now() : null;
     saveRecord(r);
-    if (rating) state.session.set(path, rating);
-    else state.session.delete(path);
     changed(path);
   }
 
@@ -82,53 +123,114 @@
     updateCell(path);
   }
 
+  // ------------------------------------------------------------ galleries
+
+  const gallery = (id) => state.galleries.find((x) => x.id === id);
+  const group = (id) => state.groups.find((x) => x.id === id);
+  const plural = (n, w) => `${fmt(n)} ${w}${n === 1 ? "" : "s"}`;
+  const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const saveGroups = () => store.put("kv", state.groups, "galleryGroups");
+
+  function galleryChanged() {
+    if (state.settings.src.type === "gallery") state.srcKeys = null;
+    renderSidebar();
+    refreshPanels();
+    refreshSmartStatus();
+  }
+
+  const isSmart = (g) => !!g && g.kind === "smart";
+  const staticGalleries = () => state.galleries.filter((g) => !isSmart(g));
+
+  // Every gallery keeps a small history: created, renamed, added/removed...
+  function logGallery(g, type, extra) {
+    if (!g) return;
+    g.log = g.log || [];
+    g.log.push({ t: Date.now(), type, ...(extra || {}) });
+    if (g.log.length > 500) g.log.splice(0, g.log.length - 500);
+  }
+
+  // Keep a gallery's custom order in step with its members.
+  function noteOrder(g, paths, remove) {
+    const order = g.order || [];
+    if (remove) {
+      const drop = new Set(paths);
+      g.order = order.filter((k) => !drop.has(k));
+    } else {
+      const have = new Set(order);
+      g.order = order.concat(paths.filter((k) => !have.has(k)));
+    }
+    store.put("galleries", g);
+  }
+
   function toggleGallery(path, id) {
     const r = ensureRecord(path);
     const has = r.galleries.includes(id);
     r.galleries = has ? r.galleries.filter((g) => g !== id) : [...r.galleries, id];
     saveRecord(r);
+    if (gallery(id)) {
+      logGallery(gallery(id), has ? "removed" : "added", { n: 1 });
+      noteOrder(gallery(id), [path], has);
+    }
+    galleryChanged();
     changed(path);
   }
 
   function addToGallery(paths, id, remove) {
+    let n = 0;
     for (const p of paths) {
       const r = ensureRecord(p);
       const has = r.galleries.includes(id);
       if (remove && has) r.galleries = r.galleries.filter((g) => g !== id);
       else if (!remove && !has) r.galleries.push(id);
+      else continue;
+      n++;
       saveRecord(r);
     }
-    const g = state.galleries.find((x) => x.id === id);
-    toast(`${remove ? "Removed" : "Added"} ${paths.length} image${paths.length === 1 ? "" : "s"} ${remove ? "from" : "to"} “${g ? g.name : "gallery"}”`);
-    renderSidebar();
+    const g = gallery(id);
+    if (g && n) logGallery(g, remove ? "removed" : "added", { n });
+    if (g) noteOrder(g, paths, remove);
+    toast(`${remove ? "Removed" : "Added"} ${plural(paths.length, "image")} ${remove ? "from" : "to"} “${g ? g.name : "gallery"}”`);
+    galleryChanged();
     paths.forEach(updateCell);
-    refreshPanels();
   }
 
-  function newGallery() {
-    const name = (prompt("New gallery name:") || "").trim();
+  // Optionally seeded with images (dropping a selection on "+ New gallery").
+  function newGallery(paths) {
+    const suggested = paths && paths.length ? suggestGalleryName(paths) : "";
+    const name = (prompt(paths && paths.length ? `New gallery with ${plural(paths.length, "image")}:` : "New gallery name:", suggested) || "").trim();
     if (!name) return null;
-    const g = { id: "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, created: Date.now() };
+    const g = { id: newId("g"), kind: "static", name, created: Date.now(), group: null, pos: topLevel().length, order: [], notes: "", log: [] };
+    logGallery(g, "created");
     state.galleries.push(g);
     store.put("galleries", g);
-    renderSidebar();
-    refreshPanels();
+    if (paths && paths.length) addToGallery(paths, g.id);
+    else galleryChanged();
     return g;
   }
 
+  // Shared folder name of the paths, if any, as a starting point.
+  function suggestGalleryName(paths) {
+    const dirs = new Set(paths.map(dirname));
+    if (dirs.size !== 1) return "";
+    const d = [...dirs][0];
+    return d.slice(d.lastIndexOf("/") + 1);
+  }
+
   function renameGallery(id) {
-    const g = state.galleries.find((x) => x.id === id);
+    const g = gallery(id);
     const name = g && (prompt("Rename gallery:", g.name) || "").trim();
-    if (!name) return;
+    if (!name || name === g.name) return;
+    logGallery(g, "renamed", { from: g.name, to: name });
     g.name = name;
     store.put("galleries", g);
-    renderSidebar();
-    refreshPanels();
+    galleryChanged();
+    renderLibTitle();
+    renderCollBar();
   }
 
   function deleteGallery(id) {
-    const g = state.galleries.find((x) => x.id === id);
-    if (!g || !confirm(`Delete gallery “${g.name}”? (Only the grouping is removed — images and ratings stay.)`)) return;
+    const g = gallery(id);
+    if (!g || !confirm(isSmart(g) ? `Delete smart gallery “${g.name}”? (The saved search goes; images are untouched.)` : `Delete gallery “${g.name}”? (Only the grouping is removed — images and ratings stay.)`)) return;
     state.galleries = state.galleries.filter((x) => x.id !== id);
     store.del("galleries", id);
     for (const r of [...state.records.values()]) {
@@ -137,37 +239,503 @@
         saveRecord(r);
       }
     }
-    if (state.lib.gallery === id) state.lib.gallery = null;
-    if (state.view === "library") rebuildLibrary();
-    refreshPanels();
+    if (state.settings.targetGallery === id) state.settings.targetGallery = null;
+    if (state.lib.smart === id) state.lib.smart = null;
+    if (state.settings.src.type === "gallery" && state.settings.src.id === id) setSource({ type: "folder", path: "" });
+    else galleryChanged();
   }
 
+  // Top-level sidebar entries (ungrouped galleries and groups), in order.
+  function topLevel() {
+    return [...state.galleries.filter((g) => !g.group).map((g) => ({ kind: "g", item: g })), ...state.groups.map((gr) => ({ kind: "group", item: gr }))].sort(
+      (a, b) => a.item.pos - b.item.pos
+    );
+  }
+  const inGroup = (gid) => state.galleries.filter((g) => g.group === gid).sort((a, b) => a.pos - b.pos);
+
+  function newGroup() {
+    const name = (prompt("New gallery group:") || "").trim();
+    if (!name) return;
+    state.groups.push({ id: newId("grp"), name, pos: topLevel().length, collapsed: false });
+    saveGroups();
+    renderGalleries();
+  }
+
+  function renameGroup(id) {
+    const gr = group(id);
+    const name = gr && (prompt("Rename group:", gr.name) || "").trim();
+    if (!name) return;
+    gr.name = name;
+    saveGroups();
+    renderGalleries();
+  }
+
+  // The group goes; its galleries move to the top level.
+  function deleteGroup(id) {
+    const gr = group(id);
+    if (!gr || !confirm(`Remove group “${gr.name}”? Its galleries move to the top level.`)) return;
+    let pos = topLevel().length;
+    for (const g of inGroup(id)) {
+      g.group = null;
+      g.pos = pos++;
+      store.put("galleries", g);
+    }
+    state.groups = state.groups.filter((x) => x !== gr);
+    saveGroups();
+    renderGalleries();
+  }
+
+  // Move a gallery or group to `groupId` (null = top level), before `before`
+  // (a gallery or group object; null = at the end). Renumbers positions.
+  function placeEntity(kind, item, groupId, before) {
+    if (kind === "group") groupId = null; // groups only nest one level
+    const siblings = (groupId ? inGroup(groupId).map((g) => ({ kind: "g", item: g })) : topLevel()).filter((e) => e.item !== item);
+    let at = before ? siblings.findIndex((e) => e.item === before) : -1;
+    if (at < 0) at = siblings.length;
+    siblings.splice(at, 0, { kind, item });
+    if (kind === "g") item.group = groupId;
+    siblings.forEach((e, i) => (e.item.pos = i));
+    siblings.filter((e) => e.kind === "g").forEach((e) => store.put("galleries", e.item));
+    saveGroups();
+    renderGalleries();
+  }
+
+  function setTarget(id) {
+    state.settings.targetGallery = state.settings.targetGallery === id ? null : id;
+    saveSettings();
+    renderSidebar();
+    const g = gallery(state.settings.targetGallery);
+    toast(g ? `Target gallery: “${g.name}” — press B to add/remove` : "Target gallery cleared");
+  }
+
+  // B: toggle the current image (or library selection) in the target gallery.
+  function targetToggle() {
+    const paths = currentPaths();
+    if (!paths.length) return toast("Nothing selected");
+    const id = state.settings.targetGallery;
+    if (!gallery(id)) {
+      const g = newGallery(paths);
+      if (!g) return;
+      state.settings.targetGallery = g.id;
+      saveSettings();
+      renderSidebar();
+      return;
+    }
+    const all = paths.every((p) => (record(p) || { galleries: [] }).galleries.includes(id));
+    addToGallery(paths, id, all);
+    if (all && state.settings.src.type === "gallery" && state.settings.src.id === id && state.view === "library") rebuildLibrary(true);
+  }
+
+  // Custom order: the saved order, then any members it doesn't know yet.
+  function customOrder(g, keys) {
+    const set = new Set(keys);
+    const out = [];
+    for (const k of g.order || []) if (set.delete(k)) out.push(k);
+    return out.concat(keys.filter((k) => set.has(k)));
+  }
+
+  // Drag-to-arrange inside a gallery (switches it to custom order).
+  function moveInGallery(id, moving, beforeKey) {
+    const g = gallery(id);
+    if (!g) return;
+    const members = [];
+    for (const r of state.records.values()) if (r.galleries.includes(id)) members.push(r.path);
+    members.sort(C.collator.compare);
+    // Start from what's on screen if it isn't custom yet, so the drop lands where it looks like it should.
+    const base = effectiveSort() === "custom" ? customOrder(g, members) : state.lib.items.concat(customOrder(g, members).filter((k) => !state.lib.items.includes(k)));
+    const mv = new Set(moving);
+    const rest = base.filter((k) => !mv.has(k));
+    let at = beforeKey ? rest.indexOf(beforeKey) : rest.length;
+    if (at < 0) at = rest.length;
+    rest.splice(at, 0, ...base.filter((k) => mv.has(k)));
+    g.order = rest;
+    logGallery(g, "reordered", { n: moving.length });
+    store.put("galleries", g);
+    state.lib.matchSort = false;
+    if (state.settings.gallerySort !== "custom") {
+      state.settings.gallerySort = "custom";
+      saveSettings();
+      toast("Switched this gallery to custom order");
+    }
+    rebuildLibrary(true);
+  }
+
+
+  // ------------------------------------------------------ smart galleries
+  //
+  // A smart gallery is a saved library state — where (folder or gallery),
+  // rating filter, search words, colour/similar match — plus a baseline:
+  // the results it had when saved (or last accepted). Its status compares
+  // what the search finds now against that baseline, so the sidebar can say
+  // "+29 new / −3 gone", and opening it splits new arrivals out on top.
+
+  const smartStatus = new Map(); // id -> { count, added, gone }
+
+  function currentQuery() {
+    const m = state.lib.match;
+    return {
+      src: { ...state.settings.src },
+      filter: state.settings.filter,
+      search: state.lib.search.trim(),
+      match: m ? JSON.parse(JSON.stringify(m)) : null,
+    };
+  }
+
+  function sameQuery(a, b) {
+    const norm = (q) => {
+      const m = q.match;
+      return JSON.stringify({
+        src: q.src,
+        filter: q.filter,
+        search: (q.search || "").toLowerCase(),
+        match: !m ? null : m.type === "color" ? ["c", m.hex, Math.round(m.tol * 1000)] : ["s", m.key || "", m.name || "", m.pal.length],
+      });
+    };
+    return norm(a) === norm(b);
+  }
+
+  // Same filtering as the library, for any query (no sorting/grouping).
+  function runQuery(q, keys) {
+    const f = q.filter;
+    if (f !== "all") {
+      keys = keys.filter((k) => {
+        const r = state.records.get(k);
+        if (f === "unrated") return !r || !r.rating;
+        if (f === "notes") return r && (r.notes || "").trim();
+        return r && r.rating === f;
+      });
+    }
+    let hits = null;
+    const terms = (q.search || "").toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length) {
+      hits = new Map();
+      keys = keys.filter((k) => {
+        const h = matchSearch(k, terms);
+        if (h) hits.set(k, h);
+        return !!h;
+      });
+    }
+    let scores = null;
+    const m = q.match;
+    if (m) {
+      scores = new Map();
+      for (const k of keys) {
+        const e = features.get(k);
+        if (!e || !e.pal || !e.pal.length) continue;
+        if (m.type === "color") {
+          const sc = features.colorScore(e.pal, m.lab, m.tol);
+          if (sc >= 0.08) scores.set(k, sc);
+        } else scores.set(k, -features.paletteDistance(m.pal, e.pal));
+      }
+      keys = keys.filter((k) => scores.has(k));
+    }
+    return { keys, hits, scores };
+  }
+
+  let statusTimer = 0;
+  function refreshSmartStatus(soon) {
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => {
+      for (const g of state.galleries) {
+        if (!isSmart(g)) continue;
+        const cur = new Set(runQuery(g.query, srcKeysFor(g.query.src)).keys);
+        const base = new Set(g.baseline);
+        let added = 0;
+        let gone = 0;
+        for (const k of cur) if (!base.has(k)) added++;
+        for (const k of base) if (!cur.has(k)) gone++;
+        smartStatus.set(g.id, { count: cur.size, added, gone });
+      }
+      renderGalleries();
+      renderCollBar();
+    }, soon ? 30 : 1200);
+  }
+
+  function describeQuery(q, html) {
+    const parts = [];
+    parts.push(q.src.type === "gallery" ? "in “" + ((gallery(q.src.id) || {}).name || "deleted gallery") + "”" : "in " + labelFor(q.src));
+    if (q.search) parts.push("“" + q.search + "”");
+    if (q.match && q.match.type === "color")
+      parts.push(html ? `<span class="sw" style="background:${esc(q.match.hex)}"></span> colour` : "colour " + q.match.hex);
+    if (q.match && q.match.type === "similar") parts.push(q.match.name ? "like “" + q.match.name + "”" : "similar colours");
+    if (q.filter !== "all") parts.push(q.filter === "notes" ? "with notes" : q.filter);
+    return html ? parts.map((x) => (x.startsWith("<") ? x : esc(x))).join(" · ") : parts.join(" · ");
+  }
+
+  function saveSmart() {
+    const q = currentQuery();
+    const suggested = q.search || (q.match && q.match.type === "similar" && q.match.name ? "Like " + q.match.name : q.match ? "Colour " + (q.match.hex || "") : labelFor(q.src));
+    const name = (prompt(`Save this search as a smart gallery (${plural(state.lib.items.length, "result")}):`, suggested) || "").trim();
+    if (!name) return;
+    const keys = runQuery(q, srcKeysFor(q.src)).keys;
+    const g = { id: newId("s"), kind: "smart", name, created: Date.now(), group: null, pos: topLevel().length, order: [], notes: "", log: [], query: q, baseline: keys };
+    logGallery(g, "created", { n: keys.length, query: describeQuery(q) });
+    state.galleries.push(g);
+    store.put("galleries", g);
+    state.lib.smart = g.id;
+    state.settings.activeSmart = g.id;
+    saveSettings();
+    smartStatus.set(g.id, { count: keys.length, added: 0, gone: 0 });
+    renderGalleries();
+    rebuildLibrary(true);
+    toast(`Saved “${name}” — ${plural(keys.length, "image")}`);
+  }
+
+  // Put a query back into the toolbar (and the library), optionally as the
+  // open smart gallery.
+  function applyQuery(q, smartId) {
+    loadQuery(q, smartId);
+    state.lib.selected.clear();
+    state.lib.focus = null;
+    saveSettings();
+    renderMatchChip();
+    renderSidebar();
+    renderStats();
+    if (state.view !== "library") showView("library");
+    else rebuildLibrary();
+    startIndexing();
+    emit("onSource");
+  }
+
+  // Just the state part (also used at startup to reopen a smart gallery).
+  function loadQuery(q, smartId) {
+    const src = q.src.type === "gallery" && !gallery(q.src.id) ? { type: "folder", path: "" } : q.src;
+    state.settings.src = { ...src };
+    state.settings.filter = q.filter;
+    state.lib.search = q.search || "";
+    $("lib-search").value = state.lib.search;
+    state.lib.match = q.match ? JSON.parse(JSON.stringify(q.match)) : null;
+    state.lib.matchSort = !!q.match;
+    if (q.match && q.match.type === "color" && q.match.h !== undefined) state.settings.lastColor = { h: q.match.h, s: q.match.s, v: q.match.v, tol: q.match.tol };
+    state.lib.smart = smartId || null;
+    state.settings.activeSmart = state.lib.smart;
+    state.lib.hideNew = false;
+    state.srcKeys = null;
+  }
+
+  function openSmart(id) {
+    const g = gallery(id);
+    if (g) applyQuery(g.query, id);
+  }
+
+  const activeSmart = () => (state.lib.smart ? gallery(state.lib.smart) : null);
+
+  // Accept new results into the baseline (all of them, or just `only`).
+  function acceptNew(only) {
+    const g = activeSmart();
+    if (!g || !state.lib.fresh) return;
+    const add = [...state.lib.fresh].filter((k) => !only || only.has(k));
+    if (!add.length) return;
+    g.baseline = g.baseline.concat(add);
+    logGallery(g, "accepted", { n: add.length });
+    store.put("galleries", g);
+    toast(`Accepted ${plural(add.length, "new image")}`);
+    refreshSmartStatus(true);
+    rebuildLibrary(true);
+  }
+
+  function forgetGone() {
+    const g = activeSmart();
+    if (!g || !state.lib.gone || !state.lib.gone.length) return;
+    const gone = new Set(state.lib.gone);
+    g.baseline = g.baseline.filter((k) => !gone.has(k));
+    logGallery(g, "dropped", { n: gone.size });
+    store.put("galleries", g);
+    refreshSmartStatus(true);
+    rebuildLibrary(true);
+  }
+
+  // Save the edited search over the smart gallery (results become the new baseline).
+  function updateSmart() {
+    const g = activeSmart();
+    if (!g) return;
+    const q = currentQuery();
+    g.query = q;
+    g.baseline = runQuery(q, srcKeysFor(q.src)).keys;
+    logGallery(g, "search changed", { n: g.baseline.length, query: describeQuery(q) });
+    store.put("galleries", g);
+    toast(`Updated “${g.name}”`);
+    refreshSmartStatus(true);
+    rebuildLibrary(true);
+  }
+
+  // A static gallery from the selection, or else from the saved results.
+  // It remembers the search it came from.
+  function smartToStatic() {
+    const g = activeSmart();
+    if (!g) return;
+    const base = new Set(g.baseline);
+    const sel = state.lib.items.filter((k) => state.lib.selected.has(k));
+    const keys = sel.length ? sel : state.lib.items.filter((k) => base.has(k));
+    const name = (prompt(`New gallery from ${sel.length ? "the selected" : "the saved"} ${plural(keys.length, "image")}:`, g.name) || "").trim();
+    if (!name) return;
+    const s2 = { id: newId("g"), kind: "static", name, created: Date.now(), group: g.group, pos: topLevel().length, order: keys.slice(), notes: "", log: [] };
+    s2.fromSmart = { id: g.id, name: g.name, query: JSON.parse(JSON.stringify(g.query)) };
+    logGallery(s2, "created", { from: g.name, query: describeQuery(g.query) });
+    state.galleries.push(s2);
+    store.put("galleries", s2);
+    addToGallery(keys, s2.id);
+    logGallery(g, "made gallery", { to: name, n: keys.length });
+    store.put("galleries", g);
+  }
+
+  // From a gallery that was made from a search: show that search's results.
+  function openOrigin(g) {
+    const o = g && g.fromSmart;
+    if (!o) return;
+    if (gallery(o.id)) return openSmart(o.id);
+    applyQuery(o.query, null);
+  }
+
+  // Bar under the toolbar for the open gallery / smart gallery.
+  function renderCollBar() {
+    const bar = $("coll-bar");
+    const sg = activeSmart();
+    const s = state.settings.src;
+    const g = sg || (s.type === "gallery" ? gallery(s.id) : null);
+    bar.hidden = !g || state.view !== "library";
+    if (bar.hidden) return;
+    const info = `<button class="tiny" data-c="info" title="Notes and history">&#9432; Info</button>`;
+    if (!sg) {
+      bar.innerHTML =
+        `<span class="cb-kind">&#9638;</span><b>${esc(g.name)}</b>` +
+        (g.fromSmart ? `<span class="muted">made from search ${describeQuery(g.fromSmart.query, true)}</span><button class="tiny" data-c="origin">Show the search</button>` : "") +
+        `<span class="spacer"></span>${info}`;
+      return;
+    }
+    const dirty = !sameQuery(sg.query, currentQuery());
+    const fresh = state.lib.fresh ? state.lib.fresh.size : 0;
+    const gone = state.lib.gone ? state.lib.gone.length : 0;
+    const selFresh = [...state.lib.selected].filter((k) => state.lib.fresh && state.lib.fresh.has(k)).length;
+    const status = dirty
+      ? `<span class="cb-dirty">Search edited</span><button class="tiny" data-c="update" title="Save this search over the smart gallery">Update</button><button class="tiny" data-c="revert">Revert</button>`
+      : !fresh && !gone
+        ? `<span class="cb-ok">&#10003; Up to date</span>`
+        : (fresh
+            ? `<span class="cb-new">+${fmt(fresh)} new</span><button class="tiny" data-c="hide">${state.lib.hideNew ? "Show new" : "Hide new"}</button>` +
+              `<button class="tiny" data-c="accept" title="Add them to the saved results">Accept all</button>` +
+              (selFresh ? `<button class="tiny" data-c="accept-sel">Accept ${fmt(selFresh)} selected</button>` : "")
+            : "") +
+          (gone ? `<span class="cb-gone" title="Saved results the search no longer finds (re-rated, moved or deleted)">&minus;${fmt(gone)} gone</span><button class="tiny" data-c="forget">Forget</button>` : "");
+    bar.innerHTML =
+      `<span class="cb-kind">&#8981;</span><b>${esc(sg.name)}</b><span class="muted">${describeQuery(sg.query, true)}</span>` +
+      `<span class="cb-sep"></span>${status}<span class="spacer"></span>` +
+      `<button class="tiny" data-c="static" title="Make an ordinary gallery from the selection, or from the saved results">Make gallery</button>${info}`;
+  }
+
+  // Details panel with nothing selected, while a gallery is open:
+  // its notes and history.
+  function renderCollectionInfo(panel, g) {
+    panel.dataset.path = "gallery:" + g.id + ":" + (g.log || []).length;
+    const fmtT = (t) => new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    const line = (e) => {
+      const n = (w) => plural(e.n || 0, w);
+      const what = {
+        created: () => (e.from ? `Created from “${e.from}”` : e.n !== undefined ? `Created with ${n("image")}` : "Created"),
+        renamed: () => `Renamed “${e.from}” → “${e.to}”`,
+        added: () => `Added ${n("image")}`,
+        removed: () => `Removed ${n("image")}`,
+        reordered: () => `Rearranged ${n("image")}`,
+        accepted: () => `Accepted ${n("new result")}`,
+        dropped: () => `Forgot ${n("result")} that no longer matched`,
+        "search changed": () => `Search changed (${n("result")})`,
+        "made gallery": () => `Made gallery “${e.to}” (${n("image")})`,
+      }[e.type];
+      return `<li><span class="muted">${fmtT(e.t)}</span> ${esc(what ? what() : e.type)}${e.query ? `<div class="muted small">${esc(e.query)}</div>` : ""}</li>`;
+    };
+    const st = smartStatus.get(g.id);
+    panel.innerHTML = `
+      <div class="d-head"><div><div class="d-name">${isSmart(g) ? "&#8981; " : ""}${esc(g.name)}</div>
+        <div class="d-folder">${isSmart(g) ? "Smart gallery" : "Gallery"} · created ${fmtT(g.created)}</div></div>
+        <button class="icon-btn" data-c="close" title="Hide (I)">&times;</button></div>
+      ${isSmart(g) ? `<h4>Search</h4><div>${describeQuery(g.query, true)}</div><div class="muted small">${plural(g.baseline.length, "saved result")}${st ? ` · finds ${fmt(st.count)} now` : ""}</div>` : ""}
+      ${g.fromSmart ? `<h4>Made from</h4><div>${describeQuery(g.fromSmart.query, true)} <button class="tiny" data-c="origin">Show</button></div>` : ""}
+      <h4>Notes <span class="seg mini"><button data-c="write">Write</button><button data-c="preview">Preview</button></span></h4>
+      <textarea class="d-notes" placeholder="Markdown notes about this gallery&hellip;"></textarea>
+      <div class="md d-preview" title="Click to edit"></div>
+      <h4>History</h4>
+      <ul class="g-log">${(g.log || []).slice().reverse().map(line).join("") || `<li class="muted">Nothing yet.</li>`}</ul>`;
+    const ta = panel.querySelector(".d-notes");
+    const pv = panel.querySelector(".d-preview");
+    ta.value = g.notes || "";
+    const mode = (m) => {
+      if (m === "preview") pv.innerHTML = markdown.render(ta.value) || '<p class="muted">No notes yet — click to write.</p>';
+      ta.hidden = m !== "write";
+      pv.hidden = m !== "preview";
+      panel.querySelectorAll('[data-c="write"],[data-c="preview"]').forEach((b) => b.classList.toggle("on", b.dataset.c === m));
+    };
+    mode((g.notes || "").trim() ? "preview" : "write");
+    let t = 0;
+    const save = () => {
+      clearTimeout(t);
+      if ((g.notes || "") === ta.value) return;
+      g.notes = ta.value;
+      store.put("galleries", g);
+    };
+    ta.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(save, 400);
+    };
+    ta.onblur = save;
+    pv.onclick = (e) => {
+      if (e.target.closest("a")) return;
+      mode("write");
+      ta.focus();
+    };
+    panel.onclick = (e) => {
+      const b = e.target.closest("[data-c]");
+      if (!b) return;
+      if (b.dataset.c === "close") return toggleDetails(false);
+      if (b.dataset.c === "origin") return openOrigin(g);
+      if (b.dataset.c === "write") return mode("write"), ta.focus();
+      if (b.dataset.c === "preview") return save(), mode("preview");
+    };
+  }
+
+  // The gallery (or smart gallery) currently being viewed, if any.
+  function openCollection() {
+    if (state.lib.smart) return activeSmart();
+    const s = state.settings.src;
+    return s.type === "gallery" ? gallery(s.id) : null;
+  }
+
+  // The image(s) the user is acting on right now.
+  function currentPaths() {
+    if (state.lb.open) return [state.lb.items[state.lb.index]];
+    const m = activeModule();
+    if (m && m.current) return m.current();
+    if (state.view === "library") return [...state.lib.selected];
+    return [];
+  }
+
+  // Counts over the current source (folder or gallery).
   function counts() {
-    const c = { yes: 0, maybe: 0, no: 0, notes: 0 };
-    const checkSet = state.fileSet.size > 0;
-    for (const r of state.records.values()) {
-      if (checkSet && !state.fileSet.has(r.path)) continue;
+    const c = { yes: 0, maybe: 0, no: 0, notes: 0, total: 0 };
+    for (const k of srcKeys()) {
+      c.total++;
+      const r = state.records.get(k);
+      if (!r) continue;
       if (r.rating) c[r.rating]++;
       if ((r.notes || "").trim()) c.notes++;
     }
-    c.reviewed = c.yes + c.maybe + c.no;
+    c.rated = c.yes + c.maybe + c.no;
+    c.unrated = c.total - c.rated;
     return c;
   }
 
   // Something about `path` changed — update every place that shows it.
   function changed(path) {
+    refreshSmartStatus();
     renderStats();
     updateCell(path);
-    renderFilmstrip();
-    if (state.view === "library") renderSidebar();
+    if (state.view === "library") renderFilterBar();
     refreshPanels();
     if (state.lb.open) renderLbPos();
-    if (state.queue[state.qi] === path) $("review-stage").dataset.rating = (record(path) || {}).rating || "";
+    emit("onChange", path);
   }
 
   function refreshPanels() {
-    details.refresh($("review-details"));
-    details.refresh($("lb-details"));
+    document.querySelectorAll(".details-panel").forEach((p) => details.refresh(p));
   }
 
   // ------------------------------------------------------------- helpers
@@ -195,25 +763,30 @@
     toast(msg || "Copied");
   }
 
-  function fullPath(rel) {
-    const root = state.settings.rootPath.trim().replace(/[\\/]+$/, "");
-    if (!root) return rel;
-    const sep = root.includes("\\") || /^[a-z]:$/i.test(root) ? "\\" : "/";
-    return rel ? root + sep + rel.split("/").join(sep) : root;
+  const rootById = (id) => state.roots.find((r) => r.id === id);
+  const dirname = (p) => p.slice(0, Math.max(0, p.lastIndexOf("/")));
+
+  function fullPath(key) {
+    const [id, rel] = source.split(key);
+    const root = (rootById(id) || {}).rootPath || "";
+    const base = root.trim().replace(/[\\/]+$/, "");
+    if (!base) return key;
+    const sep = base.includes("\\") || /^[a-z]:$/i.test(base) ? "\\" : "/";
+    return rel ? base + sep + rel.split("/").join(sep) : base;
   }
 
   function copyPath(path, folderOnly) {
-    if (!state.settings.rootPath.trim()) {
-      const root = prompt(
-        "Browsers can't see real disk paths, so paste the full path of the folder you picked once (e.g. D:\\ComfyUI\\output).\nIt's only used to build copyable paths. Change it later in Settings.",
+    const root = rootById(source.split(path)[0]);
+    if (root && !root.virtual && !(root.rootPath || "").trim()) {
+      const p = prompt(
+        `Browsers can't see real disk paths, so paste the full path of the “${root.name}” folder once (e.g. D:\\ComfyUI\\output).\nIt's only used to build copyable paths. Change it later in Settings.`,
         ""
       );
-      if (root === null) return;
-      state.settings.rootPath = root.trim();
-      saveSettings();
+      if (p === null) return;
+      root.rootPath = p.trim();
+      store.put("roots", root);
     }
-    const rel = folderOnly ? path.slice(0, Math.max(0, path.lastIndexOf("/"))) : path;
-    const p = fullPath(rel);
+    const p = fullPath(folderOnly ? dirname(path) : path);
     copyText(p, `Copied ${p} — paste into Explorer's address bar`);
   }
 
@@ -238,369 +811,903 @@
   function setThumb(img, path, cell) {
     images.thumb(path).then((url) => {
       if (url) img.src = url;
-      else cell.classList.add("nothumb");
+      else if (!source.isConnected(path)) cell.classList.add("nothumb");
     });
+  }
+
+  // cyrb53: a fast, well-mixed string hash. Shuffle order = hash(seed|key),
+  // so a seed always reproduces the same order, whatever the filter.
+  function hash(str) {
+    let h1 = 0xdeadbeef ^ 0,
+      h2 = 0x41c6ce57 ^ 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+  }
+  const randomSeed = () => Math.random().toString(36).slice(2, 7);
+
+  function rgbToHsv(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const max = Math.max(r, g, b);
+    const d = max - Math.min(r, g, b);
+    let h = 0;
+    if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return { h: (h * 60 + 360) % 360, s: max ? d / max : 0, v: max };
+  }
+
+  // ------------------------------------------------- index & folder tree
+
+  function rebuildIndex() {
+    const all = [];
+    for (const r of state.roots) for (const rel of state.files.get(r.id) || []) all.push(r.id + "/" + rel);
+    state.all = all;
+    state.srcKeys = null;
+    state.tree = buildTree();
+    // A folder that disappeared (removed, renamed) falls back to "all".
+    const s = state.settings.src;
+    if (s.type === "folder" && s.path && !findNode(s.path)) state.settings.src = { type: "folder", path: "" };
+  }
+
+  function buildTree() {
+    const top = { name: "", path: "", count: 0, children: new Map() };
+    for (const r of state.roots) top.children.set(r.id, { name: r.name, path: r.id, count: 0, children: new Map(), root: r });
+    for (const key of state.all) {
+      const segs = key.split("/");
+      let node = top;
+      node.count++;
+      for (let i = 0; i < segs.length - 1; i++) {
+        let next = node.children.get(segs[i]);
+        if (!next) {
+          next = { name: segs[i], path: segs.slice(0, i + 1).join("/"), count: 0, children: new Map() };
+          node.children.set(segs[i], next);
+        }
+        next.count++;
+        node = next;
+      }
+    }
+    return top;
+  }
+
+  function findNode(path) {
+    let node = state.tree;
+    for (const seg of path.split("/")) {
+      node = node && node.children.get(seg);
+      if (!node) return null;
+    }
+    return node;
+  }
+
+  function srcKeys() {
+    if (state.srcKeys) return state.srcKeys;
+    return (state.srcKeys = srcKeysFor(state.settings.src));
+  }
+
+  function srcKeysFor(s) {
+    let keys;
+    if (s.type === "gallery") {
+      keys = [];
+      for (const r of state.records.values()) if (r.galleries.includes(s.id)) keys.push(r.path);
+      keys.sort(C.collator.compare);
+    } else if (!s.path) {
+      keys = state.all;
+    } else {
+      const pre = s.path + "/";
+      keys = state.all.filter((k) => k.startsWith(pre));
+    }
+    return keys;
+  }
+
+  function srcLabel() {
+    const sg = activeSmart();
+    return sg ? "Smart: " + sg.name : labelFor(state.settings.src);
+  }
+
+  function labelFor(s) {
+    if (s.type === "gallery") return "Gallery: " + ((gallery(s.id) || {}).name || "?");
+    if (!s.path) return state.roots.length > 1 ? "All folders" : (state.roots[0] || {}).name || "";
+    const [id, rel] = source.split(s.path);
+    const root = rootById(id);
+    return (root ? root.name : id) + (rel ? " / " + rel.split("/").join(" / ") : "");
+  }
+
+  function setSource(src, opts) {
+    state.lib.smart = null; // picking a folder or gallery leaves any smart gallery
+    state.settings.activeSmart = null;
+    state.lib.hideNew = false;
+    state.settings.src = src;
+    state.srcKeys = null;
+    state.lib.selected.clear();
+    state.lib.focus = null;
+    saveSettings();
+    renderSidebar();
+    renderStats();
+    if (state.view === "library") rebuildLibrary();
+    startIndexing();
+    if (!(opts && opts.quiet)) emit("onSource");
+  }
+
+  function renderSidebar() {
+    renderTree();
+    renderGalleries();
+  }
+
+  function renderTree() {
+    const el = $("folder-tree");
+    if (!state.tree) return (el.innerHTML = "");
+    const s = state.settings.src;
+    const sel = s.type === "folder" ? s.path : null;
+    const open = new Set(state.settings.expanded);
+    const rows = [];
+    if (state.roots.length > 1)
+      rows.push(`<div class="tree-row all ${sel === "" ? "on" : ""}" data-folder=""><span class="caret"></span><span class="tname">All folders</span><span class="n">${fmt(state.tree.count)}</span></div>`);
+    const walk = (node, depth) => {
+      const kids = [...node.children.values()].sort((a, b) => C.collator.compare(a.name, b.name));
+      const isOpen = open.has(node.path);
+      const r = node.root;
+      let extra = "";
+      let cls = "";
+      if (r) {
+        const conn = r.virtual || source.isConnected(r.id);
+        cls = " root" + (conn ? "" : " offline") + (r.virtual ? " virtual" : "");
+        if (state.scanning.has(r.id)) extra += `<span class="muted small">scanning&hellip;</span>`;
+        else if (!r.virtual && !conn) extra += `<button class="tiny" data-t-act="reconnect" title="Re-grant read access">Reconnect</button>`;
+        extra += `<button class="tiny hov" data-t-act="remove" title="Remove this folder from the library">&times;</button>`;
+      }
+      const title = r && r.virtual ? "Ratings, notes and thumbnails from before multi-folder support. Add the original folder again to reattach them." : node.path;
+      rows.push(
+        `<div class="tree-row${cls} ${sel === node.path ? "on" : ""}" data-folder="${esc(node.path)}" style="--d:${depth}" title="${esc(title)}">` +
+          `<span class="caret" data-t-act="toggle">${kids.length ? (isOpen ? "&#9662;" : "&#9656;") : ""}</span>` +
+          `<span class="tname">${esc(node.name)}</span>${extra}<span class="n">${fmt(node.count)}</span></div>`
+      );
+      if (isOpen) kids.forEach((k) => walk(k, depth + 1));
+    };
+    [...state.tree.children.values()].forEach((n) => walk(n, 0));
+    el.innerHTML = rows.join("") || `<p class="muted small none">No folders yet.</p>`;
+  }
+
+  function toggleExpanded(path, force) {
+    const set = new Set(state.settings.expanded);
+    const on = force === undefined ? !set.has(path) : force;
+    if (on) set.add(path);
+    else set.delete(path);
+    state.settings.expanded = [...set];
+    saveSettings();
+  }
+
+  function renderGalleries() {
+    const gCounts = new Map();
+    for (const r of state.records.values()) for (const g of r.galleries) gCounts.set(g, (gCounts.get(g) || 0) + 1);
+    const s = state.settings.src;
+    const target = state.settings.targetGallery;
+    const smartLi = (g, nested) => {
+      const st = smartStatus.get(g.id);
+      const changedBy = st && (st.added || st.gone);
+      const badge = !st
+        ? ""
+        : changedBy
+          ? `<span class="sstat changed" title="Results have changed since saved">${st.added ? "+" + fmt(st.added) : ""}${st.added && st.gone ? " " : ""}${st.gone ? "&minus;" + fmt(st.gone) : ""}</span>`
+          : `<span class="sstat ok" title="Up to date"></span>`;
+      return `<li draggable="true" class="smart ${nested ? "nested" : ""} ${state.lib.smart === g.id ? "on" : ""}" data-gallery="${esc(g.id)}" title="${esc(describeQuery(g.query))}">
+        <span class="sicon">&#8981;</span><span class="gname">${esc(g.name)}</span>${badge}
+        <button class="tiny hov" data-g-act="rename" title="Rename">&#9998;</button><button class="tiny hov" data-g-act="delete" title="Delete smart gallery">&times;</button>
+        <span class="n">${fmt(st ? st.count : g.baseline.length)}</span>
+      </li>`;
+    };
+    const li = (g, nested) => isSmart(g) ? smartLi(g, nested) : `<li draggable="true" class="${nested ? "nested" : ""} ${s.type === "gallery" && s.id === g.id && !state.lib.smart ? "on" : ""} ${target === g.id ? "target" : ""}" data-gallery="${esc(g.id)}">
+        <span class="gname">${esc(g.name)}</span>
+        <button class="tiny hov tgt" data-g-act="target" title="${target === g.id ? "Target gallery (B adds to it) — click to clear" : "Make this the target gallery (B adds to it)"}">&#9673;</button>
+        <button class="tiny hov" data-g-act="rename" title="Rename">&#9998;</button><button class="tiny hov" data-g-act="delete" title="Delete gallery">&times;</button>
+        <span class="n">${fmt(gCounts.get(g.id) || 0)}</span>
+      </li>`;
+    const rows = [];
+    for (const e of topLevel()) {
+      if (e.kind === "g") {
+        rows.push(li(e.item, false));
+        continue;
+      }
+      const gr = e.item;
+      const kids = inGroup(gr.id);
+      rows.push(`<li draggable="true" class="gal-group" data-group="${esc(gr.id)}" title="Drag galleries here to file them">
+          <span class="caret" data-gr-act="toggle">${gr.collapsed ? "&#9656;" : "&#9662;"}</span><span class="gname">${esc(gr.name)}</span>
+          <button class="tiny hov" data-gr-act="rename" title="Rename group">&#9998;</button><button class="tiny hov" data-gr-act="delete" title="Remove group (keeps its galleries)">&times;</button>
+          <span class="n">${kids.length}</span></li>`);
+      if (!gr.collapsed) kids.forEach((g) => rows.push(li(g, true)));
+    }
+    rows.push(`<li class="new-gallery" data-new-gallery="1" title="Click to create, or drop images here to create a gallery with them">+ New gallery</li>`);
+    $("gallery-list").innerHTML = rows.join("");
   }
 
   // --------------------------------------------------------- top bar
 
+  function renderTabs() {
+    const tabs = [["library", "Library", "L"], ...enabledModules().map((m) => [m.id, m.title, (m.key || "").toUpperCase()])];
+    $("tabs").innerHTML = tabs
+      .map(([id, title, key]) => `<button data-view="${id}" class="${state.view === id ? "on" : ""}" title="${esc(title)}${key ? " (" + key + ")" : ""}">${esc(title)}</button>`)
+      .join("");
+  }
+
   function renderStats() {
-    const total = state.files.length;
     const c = counts();
-    const pct = (n) => (total ? (100 * n) / total : 0);
-    $("stats").innerHTML = total
-      ? `<div class="progress" title="${(pct(c.reviewed) || 0).toFixed(1)}% reviewed">
+    const pct = (n) => (c.total ? (100 * n) / c.total : 0);
+    $("stats").innerHTML = c.total
+      ? `<div class="progress" title="${pct(c.rated).toFixed(1)}% rated">
            <i class="yes" style="width:${pct(c.yes)}%"></i><i class="maybe" style="width:${pct(c.maybe)}%"></i><i class="no" style="width:${pct(c.no)}%"></i>
          </div>
-         <span><b>${fmt(c.reviewed)}</b> of ${fmt(total)} reviewed</span>
+         <span><b>${fmt(c.rated)}</b> of ${fmt(c.total)} rated</span>
          <span class="chip yes" title="Yes">&#10003; ${fmt(c.yes)}</span>
          <span class="chip maybe" title="Maybe">? ${fmt(c.maybe)}</span>
          <span class="chip no" title="No">&#10005; ${fmt(c.no)}</span>`
       : "";
-    const s = { yes: 0, maybe: 0, no: 0 };
-    for (const r of state.session.values()) s[r]++;
-    const n = state.session.size;
-    $("session-stats").textContent = n ? `This session: ${n} rated · ${s.yes} yes · ${s.maybe} maybe · ${s.no} no` : "";
   }
+
+  const offlineRoots = () => state.roots.filter((r) => !r.virtual && !source.isConnected(r.id));
 
   function renderSourceStatus() {
     const el = $("source-status");
-    const name = source.name || state.rootName;
-    if (state.scanning) el.innerHTML = `<span class="muted">Scanning ${esc(name)}&hellip;</span>`;
-    else if (source.connected) el.innerHTML = `<span class="conn" title="Connected (read-only)">&#9679; ${esc(name)}</span>`;
-    else if (name) el.innerHTML = `<button class="primary" id="reconnect-btn">Reconnect “${esc(name)}”</button>`;
-    else el.innerHTML = "";
+    const off = offlineRoots();
+    if (state.scanning.size) el.innerHTML = `<span class="muted">Scanning ${esc([...state.scanning].join(", "))}&hellip;</span>`;
+    else if (off.length) el.innerHTML = `<button class="primary" id="reconnect-btn">Reconnect ${off.length === 1 ? "“" + esc(off[0].name) + "”" : off.length + " folders"}</button>`;
+    else if (state.roots.length) {
+      const n = state.roots.filter((r) => !r.virtual).length;
+      el.innerHTML = `<span class="conn" title="Connected (read-only)">&#9679; ${n === 1 ? esc(state.roots.find((r) => !r.virtual).name) : n + " folders"}</span>`;
+    } else el.innerHTML = "";
     const rb = $("reconnect-btn");
-    if (rb) rb.onclick = reconnect;
+    if (rb) rb.onclick = reconnectAll;
+    document.body.classList.toggle("no-roots", !state.roots.length);
+  }
+
+  function renderIndexStatus(st) {
+    const el = $("index-status");
+    el.hidden = !st.running;
+    if (st.running) {
+      el.textContent = `Indexing ${fmt(st.done)} / ${fmt(st.total)}`;
+      el.title = "Working out colour palettes and reading prompts, in the background. Colour and prompt search cover what's indexed so far.";
+    }
   }
 
   // ------------------------------------------------------------ views
 
   function showView(view) {
-    if (!state.files.length) view = "welcome";
+    if (!state.roots.length) view = "welcome";
+    else if (view !== "library" && !enabledModules().some((m) => m.id === view)) view = "library";
     state.view = view;
+    document.body.dataset.view = view;
     if (view !== "welcome") {
       state.settings.view = view;
       saveSettings();
     }
     document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
-    document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
-    if (view === "review") {
-      if (!state.queue.length) newBatch();
-      else renderReview();
-    }
+    renderTabs();
     if (view === "library") rebuildLibrary();
+    const m = activeModule();
+    if (m && m.show) m.show();
   }
 
-  // ----------------------------------------------------------- review
+  // ------------------------------------------------------- search & match
 
-  function buildPool() {
-    const src = state.settings.queueSource;
-    const scope = state.settings.scope.trim().toLowerCase();
-    let pool;
-    if (src === "unreviewed") {
-      pool = state.files.filter((p) => {
-        const r = state.records.get(p);
-        return !r || !r.rating;
-      });
-    } else {
-      pool = [];
-      for (const r of state.records.values()) if (r.rating === src && state.fileSet.has(r.path)) pool.push(r.path);
-    }
-    if (scope) pool = pool.filter((p) => p.toLowerCase().includes(scope));
-    return pool;
+  const FIELD_LABEL = { path: "path", notes: "notes", prompt: "prompt", model: "model" };
+  const lcCache = new WeakMap(); // features entry -> lowercased text
+
+  function searchTerms() {
+    return state.lib.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   }
 
-  function newBatch() {
-    $("batch-done").classList.remove("show");
-    state.queue = [];
-    state.qi = 0;
-    if (source.connected) state.queue = sample(buildPool(), state.settings.queueSize);
-    renderReview();
+  function fieldsOf(k) {
+    const r = state.records.get(k);
+    const f = features.get(k);
+    let lc = f && lcCache.get(f);
+    if (f && !lc) lcCache.set(f, (lc = { prompt: (f.prompt || "").toLowerCase(), model: (f.model || "").toLowerCase() }));
+    return [
+      ["path", k.toLowerCase(), k],
+      ["notes", ((r && r.notes) || "").toLowerCase(), (r && r.notes) || ""],
+      ["prompt", lc ? lc.prompt : "", (f && f.prompt) || ""],
+      ["model", lc ? lc.model : "", (f && f.model) || ""],
+    ];
   }
 
-  let reviewToken = 0;
-  function renderReview() {
-    const path = state.queue[state.qi];
-    const img = $("review-img");
-    const msg = $("review-msg");
-    const stage = $("review-stage");
-    renderFilmstrip();
-    if (!path) {
-      img.removeAttribute("src");
-      stage.dataset.rating = "";
-      details.render($("review-details"), null);
-      if (!source.connected) {
-        msg.innerHTML = `<p>The folder isn't connected yet.</p><button class="primary big" data-act="reconnect">Reconnect</button>`;
-      } else if (state.qi >= state.queue.length && state.queue.length) {
-        msg.textContent = "";
-      } else {
-        const what = state.settings.queueSource === "unreviewed" ? "unreviewed images" : state.settings.queueSource + "s";
-        msg.innerHTML = `<p>No ${esc(what)} left${state.settings.scope ? " matching “" + esc(state.settings.scope) + "”" : ""}.</p>`;
+  // Every term must appear somewhere; returns the fields that matched.
+  function matchSearch(k, terms) {
+    const fields = fieldsOf(k);
+    const hit = new Set();
+    for (const t of terms) {
+      let found = false;
+      for (const [name, lc] of fields) {
+        if (lc.includes(t)) {
+          hit.add(name);
+          found = true;
+        }
       }
-      return;
+      if (!found) return null;
     }
-    msg.textContent = "";
-    stage.dataset.rating = (record(path) || {}).rating || "";
-    const t = ++reviewToken;
-    img.classList.add("loading");
-    images
-      .fullUrl(path)
-      .then((url) => {
-        if (t !== reviewToken) return;
-        if (img.src === url && img.complete) return img.classList.remove("loading");
-        img.onload = () => t === reviewToken && img.classList.remove("loading");
-        img.src = url;
-      })
-      .catch(() => {
-        if (t === reviewToken) msg.innerHTML = `<p>Couldn't read <code>${esc(path)}</code> — moved or deleted?</p>`;
-      });
-    if (state.settings.detailsOpen) details.render($("review-details"), path);
-    images.preload(state.queue.slice(state.qi + 1, state.qi + 3));
+    return hit;
   }
 
-  function renderFilmstrip() {
-    const fs = $("filmstrip");
-    if (!fs) return;
-    fs.innerHTML = "";
-    state.queue.forEach((p, i) => {
-      const r = (record(p) || {}).rating || "";
-      const cell = document.createElement("button");
-      cell.className = "film " + r + (i === state.qi ? " current" : "");
-      cell.dataset.i = i;
-      cell.title = p;
-      const img = document.createElement("img");
-      img.draggable = false;
-      cell.appendChild(img);
-      setThumb(img, p, cell);
-      fs.appendChild(cell);
-    });
+  function setMatch(m) {
+    state.lib.match = m;
+    state.lib.matchSort = !!m;
+    renderMatchChip();
+    if (state.view === "library") rebuildLibrary();
   }
 
-  function flashStamp(rating) {
-    const s = $("review-stamp");
-    s.className = "stamp";
-    void s.offsetWidth; // restart the animation
-    s.textContent = { yes: "YES", maybe: "MAYBE", no: "NO", skip: "SKIP" }[rating];
-    s.className = "stamp flash " + rating;
+  function colorMatch(c) {
+    state.settings.lastColor = { h: c.h, s: c.s, v: c.v, tol: c.tol };
+    saveSettings();
+    const m = { type: "color", lab: c.lab, hex: c.hex, tol: c.tol, h: c.h, s: c.s, v: c.v };
+    // Keep the scroll position stable while dragging around the wheel.
+    const was = state.lib.match && state.lib.match.type === "color";
+    state.lib.match = m;
+    if (!was) state.lib.matchSort = true;
+    renderMatchChip();
+    scheduleRebuild(was);
   }
 
-  function reviewRate(rating) {
-    const path = state.queue[state.qi];
-    if (!path) return;
-    setRating(path, rating);
-    flashStamp(rating);
-    advance();
+  let rebuildTimer = 0;
+  function scheduleRebuild(keepScroll) {
+    clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(() => state.view === "library" && rebuildLibrary(keepScroll), 120);
   }
 
-  function advance() {
-    if (state.qi < state.queue.length - 1) {
-      state.qi++;
-      renderReview();
-    } else if (state.queue.length) {
-      state.qi = state.queue.length;
-      renderReview();
-      showBatchDone();
-    }
+  // From the details panel's palette swatches.
+  function searchColor(lab) {
+    const rgb = features.labToRgb(...lab);
+    const hsv = rgbToHsv(...rgb);
+    const tol = (state.settings.lastColor || {}).tol || 0.14;
+    if (state.lb.open) closeLightbox();
+    if (state.view !== "library") showView("library");
+    colorMatch({ ...hsv, tol, lab, hex: C.colorPicker.hex(rgb) });
   }
 
-  function back() {
-    if (state.qi <= 0) return;
-    $("batch-done").classList.remove("show");
-    state.qi--;
-    renderReview();
+  function findSimilar(key) {
+    const e = features.get(key);
+    if (!e || !e.pal) return toast("Still indexing this image — try again in a moment");
+    if (state.lb.open) closeLightbox();
+    if (state.view !== "library") showView("library");
+    setMatch({ type: "similar", key, pal: e.pal });
   }
 
-  function showBatchDone() {
-    const q = state.queue;
-    const c = { yes: 0, maybe: 0, no: 0, skipped: 0 };
-    q.forEach((p) => c[(record(p) || {}).rating || "skipped"]++);
-    $("batch-summary").innerHTML =
-      `<span class="chip yes">&#10003; ${c.yes}</span> <span class="chip maybe">? ${c.maybe}</span> <span class="chip no">&#10005; ${c.no}</span>` +
-      (c.skipped ? ` <span class="chip">skipped ${c.skipped}</span>` : "") +
-      ` &nbsp;<span class="muted">${fmt(buildPool().length)} left in this queue</span>`;
-    const grid = $("batch-grid");
-    grid.innerHTML = "";
-    q.forEach((p, i) => {
-      const cell = document.createElement("button");
-      cell.className = "film " + ((record(p) || {}).rating || "");
-      cell.dataset.i = i;
-      const img = document.createElement("img");
-      img.draggable = false;
-      cell.appendChild(img);
-      setThumb(img, p, cell);
-      grid.appendChild(cell);
-    });
-    $("batch-done").classList.add("show");
+  // A saved colour profile (Colour → Profiles): rank by that make-up.
+  function matchProfile(p) {
+    if (!p) return;
+    setMatch({ type: "similar", key: p.key || null, pal: p.pal, name: p.name });
+  }
+
+  function saveProfile(key) {
+    const e = features.get(key);
+    if (!e || !e.pal || !e.pal.length) return toast("No palette for this image yet");
+    C.colorPicker.addProfile({ name: key.slice(key.lastIndexOf("/") + 1), pal: e.pal, key });
+    toast("Saved colour profile — find it under Colour → Profiles");
+  }
+
+  function renderMatchChip() {
+    const m = state.lib.match;
+    const btn = $("color-btn");
+    btn.classList.toggle("on", !!(m && m.type === "color"));
+    btn.querySelector(".sw").style.background = m && m.type === "color" ? m.hex : "";
+    const chip = $("match-chip");
+    if (m && m.type === "similar") {
+      chip.hidden = false;
+      const bar = `<span class="prof-bar mini">${m.pal.map((c) => `<i style="background:${features.labHex(c)};flex-grow:${c[3]}"></i>`).join("")}</span>`;
+      chip.innerHTML = `${m.key ? `<img alt="" />` : ""}${bar} ${m.name ? "Like “" + esc(m.name) + "”" : "Similar colours"} <button class="tiny" data-clear-match title="Clear">&times;</button>`;
+      if (m.key) images.thumb(m.key).then((u) => u && chip.querySelector("img") && (chip.querySelector("img").src = u));
+    } else if (m && m.type === "color") {
+      chip.hidden = false;
+      chip.innerHTML = `<span class="sw" style="background:${m.hex}"></span> Colour <button class="tiny" data-clear-match title="Clear">&times;</button>`;
+    } else chip.hidden = true;
   }
 
   // ---------------------------------------------------------- library
 
-  function libraryItems() {
-    const { gallery, search } = state.lib;
-    const filter = state.settings.libFilter;
-    let recs = [...state.records.values()];
-    if (gallery) recs = recs.filter((r) => r.galleries.includes(gallery));
-    else if (filter === "all") recs = recs.filter((r) => r.rating);
-    else if (filter === "notes") recs = recs.filter((r) => (r.notes || "").trim());
-    else recs = recs.filter((r) => r.rating === filter);
-    const q = search.trim().toLowerCase();
-    if (q) recs = recs.filter((r) => r.path.toLowerCase().includes(q) || (r.notes || "").toLowerCase().includes(q));
-    const sort = state.settings.libSort;
-    if (sort === "recent") recs.sort((a, b) => (b.reviewedAt || 0) - (a.reviewedAt || 0));
-    else if (sort === "path") recs.sort((a, b) => C.collator.compare(a.path, b.path));
-    else if (sort === "path-desc") recs.sort((a, b) => C.collator.compare(b.path, a.path));
-    let paths = recs.map((r) => r.path);
-    if (sort === "shuffle") paths = sample(paths, paths.length);
-    return paths;
+  const FILTERS = [
+    ["all", "All", "total", ""],
+    ["unrated", "Unrated", "unrated", ""],
+    ["yes", "&#10003;", "yes", "Yes"],
+    ["maybe", "?", "maybe", "Maybe"],
+    ["no", "&#10005;", "no", "No"],
+    ["notes", "&#9998;", "notes", "With notes"],
+  ];
+
+  function renderFilterBar() {
+    renderRatingToggle();
+    if (!state.settings.ratingBar) return;
+    const c = counts();
+    const f = state.settings.filter;
+    $("lib-filter").innerHTML = FILTERS.map(
+      ([k, label, ck, title]) =>
+        `<button class="${k} ${f === k ? "on" : ""}" data-filter="${k}" title="${title || label}">${label} <span class="n">${fmt(c[ck])}</span></button>`
+    ).join("");
   }
 
-  let io = null;
-  function rebuildLibrary() {
-    const grid = $("grid");
+  function renderLibTitle() {
+    $("lib-title").textContent = srcLabel();
+  }
+
+  const inGallerySrc = () => state.settings.src.type === "gallery";
+  function baseSort() {
+    if (inGallerySrc()) return state.settings.gallerySort;
+    return state.settings.sort === "custom" ? "path" : state.settings.sort;
+  }
+  const effectiveSort = () => (state.lib.match && state.lib.matchSort ? "match" : baseSort());
+
+  function renderSortBar() {
+    const opts = [
+      ["path", "Name / date"],
+      ["path-desc", "Name / date, newest first"],
+      ["recent", "Recently rated"],
+      ["shuffle", "Shuffle"],
+    ];
+    if (inGallerySrc()) opts.unshift(["custom", "Custom order (drag)"]);
+    if (state.lib.match) opts.unshift(["match", state.lib.match.type === "color" ? "Best colour match" : "Most similar"]);
+    const eff = effectiveSort();
+    $("lib-sort").innerHTML = opts.map(([v, l]) => `<option value="${v}" ${v === eff ? "selected" : ""}>${l}</option>`).join("");
+    $("shuffle-ctl").hidden = eff !== "shuffle";
+    $("shuffle-seed").value = state.settings.shuffleSeed;
+    const gb = $("group-btn");
+    gb.classList.toggle("on", state.settings.groupFolders);
+    gb.disabled = eff === "custom" || eff === "match";
+    gb.title = gb.disabled ? `Folder headers are off while sorting by ${eff === "custom" ? "custom order" : "best match"}` : "Folder headers (G)";
+  }
+
+  function setSort(v) {
+    if (v === "match") state.lib.matchSort = true;
+    else {
+      state.lib.matchSort = false;
+      if (inGallerySrc()) state.settings.gallerySort = v;
+      else state.settings.sort = v;
+      if (v === "shuffle" && !state.settings.shuffleSeed) state.settings.shuffleSeed = randomSeed();
+      saveSettings();
+    }
+    rebuildLibrary();
+  }
+
+  function reroll(seed) {
+    state.settings.shuffleSeed = seed || randomSeed();
+    state.lib.matchSort = false;
+    if (inGallerySrc()) state.settings.gallerySort = "shuffle";
+    else state.settings.sort = "shuffle";
+    saveSettings();
+    rebuildLibrary();
+  }
+
+  function libraryItems() {
+    const r = runQuery(currentQuery(), srcKeys());
+    let keys = r.keys;
+    state.lib.hits = r.hits;
+    state.lib.scores = r.scores;
+    const sort = effectiveSort();
+    if (sort === "path-desc") keys = keys.slice().reverse();
+    else if (sort === "recent") {
+      const t = (k) => (state.records.get(k) || {}).reviewedAt || 0;
+      keys = keys.slice().sort((a, b) => t(b) - t(a));
+    } else if (sort === "shuffle") {
+      const seed = state.settings.shuffleSeed + "|";
+      const rank = new Map(keys.map((k) => [k, hash(seed + k)]));
+      keys = keys.slice().sort((a, b) => rank.get(a) - rank.get(b));
+    } else if (sort === "match") {
+      const sc = state.lib.scores;
+      keys = keys.slice().sort((a, b) => sc.get(b) - sc.get(a));
+    } else if (sort === "custom") {
+      const g = gallery(state.settings.src.id);
+      if (g) keys = customOrder(g, keys);
+    }
+    // Smart gallery: results that arrived since it was saved go on top,
+    // under their own header (or are hidden).
+    state.lib.groups = null;
+    state.lib.fresh = null;
+    state.lib.gone = null;
+    const sg = activeSmart();
+    if (sg) {
+      const base = new Set(sg.baseline);
+      const now = new Set(keys);
+      state.lib.gone = sg.baseline.filter((k) => !now.has(k));
+      const fresh = keys.filter((k) => !base.has(k));
+      state.lib.fresh = new Set(fresh);
+      if (fresh.length) {
+        const old = keys.filter((k) => base.has(k));
+        if (state.lib.hideNew) keys = old;
+        else {
+          keys = fresh.concat(old);
+          state.lib.groups = [
+            { label: "New since saved", kind: "new", start: 0, end: fresh.length },
+            { label: "Saved results", kind: "saved", start: fresh.length, end: keys.length },
+          ];
+        }
+        return keys;
+      }
+    }
+    // Folder headers: keep folders in path order and the chosen order
+    // *within* each folder (so shuffle shuffles inside each day, etc.).
+    if (state.settings.groupFolders && sort !== "custom" && sort !== "match") {
+      const byDir = new Map();
+      for (const k of keys) {
+        const d = dirname(k);
+        if (!byDir.has(d)) byDir.set(d, []);
+        byDir.get(d).push(k);
+      }
+      if (byDir.size > 1) {
+        const dirs = [...byDir.keys()].sort(C.collator.compare);
+        if (baseSort() === "path-desc") dirs.reverse();
+        keys = [];
+        state.lib.groups = dirs.map((d) => {
+          const start = keys.length;
+          keys.push(...byDir.get(d));
+          return { dir: d, start, end: keys.length };
+        });
+      }
+    }
+    return keys;
+  }
+
+  // The grid is virtualized: only rows in (or near) view exist as DOM nodes,
+  // absolutely positioned inside a spacer as tall as the whole grid. Rows are
+  // either a folder header or a strip of cells; that's what keeps 100k-image
+  // folders as fast as 100-image ones.
+  const GRID_GAP = 8;
+  const GRID_PAD = 12; // matches .grid padding-top in styles.css
+  const HEAD_H = 34;
+  const OVERSCAN = 600; // px rendered above/below the viewport
+  const grid = { cols: 1, size: 0, rows: [], cellRows: [], cells: new Map(), heads: new Map() };
+
+  let rebuildPending = false;
+  function rebuildLibrary(keepScroll) {
+    // Rebuilding mid-drag would remove the element being dragged and
+    // silently cancel the drag; do it when the drag ends instead.
+    if (dragPaths) {
+      rebuildPending = true;
+      return;
+    }
+    rebuildPending = false;
+    hideHoverCard();
     const items = libraryItems();
     state.lib.items = items;
     const keep = new Set(items);
     for (const p of [...state.lib.selected]) if (!keep.has(p)) state.lib.selected.delete(p);
-    state.lib.anchor = -1;
+    if (state.lib.focus && !keep.has(state.lib.focus)) state.lib.focus = null;
     applyThumbFit();
-    if (io) io.disconnect();
-    io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          io.unobserve(e.target);
-          setThumb(e.target.querySelector("img"), e.target.dataset.path, e.target);
-        }
-      },
-      { root: grid, rootMargin: "800px" }
-    );
-    grid.innerHTML = "";
-    const frag = document.createDocumentFragment();
-    items.forEach((p, i) => {
-      const cell = document.createElement("div");
-      cell.className = "cell";
-      cell.draggable = true;
-      cell.dataset.i = i;
-      cell.dataset.path = p;
-      cell.title = p;
-      cell.innerHTML = `<img draggable="false" alt="" /><span class="badge"></span><span class="note-dot" title="Has notes">&#9998;</span>`;
-      decorateCell(cell);
-      frag.appendChild(cell);
-      io.observe(cell);
-    });
-    grid.appendChild(frag);
-    grid.scrollTop = 0;
-    layoutGrid();
-    $("lib-count").textContent = `${fmt(items.length)} image${items.length === 1 ? "" : "s"}`;
+    clearCells();
+    if (!keepScroll) $("grid").scrollTop = 0;
+    layoutGrid(true);
+    $("lib-count").textContent = plural(items.length, "image") + (items.length !== srcKeys().length ? ` of ${fmt(srcKeys().length)}` : "");
+    $("grid").classList.toggle("searching", !!state.lib.hits);
     const empty = $("lib-empty");
     empty.hidden = items.length > 0;
-    empty.innerHTML = state.lib.gallery
-      ? "This gallery is empty. Select images (Ctrl/⌘-click) and drag them onto it, or toggle it from an image's Info panel."
-      : state.lib.search
-        ? "Nothing matches that search."
-        : "Nothing here yet — go review some images.";
-    renderSidebar();
+    const s = state.settings.src;
+    const indexing = features.stats.running && (state.lib.match || state.lib.hits);
+    empty.innerHTML =
+      s.type === "gallery" && !srcKeys().length
+        ? "This gallery is empty. Select images and drag them onto it, or set it as the target and press B."
+        : state.lib.match
+          ? "No matches" + (indexing ? " yet — still indexing." : ". Try a wider range in the colour picker.")
+          : state.lib.search
+            ? "Nothing matches that search" + (indexing ? " yet — prompts are still being indexed." : ".")
+            : state.settings.filter !== "all"
+              ? "Nothing here with this filter."
+              : "No images in this folder.";
+    renderLibTitle();
+    renderFilterBar();
+    renderSortBar();
     renderSelectBar();
+    renderCollBar();
+    renderSaveSearch();
+    renderLibDetails();
   }
 
-  function decorateCell(cell) {
-    const r = record(cell.dataset.path) || {};
-    cell.classList.remove("yes", "maybe", "no");
-    if (r.rating) cell.classList.add(r.rating);
-    cell.classList.toggle("has-notes", !!(r.notes || "").trim());
-    cell.classList.toggle("selected", state.lib.selected.has(cell.dataset.path));
+  // ☆ in the filter section: save what's on screen as a smart gallery.
+  function renderSaveSearch() {
+    const b = $("save-search-btn");
+    const sg = activeSmart();
+    b.hidden = !!sg && sameQuery(sg.query, currentQuery());
+    b.title = sg ? "Save this edited search as a new smart gallery" : "Save this search as a smart gallery (keeps watching for new matches)";
   }
 
-  function updateCell(path) {
-    if (state.view !== "library") return;
-    const cell = $("grid").querySelector(`.cell[data-path="${CSS.escape(path)}"]`);
-    if (cell) decorateCell(cell);
+  function clearCells() {
+    for (const cell of grid.cells.values()) images.cancel(cell.dataset.path);
+    grid.cells.clear();
+    grid.heads.clear();
+    const inner = $("grid-inner");
+    inner.innerHTML = "";
+    inner.appendChild(dropMarker);
   }
 
-  function renderSidebar() {
-    const c = counts();
-    const f = state.lib.gallery ? null : state.settings.libFilter;
-    const items = [
-      ["yes", "Yes", c.yes],
-      ["maybe", "Maybe", c.maybe],
-      ["no", "No", c.no],
-      ["all", "All rated", c.reviewed],
-      ["notes", "With notes", c.notes],
-    ];
-    $("rating-list").innerHTML = items
-      .map(([k, label, n]) => `<li class="${f === k ? "on" : ""}" data-filter="${k}"><span class="dot ${k}"></span>${label}<span class="n">${fmt(n)}</span></li>`)
-      .join("");
-    const gCounts = new Map();
-    for (const r of state.records.values()) for (const g of r.galleries) gCounts.set(g, (gCounts.get(g) || 0) + 1);
-    $("gallery-list").innerHTML =
-      state.galleries
-        .map(
-          (g) => `<li class="${state.lib.gallery === g.id ? "on" : ""}" data-gallery="${esc(g.id)}">
-            <span class="gname">${esc(g.name)}</span><span class="n">${fmt(gCounts.get(g.id) || 0)}</span>
-            <button class="tiny" data-g-act="rename" title="Rename">&#9998;</button><button class="tiny" data-g-act="delete" title="Delete gallery">&times;</button>
-          </li>`
-        )
-        .join("") || `<li class="muted small none">No galleries yet.</li>`;
-  }
-
-  function renderSelectBar() {
-    const sel = state.lib.selected;
-    const bar = $("select-bar");
-    bar.classList.toggle("show", sel.size > 0);
-    $("select-count").textContent = `${fmt(sel.size)} selected`;
-    $("select-gallery").innerHTML = state.galleries.length
-      ? state.galleries.map((g) => `<option value="${esc(g.id)}" ${g.id === state.lib.gallery ? "selected" : ""}>${esc(g.name)}</option>`).join("") +
-        `<option value="__new">+ New gallery&hellip;</option>`
-      : `<option value="__new">+ New gallery&hellip;</option>`;
-    $("select-remove").hidden = !state.lib.gallery;
-  }
-
-  function selectCell(i, e) {
-    const sel = state.lib.selected;
-    const items = state.lib.items;
-    if (e.shiftKey && state.lib.anchor >= 0) {
-      const [a, b] = [Math.min(state.lib.anchor, i), Math.max(state.lib.anchor, i)];
-      for (let k = a; k <= b; k++) sel.add(items[k]);
-    } else {
-      const p = items[i];
-      if (sel.has(p)) sel.delete(p);
-      else sel.add(p);
-      state.lib.anchor = i;
+  function buildRows() {
+    const { cols, size } = grid;
+    const step = size + GRID_GAP;
+    const rows = [];
+    const cellRows = [];
+    const segs = state.lib.groups || [{ dir: null, start: 0, end: state.lib.items.length }];
+    let y = 0;
+    for (const seg of segs) {
+      if (seg.dir != null || seg.label) {
+        rows.push({ type: "head", y, h: HEAD_H, seg });
+        y += HEAD_H;
+      }
+      for (let s = seg.start; s < seg.end; s += cols) {
+        const row = { type: "cells", y, h: size, start: s, end: Math.min(s + cols, seg.end) };
+        rows.push(row);
+        cellRows.push(row);
+        y += step;
+      }
+      if (seg.dir != null || seg.label) y += 10;
     }
-    $("grid").querySelectorAll(".cell").forEach(decorateCell);
-    renderSelectBar();
+    grid.rows = rows;
+    grid.cellRows = cellRows;
+    $("grid-inner").style.height = Math.max(0, y - GRID_GAP) + "px";
   }
 
-  function clearSelection() {
-    state.lib.selected.clear();
-    $("grid").querySelectorAll(".cell.selected").forEach(decorateCell);
-    renderSelectBar();
+  // Last row starting at or above y.
+  function rowAt(rows, y) {
+    let lo = 0,
+      hi = rows.length - 1,
+      ans = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (rows[mid].y <= y) {
+        ans = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    return ans;
+  }
+  // The cell row holding item i.
+  function cellRowOf(i) {
+    const rows = grid.cellRows;
+    let lo = 0,
+      hi = rows.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (rows[mid].end <= i) lo = mid + 1;
+      else if (rows[mid].start > i) hi = mid - 1;
+      else return mid;
+    }
+    return -1;
+  }
+  function posOf(i) {
+    const r = grid.cellRows[cellRowOf(i)];
+    return r ? { x: (i - r.start) * (grid.size + GRID_GAP), y: r.y } : { x: 0, y: 0 };
   }
 
-  // The grid is laid out explicitly: column count and square cell size are
-  // computed from the container width, with fixed-pixel rows. (Relying on
-  // CSS aspect-ratio + auto-fill rows let rows collapse and cells overlap.)
-  // The size slider sets the *minimum* cell size; cells stretch to fill the row.
-  const GRID_GAP = 8;
-  const gridGeom = { cols: 1, size: 0 };
-  function layoutGrid() {
-    const grid = $("grid");
-    const cs = getComputedStyle(grid);
-    const avail = grid.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  function layoutGrid(force) {
+    const el = $("grid");
+    const cs = getComputedStyle(el);
+    const avail = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     if (avail <= 0) return; // hidden view
     const min = state.settings.thumbSize;
     const cols = Math.max(1, Math.floor((avail + GRID_GAP) / (min + GRID_GAP)));
     const size = Math.floor((avail - GRID_GAP * (cols - 1)) / cols);
-    if (cols === gridGeom.cols && size === gridGeom.size) return;
-    // Keep the first visible row's images in view across the re-layout.
-    const firstVisible = gridGeom.size ? Math.floor(grid.scrollTop / (gridGeom.size + GRID_GAP)) * gridGeom.cols : 0;
-    gridGeom.cols = cols;
-    gridGeom.size = size;
-    grid.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
-    grid.style.gridAutoRows = size + "px";
-    grid.style.gap = GRID_GAP + "px";
-    grid.scrollTop = Math.floor(firstVisible / cols) * (size + GRID_GAP);
+    if (!force && cols === grid.cols && size === grid.size) return;
+    // Keep the first visible image in view across the re-layout.
+    let anchor = -1;
+    if (!force && grid.rows.length) {
+      const r = grid.rows[rowAt(grid.rows, Math.max(0, el.scrollTop - GRID_PAD))];
+      anchor = r.type === "cells" ? r.start : r.seg.start;
+    }
+    const changedGeom = cols !== grid.cols || size !== grid.size;
+    grid.cols = cols;
+    grid.size = size;
+    if (changedGeom) clearCells();
+    buildRows();
+    if (anchor >= 0) el.scrollTop = posOf(anchor).y;
+    renderVisible();
+  }
+
+  function renderVisible() {
+    const el = $("grid");
+    const { size, cells, heads } = grid;
+    if (!size) return;
+    const step = size + GRID_GAP;
+    const top = Math.max(0, el.scrollTop - GRID_PAD - OVERSCAN);
+    const bottom = el.scrollTop + el.clientHeight + OVERSCAN;
+    const want = new Set();
+    const wantHeads = new Set();
+    const vis = [];
+    for (let ri = rowAt(grid.rows, top); ri < grid.rows.length && grid.rows[ri].y < bottom; ri++) {
+      const r = grid.rows[ri];
+      if (r.type === "head") {
+        wantHeads.add(r.seg.dir ?? r.seg.label);
+        vis.push(r);
+      } else for (let i = r.start; i < r.end; i++) want.add(i);
+      if (r.type === "cells") vis.push(r);
+    }
+    for (const [i, cell] of cells) {
+      if (!want.has(i) && cell !== dragCell) {
+        images.cancel(cell.dataset.path);
+        cell.remove();
+        cells.delete(i);
+      }
+    }
+    for (const [d, h] of heads) {
+      if (!wantHeads.has(d)) {
+        h.remove();
+        heads.delete(d);
+      }
+    }
+    const frag = document.createDocumentFragment();
+    for (const r of vis) {
+      if (r.type === "head") {
+        const hk = r.seg.dir ?? r.seg.label;
+        if (heads.has(hk)) continue;
+        const h = document.createElement("div");
+        h.className = "group-head" + (r.seg.kind ? " " + r.seg.kind : "");
+        if (r.seg.dir != null) {
+          h.dataset.dir = r.seg.dir;
+          h.title = "Open this folder";
+        }
+        h.style.top = r.y + "px";
+        h.innerHTML = `<span class="gh-name">${esc(r.seg.label || groupLabel(r.seg.dir))}</span><span class="muted">${plural(r.seg.end - r.seg.start, "image")}</span>`;
+        heads.set(hk, h);
+        frag.appendChild(h);
+        continue;
+      }
+      for (let i = r.start; i < r.end; i++) {
+        if (cells.has(i)) continue;
+        const p = state.lib.items[i];
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.draggable = true;
+        cell.dataset.i = i;
+        cell.dataset.path = p;
+        if (!state.lib.hits) cell.title = p;
+        cell.style.cssText = `left:${(i - r.start) * step}px;top:${r.y}px;width:${size}px;height:${size}px`;
+        cell.innerHTML = `<img draggable="false" alt="" /><span class="badge"></span><span class="note-dot" title="Has notes">&#9998;</span>${hitTags(p)}`;
+        decorateCell(cell);
+        setThumb(cell.firstChild, p, cell);
+        cells.set(i, cell);
+        frag.appendChild(cell);
+      }
+    }
+    $("grid-inner").appendChild(frag);
+  }
+
+  // Folder header text, relative to the folder being viewed.
+  function groupLabel(dir) {
+    const s = state.settings.src;
+    if (s.type === "folder" && s.path) {
+      if (dir === s.path) return "(this folder)";
+      if (dir.startsWith(s.path + "/")) return dir.slice(s.path.length + 1);
+    }
+    return dir;
+  }
+
+  function hitTags(p) {
+    const h = state.lib.hits && state.lib.hits.get(p);
+    const isNew = state.lib.fresh && state.lib.fresh.has(p);
+    if (!h && !isNew) return "";
+    return `<span class="hit-tags">${isNew ? `<i class="new">new</i>` : ""}${h ? [...h].map((f) => `<i class="${f}">${FIELD_LABEL[f]}</i>`).join("") : ""}</span>`;
+  }
+
+  let scrollRaf = 0;
+  function onGridScroll() {
+    features.busy(600);
+    hideHoverCard();
+    if (scrollRaf) return;
+    scrollRaf = requestAnimationFrame(() => {
+      scrollRaf = 0;
+      renderVisible();
+    });
+  }
+
+  function scrollToItem(i) {
+    const el = $("grid");
+    const { y } = posOf(i);
+    if (y < el.scrollTop - GRID_PAD || y + grid.size > el.scrollTop + el.clientHeight - GRID_PAD) el.scrollTop = Math.max(0, y - el.clientHeight / 3);
+    renderVisible();
+  }
+
+  function decorateCell(cell) {
+    const p = cell.dataset.path;
+    const r = record(p) || {};
+    cell.classList.remove("yes", "maybe", "no");
+    if (r.rating) cell.classList.add(r.rating);
+    cell.classList.toggle("has-notes", !!(r.notes || "").trim());
+    cell.classList.toggle("selected", state.lib.selected.has(p));
+    cell.classList.toggle("focus", state.lib.focus === p);
+  }
+  const decorateAll = () => grid.cells.forEach(decorateCell);
+
+  function updateCell(path) {
+    if (state.view !== "library") return;
+    const cell = $("grid-inner").querySelector(`.cell[data-path="${CSS.escape(path)}"]`);
+    if (cell) decorateCell(cell);
+  }
+
+  function renderSelectBar() {
+    const sel = state.lib.selected;
+    const s = state.settings.src;
+    const inGallery = s.type === "gallery" ? s.id : null;
+    $("select-bar").classList.toggle("show", sel.size > 1);
+    $("select-count").textContent = `${fmt(sel.size)} selected`;
+    const pick = inGallery || state.settings.targetGallery;
+    $("select-gallery").innerHTML =
+      staticGalleries().map((g) => `<option value="${esc(g.id)}" ${g.id === pick ? "selected" : ""}>${esc(g.name)}</option>`).join("") +
+      `<option value="__new">+ New gallery&hellip;</option>`;
+    $("select-remove").hidden = !inGallery;
+  }
+
+  // Click = select just this; Ctrl/⌘ = toggle; Shift = range from the focus.
+  function selectCell(i, e) {
+    const sel = state.lib.selected;
+    const items = state.lib.items;
+    const p = items[i];
+    const anchor = state.lib.focus ? items.indexOf(state.lib.focus) : -1;
+    if (e.shiftKey && anchor >= 0) {
+      if (!(e.ctrlKey || e.metaKey)) sel.clear();
+      const [a, b] = [Math.min(anchor, i), Math.max(anchor, i)];
+      for (let k = a; k <= b; k++) sel.add(items[k]);
+      decorateAll();
+      renderSelectBar();
+      return; // keep the anchor where it was
+    }
+    if (e.ctrlKey || e.metaKey) {
+      if (sel.has(p)) sel.delete(p);
+      else sel.add(p);
+    } else if (sel.size === 1 && sel.has(p)) {
+      sel.clear(); // clicking the only selected image deselects it
+      return setFocus(null);
+    } else {
+      sel.clear();
+      sel.add(p);
+    }
+    setFocus(p);
+  }
+
+  function setFocus(p) {
+    state.lib.focus = p;
+    decorateAll();
+    renderSelectBar();
+    renderCollBar();
+    renderLibDetails();
+  }
+
+  // Arrow keys: move the cursor (Shift extends the selection).
+  function moveCursor(dx, dy, extend) {
+    const items = state.lib.items;
+    if (!items.length) return;
+    let i = state.lib.focus ? items.indexOf(state.lib.focus) : -1;
+    if (i < 0) i = 0;
+    else if (dx) i = Math.max(0, Math.min(items.length - 1, i + dx));
+    else {
+      const ri = cellRowOf(i);
+      const r = grid.cellRows[ri];
+      const t = grid.cellRows[ri + dy];
+      if (t) i = Math.min(t.start + (i - r.start), t.end - 1);
+    }
+    const p = items[i];
+    if (extend) state.lib.selected.add(p);
+    else {
+      state.lib.selected.clear();
+      state.lib.selected.add(p);
+    }
+    scrollToItem(i);
+    setFocus(p);
+  }
+
+  function clearSelection() {
+    state.lib.selected.clear();
+    state.lib.focus = null;
+    decorateAll();
+    renderSelectBar();
+    renderLibDetails();
+  }
+
+  function renderLibDetails() {
+    if (!state.settings.libDetails || state.view !== "library") return;
+    const panel = $("lib-details");
+    const p = state.lib.focus;
+    const coll = !p && openCollection();
+    if (!coll && panel.dataset.path === (p || "")) return;
+    if (coll && panel.dataset.path === "gallery:" + coll.id + ":" + (coll.log || []).length) return;
+    if (p) details.render(panel, p);
+    else if (coll) renderCollectionInfo(panel, coll);
+    else {
+      panel.dataset.path = "";
+      panel.innerHTML = `<p class="muted">Select an image to see its details. <kbd>I</kbd> hides this panel.</p>`;
+    }
   }
 
   function setThumbSize(px) {
@@ -619,10 +1726,117 @@
     b.title = fit ? "Showing whole images — click to crop thumbnails to fill squares" : "Showing cropped squares — click to show whole images";
   }
 
+  function toggleGroupFolders() {
+    if (effectiveSort() === "custom" || effectiveSort() === "match") return;
+    state.settings.groupFolders = !state.settings.groupFolders;
+    saveSettings();
+    const keep = state.lib.focus;
+    rebuildLibrary();
+    if (keep) {
+      const i = state.lib.items.indexOf(keep);
+      if (i >= 0) scrollToItem(i);
+    }
+    toast(state.settings.groupFolders ? "Folder headers on (G)" : "Folder headers off — one continuous feed");
+  }
+
+  // Jump from any image (e.g. one in a gallery) to its folder in the library.
+  function showInFolder(path) {
+    const dir = dirname(path);
+    if (state.lb.open) closeLightbox();
+    const segs = dir.split("/");
+    for (let i = 1; i < segs.length; i++) toggleExpanded(segs.slice(0, i).join("/"), true);
+    state.settings.filter = "all";
+    state.lib.search = "";
+    state.lib.match = null;
+    $("lib-search").value = "";
+    renderMatchChip();
+    if (state.view !== "library") {
+      state.settings.src = { type: "folder", path: dir };
+      state.srcKeys = null;
+      showView("library");
+      renderSidebar();
+      renderStats();
+      emit("onSource");
+    } else setSource({ type: "folder", path: dir });
+    const i = state.lib.items.indexOf(path);
+    if (i < 0) return;
+    state.lib.selected = new Set([path]);
+    scrollToItem(i);
+    setFocus(path);
+  }
+
+  // ------------------------------------------------- search hover card
+
+  let hoverTimer = 0;
+  function showHoverCard(cell) {
+    const p = cell.dataset.path;
+    const terms = searchTerms();
+    const hit = state.lib.hits && state.lib.hits.get(p);
+    if (!hit || !terms.length) return;
+    const rows = fieldsOf(p)
+      .filter(([name]) => hit.has(name))
+      .map(([name, lc, raw]) => `<div class="hc-row"><span class="hc-field ${name}">${FIELD_LABEL[name]}</span><span class="hc-text">${snippet(raw, lc, terms)}</span></div>`);
+    const card = $("hovercard");
+    card.innerHTML = rows.join("");
+    const r = cell.getBoundingClientRect();
+    card.classList.add("show");
+    const w = card.offsetWidth;
+    const h = card.offsetHeight;
+    let x = r.right + 8;
+    if (x + w > window.innerWidth - 8) x = r.left - w - 8;
+    if (x < 8) x = Math.min(window.innerWidth - w - 8, r.left);
+    const y = Math.max(8, Math.min(window.innerHeight - h - 8, r.top));
+    card.style.left = x + "px";
+    card.style.top = y + "px";
+  }
+  function hideHoverCard() {
+    clearTimeout(hoverTimer);
+    $("hovercard").classList.remove("show");
+  }
+
+  // Text around the first match of each term, with matches highlighted.
+  function snippet(raw, lc, terms) {
+    const ranges = [];
+    for (const t of terms) {
+      let from = 0;
+      let idx;
+      while ((idx = lc.indexOf(t, from)) >= 0) {
+        ranges.push([idx, idx + t.length]);
+        from = idx + t.length;
+      }
+    }
+    if (!ranges.length) return esc(raw.slice(0, 120));
+    ranges.sort((a, b) => a[0] - b[0]);
+    const CTX = 60;
+    const windows = [];
+    for (const [a, b] of ranges) {
+      const w = windows[windows.length - 1];
+      if (w && a - CTX <= w[1]) w[1] = Math.max(w[1], b + CTX);
+      else windows.push([Math.max(0, a - CTX), b + CTX]);
+      if (windows.length > 3) break;
+    }
+    return windows
+      .slice(0, 3)
+      .map(([ws, we]) => {
+        we = Math.min(raw.length, we);
+        let out = "";
+        let pos = ws;
+        for (const [a, b] of ranges) {
+          if (b <= ws || a >= we || a < pos) continue;
+          out += esc(raw.slice(pos, a)) + "<mark>" + esc(raw.slice(a, b)) + "</mark>";
+          pos = b;
+        }
+        out += esc(raw.slice(pos, we));
+        return (ws > 0 ? "&hellip;" : "") + out + (we < raw.length ? "&hellip;" : "");
+      })
+      .join(" ");
+  }
+
   // --------------------------------------------------------- lightbox
 
   function openLightbox(items, index) {
     if (!items.length) return;
+    hideHoverCard();
     const lb = state.lb;
     lb.items = items.slice();
     lb.index = Math.max(0, Math.min(index, items.length - 1));
@@ -634,9 +1848,19 @@
   function closeLightbox() {
     state.lb.open = false;
     $("lightbox").classList.remove("open");
-    if (document.fullscreenElement === $("lightbox")) document.exitFullscreen();
     details.render($("lb-details"), null);
-    if (state.view === "review") renderReview();
+    // Leave the library's cursor on the last image viewed.
+    if (state.view === "library") {
+      const p = state.lb.items[state.lb.index];
+      const i = state.lib.items.indexOf(p);
+      if (i >= 0) {
+        state.lib.selected = new Set([p]);
+        scrollToItem(i);
+        setFocus(p);
+      }
+    }
+    const m = activeModule();
+    if (m && m.show) m.show();
   }
 
   let lbToken = 0;
@@ -645,8 +1869,12 @@
     const path = items[index];
     const img = $("lb-img");
     const t = ++lbToken;
-    setZoom(false);
+    // A new image starts in Fit (or stays 1:1 if that's what you were in).
+    if (view.mode === "free") view.mode = "fit";
+    view.natW = view.natH = 0;
     img.removeAttribute("src");
+    $("lb-mini").hidden = true;
+    img.onload = () => t === lbToken && onViewImageLoad();
     // Show the cached thumbnail instantly, then swap in the full-size file.
     images.thumb(path).then((u) => {
       if (t === lbToken && u && !img.dataset.full) img.src = u;
@@ -661,6 +1889,7 @@
       })
       .catch(() => {});
     renderLbPos();
+    renderZones();
     if (state.settings.detailsOpen) details.render($("lb-details"), path);
     images.preload([items[index + 1], items[index - 1]].filter(Boolean));
   }
@@ -681,39 +1910,279 @@
     renderLightbox();
   }
 
-  function setZoom(on, e) {
-    const stage = $("lb-stage");
+  // ------------------------------------------------------- image view
+  //
+  // The lightbox image is positioned by hand: view.x/y is its top-left in
+  // stage pixels and view.scale its size. Modes: "fit" (whole image, scaled
+  // up or down to the screen — the default), "1:1" (one image pixel per
+  // screen pixel) and "free" (wherever wheel-zoom or dragging left it).
+  // You can always drag it; the wheel zooms around the cursor.
+  const view = { mode: "fit", scale: 1, x: 0, y: 0, natW: 0, natH: 0 };
+  const ZOOM_MIN = 0.02;
+  const ZOOM_MAX = 40;
+  const ZONE = 0.2; // prev/next click zones: this share of the width on each side
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const dpr = () => window.devicePixelRatio || 1;
+
+  function stageSize() {
+    const st = $("lb-stage");
+    return { W: st.clientWidth, H: st.clientHeight };
+  }
+
+  // Lay the image out for a mode without changing view.mode (used to show
+  // a fitted thumbnail while the full file for 1:1 is still loading).
+  function layout(mode, cx, cy) {
+    const { W, H } = stageSize();
+    if (mode === "fit") {
+      view.scale = Math.min(W / view.natW, H / view.natH);
+      view.x = (W - view.natW * view.scale) / 2;
+      view.y = (H - view.natH * view.scale) / 2;
+    } else if (mode === "1:1") {
+      if (cx === undefined) {
+        // centred
+        view.scale = 1 / dpr();
+        view.x = (W - view.natW * view.scale) / 2;
+        view.y = (H - view.natH * view.scale) / 2;
+      } else zoomAround(1 / dpr(), cx, cy);
+    }
+  }
+
+  function setViewMode(mode, cx, cy) {
+    view.mode = mode;
+    if (!view.natW) return applyView();
+    layout(mode, cx, cy);
+    view.mode = mode;
+    applyView();
+  }
+
+  function zoomAround(s, cx, cy) {
+    s = clamp(s, ZOOM_MIN, ZOOM_MAX);
+    view.x = cx - (cx - view.x) * (s / view.scale);
+    view.y = cy - (cy - view.y) * (s / view.scale);
+    view.scale = s;
+    keepOnScreen();
+  }
+
+  function zoomBy(factor, cx, cy) {
+    if (!view.natW) return;
+    if (cx === undefined) {
+      const { W, H } = stageSize();
+      cx = W / 2;
+      cy = H / 2;
+    }
+    zoomAround(view.scale * factor, cx, cy);
+    view.mode = "free";
+    applyView();
+  }
+
+  // However far it's dragged, keep a bit of the image on screen.
+  function keepOnScreen() {
+    const { W, H } = stageSize();
+    const w = view.natW * view.scale;
+    const h = view.natH * view.scale;
+    const m = 60;
+    view.x = clamp(view.x, Math.min(0, m - w), Math.max(W - w, W - m));
+    view.y = clamp(view.y, Math.min(0, m - h), Math.max(H - h, H - m));
+  }
+
+  function applyView() {
     const img = $("lb-img");
-    let fx = 0.5;
-    let fy = 0.5;
-    if (on && e) {
-      const r = img.getBoundingClientRect();
-      fx = (e.clientX - r.left) / r.width;
-      fy = (e.clientY - r.top) / r.height;
-    }
-    state.lb.zoom = on;
-    stage.classList.toggle("zoom", on);
-    if (on) {
-      stage.scrollLeft = fx * img.naturalWidth - stage.clientWidth / 2;
-      stage.scrollTop = fy * img.naturalHeight - stage.clientHeight / 2;
-    }
+    img.style.width = view.natW * view.scale + "px";
+    img.style.height = view.natH * view.scale + "px";
+    img.style.transform = `translate(${view.x}px, ${view.y}px)`;
+    // Zoomed well in (not just fitted): show crisp pixels rather than blur.
+    img.classList.toggle("pixelated", view.mode !== "fit" && view.scale * dpr() >= 3);
+    $("lb-fit").classList.toggle("on", view.mode === "fit");
+    $("lb-one").classList.toggle("on", view.mode === "1:1");
+    $("lb-scale").textContent = view.natW && img.dataset.full ? Math.round(view.scale * dpr() * 100) + "%" : "";
+    renderMini();
+  }
+
+  function onViewImageLoad() {
+    const img = $("lb-img");
+    const prevW = view.natW;
+    view.natW = img.naturalWidth;
+    view.natH = img.naturalHeight;
+    $("lb-mini").querySelector("img").src = img.src;
+    if (view.mode === "free" && prevW) {
+      view.scale *= prevW / view.natW; // thumbnail -> full file: keep the same on-screen size
+      applyView();
+    } else if (view.mode === "1:1" && !img.dataset.full) {
+      layout("fit"); // just the thumbnail so far
+      applyView();
+    } else setViewMode(view.mode);
+  }
+
+  // Navigator: where the visible part sits in the whole image, shown only
+  // while the image runs off the screen. Click or drag in it to move there.
+  function renderMini() {
+    const mini = $("lb-mini");
+    const { W, H } = stageSize();
+    const w = view.natW * view.scale;
+    const h = view.natH * view.scale;
+    const over = view.natW && (view.x < -1 || view.y < -1 || view.x + w > W + 1 || view.y + h > H + 1);
+    mini.hidden = !over;
+    if (!over) return;
+    const ms = Math.min(150 / view.natW, 150 / view.natH);
+    mini.style.width = view.natW * ms + "px";
+    mini.style.height = view.natH * ms + "px";
+    const x0 = clamp(-view.x / view.scale, 0, view.natW);
+    const y0 = clamp(-view.y / view.scale, 0, view.natH);
+    const x1 = clamp((W - view.x) / view.scale, 0, view.natW);
+    const y1 = clamp((H - view.y) / view.scale, 0, view.natH);
+    const r = mini.querySelector(".lb-mini-rect").style;
+    r.left = x0 * ms + "px";
+    r.top = y0 * ms + "px";
+    r.width = (x1 - x0) * ms + "px";
+    r.height = (y1 - y0) * ms + "px";
+  }
+
+  function miniJump(e) {
+    const mini = $("lb-mini");
+    const r = mini.getBoundingClientRect();
+    const ms = r.width / view.natW;
+    const ix = (e.clientX - r.left) / ms;
+    const iy = (e.clientY - r.top) / ms;
+    const { W, H } = stageSize();
+    view.x = W / 2 - ix * view.scale;
+    view.y = H / 2 - iy * view.scale;
+    keepOnScreen();
+    applyView();
+  }
+
+  // Which click zone (if any) a pointer position is in: -1 prev, 1 next.
+  function zoneAt(e) {
+    const r = $("lb-stage").getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width;
+    if (fx < ZONE && state.lb.index > 0) return -1;
+    if (fx > 1 - ZONE && state.lb.index < state.lb.items.length - 1) return 1;
+    return 0;
+  }
+
+  function renderZones() {
+    $("lb-prev").classList.toggle("off", state.lb.index <= 0);
+    $("lb-next").classList.toggle("off", state.lb.index >= state.lb.items.length - 1);
+  }
+
+  function bindView() {
+    const st = $("lb-stage");
+    let drag = null;
+    st.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      drag = { sx: e.clientX, sy: e.clientY, x: view.x, y: view.y, moved: false };
+      st.setPointerCapture(e.pointerId);
+    });
+    st.addEventListener("pointermove", (e) => {
+      if (!drag) {
+        const z = zoneAt(e);
+        st.dataset.zone = z < 0 ? "prev" : z > 0 ? "next" : "";
+        return;
+      }
+      const dx = e.clientX - drag.sx;
+      const dy = e.clientY - drag.sy;
+      if (!drag.moved && Math.hypot(dx, dy) > 4) {
+        drag.moved = true; // a drag, not a click: never navigates
+        st.classList.add("panning");
+        st.dataset.zone = "";
+      }
+      if (!drag.moved || !view.natW) return;
+      view.x = drag.x + dx;
+      view.y = drag.y + dy;
+      keepOnScreen();
+      if (view.mode === "fit") view.mode = "free";
+      applyView();
+    });
+    const end = (e) => {
+      const d = drag;
+      drag = null;
+      st.classList.remove("panning");
+      if (!d || d.moved || e.type === "pointercancel") return;
+      const z = zoneAt(e);
+      if (z) lbStep(z);
+    };
+    st.addEventListener("pointerup", end);
+    st.addEventListener("pointercancel", end);
+    st.addEventListener("pointerleave", () => !drag && (st.dataset.zone = ""));
+    st.addEventListener("dblclick", (e) => {
+      if (zoneAt(e)) return;
+      const r = st.getBoundingClientRect();
+      setViewMode(view.mode === "1:1" ? "fit" : "1:1", e.clientX - r.left, e.clientY - r.top);
+    });
+    st.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const r = st.getBoundingClientRect();
+        zoomBy(Math.pow(1.0015, -e.deltaY * (e.deltaMode === 1 ? 33 : 1)), e.clientX - r.left, e.clientY - r.top);
+      },
+      { passive: false }
+    );
+    new ResizeObserver(() => {
+      if (!state.lb.open || !view.natW) return;
+      if (view.mode === "free") {
+        keepOnScreen();
+        applyView();
+      } else setViewMode(view.mode);
+    }).observe(st);
+
+    const mini = $("lb-mini");
+    let miniDrag = false;
+    mini.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      miniDrag = true;
+      mini.setPointerCapture(e.pointerId);
+      miniJump(e);
+    });
+    mini.addEventListener("pointermove", (e) => miniDrag && miniJump(e));
+    mini.addEventListener("pointerup", () => (miniDrag = false));
+
+    $("lb-fit").onclick = () => setViewMode("fit");
+    $("lb-one").onclick = () => setViewMode("1:1");
   }
 
   // ------------------------------------------------------- shared UI
 
+  // The library has its own details panel, opened only with I (or Info).
   function toggleDetails(force) {
+    if (state.view === "library" && !state.lb.open) {
+      const open = force === undefined ? !state.settings.libDetails : force;
+      state.settings.libDetails = open;
+      saveSettings();
+      document.body.classList.toggle("lib-details", open);
+      if (open) {
+        $("lib-details").dataset.path = "\0"; // force a render
+        renderLibDetails();
+      }
+      return layoutGrid();
+    }
     const open = force === undefined ? !state.settings.detailsOpen : force;
     state.settings.detailsOpen = open;
     saveSettings();
     document.body.classList.toggle("details-open", open);
-    if (open) {
-      if (state.lb.open) details.render($("lb-details"), state.lb.items[state.lb.index]);
-      details.render($("review-details"), state.queue[state.qi] || null);
-    }
+    if (open && state.lb.open) details.render($("lb-details"), state.lb.items[state.lb.index]);
+    emit("onDetails", open);
   }
 
+  function toggleSidebar() {
+    state.settings.sidebarHidden = !state.settings.sidebarHidden;
+    saveSettings();
+    document.body.classList.toggle("sidebar-hidden", state.settings.sidebarHidden);
+  }
+
+  function renderRatingToggle() {
+    const open = state.settings.ratingBar;
+    const f = state.settings.filter;
+    $("lib-filter").hidden = !open;
+    const b = $("rating-toggle");
+    b.classList.toggle("on", open || f !== "all");
+    const label = f === "all" ? "" : (FILTERS.find((x) => x[0] === f) || [])[3] || "Unrated";
+    b.innerHTML = `&#9733;${!open && label ? " " + label : ""}`;
+    b.title = open ? "Hide rating filters" : "Rating filters" + (label ? ` (showing: ${label})` : "");
+  }
+
+  // The whole app (lightbox included) goes fullscreen.
   function toggleFullscreen() {
-    const el = state.lb.open ? $("lightbox") : document.documentElement;
+    const el = document.documentElement;
     if (document.fullscreenElement) document.exitFullscreen();
     else if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
   }
@@ -725,62 +2194,132 @@
     if (text) $("scan-text").textContent = text;
   }
 
-  function applyScan(paths) {
-    const before = state.fileSet;
-    let added = 0;
-    for (const p of paths) if (!before.has(p)) added++;
-    const hadFiles = state.files.length > 0;
-    state.files = paths;
-    state.fileSet = new Set(paths);
-    state.rootName = source.name;
-    store.put("kv", paths, "files");
-    store.put("kv", source.name, "rootName");
-    renderStats();
-    if (hadFiles && added) toast(`${fmt(added)} new image${added === 1 ? "" : "s"} found`);
-    else if (!hadFiles) toast(`${fmt(paths.length)} images found`);
+  function uniqueRootId(name) {
+    const base = name.replace(/\//g, "_") || "folder";
+    let id = base;
+    for (let n = 2; rootById(id) || id === ORPHAN; n++) id = `${base} (${n})`;
+    return id;
   }
 
-  async function scanNow(blocking) {
-    if (state.scanning) return;
-    state.scanning = true;
+  async function saveFiles(id, rels) {
+    state.files.set(id, rels);
+    await store.put("kv", rels, "files:" + id);
+  }
+
+  // After every structural change to the file lists.
+  function indexChanged(keepScroll) {
+    refreshSmartStatus();
+    rebuildIndex();
+    renderSidebar();
+    renderStats();
     renderSourceStatus();
+    if (state.view === "welcome" || state.view === null) showView(state.settings.view);
+    else if (state.view === "library") rebuildLibrary(keepScroll);
+    startIndexing();
+    emit("onFiles");
+  }
+
+  let indexTimer = 0;
+  function startIndexing() {
+    clearTimeout(indexTimer);
+    indexTimer = setTimeout(() => features.start(state.all, srcKeys()), 400);
+  }
+
+  async function applyScan(id, rels) {
+    const before = new Set(state.files.get(id) || []);
+    const hadFiles = before.size > 0;
+    let added = 0;
+    for (const p of rels) if (!before.has(p)) added++;
+    await saveFiles(id, rels);
+    const adopted = await adoptOrphans(id);
+    indexChanged(true);
+    const name = (rootById(id) || {}).name || id;
+    if (hadFiles && added) toast(`${plural(added, "new image")} in “${name}”`);
+    else if (!hadFiles) toast(`${plural(rels.length, "image")} found in “${name}”` + (adopted ? ` — reattached ${fmt(adopted)} from earlier` : ""));
+    else if (adopted) toast(`Reattached ${plural(adopted, "image")}'s ratings and notes from earlier`);
+  }
+
+  async function scanRoot(id, blocking) {
+    if (state.scanning.has(id)) return;
+    state.scanning.add(id);
+    renderSourceStatus();
+    renderTree();
     if (blocking) showScan(true, "Scanning…");
     try {
-      const paths = await source.scan((n, dir) => {
+      const rels = await source.scan(id, (n, dir) => {
         if (blocking) $("scan-text").textContent = `Scanning… ${fmt(n)} images${dir ? " — " + dir : ""}`;
       });
-      applyScan(paths);
+      state.scanning.delete(id);
+      await applyScan(id, rels);
     } catch (e) {
       console.error(e);
       toast("Scan failed: " + e.message);
     } finally {
-      state.scanning = false;
+      state.scanning.delete(id);
       showScan(false);
       renderSourceStatus();
+      renderTree();
     }
   }
 
-  function confirmSwitch(newName) {
-    if (!state.files.length || !state.rootName || newName === state.rootName) return true;
-    return confirm(
-      `Switch from “${state.rootName}” to “${newName}”?\n\nRatings, notes and galleries are keyed by path relative to the chosen folder, so they only line up if the new folder has the same layout (e.g. the same output folder moved elsewhere).`
-    );
+  async function addRoot(name, handle) {
+    const id = uniqueRootId(name);
+    const root = { id, name: id, handle: handle || null, rootPath: "", added: Date.now() };
+    state.roots.push(root);
+    await store.put("roots", root).catch(async (e) => {
+      console.warn("Couldn't persist folder handle", e);
+      await store.put("roots", { ...root, handle: null });
+    });
+    return root;
   }
 
-  async function chooseFolder() {
-    if (!source.supportsHandles) return $("dir-input").click();
+  // Picking a folder that's already in the library reconnects it instead.
+  async function matchRoot(name, handle) {
+    for (const r of state.roots) {
+      if (r.virtual) continue;
+      if (handle && r.handle) {
+        try {
+          if (await r.handle.isSameEntry(handle)) return r;
+        } catch (e) {
+          /* stale handle */
+        }
+      }
+    }
+    // Without handles (folder-input fallback) re-picking a connected folder is how you refresh it.
+    const byName = state.roots.find((r) => !r.virtual && r.name === name && (!source.isConnected(r.id) || !handle));
+    if (
+      byName &&
+      confirm(
+        `Is this the same “${name}” folder you added before (moved, or re-picked)?\n\nOK — reconnect it, keeping its ratings, notes and galleries.\nCancel — add it as a separate folder.`
+      )
+    )
+      return byName;
+    return null;
+  }
+
+  let pendingReconnect = null; // root id the dir-input fallback is reconnecting
+
+  async function addFolder() {
+    if (!source.supportsHandles) {
+      pendingReconnect = null;
+      return $("dir-input").click();
+    }
     let h;
     try {
       h = await window.showDirectoryPicker({ id: "archive-curator", mode: "read" });
     } catch (e) {
       return; // cancelled
     }
-    if (!confirmSwitch(h.name)) return;
-    source.useHandle(h);
-    state.storedHandle = h;
-    store.put("kv", h, "rootHandle").catch((e) => console.warn("Couldn't persist folder handle", e));
-    await scanNow(true);
-    afterConnect();
+    let root = await matchRoot(h.name, h);
+    if (root) {
+      root.handle = h;
+      store.put("roots", root).catch(() => {});
+    } else root = await addRoot(h.name, h);
+    source.useHandle(root.id, h);
+    renderSourceStatus();
+    await scanRoot(root.id, true);
+    setSource({ type: "folder", path: root.id });
+    if (state.view !== "library") showView("library");
   }
 
   async function onDirInput(e) {
@@ -788,39 +2327,198 @@
     if (!list || !list.length) return;
     showScan(true, `Reading ${fmt(list.length)} files…`);
     await new Promise((r) => setTimeout(r, 30));
-    const first = (list[0].webkitRelativePath || "").split("/")[0];
-    if (!confirmSwitch(first)) return showScan(false);
-    const paths = source.useFileList(list);
-    applyScan(paths);
-    showScan(false);
+    const { name, map } = source.readFileList(list);
     e.target.value = "";
-    afterConnect();
+    let root = pendingReconnect ? rootById(pendingReconnect) : await matchRoot(name, null);
+    pendingReconnect = null;
+    if (!root) root = await addRoot(name, null);
+    source.useFileMap(root.id, map);
+    showScan(false);
+    await scanRoot(root.id, false);
+    setSource({ type: "folder", path: root.id });
   }
 
-  async function reconnect() {
-    if (state.storedHandle) {
-      try {
-        if (await source.hasPermission(state.storedHandle, true)) {
-          source.useHandle(state.storedHandle);
-          afterConnect();
-          scanNow(false);
-          return;
-        }
-      } catch (e) {
-        console.warn(e);
-      }
-      toast("Permission denied — try Change folder in Settings");
-    } else {
-      $("dir-input").click();
+  async function reconnect(id) {
+    const root = rootById(id);
+    if (!root || root.virtual) return;
+    if (!root.handle) {
+      pendingReconnect = id;
+      return $("dir-input").click();
     }
+    try {
+      if (await source.hasPermission(root.handle, true)) {
+        source.useHandle(id, root.handle);
+        renderSourceStatus();
+        renderTree();
+        afterConnect();
+        scanRoot(id, false);
+        return true;
+      }
+      toast(`Permission denied for “${root.name}”`);
+    } catch (e) {
+      console.warn(e);
+      toast(`Couldn't reconnect “${root.name}” — try adding it again`);
+    }
+    return false;
+  }
+
+  // One click, every folder. Browsers may only allow one permission prompt
+  // per click; if so, the rest stay offline with a Reconnect button each.
+  async function reconnectAll() {
+    for (const r of offlineRoots()) {
+      if (!r.handle) continue;
+      try {
+        if (await source.hasPermission(r.handle, true)) source.useHandle(r.id, r.handle);
+      } catch (e) {
+        toast("Click Reconnect on each remaining folder in the sidebar");
+        break;
+      }
+    }
+    const off = offlineRoots();
+    if (off.length === 1 && !off[0].handle) reconnect(off[0].id);
+    renderSourceStatus();
+    renderTree();
+    afterConnect();
+    for (const r of state.roots) if (source.isConnected(r.id)) scanRoot(r.id, false);
   }
 
   function afterConnect() {
-    renderSourceStatus();
-    if (state.view === "welcome" || state.view === null) return showView(state.settings.view);
-    if (state.view === "review" && state.qi >= state.queue.length && !$("batch-done").classList.contains("show")) newBatch();
-    else if (state.view === "review") renderReview();
-    if (state.view === "library") rebuildLibrary();
+    if (state.view === "library") rebuildLibrary(true);
+    startIndexing();
+    emit("onFiles");
+  }
+
+  async function removeRoot(id) {
+    const root = rootById(id);
+    if (!root) return;
+    const msg = root.virtual
+      ? "Forget these unattached ratings, notes and thumbnails for good?"
+      : `Remove “${root.name}” from the library?\n\nThe folder itself is untouched. Its ratings, notes and gallery entries are kept and come back if you add it again.`;
+    if (!confirm(msg)) return;
+    const pre = id + "/";
+    const keys = (state.files.get(id) || []).map((rel) => pre + rel);
+    state.roots = state.roots.filter((r) => r !== root);
+    state.files.delete(id);
+    source.disconnect(id);
+    await store.del("roots", id);
+    await store.del("kv", "files:" + id);
+    const thumbKeys = (await store.keys("thumbs")).filter((k) => k.startsWith(pre));
+    images.forget(thumbKeys);
+    await store.delMany("thumbs", thumbKeys);
+    await features.forget(keys);
+    if (root.virtual) {
+      const dead = [...state.records.keys()].filter((k) => k.startsWith(pre));
+      dead.forEach((k) => state.records.delete(k));
+      await store.delMany("records", dead);
+      galleryChanged();
+    }
+    if (state.settings.src.type === "folder" && (state.settings.src.path + "/").startsWith(pre)) state.settings.src = { type: "folder", path: "" };
+    indexChanged();
+    if (!state.roots.length) showView("welcome");
+    if ($("settings").open) renderSettingsFolders();
+  }
+
+  // ------------------------------------------- migration & orphan reattach
+
+  // v1 kept one folder, and keyed everything by path relative to it. Move it
+  // all under that folder's root id; whatever doesn't belong to the current
+  // file list came from an earlier folder and goes to the ORPHAN pseudo-
+  // folder until that folder is re-added. Re-runnable if interrupted: records
+  // are rebuilt from a backup taken first.
+  async function migrateV1() {
+    if ((await store.get("kv", "schema")) >= 2) return;
+    const [files, rootName, handle] = await Promise.all([
+      store.get("kv", "files"),
+      store.get("kv", "rootName"),
+      store.get("kv", "rootHandle").catch(() => null),
+    ]);
+    let backup = await store.get("kv", "v1-backup");
+    if (!backup && (files || rootName)) {
+      backup = { records: await store.getAll("records"), files: files || [], rootName: rootName || "", savedAt: Date.now() };
+      await store.put("kv", backup, "v1-backup");
+    }
+    if (backup) {
+      const name = (backup.rootName || "folder").replace(/\//g, "_");
+      const fileSet = new Set(backup.files);
+      const orphans = new Set();
+      if (!(await store.get("roots", name))) {
+        const root = { id: name, name, handle: handle || null, rootPath: state.settings.rootPath || "", added: Date.now() };
+        await store.put("roots", root).catch(() => store.put("roots", { ...root, handle: null }));
+      }
+      await store.put("kv", backup.files, "files:" + name);
+      const recs = backup.records.map((r) => {
+        const id = fileSet.has(r.path) ? name : ORPHAN;
+        if (id === ORPHAN) orphans.add(r.path);
+        return { ...r, path: id + "/" + r.path };
+      });
+      await store.replaceAll("records", recs);
+      const pairs = [];
+      for (const k of await store.keys("thumbs")) {
+        if (fileSet.has(k)) pairs.push([k, name + "/" + k]);
+        else if (k.startsWith(name + "/") || k.startsWith(ORPHAN + "/")) continue; // already moved
+        else {
+          orphans.add(k);
+          pairs.push([k, ORPHAN + "/" + k]);
+        }
+      }
+      await store.rekey("thumbs", pairs);
+      if (orphans.size) await store.put("kv", [...orphans].sort(C.collator.compare), "files:" + ORPHAN);
+    }
+    delete state.settings.rootPath;
+    delete state.settings.libFilter;
+    if (state.settings.libSort) state.settings.sort = state.settings.libSort;
+    delete state.settings.libSort;
+    await store.put("kv", state.settings, "settings");
+    await store.delMany("kv", ["files", "rootName", "rootHandle"]);
+    await store.put("kv", 2, "schema");
+  }
+
+  function orphanRoot() {
+    return { id: ORPHAN, name: "Unattached", virtual: true, handle: null, rootPath: "", added: 0 };
+  }
+
+  // Move ORPHAN images whose relative path exists in root `id` under it.
+  async function adoptOrphans(id) {
+    const orphans = state.files.get(ORPHAN);
+    if (!orphans || !orphans.length || id === ORPHAN) return 0;
+    const rels = new Set(state.files.get(id));
+    const moved = orphans.filter((r) => rels.has(r));
+    if (!moved.length) return 0;
+    const puts = [];
+    const dels = [];
+    for (const rel of moved) {
+      const from = ORPHAN + "/" + rel;
+      const to = id + "/" + rel;
+      const r = state.records.get(from);
+      if (!r) continue;
+      state.records.delete(from);
+      dels.push(from);
+      if (!state.records.has(to)) {
+        r.path = to;
+        state.records.set(to, r);
+        puts.push(r);
+      }
+    }
+    await store.delMany("records", dels);
+    await store.putMany("records", puts);
+    const pairs = moved.map((rel) => [ORPHAN + "/" + rel, id + "/" + rel]);
+    images.forget(pairs.map((p) => p[0]));
+    await store.rekey("thumbs", pairs);
+    await features.rekey(pairs);
+    const renamed = new Map(pairs);
+    for (const g of state.galleries) {
+      if (!g.order || !g.order.some((k) => renamed.has(k))) continue;
+      g.order = g.order.map((k) => renamed.get(k) || k);
+      store.put("galleries", g);
+    }
+    const left = orphans.filter((r) => !rels.has(r));
+    if (left.length) await saveFiles(ORPHAN, left);
+    else {
+      state.files.delete(ORPHAN);
+      state.roots = state.roots.filter((r) => r.id !== ORPHAN);
+      await store.del("kv", "files:" + ORPHAN);
+    }
+    return dels.length;
   }
 
   // ------------------------------------------------------ import/export
@@ -828,10 +2526,10 @@
   function exportData() {
     const data = {
       app: "archive-curator",
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
-      rootName: state.rootName,
-      rootPath: state.settings.rootPath,
+      roots: state.roots.filter((r) => !r.virtual).map(({ id, name, rootPath, added }) => ({ id, name, rootPath, added })),
+      galleryGroups: state.groups,
       galleries: state.galleries,
       records: [...state.records.values()],
     };
@@ -851,18 +2549,33 @@
       return toast("Not a valid JSON file");
     }
     if (!data || data.app !== "archive-curator") return toast("Not an Archive Curator export");
+    // v1 exports had paths relative to a single folder.
+    const prefix = data.version === 1 ? (rootById(data.rootName) ? data.rootName : ORPHAN) + "/" : "";
+    for (const gr of data.galleryGroups || []) if (!group(gr.id)) state.groups.push(gr);
+    saveGroups();
     for (const g of data.galleries || []) {
-      if (!state.galleries.some((x) => x.id === g.id)) {
-        state.galleries.push(g);
-        store.put("galleries", g);
+      if (!gallery(g.id)) {
+        const copy = { group: null, pos: topLevel().length, order: [], ...g };
+        if (copy.group && !group(copy.group)) copy.group = null;
+        if (prefix) copy.order = (copy.order || []).map((k) => prefix + k);
+        state.galleries.push(copy);
+        store.put("galleries", copy);
+      }
+    }
+    for (const r of data.roots || []) {
+      const mine = rootById(r.id);
+      if (mine && !mine.rootPath && r.rootPath) {
+        mine.rootPath = r.rootPath;
+        store.put("roots", mine);
       }
     }
     const changedRecs = [];
     for (const inc of data.records || []) {
-      const cur = state.records.get(inc.path);
+      const path = prefix + inc.path;
+      const cur = state.records.get(path);
       if (!cur) {
-        const r = { path: inc.path, rating: inc.rating || null, reviewedAt: inc.reviewedAt || null, notes: inc.notes || "", galleries: inc.galleries || [] };
-        state.records.set(r.path, r);
+        const r = { path, rating: inc.rating || null, reviewedAt: inc.reviewedAt || null, notes: inc.notes || "", galleries: inc.galleries || [] };
+        state.records.set(path, r);
         changedRecs.push(r);
         continue;
       }
@@ -875,23 +2588,66 @@
       changedRecs.push(cur);
     }
     await store.putMany("records", changedRecs);
-    if (!state.settings.rootPath && data.rootPath) state.settings.rootPath = data.rootPath;
-    saveSettings();
+    if (prefix === ORPHAN + "/") {
+      const rels = new Set(state.files.get(ORPHAN) || []);
+      for (const inc of data.records || []) rels.add(inc.path);
+      await saveFiles(ORPHAN, [...rels].sort(C.collator.compare));
+      if (!rootById(ORPHAN)) state.roots.push(orphanRoot());
+    }
     toast(`Imported ${fmt(changedRecs.length)} records, ${fmt((data.galleries || []).length)} galleries`);
-    renderStats();
-    if (state.view === "library") rebuildLibrary();
+    state.srcKeys = null;
+    indexChanged(true);
   }
 
   // ---------------------------------------------------------- settings
 
+  function renderSettingsFolders() {
+    $("set-folders").innerHTML =
+      state.roots
+        .map((r) => {
+          const n = (state.files.get(r.id) || []).length;
+          const conn = r.virtual ? "from an earlier session" : source.isConnected(r.id) ? "connected" : "not connected";
+          return `<div class="folder-row" data-root="${esc(r.id)}">
+            <div class="fr-head"><b>${esc(r.name)}</b> <span class="muted">${plural(n, "image")} · ${conn}</span>
+              <span class="spacer"></span>
+              ${r.virtual ? "" : source.isConnected(r.id) ? `<button type="button" class="tiny" data-f-act="rescan">Rescan</button>` : `<button type="button" class="tiny" data-f-act="reconnect">Reconnect</button>`}
+              <button type="button" class="tiny" data-f-act="remove">${r.virtual ? "Forget" : "Remove"}</button>
+            </div>
+            ${r.virtual ? "" : `<input type="text" data-f-act="path" placeholder="Full path on disk, e.g. D:\\ComfyUI\\output" value="${esc(r.rootPath || "")}" />`}
+          </div>`;
+        })
+        .join("") || `<p class="muted">No folders yet.</p>`;
+  }
+
+  function renderSettingsModules() {
+    const el = $("set-modules");
+    el.innerHTML = modules.length
+      ? modules
+          .map(
+            (m) => `<div class="module-row" data-module="${esc(m.id)}">
+              <label class="check"><input type="checkbox" ${moduleEnabled(m) ? "checked" : ""} /> <b>${esc(m.title)}</b> <span class="muted">— ${esc(m.description || "")}</span></label>
+              <div class="module-settings"></div>
+            </div>`
+          )
+          .join("")
+      : `<p class="muted">No modules installed.</p>`;
+    modules.forEach((m) => {
+      const box = el.querySelector(`[data-module="${CSS.escape(m.id)}"] .module-settings`);
+      if (m.settings && moduleEnabled(m)) m.settings(box);
+    });
+  }
+
   function openSettings() {
-    $("set-folder").innerHTML = state.rootName
-      ? `<b>${esc(state.rootName)}</b> — ${fmt(state.files.length)} images ${source.connected ? "(connected, read-only)" : "(not connected)"}`
-      : "No folder chosen yet.";
-    $("set-root-path").value = state.settings.rootPath;
-    $("set-queue-size").value = state.settings.queueSize;
-    $("set-rescan").disabled = !source.connected;
+    renderSettingsFolders();
+    renderSettingsModules();
+    $("set-index").textContent = `${fmt(features.count())} of ${fmt(state.all.length)} images indexed for colour and prompt search.`;
     $("settings").showModal();
+  }
+
+  // Opening the picker starts a colour search with its current colour.
+  function openColorPicker() {
+    if (state.view !== "library") showView("library");
+    C.colorPicker.open($("color-btn"), state.settings.lastColor || undefined, { onChange: colorMatch, onClear: () => setMatch(null), onProfile: matchProfile });
   }
 
   // -------------------------------------------------------------- keys
@@ -907,12 +2663,11 @@
       if (k === "a" && state.view === "library" && !state.lb.open) {
         e.preventDefault();
         state.lib.items.forEach((p) => state.lib.selected.add(p));
-        $("grid").querySelectorAll(".cell").forEach(decorateCell);
+        decorateAll();
         renderSelectBar();
       }
       return;
     }
-    const rateKeys = { y: "yes", p: "yes", m: "maybe", n: "no", x: "no", 0: null, u: null };
 
     if (state.lb.open) {
       const path = state.lb.items[state.lb.index];
@@ -921,185 +2676,334 @@
       else if (k === "Home") ((state.lb.index = 0), renderLightbox());
       else if (k === "End") ((state.lb.index = state.lb.items.length - 1), renderLightbox());
       else if (k === "Escape" || k === "Enter") closeLightbox();
-      else if (k === " ") setZoom(!state.lb.zoom);
-      else if (k in rateKeys) setRating(path, rateKeys[k]);
+      else if (k === " ") setViewMode(view.mode === "1:1" ? "fit" : "1:1");
+      else if (k === "+" || k === "=") zoomBy(1.25);
+      else if (k === "-") zoomBy(0.8);
+      else if (k in RATE_KEYS) setRating(path, RATE_KEYS[k]);
       else if (k === "i") toggleDetails();
       else if (k === "f") toggleFullscreen();
+      else if (k === "b") targetToggle();
       else return;
       e.preventDefault();
       return;
     }
 
-    if (k === "i" && state.view !== "welcome") return toggleDetails();
+    if (state.view === "welcome") return;
+    if (k === "i") return toggleDetails();
     if (k === "f") return toggleFullscreen();
-    if (k === "r" && state.view !== "welcome") return showView("review");
-    if (k === "l" && state.view !== "welcome") return showView("library");
+    if (k === "b") return targetToggle();
+    if (k === "l") return showView("library");
+    if (k === "[") return toggleSidebar();
+    const tab = enabledModules().find((m) => m.key && m.key === k);
+    if (tab) return showView(tab.id);
 
-    if (state.view === "review") {
-      const done = $("batch-done").classList.contains("show");
-      if (done) {
-        if (k === "Enter" || k === " ") newBatch();
-        else if (k === "Backspace" || k === "z") back();
-        else return;
-        e.preventDefault();
-        return;
-      }
-      const path = state.queue[state.qi];
-      if (k === "ArrowRight" || k === "y" || k === "p") reviewRate("yes");
-      else if (k === "ArrowUp" || k === "m") reviewRate("maybe");
-      else if (k === "ArrowLeft" || k === "n" || k === "x") reviewRate("no");
-      else if (k === "ArrowDown" || k === "s") (flashStamp("skip"), advance());
-      else if (k === "Backspace" || k === "z") back();
-      else if ((k === "0" || k === "u") && path) setRating(path, null);
-      else if (k === "Enter" && path) openLightbox(state.queue, state.qi);
-      else return;
-      e.preventDefault();
+    const m = activeModule();
+    if (m) {
+      if (m.onKey && m.onKey(e, k)) e.preventDefault();
     } else if (state.view === "library") {
+      const sel = [...state.lib.selected];
       if (k === "+" || k === "=") setThumbSize(state.settings.thumbSize + 40);
       else if (k === "-") setThumbSize(state.settings.thumbSize - 40);
-      else if (k === "Escape") clearSelection();
-      else return;
+      else if (k === "ArrowRight") moveCursor(1, 0, e.shiftKey);
+      else if (k === "ArrowLeft") moveCursor(-1, 0, e.shiftKey);
+      else if (k === "ArrowDown") moveCursor(0, 1, e.shiftKey);
+      else if (k === "ArrowUp") moveCursor(0, -1, e.shiftKey);
+      else if ((k === "Enter" || k === " ") && state.lib.focus) openLightbox(state.lib.items, state.lib.items.indexOf(state.lib.focus));
+      else if (k in RATE_KEYS && sel.length) sel.forEach((p) => setRating(p, RATE_KEYS[k]));
+      else if (k === "g") toggleGroupFolders();
+      else if (k === "d") reroll();
+      else if (k === "c") openColorPicker();
+      else if (k === "/") $("lib-search").focus();
+      else if (k === "Escape") {
+        if (state.lib.selected.size) clearSelection();
+        else if (state.lib.match) setMatch(null);
+      } else return;
       e.preventDefault();
     }
   }
 
-  // Flick the review image: right = yes, left = no, up = maybe.
-  function bindSwipe(stage) {
-    let start = null;
-    stage.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || !state.queue[state.qi]) return;
-      start = { x: e.clientX, y: e.clientY };
-      stage.setPointerCapture(e.pointerId);
-    });
-    stage.addEventListener("pointermove", (e) => {
-      if (!start) return;
-      const dx = e.clientX - start.x;
-      const dy = e.clientY - start.y;
-      $("review-img").style.transform = `translate(${dx * 0.4}px, ${dy * 0.4}px) rotate(${dx * 0.02}deg)`;
-    });
-    const end = (e) => {
-      if (!start) return;
-      const dx = e.clientX - start.x;
-      const dy = e.clientY - start.y;
-      start = null;
-      $("review-img").style.transform = "";
-      if (e.type === "pointercancel") return;
-      if (Math.abs(dx) > 90 && Math.abs(dx) > Math.abs(dy)) reviewRate(dx > 0 ? "yes" : "no");
-      else if (dy < -90) reviewRate("maybe");
-      else if (Math.abs(dx) < 5 && Math.abs(dy) < 5) openLightbox(state.queue, state.qi);
-    };
-    stage.addEventListener("pointerup", end);
-    stage.addEventListener("pointercancel", end);
-  }
-
   // ------------------------------------------------------------- bind
 
+  const DRAG_TYPE = "application/x-curator-paths";
+  const GALLERY_DRAG = "application/x-curator-gallery";
+  let dragPaths = null; // images being dragged from the grid
+  let dragCell = null; // its element, kept alive while scrolling
+  let dragEntity = null; // { kind, item } being dragged in the gallery list
+  const dropMarker = document.createElement("div");
+  dropMarker.className = "drop-marker";
+
+  // Where a drop at (x, y) would insert, in a gallery's grid.
+  function dropIndexAt(clientX, clientY) {
+    const inner = $("grid-inner").getBoundingClientRect();
+    const x = clientX - inner.left;
+    const y = clientY - inner.top;
+    const rows = grid.cellRows;
+    if (!rows.length) return { index: 0, row: null };
+    const row = rows[rowAt(rows, y)];
+    const step = grid.size + GRID_GAP;
+    const rel = x / step;
+    let index = row.start + Math.floor(rel) + (rel - Math.floor(rel) > 0.5 ? 1 : 0);
+    index = Math.max(row.start, Math.min(row.end, index));
+    return { index, row };
+  }
+
   function bind() {
-    document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showView(b.dataset.view)));
+    $("tabs").onclick = (e) => {
+      const b = e.target.closest("button[data-view]");
+      if (b) showView(b.dataset.view);
+    };
     $("settings-btn").onclick = openSettings;
-    $("pick-btn").onclick = chooseFolder;
+    $("pick-btn").onclick = addFolder;
+    $("add-folder-btn").onclick = addFolder;
     $("dir-input").onchange = onDirInput;
     $("browser-note").textContent = source.supportsHandles
-      ? "Your browser remembers the folder; next time it's one click to reconnect."
-      : "Tip: in Chrome or Edge the folder is remembered between sessions. In this browser you'll re-pick it each visit (your ratings are kept either way).";
+      ? "Your browser remembers the folders; next time it's one click to reconnect."
+      : "Tip: in Chrome or Edge folders are remembered between sessions. In this browser you'll re-pick them each visit (your ratings are kept either way).";
 
-    // review
-    $("queue-source").value = state.settings.queueSource;
-    $("queue-source").onchange = (e) => {
-      state.settings.queueSource = e.target.value;
-      saveSettings();
-      newBatch();
+    // folder tree
+    $("folder-tree").onclick = (e) => {
+      const row = e.target.closest(".tree-row");
+      if (!row) return;
+      const path = row.dataset.folder;
+      const act = e.target.closest("[data-t-act]");
+      const a = act && act.dataset.tAct;
+      if (a === "reconnect") return reconnect(path);
+      if (a === "remove") return removeRoot(path);
+      if (a === "toggle" && act.textContent) {
+        toggleExpanded(path);
+        return renderTree();
+      }
+      setSource({ type: "folder", path });
     };
-    $("queue-scope").value = state.settings.scope;
-    let scopeTimer = null;
-    $("queue-scope").oninput = (e) => {
-      state.settings.scope = e.target.value;
-      saveSettings();
-      clearTimeout(scopeTimer);
-      scopeTimer = setTimeout(newBatch, 500);
+    $("folder-tree").ondblclick = (e) => {
+      const row = e.target.closest(".tree-row");
+      if (!row || !row.dataset.folder || e.target.closest("[data-t-act]")) return;
+      toggleExpanded(row.dataset.folder);
+      renderTree();
     };
-    $("rate-bar").onclick = (e) => {
-      const b = e.target.closest("button");
-      if (!b) return;
-      const act = b.dataset.act;
-      if (RATINGS.includes(act)) reviewRate(act);
-      else if (act === "skip") (flashStamp("skip"), advance());
-      else if (act === "back") back();
-      else if (act === "info") toggleDetails();
-    };
-    $("review-msg").onclick = (e) => e.target.closest('[data-act="reconnect"]') && reconnect();
-    $("filmstrip").onclick = (e) => {
-      const b = e.target.closest(".film");
-      if (!b) return;
-      state.qi = +b.dataset.i;
-      $("batch-done").classList.remove("show");
-      renderReview();
-    };
-    $("batch-grid").onclick = (e) => {
-      const b = e.target.closest(".film");
-      if (b) openLightbox(state.queue, +b.dataset.i);
-    };
-    $("next-batch-btn").onclick = newBatch;
-    $("to-library-btn").onclick = () => showView("library");
-    bindSwipe($("review-stage"));
 
-    // library
-    $("rating-list").onclick = (e) => {
-      const li = e.target.closest("li[data-filter]");
-      if (!li) return;
-      state.settings.libFilter = li.dataset.filter;
-      state.lib.gallery = null;
-      saveSettings();
-      rebuildLibrary();
-    };
+    // galleries
     const gl = $("gallery-list");
+    $("new-group-btn").onclick = newGroup;
     gl.onclick = (e) => {
+      if (e.target.closest("[data-new-gallery]")) return newGallery();
+      const gh = e.target.closest("li[data-group]");
+      if (gh) {
+        const gr = group(gh.dataset.group);
+        const a = (e.target.closest("[data-gr-act]") || {}).dataset;
+        if (a && a.grAct === "rename") return renameGroup(gr.id);
+        if (a && a.grAct === "delete") return deleteGroup(gr.id);
+        gr.collapsed = !gr.collapsed;
+        saveGroups();
+        return renderGalleries();
+      }
       const li = e.target.closest("li[data-gallery]");
       if (!li) return;
+      const id = li.dataset.gallery;
       const act = e.target.closest("[data-g-act]");
-      if (act) return act.dataset.gAct === "rename" ? renameGallery(li.dataset.gallery) : deleteGallery(li.dataset.gallery);
-      state.lib.gallery = li.dataset.gallery;
-      rebuildLibrary();
+      if (act) {
+        const a = act.dataset.gAct;
+        return a === "rename" ? renameGallery(id) : a === "target" ? setTarget(id) : deleteGallery(id);
+      }
+      if (isSmart(gallery(id))) return openSmart(id);
+      setSource({ type: "gallery", id });
+    };
+    gl.addEventListener("dragstart", (e) => {
+      const li = e.target.closest("li[data-gallery], li[data-group]");
+      if (!li) return;
+      dragEntity = li.dataset.group ? { kind: "group", item: group(li.dataset.group) } : { kind: "g", item: gallery(li.dataset.gallery) };
+      e.dataTransfer.setData(GALLERY_DRAG, "1");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    gl.addEventListener("dragend", () => {
+      dragEntity = null;
+      gl.querySelectorAll(".drop, .drop-before").forEach((x) => x.classList.remove("drop", "drop-before"));
+    });
+    const dropTarget = (e) => e.target.closest("li[data-gallery], li[data-new-gallery], li[data-group]");
+    // Images: onto a gallery (add) or + New gallery. Galleries/groups: reorder or file into a group.
+    const dropKind = (e, li) => {
+      const t = e.dataTransfer.types;
+      if (t.includes(DRAG_TYPE)) return li.dataset.group || (li.dataset.gallery && isSmart(gallery(li.dataset.gallery))) ? null : "drop";
+      if (t.includes(GALLERY_DRAG) && dragEntity) {
+        if (li.dataset.group && dragEntity.kind === "g") return "drop";
+        if (li.dataset.gallery && li.dataset.gallery === (dragEntity.item || {}).id) return null;
+        return "drop-before";
+      }
+      return null;
     };
     gl.addEventListener("dragover", (e) => {
-      const li = e.target.closest("li[data-gallery]");
-      if (!li || !e.dataTransfer.types.includes("application/x-curator-paths")) return;
+      const li = dropTarget(e);
+      const kind = li && dropKind(e, li);
+      if (!kind) return;
       e.preventDefault();
-      gl.querySelectorAll(".drop").forEach((x) => x.classList.remove("drop"));
-      li.classList.add("drop");
+      gl.querySelectorAll(".drop, .drop-before").forEach((x) => x !== li && x.classList.remove("drop", "drop-before"));
+      li.classList.add(kind);
     });
     gl.addEventListener("dragleave", (e) => {
-      const li = e.target.closest("li[data-gallery]");
-      if (li && !li.contains(e.relatedTarget)) li.classList.remove("drop");
+      const li = dropTarget(e);
+      if (li && !li.contains(e.relatedTarget)) li.classList.remove("drop", "drop-before");
     });
     gl.addEventListener("drop", (e) => {
-      const li = e.target.closest("li[data-gallery]");
+      const li = dropTarget(e);
       if (!li) return;
       e.preventDefault();
-      li.classList.remove("drop");
-      const paths = JSON.parse(e.dataTransfer.getData("application/x-curator-paths") || "[]");
-      if (paths.length) addToGallery(paths, li.dataset.gallery);
+      li.classList.remove("drop", "drop-before");
+      if (e.dataTransfer.types.includes(GALLERY_DRAG) && dragEntity) {
+        const { kind, item } = dragEntity;
+        dragEntity = null;
+        if (li.dataset.newGallery) return placeEntity(kind, item, null, null);
+        if (li.dataset.group) {
+          const gr = group(li.dataset.group);
+          if (kind === "g") {
+            gr.collapsed = false;
+            return placeEntity("g", item, gr.id, null);
+          }
+          return placeEntity("group", item, null, gr);
+        }
+        const target = gallery(li.dataset.gallery);
+        if (kind === "group") return placeEntity("group", item, null, target.group ? group(target.group) : target);
+        return placeEntity("g", item, target.group || null, target);
+      }
+      const paths = JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || "[]");
+      if (!paths.length) return;
+      if (li.dataset.newGallery) newGallery(paths);
+      else addToGallery(paths, li.dataset.gallery);
+      renderSelectBar();
     });
-    $("new-gallery-btn").onclick = newGallery;
 
-    const grid = $("grid");
-    grid.onclick = (e) => {
-      const cell = e.target.closest(".cell");
-      if (!cell) return;
-      const i = +cell.dataset.i;
-      if (e.ctrlKey || e.metaKey || e.shiftKey) selectCell(i, e);
-      else openLightbox(state.lib.items, i);
+    // library bar
+    $("lib-filter").onclick = (e) => {
+      const b = e.target.closest("button[data-filter]");
+      if (!b) return;
+      state.settings.filter = b.dataset.filter;
+      saveSettings();
+      rebuildLibrary();
     };
-    grid.addEventListener("dragstart", (e) => {
+    $("lib-sort").onchange = (e) => setSort(e.target.value);
+    $("save-search-btn").onclick = saveSmart;
+    $("coll-bar").onclick = (e) => {
+      const b = e.target.closest("[data-c]");
+      if (!b) return;
+      const c = b.dataset.c;
+      const sg = activeSmart();
+      if (c === "info") {
+        state.lib.selected.clear();
+        state.lib.focus = null;
+        decorateAll();
+        renderSelectBar();
+        $("lib-details").dataset.path = "\0";
+        if (!state.settings.libDetails) toggleDetails(true);
+        else renderLibDetails();
+      } else if (c === "origin") openOrigin(openCollection());
+      else if (c === "hide") {
+        state.lib.hideNew = !state.lib.hideNew;
+        rebuildLibrary(true);
+      } else if (c === "accept") acceptNew();
+      else if (c === "accept-sel") acceptNew(new Set(state.lib.selected));
+      else if (c === "forget") forgetGone();
+      else if (c === "update") updateSmart();
+      else if (c === "revert" && sg) applyQuery(sg.query, sg.id);
+      else if (c === "static") smartToStatic();
+    };
+    $("rating-toggle").onclick = () => {
+      state.settings.ratingBar = !state.settings.ratingBar;
+      saveSettings();
+      renderFilterBar();
+    };
+    $("sidebar-btn").onclick = toggleSidebar;
+    $("reroll-btn").onclick = () => reroll();
+    $("shuffle-seed").onchange = (e) => reroll(e.target.value.trim() || randomSeed());
+    $("group-btn").onclick = toggleGroupFolders;
+    $("color-btn").onclick = openColorPicker;
+    $("match-chip").onclick = (e) => {
+      if (e.target.closest("[data-clear-match]")) return setMatch(null);
+      if (state.lib.match && state.lib.match.type === "color") openColorPicker();
+    };
+
+    // grid
+    const gridEl = $("grid");
+    gridEl.addEventListener("scroll", onGridScroll, { passive: true });
+    gridEl.onclick = (e) => {
+      const head = e.target.closest(".group-head");
+      if (head) return head.dataset.dir !== undefined && setSource({ type: "folder", path: head.dataset.dir });
+      const cell = e.target.closest(".cell");
+      if (!cell) {
+        if (e.target === gridEl || e.target.id === "grid-inner") clearSelection();
+        return;
+      }
+      selectCell(+cell.dataset.i, e);
+    };
+    gridEl.ondblclick = (e) => {
+      const cell = e.target.closest(".cell");
+      if (cell) openLightbox(state.lib.items, +cell.dataset.i);
+    };
+    gridEl.addEventListener("mouseover", (e) => {
+      const cell = e.target.closest(".cell");
+      clearTimeout(hoverTimer);
+      if (!cell || !state.lib.hits) return hideHoverCard();
+      hoverTimer = setTimeout(() => showHoverCard(cell), 250);
+    });
+    gridEl.addEventListener("mouseleave", hideHoverCard);
+    gridEl.addEventListener("dragstart", (e) => {
       const cell = e.target.closest(".cell");
       if (!cell) return;
+      hideHoverCard();
       const p = cell.dataset.path;
-      const paths = state.lib.selected.has(p) ? [...state.lib.selected] : [p];
-      e.dataTransfer.setData("application/x-curator-paths", JSON.stringify(paths));
-      e.dataTransfer.setData("text/plain", paths.map(fullPath).join("\n"));
-      e.dataTransfer.effectAllowed = "copy";
+      if (!state.lib.selected.has(p)) {
+        state.lib.selected = new Set([p]);
+        setFocus(p);
+      }
+      dragPaths = state.lib.items.filter((k) => state.lib.selected.has(k));
+      dragCell = cell;
+      e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(dragPaths));
+      e.dataTransfer.setData("text/plain", dragPaths.map(fullPath).join("\n"));
+      e.dataTransfer.effectAllowed = "copyMove";
     });
-    grid.addEventListener(
+    gridEl.addEventListener("dragend", () => {
+      dragPaths = null;
+      dragCell = null;
+      dropMarker.classList.remove("show");
+      if (rebuildPending) rebuildLibrary(true);
+      else renderVisible();
+    });
+    // Arrange by dragging, inside a gallery.
+    gridEl.addEventListener("dragover", (e) => {
+      if (!dragPaths || !inGallerySrc() || state.lib.groups) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const r = gridEl.getBoundingClientRect();
+      if (e.clientY < r.top + 40) gridEl.scrollTop -= 20;
+      else if (e.clientY > r.bottom - 40) gridEl.scrollTop += 20;
+      const { index, row } = dropIndexAt(e.clientX, e.clientY);
+      if (!row) return;
+      const step = grid.size + GRID_GAP;
+      dropMarker.style.left = (index - row.start) * step - GRID_GAP / 2 - 1 + "px";
+      dropMarker.style.top = row.y + "px";
+      dropMarker.style.height = grid.size + "px";
+      dropMarker.classList.add("show");
+    });
+    gridEl.addEventListener("dragleave", (e) => {
+      if (!gridEl.contains(e.relatedTarget)) dropMarker.classList.remove("show");
+    });
+    gridEl.addEventListener("drop", (e) => {
+      if (!dragPaths || !inGallerySrc() || state.lib.groups) return;
+      e.preventDefault();
+      dropMarker.classList.remove("show");
+      const { index } = dropIndexAt(e.clientX, e.clientY);
+      const moving = new Set(dragPaths);
+      let before = null;
+      for (let i = index; i < state.lib.items.length; i++) {
+        if (!moving.has(state.lib.items[i])) {
+          before = state.lib.items[i];
+          break;
+        }
+      }
+      const moving2 = dragPaths;
+      dragPaths = null;
+      dragCell = null;
+      moveInGallery(state.settings.src.id, moving2, before);
+    });
+    gridEl.addEventListener(
       "wheel",
       (e) => {
         if (!e.ctrlKey) return;
@@ -1108,41 +3012,32 @@
       },
       { passive: false }
     );
+    new ResizeObserver(() => layoutGrid()).observe(gridEl);
     let searchTimer = null;
     $("lib-search").oninput = (e) => {
       state.lib.search = e.target.value;
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(rebuildLibrary, 200);
-    };
-    $("lib-sort").value = state.settings.libSort;
-    $("lib-sort").onchange = (e) => {
-      state.settings.libSort = e.target.value;
-      saveSettings();
-      rebuildLibrary();
+      searchTimer = setTimeout(() => rebuildLibrary(), 220);
     };
     $("thumb-size").value = state.settings.thumbSize;
     $("thumb-size").oninput = (e) => setThumbSize(+e.target.value);
-    new ResizeObserver(layoutGrid).observe(grid);
     $("fit-btn").onclick = () => {
       state.settings.thumbFit = state.settings.thumbFit === "contain" ? "cover" : "contain";
       saveSettings();
       applyThumbFit();
     };
     $("select-add").onclick = () => {
-      let id = $("select-gallery").value;
-      if (id === "__new") {
-        const g = newGallery();
-        if (!g) return;
-        id = g.id;
-      }
-      addToGallery([...state.lib.selected], id);
+      const id = $("select-gallery").value;
+      if (id === "__new") newGallery([...state.lib.selected]);
+      else addToGallery([...state.lib.selected], id);
       renderSelectBar();
     };
     $("select-remove").onclick = () => {
-      if (!state.lib.gallery) return;
-      addToGallery([...state.lib.selected], state.lib.gallery, true);
+      const s = state.settings.src;
+      if (s.type !== "gallery") return;
+      addToGallery([...state.lib.selected], s.id, true);
       state.lib.selected.clear();
-      rebuildLibrary();
+      rebuildLibrary(true);
     };
     $("select-bar").addEventListener("click", (e) => {
       const b = e.target.closest("[data-rate]");
@@ -1153,35 +3048,41 @@
     $("select-clear").onclick = clearSelection;
 
     // lightbox
-    $("lb-prev").onclick = () => lbStep(-1);
-    $("lb-next").onclick = () => lbStep(1);
     $("lb-close").onclick = closeLightbox;
-    $("lb-full").onclick = toggleFullscreen;
     $("lb-info").onclick = () => toggleDetails();
-    $("lb-zoom").onclick = () => setZoom(!state.lb.zoom);
-    $("lb-stage").onclick = (e) => {
-      if (e.target.id === "lb-img") setZoom(!state.lb.zoom, e);
-      else if (!state.lb.zoom) closeLightbox();
-    };
+    $("fullscreen-btn").onclick = toggleFullscreen;
+    bindView();
 
     // settings
-    $("set-change").onclick = () => {
+    $("set-add").onclick = () => {
       $("settings").close();
-      chooseFolder();
+      addFolder();
     };
-    $("set-rescan").onclick = () => {
-      $("settings").close();
-      scanNow(true);
-    };
-    $("set-root-path").oninput = (e) => {
-      state.settings.rootPath = e.target.value.trim();
+    $("set-folders").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-f-act]");
+      if (!b) return;
+      const id = b.closest("[data-root]").dataset.root;
+      const a = b.dataset.fAct;
+      if (a === "rescan") {
+        $("settings").close();
+        scanRoot(id, true);
+      } else if (a === "reconnect") reconnect(id).then(renderSettingsFolders);
+      else if (a === "remove") removeRoot(id);
+    });
+    $("set-folders").addEventListener("input", (e) => {
+      if (e.target.dataset.fAct !== "path") return;
+      const root = rootById(e.target.closest("[data-root]").dataset.root);
+      root.rootPath = e.target.value.trim();
+      store.put("roots", root);
+    });
+    $("set-modules").addEventListener("change", (e) => {
+      const row = e.target.closest("[data-module]");
+      if (!row || e.target.type !== "checkbox") return;
+      state.settings.modules[row.dataset.module] = e.target.checked;
       saveSettings();
-    };
-    $("set-queue-size").oninput = (e) => {
-      const n = parseInt(e.target.value, 10);
-      if (n > 0) state.settings.queueSize = Math.min(200, n);
-      saveSettings();
-    };
+      renderSettingsModules();
+      showView(state.view === "welcome" ? "welcome" : state.view);
+    });
     $("set-export").onclick = exportData;
     $("set-import").onclick = () => $("import-input").click();
     $("import-input").onchange = (e) => {
@@ -1191,6 +3092,7 @@
     $("set-clear-thumbs").onclick = async () => {
       await images.clearThumbCache();
       toast("Thumbnail cache cleared");
+      if (state.view === "library") rebuildLibrary(true);
     };
 
     document.addEventListener("keydown", onKey);
@@ -1199,43 +3101,98 @@
   // -------------------------------------------------------------- init
 
   async function init() {
-    const [settings, files, rootName, handle, recs, gals] = await Promise.all([
-      store.get("kv", "settings"),
-      store.get("kv", "files"),
-      store.get("kv", "rootName"),
-      store.get("kv", "rootHandle").catch(() => null),
+    Object.assign(state.settings, (await store.get("kv", "settings")) || {});
+    state.settings.src = state.settings.src || { type: "folder", path: "" };
+    await migrateV1();
+
+    const [roots, recs, gals, groups] = await Promise.all([
+      store.getAll("roots"),
       store.getAll("records"),
       store.getAll("galleries"),
+      store.get("kv", "galleryGroups"),
+      features.load(),
     ]);
-    Object.assign(state.settings, settings || {});
-    state.files = files || [];
-    state.fileSet = new Set(state.files);
-    state.rootName = rootName || "";
-    state.storedHandle = handle || null;
+    state.roots = roots.sort((a, b) => a.added - b.added);
+    await Promise.all(state.roots.map(async (r) => state.files.set(r.id, (await store.get("kv", "files:" + r.id)) || [])));
+    const orphans = await store.get("kv", "files:" + ORPHAN);
+    if (orphans && orphans.length) {
+      state.files.set(ORPHAN, orphans);
+      state.roots.push(orphanRoot());
+    }
     for (const r of recs) state.records.set(r.path, r);
+    state.groups = groups || [];
     state.galleries = gals.sort((a, b) => a.created - b.created);
+    // Galleries from before groups/ordering: give them a place in the list.
+    state.galleries.forEach((g, i) => {
+      if (!g.kind) g.kind = "static";
+      if (g.pos === undefined) g.pos = i;
+      if (g.group === undefined) g.group = null;
+      if (g.group && !group(g.group)) g.group = null;
+    });
+    if (!state.settings.shuffleSeed) state.settings.shuffleSeed = randomSeed();
     document.body.classList.toggle("details-open", !!state.settings.detailsOpen);
+    document.body.classList.toggle("lib-details", !!state.settings.libDetails);
+    document.body.classList.toggle("sidebar-hidden", !!state.settings.sidebarHidden);
+
+    const api = {
+      state,
+      $,
+      esc,
+      fmt,
+      plural,
+      toast,
+      record,
+      setRating,
+      srcKeys,
+      srcLabel,
+      sample,
+      setThumb,
+      openLightbox,
+      toggleDetails,
+      saveSettings,
+      showView,
+      isActive: (id) => state.view === id && !state.lb.open,
+      views: $("views"),
+    };
+    for (const m of modules) if (m.init) m.init(api);
+
+    $("app").appendChild(Object.assign(document.createElement("div"), { id: "hovercard", className: "hovercard" }));
+    features.on("progress", renderIndexStatus);
+    features.on("batch", () => {
+      refreshSmartStatus();
+      // New palettes/prompts can change what a colour or prompt search shows.
+      if (state.view === "library" && (state.lib.match || state.lib.hits)) rebuildLibrary(true);
+    });
 
     bind();
+    rebuildIndex();
 
-    let connected = false;
-    if (handle && source.supportsHandles) {
-      try {
-        connected = await source.hasPermission(handle, false);
-      } catch (e) {
-        /* stale handle */
+    if (source.supportsHandles) {
+      for (const r of state.roots) {
+        if (!r.handle) continue;
+        try {
+          if (await source.hasPermission(r.handle, false)) source.useHandle(r.id, r.handle);
+        } catch (e) {
+          /* stale handle */
+        }
       }
-      if (connected) source.useHandle(handle);
     }
+    renderSidebar();
     renderStats();
     renderSourceStatus();
+    renderMatchChip();
+    const reopen = gallery(state.settings.activeSmart);
+    if (isSmart(reopen)) loadQuery(reopen.query, reopen.id);
     showView(state.settings.view);
-    if (connected) scanNow(false);
+    refreshSmartStatus(true);
+    startIndexing();
+    // Pick up new images in the background, one folder at a time.
+    for (const r of state.roots) if (source.isConnected(r.id)) await scanRoot(r.id, false);
   }
 
   C.app = {
     record,
-    galleries: () => state.galleries,
+    galleries: () => staticGalleries(),
     setRating,
     setNotes,
     toggleGallery,
@@ -1243,12 +3200,20 @@
     copyPath,
     copyText,
     openOriginal,
+    showInFolder,
+    saveSmart,
+    searchColor,
+    findSimilar,
+    saveProfile,
     toggleDetails,
     state,
   };
 
-  init().catch((e) => {
-    console.error(e);
-    document.body.insertAdjacentHTML("afterbegin", `<p class="fatal">Failed to start: ${esc(e.message)}</p>`);
-  });
+  // Modules load after this file, so start once every script has run.
+  document.addEventListener("DOMContentLoaded", () =>
+    init().catch((e) => {
+      console.error(e);
+      document.body.insertAdjacentHTML("afterbegin", `<p class="fatal">Failed to start: ${esc(e.message)}</p>`);
+    })
+  );
 })();

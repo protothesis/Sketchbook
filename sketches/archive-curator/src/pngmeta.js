@@ -1,6 +1,6 @@
 // Pulls generation metadata out of PNG text chunks — ComfyUI embeds its
 // API-format graph as "prompt" (and the editor graph as "workflow");
-// A1111/Forge write a single "parameters" string. Read-only, on demand.
+// A1111/Forge write a single "parameters" string. Read-only.
 (function () {
   const C = (window.Curator = window.Curator || {});
   const SIG = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -19,19 +19,32 @@
     return new Uint8Array(await new Response(stream).arrayBuffer());
   }
 
+  // Reads chunk by chunk through file.slice() rather than loading the whole
+  // file: text chunks normally sit before the image data, so once one has
+  // been found, the first IDAT ends the search.
   async function readChunks(file) {
-    const buf = new Uint8Array(await file.arrayBuffer());
+    let buf = new Uint8Array(await file.slice(0, 1 << 18).arrayBuffer());
+    let bufStart = 0;
+    const bytes = async (pos, len) => {
+      if (pos >= bufStart && pos + len <= bufStart + buf.length) return buf.subarray(pos - bufStart, pos - bufStart + len);
+      buf = new Uint8Array(await file.slice(pos, pos + Math.max(len, 1 << 12)).arrayBuffer());
+      bufStart = pos;
+      return buf.subarray(0, len);
+    };
     for (let i = 0; i < 8; i++) if (buf[i] !== SIG[i]) return {};
-    const view = new DataView(buf.buffer);
     const out = {};
     let pos = 8;
-    while (pos + 8 <= buf.length) {
-      const len = view.getUint32(pos);
-      const type = String.fromCharCode(buf[pos + 4], buf[pos + 5], buf[pos + 6], buf[pos + 7]);
-      const data = buf.subarray(pos + 8, pos + 8 + len);
+    while (pos + 8 <= file.size) {
+      const h = await bytes(pos, 8);
+      if (h.length < 8) break;
+      const len = ((h[0] << 24) | (h[1] << 16) | (h[2] << 8) | h[3]) >>> 0;
+      const type = String.fromCharCode(h[4], h[5], h[6], h[7]);
+      const dataPos = pos + 8;
       pos += 12 + len;
       if (type === "IEND") break;
+      if (type === "IDAT" && Object.keys(out).length) break;
       if (type !== "tEXt" && type !== "iTXt" && type !== "zTXt") continue;
+      const data = (await bytes(dataPos, len)).slice();
       const nul = data.indexOf(0);
       if (nul < 0) continue;
       const key = new TextDecoder("latin1").decode(data.subarray(0, nul));

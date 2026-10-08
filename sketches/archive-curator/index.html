@@ -4,145 +4,127 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Archive Curator</title>
-<meta name="description" content="Flashcard-style random review and curation for a huge local image archive. Read-only: a metadata layer over your files." />
+<meta name="description" content="A fast, minimal viewer and organizer for big local image archives: folder tree, virtual galleries, ratings and notes, with optional modules like flashcard review. Read-only: a metadata layer over your files." />
 <link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="src/modules/review.css" />
 </head>
 <body>
 <div id="app">
   <header class="topbar">
+    <button class="icon-btn" id="sidebar-btn" title="Show/hide folders &amp; galleries ([)">&#9776;</button>
     <div class="brand">Archive<span>Curator</span></div>
-    <nav class="tabs">
-      <button data-view="review" title="Flashcard review (R)">Review</button>
-      <button data-view="library" title="Library (L)">Library</button>
-    </nav>
+    <nav class="tabs" id="tabs"></nav>
     <div class="stats" id="stats"></div>
+    <span class="index-status" id="index-status" hidden></span>
     <div class="source-status" id="source-status"></div>
+    <button class="icon-btn" id="fullscreen-btn" title="Fullscreen (F)">&#x26F6;</button>
     <button class="icon-btn" id="settings-btn" title="Settings">&#9881;</button>
   </header>
 
-  <!-- First run -->
-  <section class="view" id="view-welcome">
-    <div class="welcome">
-      <h1>Point me at an image archive.</h1>
-      <p>
-        Pick a folder (e.g. your ComfyUI <code>output</code> folder). It's
-        scanned recursively and served back to you ten random images at a
-        time. Rate them, note them, group them into virtual galleries.
-      </p>
-      <p class="muted">
-        Strictly read-only — nothing is ever moved, copied, renamed or
-        deleted. Ratings, notes and galleries live in this browser's storage
-        and can be exported as JSON.
-      </p>
-      <button class="primary big" id="pick-btn">Choose folder&hellip;</button>
-      <input type="file" id="dir-input" webkitdirectory multiple hidden />
-      <p class="muted small" id="browser-note"></p>
-    </div>
-  </section>
-
-  <!-- Flashcard review -->
-  <section class="view" id="view-review">
-    <div class="review-bar">
-      <label>Queue from
-        <select id="queue-source">
-          <option value="unreviewed">Unreviewed</option>
-          <option value="maybe">Maybes (re-rate)</option>
-          <option value="yes">Yeses (re-rate)</option>
-          <option value="no">Nos (second chance)</option>
-        </select>
-      </label>
-      <label>Path contains
-        <input type="search" id="queue-scope" placeholder="e.g. 2024-05" />
-      </label>
-      <span class="spacer"></span>
-      <span class="session-stats" id="session-stats"></span>
-    </div>
-    <div class="review-body">
-      <div class="review-main">
-        <div class="stage" id="review-stage">
-          <img id="review-img" alt="" />
-          <div class="stamp" id="review-stamp"></div>
-          <div class="stage-msg" id="review-msg"></div>
-        </div>
-        <div class="rate-bar" id="rate-bar">
-          <button data-act="back" title="Back (Backspace)">&#8630; Back</button>
-          <span class="spacer"></span>
-          <button class="rate no" data-act="no" title="No (&larr; or N)"><kbd>&larr;</kbd> No</button>
-          <button class="rate maybe" data-act="maybe" title="Maybe (&uarr; or M)"><kbd>&uarr;</kbd> Maybe</button>
-          <button class="rate yes" data-act="yes" title="Yes (&rarr; or Y)"><kbd>&rarr;</kbd> Yes</button>
-          <span class="spacer"></span>
-          <button data-act="skip" title="Skip (&darr; or S)">Skip <kbd>&darr;</kbd></button>
-          <button data-act="info" title="Details & notes (I)">Info <kbd>I</kbd></button>
-        </div>
-        <div class="filmstrip" id="filmstrip"></div>
-      </div>
-      <aside class="details-panel" id="review-details"></aside>
-    </div>
-    <div class="batch-done" id="batch-done">
-      <div class="batch-card">
-        <h2>Batch done</h2>
-        <p id="batch-summary"></p>
-        <div class="batch-grid" id="batch-grid"></div>
-        <div class="batch-actions">
-          <button class="primary big" id="next-batch-btn">Next batch <kbd>Enter</kbd></button>
-          <button class="big" id="to-library-btn">Library <kbd>L</kbd></button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Library -->
-  <section class="view" id="view-library">
-    <aside class="sidebar">
-      <h3>Rating</h3>
-      <ul class="nav-list" id="rating-list"></ul>
-      <h3>Galleries <button class="tiny" id="new-gallery-btn" title="New gallery">+</button></h3>
+  <div class="main">
+    <!-- Shared by every view: what you're looking at -->
+    <aside class="sidebar" id="sidebar">
+      <h3>Folders <button class="tiny" id="add-folder-btn" title="Add another folder">+ Add</button></h3>
+      <div class="tree" id="folder-tree"></div>
+      <h3>Galleries <button class="tiny" id="new-group-btn" title="New group of galleries">+ Group</button></h3>
       <ul class="nav-list" id="gallery-list"></ul>
-      <p class="muted small hint">Ctrl/&#8984;-click or Shift-click thumbnails to select; drag them onto a gallery.</p>
+      <p class="muted small hint">
+        Click to select (Ctrl/&#8984; or Shift for more), double-click to open.
+        Drag a selection onto a gallery, or onto <b>+ New gallery</b> to make
+        one. <kbd>B</kbd> adds to the target gallery (&#9673;). Drag galleries
+        to reorder them or file them into a group.
+      </p>
     </aside>
-    <div class="lib-main">
-      <div class="lib-bar">
-        <input type="search" id="lib-search" placeholder="Search path or notes&hellip;" />
-        <select id="lib-sort">
-          <option value="recent">Recently rated</option>
-          <option value="path">Chronological (path)</option>
-          <option value="path-desc">Reverse chronological</option>
-          <option value="shuffle">Shuffle</option>
-        </select>
-        <button id="fit-btn">Fit</button>
-        <label class="size">&#9638;
-          <input type="range" id="thumb-size" min="80" max="520" step="10" />
-        </label>
-        <span class="muted" id="lib-count"></span>
-      </div>
-      <div class="select-bar" id="select-bar">
-        <span id="select-count"></span>
-        <select id="select-gallery"></select>
-        <button id="select-add">Add to gallery</button>
-        <button id="select-remove">Remove from this gallery</button>
-        <span class="divider"></span>
-        <button class="rate yes" data-rate="yes">Yes</button>
-        <button class="rate maybe" data-rate="maybe">Maybe</button>
-        <button class="rate no" data-rate="no">No</button>
-        <span class="spacer"></span>
-        <button id="select-clear">Clear <kbd>Esc</kbd></button>
-      </div>
-      <div class="grid" id="grid"></div>
-      <div class="empty" id="lib-empty"></div>
+
+    <div class="views" id="views">
+      <!-- First run -->
+      <section class="view" id="view-welcome">
+        <div class="welcome">
+          <h1>Point me at your images.</h1>
+          <p>
+            Add a folder (e.g. your ComfyUI <code>output</code> folder or a photo
+            archive). It's scanned recursively. Add as many folders as you like
+            and browse them all together or one at a time.
+          </p>
+          <p class="muted">
+            Strictly read-only — nothing is ever moved, copied, renamed or
+            deleted. Ratings, notes and galleries live in this browser's storage
+            and can be exported as JSON.
+          </p>
+          <button class="primary big" id="pick-btn">Add folder&hellip;</button>
+          <p class="muted small" id="browser-note"></p>
+        </div>
+      </section>
+
+      <!-- Library (core) -->
+      <section class="view" id="view-library">
+       <div class="lib-main">
+        <div class="lib-bar">
+          <div class="lb-group lb-where">
+            <span class="lib-title" id="lib-title"></span>
+            <span class="muted" id="lib-count"></span>
+          </div>
+          <div class="lb-group" title="Filter">
+            <button id="rating-toggle" title="Rating filters">&#9733;</button>
+            <div class="seg filter" id="lib-filter" hidden></div>
+            <input type="search" id="lib-search" placeholder="Search names, notes, prompts&hellip; ( / )" title="Matches file path and name, notes, prompts and model names. Every word must match somewhere." />
+            <button id="color-btn" title="Search by colour (C)"><span class="sw"></span> Colour</button>
+            <span class="match-chip" id="match-chip" hidden></span>
+            <button id="save-search-btn" title="Save this search as a smart gallery">&#9734; Save</button>
+          </div>
+          <div class="lb-group" title="Sort">
+            <select id="lib-sort" title="Sort"></select>
+            <span class="shuffle-ctl" id="shuffle-ctl" hidden>
+              <button id="reroll-btn" title="Reroll the shuffle (D)">&#127922;</button>
+              <input type="text" id="shuffle-seed" spellcheck="false" title="Shuffle seed — type one to get the same order back" />
+            </span>
+          </div>
+          <div class="lb-group" title="View">
+            <button id="group-btn" title="Folder headers (G)">&#9636; Folders</button>
+            <button id="fit-btn">Fit</button>
+            <label class="size" title="Thumbnail size (+ / &minus;, Ctrl+scroll)">&#9638;
+              <input type="range" id="thumb-size" min="80" max="520" step="10" />
+            </label>
+          </div>
+        </div>
+        <div class="coll-bar" id="coll-bar" hidden></div>
+        <div class="select-bar" id="select-bar">
+          <span id="select-count"></span>
+          <select id="select-gallery"></select>
+          <button id="select-add">Add to gallery</button>
+          <button id="select-remove">Remove from this gallery</button>
+          <span class="divider"></span>
+          <button class="rate yes" data-rate="yes">Yes</button>
+          <button class="rate maybe" data-rate="maybe">Maybe</button>
+          <button class="rate no" data-rate="no">No</button>
+          <span class="spacer"></span>
+          <button id="select-clear">Clear <kbd>Esc</kbd></button>
+        </div>
+        <div class="grid" id="grid"><div class="grid-inner" id="grid-inner"></div></div>
+        <div class="empty" id="lib-empty"></div>
+       </div>
+       <aside class="details-panel" id="lib-details"></aside>
+      </section>
+      <!-- Modules (src/modules/*.js) add their own views here. -->
     </div>
-  </section>
+  </div>
 
   <!-- Lightbox -->
   <div class="lightbox" id="lightbox">
     <div class="lb-main">
-      <div class="lb-stage" id="lb-stage"><img id="lb-img" alt="" /></div>
-      <button class="lb-nav prev" id="lb-prev" title="Previous (&larr;)">&#8249;</button>
-      <button class="lb-nav next" id="lb-next" title="Next (&rarr;)">&#8250;</button>
+      <div class="lb-stage" id="lb-stage"><img id="lb-img" alt="" draggable="false" /></div>
+      <!-- Click zones (the stage handles the clicks; these only show where they are) -->
+      <div class="lb-zone prev" id="lb-prev"><span>&#8249;</span></div>
+      <div class="lb-zone next" id="lb-next"><span>&#8250;</span></div>
+      <div class="lb-mini" id="lb-mini" hidden title="Click or drag to move around"><img alt="" draggable="false" /><div class="lb-mini-rect"></div></div>
       <div class="lb-top">
         <span id="lb-pos"></span>
         <span class="spacer"></span>
-        <button id="lb-zoom" title="Toggle 100% (Space / click)">1:1</button>
-        <button id="lb-full" title="Fullscreen (F)">&#x26F6;</button>
+        <span class="lb-scale" id="lb-scale" title="Scroll to zoom, drag to move"></span>
+        <div class="seg lb-modes">
+          <button id="lb-fit" title="Fit the whole image to the screen (Space / double-click)">Fit</button>
+          <button id="lb-one" title="Actual pixels (Space / double-click)">1:1</button>
+        </div>
         <button id="lb-info" title="Details & notes (I)">Info</button>
         <button id="lb-close" title="Close (Esc)">&times;</button>
       </div>
@@ -155,19 +137,20 @@
     <form method="dialog" class="settings">
       <h2>Settings</h2>
       <section>
-        <h3>Folder</h3>
-        <p id="set-folder"></p>
+        <h3>Folders</h3>
+        <div class="folder-list" id="set-folders"></div>
         <div class="row">
-          <button type="button" id="set-change">Change folder&hellip;</button>
-          <button type="button" id="set-rescan">Rescan</button>
+          <button type="button" id="set-add">Add folder&hellip;</button>
         </div>
-        <label>Full path of that folder on disk <span class="muted">(only used to build copyable paths — browsers can't see it)</span>
-          <input type="text" id="set-root-path" placeholder="D:\ComfyUI\output" />
-        </label>
+        <p class="muted small">
+          The disk path is only used to build copyable paths (browsers can't see
+          it). Removing a folder forgets its file list and thumbnails; its
+          ratings, notes and galleries come back if you add it again.
+        </p>
       </section>
       <section>
-        <h3>Review</h3>
-        <label>Images per batch <input type="number" id="set-queue-size" min="1" max="200" /></label>
+        <h3>Modules</h3>
+        <div id="set-modules"></div>
       </section>
       <section>
         <h3>Data</h3>
@@ -176,29 +159,36 @@
           <button type="button" id="set-import">Import JSON&hellip;</button>
           <button type="button" id="set-clear-thumbs">Clear thumbnail cache</button>
         </div>
+        <p class="muted small" id="set-index"></p>
         <input type="file" id="import-input" accept=".json,application/json" hidden />
       </section>
       <section>
         <h3>Keys</h3>
-        <dl class="keys">
-          <dt>&rarr; / Y / P</dt><dd>Yes (review) &middot; in lightbox &larr;&rarr; navigate, Y/M/N rate</dd>
-          <dt>&uarr; / M</dt><dd>Maybe</dd>
-          <dt>&larr; / N / X</dt><dd>No</dd>
-          <dt>&darr; / S</dt><dd>Skip</dd>
-          <dt>Backspace / Z</dt><dd>Back one image</dd>
-          <dt>0 / U</dt><dd>Clear rating</dd>
+        <dl class="keys" id="set-keys">
+          <dt>L</dt><dd>Library</dd>
+          <dt>[</dt><dd>Show/hide the folders &amp; galleries panel</dd>
+          <dt>Click / dbl-click</dt><dd>Select / open (library); Ctrl/&#8984; and Shift add to the selection</dd>
+          <dt>Arrows, Enter</dt><dd>Move the cursor (Shift extends), open it (library)</dd>
+          <dt>G</dt><dd>Folder headers on/off</dd>
+          <dt>D</dt><dd>Reroll the shuffle</dd>
+          <dt>C</dt><dd>Search by colour</dd>
+          <dt>/</dt><dd>Search box</dd>
           <dt>I</dt><dd>Details, prompt &amp; notes</dd>
           <dt>F</dt><dd>Fullscreen</dd>
-          <dt>Enter</dt><dd>Open current image in lightbox / next batch</dd>
-          <dt>R / L</dt><dd>Review / Library</dd>
-          <dt>+ / &minus;</dt><dd>Thumbnail size (library)</dd>
-          <dt>Ctrl+A</dt><dd>Select all (library)</dd>
+          <dt>B</dt><dd>Add/remove current image or selection to the target gallery</dd>
+          <dt>Y / M / N, 0</dt><dd>Rate yes / maybe / no, clear (selection or lightbox)</dd>
+          <dt>&larr; &rarr;</dt><dd>Previous / next (lightbox; or click the left/right fifth of the screen)</dd>
+          <dt>Scroll, drag</dt><dd>Zoom around the cursor, move the image (lightbox)</dd>
+          <dt>Space / dbl-click</dt><dd>Fit &harr; 1:1 actual pixels (lightbox); + / &minus; zoom</dd>
+          <dt>+ / &minus;</dt><dd>Thumbnail size (library; also Ctrl+scroll)</dd>
+          <dt>Ctrl+A / Esc</dt><dd>Select all / clear selection (library)</dd>
         </dl>
       </section>
       <div class="row end"><button class="primary" value="close">Done</button></div>
     </form>
   </dialog>
 
+  <input type="file" id="dir-input" webkitdirectory multiple hidden />
   <div class="scan-overlay" id="scan-overlay"><div><div class="spinner"></div><p id="scan-text">Scanning&hellip;</p></div></div>
   <div class="toast" id="toast"></div>
 </div>
@@ -207,8 +197,12 @@
 <script src="src/source.js"></script>
 <script src="src/images.js"></script>
 <script src="src/pngmeta.js"></script>
+<script src="src/features.js"></script>
+<script src="src/colorpicker.js"></script>
 <script src="src/markdown.js"></script>
 <script src="src/details.js"></script>
 <script src="src/app.js"></script>
+<!-- Modules: each registers itself with Curator.registerModule(). -->
+<script src="src/modules/review.js"></script>
 </body>
 </html>
