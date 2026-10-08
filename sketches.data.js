@@ -19,10 +19,10 @@ window.SKETCHES = [
   {
     slug: "archive-curator",
     title: "Archive Curator",
-    description: "Flashcard-style random review and curation for a huge local image archive (e.g. ComfyUI outputs) — a read-only metadata layer of ratings, notes and virtual galleries.",
+    description: "A fast, minimal viewer and organizer for big local image archives (ComfyUI outputs, photos): multi-folder tree, virtual galleries, ratings and notes over read-only files, with optional modules like flashcard review.",
     date: "2026-10-01",
-    status: "prototype",
-    tags: ["images","curation","tool","comfyui","file-system-access"],
+    status: "active",
+    tags: ["images","viewer","curation","tool","comfyui","file-system-access"],
     demo: "sketches/archive-curator/index.html",
   },
   {
