@@ -8,6 +8,8 @@
 //   place: { id, name, seed, base, settings, locked, generator, from, found }
 //     base      settings it was discovered with (what it shows when unlocked)
 //     settings  the locked settings (null unless locked)
+//     roads     the roads out it had when last seen, [{ destination, bearing,
+//               ferry }], so the atlas map can show roads not yet taken
 //   link:  { from, to, bearing } a road leaving `from` at a compass bearing.
 //          Every road is stored both ways.
 // A place's links become the `roads` constraint when it is generated, so a
@@ -55,21 +57,46 @@
    * The draws come from world + name, so the same first visit always
    * discovers the same town; after that the atlas remembers it.
    */
-  function discover(world, name, origin) {
+  // Settings that plausibly sit a road apart. A change of setting picks one
+  // of these, so a lakeside town doesn't lead straight into the desert.
+  var NEAR_ENVS = {
+    valley: ['plains', 'forest', 'lakeside', 'highlands'], plains: ['valley', 'forest', 'coast', 'lakeside', 'arid'],
+    coast: ['plains', 'valley', 'highlands', 'arid'], highlands: ['valley', 'forest', 'lakeside', 'coast', 'arid'],
+    forest: ['valley', 'plains', 'highlands', 'lakeside'], lakeside: ['valley', 'forest', 'plains', 'highlands'],
+    island: ['coast'], arid: ['plains', 'highlands', 'coast']
+  };
+  // No road leads to an island: you get there by ferry, which only ever
+  // lands on an island or the coast.
+  function roadEnv(env) { return env === 'island' ? 'coast' : env; }
+  var FERRY_ENVS = { island: ['island', 'coast'], coast: ['island', 'island', 'coast'] };
+  // Where the sliders drift back to, so a long road doesn't run away to the
+  // extremes: each town moves a fifth of the way back, plus some noise.
+  var TYPICAL = { planning: 0.25, density: 0.5, farmland: 0.6, woodland: 0.5 };
+
+  function discover(world, name, origin, byFerry) {
     var rand = R.createRng(String(world), 'discover|' + slug(name)), op = origin && origin.params || VG.DEFAULTS;
-    var envs = Object.keys(VG.ENVIRONMENTS).filter(function (e) { return e !== 'island'; });
+    var envs = NEAR_ENVS[op.environment] || NEAR_ENVS.valley;
     var u = rand(), cls = u < 0.3 ? 0 : u < 0.72 ? 1 : u < 0.92 ? 2 : 3, c = VG.SIZES[cls];
     var top = cls === VG.SIZES.length - 1 ? c.range[1] : c.range[1] - 1;
     var pop = Math.min(top, Math.round(c.range[0] * Math.pow(c.range[1] / c.range[0], rand())));
     // The name can say where it is ("Lynport" is on the coast); otherwise
     // it mostly shares its neighbour's land.
-    var sameLand = rand() < (op.environment === 'arid' ? 0.9 : 0.6), other = envs[Math.floor(rand() * envs.length)];
-    var hint = VG.names.envHint(name), useHint = rand() < 0.6;
+    var sameLand = rand() < 0.6, other = envs[Math.floor(rand() * envs.length)];
+    // Desert towns only ever name desert-sounding neighbours, so an arid
+    // hint is weak or deserts would never end.
+    var hint = VG.names.envHint(name), useHint = rand() < (hint === 'arid' ? 0.3 : 0.6);
     var env = hint && useHint ? hint : sameLand ? op.environment : other;
+    if (byFerry) {
+      var shores = FERRY_ENVS[op.environment] || FERRY_ENVS.coast;
+      env = hint === 'coast' && useHint ? 'coast' : shores[Math.floor(rand() * shores.length)];
+    } else env = roadEnv(env);
     sameLand = env === op.environment;
     var riverRoll = rand();
     var river = sameLand && origin && origin.river && riverRoll < 0.7 ? 'yes' : 'auto';
-    function near(k) { return Math.round(G.clamp(+op[k] + rand.gauss() * 0.15, 0, 1) * 20) / 20; }
+    function near(k) {
+      var v = +op[k] + (TYPICAL[k] - op[k]) * 0.2 + rand.gauss() * 0.15;
+      return Math.round(G.clamp(v, 0, 1) * 20) / 20;
+    }
     return {
       seed: seedFor(world, name), population: pop, environment: env, river: river,
       planning: near('planning'), density: near('density'), farmland: near('farmland'), woodland: near('woodland')
@@ -101,12 +128,14 @@
    * A road from `from` to `to`, leaving `from` at `bearing`. The far end gets
    * a road back from the opposite side, unless it already has one.
    */
-  function connect(A, from, to, bearing) {
+  function connect(A, from, to, bearing, ferry) {
     var b = Math.round(((+bearing % 360) + 360) % 360);
     // An existing link keeps its bearing even if the road had to swing round
-    // water: the bearing is the constraint that reproduces that road.
-    if (!linkBetween(A, from, to)) A.links.push({ from: from, to: to, bearing: b });
-    if (!linkBetween(A, to, from)) A.links.push({ from: to, to: from, bearing: (b + 180) % 360 });
+    // water: the bearing is the constraint that reproduces that road. A
+    // ferry is a ferry at both ends.
+    function link(f, t, br) { var l = { from: f, to: t, bearing: br }; if (ferry) l.ferry = true; A.links.push(l); }
+    if (!linkBetween(A, from, to)) link(from, to, b);
+    if (!linkBetween(A, to, from)) link(to, from, (b + 180) % 360);
   }
 
   function linksFrom(A, id) { return A.links.filter(function (l) { return l.from === id; }); }
@@ -119,7 +148,11 @@
     return o;
   }
   function roadsFor(A, id) {
-    return linksFrom(A, id).map(function (l) { return { destination: A.places[l.to] ? A.places[l.to].name : l.to, bearing: l.bearing }; });
+    return linksFrom(A, id).map(function (l) {
+      var o = { destination: A.places[l.to] ? A.places[l.to].name : l.to, bearing: l.bearing };
+      if (l.ferry) o.ferry = true;
+      return o;
+    });
   }
 
   /** Lock: keep these settings, and note which generator they were made with. */
@@ -145,8 +178,8 @@
     var from = fromId && A.places[fromId];
     if (!from) from = addPlace(A, S.name, params, null, true);
     var dest = placeByName(A, way.destination);
-    if (!dest) dest = addPlace(A, way.destination, discover(A.world, way.destination, { params: params, river: !!S.terrain.river }), from.id);
-    connect(A, from.id, dest.id, way.bearing);
+    if (!dest) dest = addPlace(A, way.destination, discover(A.world, way.destination, { params: params, river: !!S.terrain.river }, !!way.ferry), from.id);
+    connect(A, from.id, dest.id, way.bearing, !!way.ferry);
     return { from: from.id, to: dest.id };
   }
 
@@ -171,9 +204,15 @@
         generator: +p.generator || 1, from: p.from || null, found: p.found || null
       };
       if (p.lockedOn) A.places[id].lockedOn = p.lockedOn;
+      if (Array.isArray(p.roads)) A.places[id].roads = p.roads.filter(function (r) { return r && r.destination && isFinite(+r.bearing); })
+        .map(function (r) { var o = { destination: String(r.destination), bearing: +r.bearing }; if (r.ferry) o.ferry = true; return o; });
     });
     o.links.forEach(function (l) {
-      if (l && A.places[l.from] && A.places[l.to] && isFinite(+l.bearing)) A.links.push({ from: l.from, to: l.to, bearing: +l.bearing });
+      if (l && A.places[l.from] && A.places[l.to] && isFinite(+l.bearing)) {
+        var k = { from: l.from, to: l.to, bearing: +l.bearing };
+        if (l.ferry) k.ferry = true;
+        A.links.push(k);
+      }
     });
     A.trail = (o.trail || []).filter(function (id) { return A.places[id]; });
     return A;

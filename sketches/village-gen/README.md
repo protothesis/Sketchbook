@@ -80,16 +80,40 @@ and road:
 - A destination's seed is the world seed (the first town's land seed) plus
   its name, so the same name is always the same town, however you reach it.
 - A new place's settings are discovered once, from that seed and the place
-  you came from: it usually shares its neighbour's setting and character,
-  and a name like "Lynport" puts it on the coast. The atlas remembers them.
+  you came from: it usually shares its neighbour's setting, or moves to a
+  plausible neighbouring one (valley to plains, forest, lakeside or
+  highlands…), and a name like "Lynport" puts it on the coast. Its sliders
+  wander from its neighbour's but drift back toward typical values, so a
+  long road changes character without running away. The atlas remembers
+  them.
 - Every road you've walked is held as a constraint when its towns are
   generated, so going back gives exactly the same place.
 - **Lock place** saves the current settings: revisits use them. Change a
   locked place and **Save changes** / **Revert** appear. Unlocked places
   forget tweaks when you leave. Locking a town you haven't left yet adds it
   to the atlas.
-- **Random** and **New seed** step off the atlas to a new town; travelling
-  from it starts a new branch of the same atlas.
+- Roads only lead somewhere if they reach the map edge over land. A road
+  that runs down to open water is a **landing** (⚓): it has no destination
+  and you can't travel from it. An island, with no land road out at all,
+  runs **ferries** instead ("⛴ ferry to Kilpool"), and a road back that
+  can't find land becomes a ferry too. On the coast, a landing facing open
+  sea runs a ferry about 60% of the time, so some coastal towns have
+  ferries, some only landings; lakes only have landings. Roads and ferries only connect to
+  their own kind: no road leads to an island, a ferry only lands on an
+  island or the coast, and you come back the way you went (on the atlas
+  map, ferries are dashed blue).
+- **New seed** reshapes the current town in place: same name, same roads,
+  a tweak like any other. **Random** steps off the atlas to a brand-new
+  town; travelling from it starts a separate journey in the same atlas.
+
+The **atlas map** under *Atlas* shows every place and road as a subway map
+(⤢ or M opens it big over the main map). There are no distances in the
+atlas, so it's laid out by dead reckoning: each road is one step in the
+direction it leaves, snapped to 45°, with north up. Squares are where a
+journey started, colours are settings. Every place you've visited shows its
+roads not taken as short spurs; hover a place (or be in it) to stretch them
+out and see where they lead. Click a place to go there, or a spur to go
+there and take that road.
 
 **← Back** (B) walks back along your trail, and browser Back/Forward work
 too. The atlas is saved in this browser automatically; **Export atlas**
@@ -110,8 +134,10 @@ centred on (0, 0):
   frontage, y from the front wall), `upperFloors`, `tags`.
 - `network`: `nodes`, `edges` (with `length`, `kind`, `bridge`), `ways`
   (named roads as node chains; roads off the map also have `destination`,
-  `rim` and `bearing` in compass degrees, and `forced` if a constraint asked
-  for them). `VillageGen.findPath(s, fromNode, toNode)` gives the shortest
+  `rim` and `bearing` in compass degrees, `exit` (a point past the map's
+  edge to draw the road on to, under the fade), and `forced` if a constraint asked
+  for them; `landing` marks a road that ends at open water with no
+  destination, `ferry` one whose destination is across water). `VillageGen.findPath(s, fromNode, toNode)` gives the shortest
   walking route.
 - `generatorVersion`, and `constraints` when it was generated with any.
 - `fields[]`: `crop`, `polygon`, `area`, `hectares`, `furlong`.
@@ -132,7 +158,7 @@ moves; if water blocks the bearing it swings round until it finds land.
 
 The atlas JSON (`format: "village-gen-atlas"`) holds `world`, `places`
 (`name`, `seed`, `base` settings, `settings` when locked, `locked`,
-`generator`, `from`), `links` (`from`, `to`, `bearing`, stored both ways)
+`generator`, `from`, `roads` out as last seen), `links` (`from`, `to`, `bearing`, `ferry`, stored both ways)
 and `trail`.
 
 **Download JSON** in the panel exports it. Terrain heights and trees are

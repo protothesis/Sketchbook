@@ -150,11 +150,12 @@
     ['land', 'town', 'names'].forEach(function (k) { if (!keeps[k]) sd[k] = fresh; });
     params.seed = VG.formatSeed(sd);
   }
-  /** Random and New seed make a new town: step off the atlas place. */
+  /** Random makes a new town: step off the atlas place (a new journey). */
   function leavePlace() { placeId = null; linkPlace = null; }
+  /** New seed rerolls this town in place: same name and roads, a tweak like any other. */
   function reseed() {
     if (keeps.land && keeps.town && keeps.names) return;
-    leavePlace(); rerollSeed(); syncControls(); regenSoon(0);
+    rerollSeed(); syncControls(); regenSoon(0);
   }
   /** Random settlement: reroll the seed and every unlocked setting. */
   function randomize() {
@@ -221,7 +222,7 @@
     $('hist').value = 1000;
     stopPlay();
     view.minScale = Math.min(view.w, view.h) / (S.bounds.size * 1.15);
-    if (!keepView) frameTown(false);
+    if (!keepView) frameMap(false); // the whole map: the roads in and out, not just the town
     closeInspector();
     // Buildings keep their identity across tweaks: follow the selected one.
     if (selKey) {
@@ -229,16 +230,19 @@
       if (again) inspect({ kind: 'building', item: again });
     }
     describe();
+    rememberRoads();
     updatePlace();
     writeHash();
     $('status').textContent = S.stats.buildings.toLocaleString() + ' buildings · ' + ms + ' ms';
     $('busy').classList.remove('on');
+    if (pendingTravel) setTimeout(takePendingRoad, 0);
     dirty = true;
     window.settlement = S; // handy from the console
     window.villageView = view;
     window.villageRenderer = renderer;
   }
 
+  function frameMap(animate) { view.fit(0, 0, S.bounds.size * 1.02, animate); }
   function frameTown(animate) {
     view.fit(S.center.x, S.center.y, Math.max(260, S.radius * 3.2), animate);
   }
@@ -331,7 +335,7 @@
     if (dw) {
       renderer.hover = null;
       canvas.classList.add('pointing');
-      tip.textContent = 'Travel to ' + dw.destination + (known(dw.destination) ? ' (in your atlas)' : '');
+      tip.textContent = (dw.ferry ? 'Take the ferry to ' : 'Travel to ') + dw.destination + (known(dw.destination) ? ' (in your atlas)' : '');
       tip.style.left = p[0] + 'px'; tip.style.top = p[1] + 'px'; tip.style.display = 'block';
       return;
     }
@@ -390,7 +394,8 @@
     } else {
       pill.textContent = VG.ROAD_KINDS[it.kind].label; pill.style.background = '#9a8a72';
       rows.push(['Length', it.length.toLocaleString() + ' m']);
-      if (it.destination) rows.push(['Leads to', it.destination + (known(it.destination) ? ' (in your atlas)' : '')]);
+      if (it.destination) rows.push(['Leads to', it.destination + (it.ferry ? ', by ferry' : '') + (known(it.destination) ? ' (in your atlas)' : '')]);
+      if (it.landing) rows.push(['Ends at', 'a landing on the water: no road on from here']);
       var n = S.buildings.filter(function (b) { return b.wayId === it.id; }).length;
       rows.push(['Buildings', n]);
     }
@@ -398,7 +403,7 @@
     $('iroute').hidden = hit.kind !== 'building';
     var dest = hit.kind === 'way' && it.destination;
     $('itravel').hidden = !dest;
-    if (dest) $('itravel').textContent = 'Travel to ' + it.destination + ' →';
+    if (dest) $('itravel').textContent = (it.ferry ? 'Take the ferry to ' : 'Travel to ') + it.destination + ' →';
     drawPlan(hit.kind === 'building' ? it : null);
   }
   function esc(s) { return s.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
@@ -478,7 +483,7 @@
   $('zin').addEventListener('click', function () { view.zoomAt(1.6, view.w / 2, view.h / 2); });
   $('zout').addEventListener('click', function () { view.zoomAt(1 / 1.6, view.w / 2, view.h / 2); });
   $('ztown').addEventListener('click', function () { frameTown(true); });
-  $('zmap').addEventListener('click', function () { view.fit(0, 0, S.bounds.size * 1.02, true); });
+  $('zmap').addEventListener('click', function () { frameMap(true); });
   Array.prototype.forEach.call(document.querySelectorAll('[data-layer]'), function (el) {
     el.addEventListener('change', function () { renderer.layers[el.dataset.layer] = el.checked; dirty = true; });
   });
@@ -495,7 +500,8 @@
     else if (k === 'ArrowRight') { view.cx += pan; dirty = true; }
     else if (k === 'ArrowUp') { view.cy -= pan; dirty = true; }
     else if (k === 'ArrowDown') { view.cy += pan; dirty = true; }
-    else if (k === 'Escape') closeInspector();
+    else if (k === 'Escape') { if (!$('amapover').hidden) closeAtlasMap(); else closeInspector(); }
+    else if (k === 'm' || k === 'M') { if ($('amapover').hidden) $('amapbig').click(); else closeAtlasMap(); }
     else return;
     if (k.indexOf('Arrow') === 0) e.preventDefault();
   });
@@ -547,6 +553,7 @@
     ensureAtlas();
     var res = AT.travel(atlas, placeId, S, params, way);
     if (!placeId) { placeId = res.from; writeHash(); } // the start of a journey: this page is now a place
+    rememberRoads();
     AT.visit(atlas, res.from);
     go(res.to);
   }
@@ -612,6 +619,7 @@
     }
     $('placenote').textContent = notes.join(' ');
 
+    drawAtlasMaps();
     if (!atlas || !Object.keys(atlas.places).length) {
       $('atlasline').textContent = 'Empty. Travel along a road or lock a place to start one. Saved in this browser; export it to keep it safe.';
       $('places').innerHTML = '';
@@ -628,6 +636,61 @@
     }
     dirty = true;
   }
+  /**
+   * Note the roads out of this place (as it's saved, not mid-tweak), so the
+   * atlas map can show the ones not taken yet without generating it again.
+   */
+  function rememberRoads() {
+    var p = placeId && atlas && atlas.places[placeId];
+    if (!p || !S || !AT.sameSettings(params, p.locked ? p.settings : p.base)) return;
+    var roads = S.network.ways.filter(function (w) { return w.destination && w.rim; }).map(function (w) {
+      var o = { destination: w.destination, bearing: w.bearing };
+      if (w.ferry) o.ferry = true;
+      return o;
+    });
+    if (JSON.stringify(roads) !== JSON.stringify(p.roads)) { p.roads = roads; saveAtlas(); }
+  }
+
+  // The atlas as a subway map, in the panel and (bigger) over the map.
+  // Clicking a road not taken from another place goes there, then takes it.
+  var pendingTravel = null;
+  function pickOnMap(kind, item) {
+    if (kind === 'place') { if (item !== placeId) { closeAtlasMap(); go(item); } }
+    else if (kind === 'road') {
+      closeAtlasMap();
+      if (item.way) travelVia(item.way);
+      else { pendingTravel = item.destination; go(item.place); }
+    }
+  }
+  function takePendingRoad() {
+    var name = pendingTravel;
+    pendingTravel = null;
+    var w = name && S.network.ways.filter(function (x) { return x.destination === name; })[0];
+    if (w) travelVia(w);
+  }
+  var amap = new VG.AtlasMap($('amap'), pickOnMap), amap2 = new VG.AtlasMap($('amap2'), pickOnMap);
+  function drawAtlasMaps() {
+    // Roads out of here as they are right now (the map leaves out walked ones).
+    var stubs = !S || !placeId ? [] : S.network.ways.filter(function (w) { return w.destination && w.rim; })
+      .map(function (w) { return { destination: w.destination, bearing: w.bearing, ferry: !!w.ferry, way: w, place: placeId }; });
+    amap.set(atlas, placeId, stubs);
+    if (!$('amapover').hidden) amap2.set(atlas, placeId, stubs);
+    var used = {};
+    if (atlas) Object.keys(atlas.places).forEach(function (id) { var p = atlas.places[id]; used[(p.locked && p.settings ? p.settings : p.base).environment] = 1; });
+    var journeys = amap.L ? amap.L.journeys : 0;
+    $('amapkey').innerHTML = Object.keys(VG.ENV_COLORS).filter(function (e) { return used[e]; }).map(function (e) {
+      return '<span><i style="background:' + VG.ENV_COLORS[e] + '"></i>' + esc(VG.ENVIRONMENTS[e].label) + '</span>';
+    }).join('') + (journeys > 1 ? '<span>· ' + journeys + ' separate journeys</span>' : '');
+  }
+  function closeAtlasMap() { $('amapover').hidden = true; }
+  $('amapbig').addEventListener('click', function () {
+    $('amapover').hidden = false;
+    amap2.view = null;
+    drawAtlasMaps();
+  });
+  $('amapclose').addEventListener('click', closeAtlasMap);
+  window.addEventListener('resize', function () { amap.draw(); if (!$('amapover').hidden) amap2.draw(); });
+
   $('places').addEventListener('click', function (e) {
     var li = e.target.closest('li');
     if (li && li.dataset.place !== placeId) go(li.dataset.place);

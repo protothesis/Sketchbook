@@ -58,14 +58,18 @@
 
   // Bumped whenever a change to the rules would change what an existing seed
   // generates. Locked atlas places record the version they were made with.
-  var GENERATOR_VERSION = 1;
+  // 2: roads that run into open water are landings, not routes onward.
+  // 3: some landings on the open sea run ferries.
+  var GENERATOR_VERSION = 3;
 
   // Compass bearings (0 = north, clockwise, degrees) ↔ map angles (radians,
   // x east, y south).
   function bearingToAngle(b) { return (b - 90) * Math.PI / 180; }
   function angleToBearing(a) { var d = a * 180 / Math.PI + 90; return Math.round(((d % 360) + 360) % 360); }
   function angDiff(a, b) { var d = Math.abs(a - b) % (Math.PI * 2); return d > Math.PI ? Math.PI * 2 - d : d; }
-  var FORCED_SWING = [0, 0.12, -0.12, 0.25, -0.25, 0.4, -0.4, 0.6, -0.6, 0.85, -0.85, 1.2, -1.2];
+  // How far a required road may swing from its bearing to find its kind of
+  // way out (land for a road, water for a ferry): all the way round if needed.
+  var FORCED_SWING = [0, 0.12, -0.12, 0.25, -0.25, 0.4, -0.4, 0.6, -0.6, 0.85, -0.85, 1.2, -1.2, 1.6, -1.6, 2.1, -2.1, 2.6, -2.6, 3.1];
 
   /**
    * Fit required roads into the approach slots: each takes over the free slot
@@ -83,6 +87,7 @@
       // rounded): keep its exact angle so the town comes out identical.
       if (angDiff(best.angle, a) > Math.PI / 180) best.angle = a;
       best.destination = rd.destination;
+      best.ferry = !!rd.ferry;
     });
   }
 
@@ -108,7 +113,7 @@
 
     var forcedName = options && options.name ? String(options.name) : null;
     var roads = (options && options.roads || []).filter(function (r) { return r && r.destination && isFinite(+r.bearing); })
-      .map(function (r) { return { destination: String(r.destination), bearing: +r.bearing }; });
+      .map(function (r) { var o = { destination: String(r.destination), bearing: +r.bearing }; if (r.ferry) o.ferry = true; return o; });
 
     var sizeIdx = classify(P.population), size = SIZES[sizeIdx], pop = P.population;
     var W = CLASS_W[sizeIdx];
@@ -164,12 +169,27 @@
       var way = null;
       // A road we were told to build has to exist: if its bearing runs into
       // water or off the land, swing it round until it finds a way in.
-      var tries = slot.destination ? FORCED_SWING : [0];
-      for (var t = 0; t < tries.length && !way; t++) way = net.routeApproach(grid, hub, slot.angle + tries[t], size.step);
+      // A road must reach the map edge over land, a ferry must reach open
+      // water. If there's no such way at all, take whatever there is (a road
+      // with no land anywhere, an island, has to be a ferry).
+      var tries = slot.destination ? FORCED_SWING : [0], need = slot.destination ? (slot.ferry ? 'water' : 'land') : null;
+      for (var t = 0; t < tries.length && !way; t++) way = net.routeApproach(grid, hub, slot.angle + tries[t], size.step, need);
+      if (!way && slot.destination) way = net.routeApproach(grid, hub, slot.angle, size.step);
       if (!way) return;
-      if (slot.destination) { way.destination = slot.destination; way.forced = true; }
+      if (slot.destination) {
+        way.destination = slot.destination; way.forced = true;
+        if (way.toWater) way.ferry = true;
+      } else if (way.toWater) way.landing = true; // a lane down to the water, not a road onward
       approaches.push(way);
     });
+    // No road out over land at all (an island): the landings run ferries.
+    if (approaches.length && approaches.every(function (w) { return w.toWater; })) {
+      approaches.forEach(function (w) { if (w.landing) { w.landing = false; w.ferry = true; } });
+    }
+    // On the open sea (not a lake), some landings run a ferry to somewhere
+    // over the water: that's how a journey from inland reaches an island.
+    var fr = R.createRng(seeds.town, 'ferries');
+    approaches.forEach(function (w) { if (w.landing && w.toSea && fr() < 0.6) { w.landing = false; w.ferry = true; } });
     lap('approach');
 
     // --- Size estimate -------------------------------------------------------
@@ -345,12 +365,18 @@
     taken[S.name] = 1;
     approaches.forEach(function (w) { if (w.destination) taken[w.destination] = 1; });
     approaches.forEach(function (w, i) {
+      if (w.landing) { // a lane down to the water: named for it, leads nowhere
+        var r = R.createRng(nameSeed, 'landing|' + i);
+        w.name = claim(i === 0 && S.sizeIdx >= 1 ? 'High Street' : r.pick(S.params.environment === 'lakeside' ?
+          ['Landing Lane', 'Boat Lane', 'Mere Lane'] : ['Quay Road', 'Harbour Road', 'Landing Road', 'Strand Road']));
+        return;
+      }
       // A road somewhere else already goes to (or is) this name: draw again.
       for (var k = 0; !w.destination && k < 6; k++) {
         var d = VG.names.neighbour(R.createRng(nameSeed, 'dest|' + i + (k ? '|' + k : '')), S.params.environment);
         if (!taken[d]) { w.destination = d; taken[d] = 1; }
       }
-      w.name = claim(i === 0 && S.sizeIdx >= 1 ? 'High Street' : w.destination + ' Road');
+      w.name = claim(i === 0 && S.sizeIdx >= 1 ? 'High Street' : w.destination + (w.ferry ? ' Ferry' : ' Road'));
     });
     var byWay = {};
     S.buildings.forEach(function (b) { if (b.wayId !== null) (byWay[b.wayId] = byWay[b.wayId] || []).push(b); });
@@ -492,8 +518,19 @@
       if (w.rim) {
         o.rim = { x: Math.round(w.rim.x), y: Math.round(w.rim.y) };
         o.bearing = angleToBearing(Math.atan2(w.rim.y, w.rim.x));
+        // A road that leads somewhere carries on past the map's edge: `exit`
+        // is a point beyond the rim to draw it to, so it runs on under the
+        // fade instead of visibly stopping.
+        if (o.destination && !w.ferry && w.nodes.length > 1) {
+          var E = net.nodes[w.nodes[w.nodes.length - 1]], F = net.nodes[w.nodes[w.nodes.length - 2]];
+          var sx = E.x - F.x, sy = E.y - F.y, sl = Math.hypot(sx, sy) || 1, rl = Math.hypot(E.x, E.y) || 1;
+          var dx = sx / sl + E.x / rl, dy = sy / sl + E.y / rl, dl = Math.hypot(dx, dy) || 1;
+          o.exit = { x: Math.round(E.x + dx / dl * T.W * 0.1), y: Math.round(E.y + dy / dl * T.W * 0.1) };
+        }
       }
       if (w.forced) o.forced = true;
+      if (w.landing) o.landing = true;
+      if (w.ferry) o.ferry = true;
       return o;
     });
     var hidden = { terrain: T, net: net, placer: S._placer, fieldHash: S.fieldHash };
