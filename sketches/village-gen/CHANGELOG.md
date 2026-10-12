@@ -7,12 +7,65 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-12: The atlas map shows every visited place's roads not taken as
+  a short spur (remembered as `roads` on each place when you visit it).
+  Hovering a place, or being in it, draws them long and labels where they
+  lead; clicking one goes to that place and takes that road.
+
+- 2026-10-12: **Atlas map** (`ui/atlasmap.js`): the atlas drawn as a subway
+  map in the panel, and bigger over the main map with ⤢ (or M). Stations
+  are coloured by setting and sized by class; a journey's start is a
+  square; separate journeys sit side by side. The layout dead-reckons from
+  the road bearings (snapped to 45°, north up). Unexplored roads out of the
+  current town are dashed stubs. Click a station to go there, a stub to
+  travel; drag, scroll and double-click to pan, zoom and fit.
+
+- 2026-10-12: **Atlas** (`engine/atlas.js`): the road labels at the map's
+  edge ("to Ashby →") are clickable and take you to that town. Its seed comes
+  from the world seed plus its name, so a name is always the same town, and
+  it always has a road back to where you came from, entering from the
+  opposite side. **← Back** (B), browser Back/Forward and the place list
+  retrace the journey, and every place comes back exactly as it was.
+  **Lock place** keeps a place's current settings for every revisit;
+  unlocked places show the settings they were discovered with. The atlas is
+  saved in the browser, with **Export / Import atlas** JSON as the reliable
+  save. The URL hash carries the place's name and roads.
+- 2026-10-12: `generate()` accepts constraints from a parent: `name` and
+  `roads: [{ destination, bearing }]` (roads that must leave towards those
+  places). Output ways gain `bearing` (compass degrees) and `forced`.
+  `VillageGen.GENERATOR_VERSION` (and `generatorVersion` on each settlement)
+  records which rules made a place. Without constraints the output is
+  unchanged.
+
 - 2026-10-12: **Random settlement** button (R) that rerolls every unlocked
   setting; a padlock on each setting; **Keep** chips for the three parts of
   the seed (land / layout / names, written `land/layout/names`). Every
   building has a stable `key` and the inspector follows it across tweaks.
 
 ### Changed
+
+- 2026-10-12: A new town opens showing the whole map (◎ still frames the
+  town). Roads that lead somewhere carry on past the map's edge (`exit` on
+  the way) so they run on under the fade instead of visibly stopping.
+
+- 2026-10-12: **New seed** in an atlas town now reshapes that town in place
+  (same name and roads) instead of leaving the atlas; **Random** still
+  starts a new journey. Discovering new places: a change of setting picks a
+  plausible neighbouring one, deserts no longer trap a journey (arid was
+  31% of towns with runs of 8 on average, now 9% and 2.3), and sliders
+  drift back toward typical values instead of random-walking to extremes.
+  Only affects places discovered from now on.
+
+- 2026-10-12: Level-of-detail rendering. Zoomed out, fields and buildings
+  are drawn from images baked once per settlement (for places with 400+
+  buildings), and everything else that shares a colour is drawn a few
+  hundred shapes per path instead of one canvas call each. City of 15,000,
+  1040×858 canvas, Intel UHD GPU: whole map 67 → 17 ms per frame, town view
+  96 → 46 ms, zoom 0.95 84 → 54 ms; close-ups unchanged (zoom 8: 12.5 ms
+  both). Zoomed out, buildings show their colours instead of merging into a
+  dark mass.
+- 2026-10-12: Destinations that don't collide: a road's made-up destination
+  is redrawn if it repeats another road's or the town's own name.
 
 - 2026-10-12: Map size is fixed per size class, so Population and Density no
   longer redraw the terrain or move the camera. Population slider spans the
@@ -22,6 +75,29 @@ All notable changes to this sketch are logged here, per
   Density and Population keep buildings' names and families.
 
 ### Fixed
+
+- 2026-10-12: Coastal towns run ferries too: a landing facing the open sea
+  (not a lake) is a ferry about 60% of the time, so a journey that starts
+  inland can reach islands. `GENERATOR_VERSION` 3 (coastal towns only).
+
+- 2026-10-12: Roads and ferries only connect to their own kind. No road
+  leads to an island; a ferry only lands on an island or the coast, and
+  the way back is a ferry from that town's waterfront (a coastal town's
+  landing becomes "ferry to …"). Atlas links record `ferry`, and required
+  roads can swing all the way round to find land (or water, for a ferry).
+  The atlas map draws ferry crossings as dashed blue lines.
+
+- 2026-10-12: Roads no longer lead "to Bramham" straight into the sea. An
+  approach road with open water between it and the map edge is a
+  **landing** (⚓, named Quay Road, Harbour Road…) with no destination, so
+  no journey continues from it. Roads the atlas requires must reach the
+  edge over land and swing round to find it. A town with no land road out
+  at all (an island) runs **ferries** from its landings instead, and a
+  required road with no land within reach becomes a ferry too. Roads may
+  also start in a river at the edge rather than on its bank mid-map.
+  `GENERATOR_VERSION` is now 2: coastal and island towns, and atlas places
+  whose roads ran into water, can come out differently; others are
+  unchanged.
 
 - 2026-10-12: Fields and buildings no longer sit on rivers or lake edges;
   rivers stop at lakes and the sea instead of being drawn across them.

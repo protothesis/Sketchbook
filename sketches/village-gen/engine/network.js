@@ -217,17 +217,31 @@
   /**
    * Route an approach road from the map edge at `angle` into `hub`. Returns
    * the way, plus the edge point it set out from (for "to Ashford" labels).
+   * If open water lies between that point and the edge, the road can't
+   * really lead anywhere: the way is marked `toWater` (a landing). `need`
+   * ('land' or 'water') refuses the other kind: no road is made.
    */
-  Network.prototype.routeApproach = function (grid, hub, angle, step) {
+  Network.prototype.routeApproach = function (grid, hub, angle, step, need) {
     var T = this.T, W = T.W, res = grid.res, self = this;
     // Walk inward from the rim until we hit routable land.
     var sx, sy, si, sj, found = false;
     for (var r = 0.47; r > 0.08; r -= 0.01) {
       sx = Math.cos(angle) * r * W; sy = Math.sin(angle) * r * W;
       si = Math.round((sx / W + 0.5) * (res - 1)); sj = Math.round((sy / W + 0.5) * (res - 1));
-      if (grid.cost[sj * res + si] < 20) { found = true; break; }
+      // Land, or a river (the road just bridges it on its way out).
+      var c0 = grid.cost[sj * res + si];
+      if (c0 < 20 || (c0 < Infinity && T.isRiver(sx, sy))) { found = true; break; }
     }
     if (!found) return null;
+    var toWater = false;
+    for (var r2 = r + 0.01; r2 <= 0.475 && !toWater; r2 += 0.01) {
+      var wx = Math.cos(angle) * r2 * W, wy = Math.sin(angle) * r2 * W;
+      if (T.isWaterBody(wx, wy) || T.heightAt(wx, wy) < T.wl) toWater = true;
+    }
+    // Open sea: still water at the very edge (a lake has its far shore on the map).
+    var ex = Math.cos(angle) * 0.475 * W, ey = Math.sin(angle) * 0.475 * W;
+    var toSea = toWater && (T.isWaterBody(ex, ey) || T.heightAt(ex, ey) < T.wl);
+    if ((need === 'land' && toWater) || (need === 'water' && !toWater)) return null;
     var ti = Math.round((hub.x / W + 0.5) * (res - 1)), tj = Math.round((hub.y / W + 0.5) * (res - 1));
     var path = astar(grid, si, sj, ti, tj);
     if (!path || path.length < 3) return null;
@@ -257,6 +271,8 @@
     ids.reverse();
     var w = self.addWay('road', ids, 0);
     w.rim = { x: pts[0][0], y: pts[0][1] };
+    if (toWater) w.toWater = true;
+    if (toSea) w.toSea = true;
     return w;
   };
 

@@ -61,6 +61,15 @@
       var keys = Object.keys(SUF).filter(function (k) { return SUF[k].length; });
       return settlement(rand, env === 'arid' ? 'arid' : rand.pick(keys), 'village');
     },
+    /** The setting a name's ending suggests ("Lynport" → coast), or null. */
+    envHint: function (name) {
+      var n = String(name).toLowerCase().replace(/ .*$/, '');
+      if (ARID_B.some(function (b) { return n.slice(-b.length) === b; }) && ARID_A.some(function (a) { return n.indexOf(a.toLowerCase()) === 0; })) return 'arid';
+      for (var env in SUF) {
+        for (var i = 0; i < SUF[env].length; i++) if (n.length > SUF[env][i].length + 2 && n.slice(-SUF[env][i].length) === SUF[env][i]) return env === 'island' ? 'coast' : env;
+      }
+      return null;
+    },
     surname: function (rand, env) { return rand.pick(env === 'arid' ? ARID_SURNAMES : SURNAMES); },
     inn: function (rand) { return 'The ' + rand.pick(INN_ADJ) + ' ' + rand.pick(INN_NOUN); },
     church: function (rand) { return 'St. ' + rand.pick(SAINTS) + '’s'; },

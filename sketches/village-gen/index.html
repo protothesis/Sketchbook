@@ -138,6 +138,25 @@
   #plan { width: 100%; height: 170px; display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
   .layers { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 13px; }
   .layers label { display: flex; gap: 6px; align-items: center; }
+  .journey { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; min-height: 24px; }
+  .journey .chip[aria-pressed="true"]::before { content: "🔒 "; }
+  #placenote:empty { display: none; }
+  #places { list-style: none; margin: 0 0 8px; padding: 0; max-height: 220px; overflow-y: auto; }
+  #places li { display: flex; align-items: baseline; gap: 8px; padding: 3px 4px; border-radius: 6px; cursor: pointer; }
+  #places li:hover { background: var(--bg); }
+  #places li.here { background: var(--accent-soft); cursor: default; }
+  #places .n { margin-left: auto; color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
+  #places .via { color: var(--text-muted); font-size: 11.5px; }
+  #atlasmsg:empty { display: none; }
+  .amapwrap { position: relative; }
+  #amap { width: 100%; height: 230px; display: block; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); touch-action: none; cursor: grab; }
+  #amapbig { position: absolute; right: 6px; top: 6px; width: 28px; height: 28px; padding: 0; }
+  .amapkey { margin: 5px 0 8px; display: flex; flex-wrap: wrap; gap: 2px 9px; }
+  .amapkey i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 3px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.25); }
+  #amapover { position: absolute; inset: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+  #amap2 { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; border-radius: var(--radius); }
+  .amaphead { position: absolute; left: 12px; right: 8px; top: 8px; display: flex; gap: 10px; align-items: center; pointer-events: none; }
+  .amaphead button { margin-left: auto; pointer-events: auto; }
   pre.code { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 11.5px; overflow-x: auto; margin: 6px 0 0; }
   @media (max-width: 860px) {
     main { flex-direction: column; }
@@ -161,11 +180,22 @@
       <button id="zmap" title="Whole map">⤢</button>
     </div>
     <div id="busy">Growing…</div>
+    <div id="amapover" hidden>
+      <canvas id="amap2" aria-label="Map of the atlas"></canvas>
+      <div class="amaphead"><b>Atlas</b><span class="small muted">Click a place to go there; dashed roads are unexplored. Drag, scroll, double-click to fit.</span><button id="amapclose" aria-label="Close the atlas map">✕</button></div>
+    </div>
     <div id="tip"></div>
   </div>
   <aside id="panel">
+    <div class="journey">
+      <button id="back" class="chip" hidden title="Back along the road you came by"></button>
+      <button id="placelock" class="chip" aria-pressed="false"></button>
+      <button id="placesave" class="chip" hidden title="Keep these changes in the lock">Save changes</button>
+      <button id="placerevert" class="chip" hidden title="Back to the locked settings">Revert</button>
+    </div>
     <h1 id="sname"></h1>
     <p id="ssub"></p>
+    <p class="hint" id="placenote"></p>
     <div class="tiles" id="tiles"></div>
     <p class="small muted" id="sline"></p>
 
@@ -177,6 +207,7 @@
       <table class="props" id="iprops"></table>
       <canvas id="plan" hidden></canvas>
       <div class="row" style="margin-top:8px">
+        <button id="itravel" class="primary" hidden></button>
         <button id="izoom">Zoom to</button>
         <button id="iroute" title="Shortest walk along the roads to the centre">Route to centre</button>
         <button id="icopy" title="Copy this item as JSON">Copy JSON</button>
@@ -185,7 +216,7 @@
 
     <h2>Shape it</h2>
     <button id="random" class="primary big" title="Reroll everything that isn't kept or locked (R)">🎲 Random settlement</button>
-    <p class="hint">Random rerolls every setting that isn’t locked and every part of the seed you aren’t keeping. <b>New seed</b> keeps all the settings.</p>
+    <p class="hint">Random rerolls every setting that isn’t locked and every part of the seed you aren’t keeping. <b>New seed</b> keeps all the settings. In an atlas town, New seed reshapes that town (same name and roads); Random starts a new journey.</p>
     <div class="ctl">
       <label for="seed">Seed</label>
       <div class="seedrow wide"><input id="seed" type="text" spellcheck="false" autocomplete="off" title="One word for everything, or land/layout/names" /><button id="reseed" title="New seed, same settings (N)">New seed</button></div>
@@ -242,6 +273,22 @@
     <h2>What’s here</h2>
     <ul id="legend"></ul>
 
+    <h2>Atlas</h2>
+    <p class="small muted" id="atlasline"></p>
+    <div class="amapwrap">
+      <canvas id="amap" aria-label="Map of the atlas: places and the roads between them. Click a place to go there."></canvas>
+      <button id="amapbig" title="Show the atlas map over the main map">⤢</button>
+    </div>
+    <p class="small muted amapkey" id="amapkey"></p>
+    <ul id="places"></ul>
+    <div class="row">
+      <button id="atlasexport" title="Save every place and road as a JSON file">Export atlas</button>
+      <button id="atlasimport" title="Load an atlas JSON file">Import atlas</button>
+      <button id="atlasclear" title="Forget every place and road">New atlas</button>
+      <input type="file" id="atlasfile" accept=".json,application/json" hidden />
+    </div>
+    <p class="small muted" id="atlasmsg"></p>
+
     <h2>Layers</h2>
     <div class="layers">
       <label><input type="checkbox" data-layer="contours" checked /> Contours</label>
@@ -271,8 +318,10 @@ VillageGen.findPath(s, fromNode, toNode)</pre>
 <script src="engine/buildings.js"></script>
 <script src="engine/fields.js"></script>
 <script src="engine/settlement.js"></script>
+<script src="engine/atlas.js"></script>
 <script src="ui/render.js"></script>
 <script src="ui/view.js"></script>
+<script src="ui/atlasmap.js"></script>
 <script src="ui/app.js"></script>
 </body>
 </html>
