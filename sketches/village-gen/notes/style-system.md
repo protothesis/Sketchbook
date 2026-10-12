@@ -57,7 +57,7 @@ collection and the second is the attribute that styles care about:
 | `landmark.<type>` | `S.landmarks` | `pond`, … |
 | `way.<kind>` | `S.network.ways` | `road`, `street`, `lane`, `track` |
 | `bridge` | `S.network.edges` with `bridge` | none |
-| `way.*` flags | `w.exit`, `w.landing`, `w.ferry` (atlas branch, 0761d30) | filterable: `filter: { landing: true }` |
+| `way.*` flags | `w.exit`, `w.landing`, `w.ferry` (on main since 0761d30) | filterable: `filter: { landing: true }` |
 | `building.<category>` | `S.buildings` | `residential`, `civic`, … (`type` available to filters) |
 | `room` | `building.rooms` | none |
 | `tree` | `S.trees` | none |
