@@ -204,6 +204,14 @@ Two notes on terrain:
 **Buildings stay rectangular for now.** Lots, floor plans and collision all
 assume rectangles. Unusual building shapes are a later plugin of their own.
 
+## Visual style
+
+Maps will be drawn through a style system (data and presentation kept apart, so
+one place can look very different per region, planet or view type). The
+first target look is a crisp "presentation board" style. See
+[`notes/visual-direction.md`](notes/visual-direction.md) and the draft spec
+[`notes/style-system.md`](notes/style-system.md).
+
 ## Data and performance
 
 Measured 2026-10-12, seed `ash`, valley, Node, headless:
@@ -229,6 +237,9 @@ Measured 2026-10-12, seed `ash`, valley, Node, headless:
 - **Next:** region prototype as a new sketch: land, rivers, towns as points,
   roads between them, zoom into a town via village-gen with the
   parent-to-child contract.
+- **Soon:** style system (extract today's look as a `natural` style, then
+  a `board` style), plus generator **areas** (settlement boundary, forest,
+  settled ground) that it and later levels need. (See *Visual style*.)
 - **Later, any order:** medieval profile extracted as data; second profile;
   first feature modules; erosion; edits layer; world level; planets.
 - **Whenever:** Psyche Town consuming small settlements (hamlet and village
