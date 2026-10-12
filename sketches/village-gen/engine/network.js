@@ -218,10 +218,10 @@
    * Route an approach road from the map edge at `angle` into `hub`. Returns
    * the way, plus the edge point it set out from (for "to Ashford" labels).
    * If open water lies between that point and the edge, the road can't
-   * really lead anywhere: the way is marked `toWater` (a landing), or with
-   * `landOnly` no road is made at all.
+   * really lead anywhere: the way is marked `toWater` (a landing). `need`
+   * ('land' or 'water') refuses the other kind: no road is made.
    */
-  Network.prototype.routeApproach = function (grid, hub, angle, step, landOnly) {
+  Network.prototype.routeApproach = function (grid, hub, angle, step, need) {
     var T = this.T, W = T.W, res = grid.res, self = this;
     // Walk inward from the rim until we hit routable land.
     var sx, sy, si, sj, found = false;
@@ -238,7 +238,7 @@
       var wx = Math.cos(angle) * r2 * W, wy = Math.sin(angle) * r2 * W;
       if (T.isWaterBody(wx, wy) || T.heightAt(wx, wy) < T.wl) toWater = true;
     }
-    if (toWater && landOnly) return null;
+    if ((need === 'land' && toWater) || (need === 'water' && !toWater)) return null;
     var ti = Math.round((hub.x / W + 0.5) * (res - 1)), tj = Math.round((hub.y / W + 0.5) * (res - 1));
     var path = astar(grid, si, sj, ti, tj);
     if (!path || path.length < 3) return null;

@@ -59,15 +59,19 @@
   // of these, so a lakeside town doesn't lead straight into the desert.
   var NEAR_ENVS = {
     valley: ['plains', 'forest', 'lakeside', 'highlands'], plains: ['valley', 'forest', 'coast', 'lakeside', 'arid'],
-    coast: ['plains', 'valley', 'island', 'highlands', 'arid'], highlands: ['valley', 'forest', 'lakeside', 'coast', 'arid'],
+    coast: ['plains', 'valley', 'highlands', 'arid'], highlands: ['valley', 'forest', 'lakeside', 'coast', 'arid'],
     forest: ['valley', 'plains', 'highlands', 'lakeside'], lakeside: ['valley', 'forest', 'plains', 'highlands'],
     island: ['coast'], arid: ['plains', 'highlands', 'coast']
   };
+  // No road leads to an island: you get there by ferry, which only ever
+  // lands on an island or the coast.
+  function roadEnv(env) { return env === 'island' ? 'coast' : env; }
+  var FERRY_ENVS = { island: ['island', 'coast'], coast: ['island', 'island', 'coast'] };
   // Where the sliders drift back to, so a long road doesn't run away to the
   // extremes: each town moves a fifth of the way back, plus some noise.
   var TYPICAL = { planning: 0.25, density: 0.5, farmland: 0.6, woodland: 0.5 };
 
-  function discover(world, name, origin) {
+  function discover(world, name, origin, byFerry) {
     var rand = R.createRng(String(world), 'discover|' + slug(name)), op = origin && origin.params || VG.DEFAULTS;
     var envs = NEAR_ENVS[op.environment] || NEAR_ENVS.valley;
     var u = rand(), cls = u < 0.3 ? 0 : u < 0.72 ? 1 : u < 0.92 ? 2 : 3, c = VG.SIZES[cls];
@@ -80,6 +84,10 @@
     // hint is weak or deserts would never end.
     var hint = VG.names.envHint(name), useHint = rand() < (hint === 'arid' ? 0.3 : 0.6);
     var env = hint && useHint ? hint : sameLand ? op.environment : other;
+    if (byFerry) {
+      var shores = FERRY_ENVS[op.environment] || FERRY_ENVS.coast;
+      env = hint === 'coast' && useHint ? 'coast' : shores[Math.floor(rand() * shores.length)];
+    } else env = roadEnv(env);
     sameLand = env === op.environment;
     var riverRoll = rand();
     var river = sameLand && origin && origin.river && riverRoll < 0.7 ? 'yes' : 'auto';
@@ -118,12 +126,14 @@
    * A road from `from` to `to`, leaving `from` at `bearing`. The far end gets
    * a road back from the opposite side, unless it already has one.
    */
-  function connect(A, from, to, bearing) {
+  function connect(A, from, to, bearing, ferry) {
     var b = Math.round(((+bearing % 360) + 360) % 360);
     // An existing link keeps its bearing even if the road had to swing round
-    // water: the bearing is the constraint that reproduces that road.
-    if (!linkBetween(A, from, to)) A.links.push({ from: from, to: to, bearing: b });
-    if (!linkBetween(A, to, from)) A.links.push({ from: to, to: from, bearing: (b + 180) % 360 });
+    // water: the bearing is the constraint that reproduces that road. A
+    // ferry is a ferry at both ends.
+    function link(f, t, br) { var l = { from: f, to: t, bearing: br }; if (ferry) l.ferry = true; A.links.push(l); }
+    if (!linkBetween(A, from, to)) link(from, to, b);
+    if (!linkBetween(A, to, from)) link(to, from, (b + 180) % 360);
   }
 
   function linksFrom(A, id) { return A.links.filter(function (l) { return l.from === id; }); }
@@ -136,7 +146,11 @@
     return o;
   }
   function roadsFor(A, id) {
-    return linksFrom(A, id).map(function (l) { return { destination: A.places[l.to] ? A.places[l.to].name : l.to, bearing: l.bearing }; });
+    return linksFrom(A, id).map(function (l) {
+      var o = { destination: A.places[l.to] ? A.places[l.to].name : l.to, bearing: l.bearing };
+      if (l.ferry) o.ferry = true;
+      return o;
+    });
   }
 
   /** Lock: keep these settings, and note which generator they were made with. */
@@ -162,8 +176,8 @@
     var from = fromId && A.places[fromId];
     if (!from) from = addPlace(A, S.name, params, null, true);
     var dest = placeByName(A, way.destination);
-    if (!dest) dest = addPlace(A, way.destination, discover(A.world, way.destination, { params: params, river: !!S.terrain.river }), from.id);
-    connect(A, from.id, dest.id, way.bearing);
+    if (!dest) dest = addPlace(A, way.destination, discover(A.world, way.destination, { params: params, river: !!S.terrain.river }, !!way.ferry), from.id);
+    connect(A, from.id, dest.id, way.bearing, !!way.ferry);
     return { from: from.id, to: dest.id };
   }
 
@@ -190,7 +204,11 @@
       if (p.lockedOn) A.places[id].lockedOn = p.lockedOn;
     });
     o.links.forEach(function (l) {
-      if (l && A.places[l.from] && A.places[l.to] && isFinite(+l.bearing)) A.links.push({ from: l.from, to: l.to, bearing: +l.bearing });
+      if (l && A.places[l.from] && A.places[l.to] && isFinite(+l.bearing)) {
+        var k = { from: l.from, to: l.to, bearing: +l.bearing };
+        if (l.ferry) k.ferry = true;
+        A.links.push(k);
+      }
     });
     A.trail = (o.trail || []).filter(function (id) { return A.places[id]; });
     return A;

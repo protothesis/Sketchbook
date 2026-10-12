@@ -66,7 +66,9 @@
   function bearingToAngle(b) { return (b - 90) * Math.PI / 180; }
   function angleToBearing(a) { var d = a * 180 / Math.PI + 90; return Math.round(((d % 360) + 360) % 360); }
   function angDiff(a, b) { var d = Math.abs(a - b) % (Math.PI * 2); return d > Math.PI ? Math.PI * 2 - d : d; }
-  var FORCED_SWING = [0, 0.12, -0.12, 0.25, -0.25, 0.4, -0.4, 0.6, -0.6, 0.85, -0.85, 1.2, -1.2];
+  // How far a required road may swing from its bearing to find its kind of
+  // way out (land for a road, water for a ferry): all the way round if needed.
+  var FORCED_SWING = [0, 0.12, -0.12, 0.25, -0.25, 0.4, -0.4, 0.6, -0.6, 0.85, -0.85, 1.2, -1.2, 1.6, -1.6, 2.1, -2.1, 2.6, -2.6, 3.1];
 
   /**
    * Fit required roads into the approach slots: each takes over the free slot
@@ -84,6 +86,7 @@
       // rounded): keep its exact angle so the town comes out identical.
       if (angDiff(best.angle, a) > Math.PI / 180) best.angle = a;
       best.destination = rd.destination;
+      best.ferry = !!rd.ferry;
     });
   }
 
@@ -109,7 +112,7 @@
 
     var forcedName = options && options.name ? String(options.name) : null;
     var roads = (options && options.roads || []).filter(function (r) { return r && r.destination && isFinite(+r.bearing); })
-      .map(function (r) { return { destination: String(r.destination), bearing: +r.bearing }; });
+      .map(function (r) { var o = { destination: String(r.destination), bearing: +r.bearing }; if (r.ferry) o.ferry = true; return o; });
 
     var sizeIdx = classify(P.population), size = SIZES[sizeIdx], pop = P.population;
     var W = CLASS_W[sizeIdx];
@@ -165,10 +168,11 @@
       var way = null;
       // A road we were told to build has to exist: if its bearing runs into
       // water or off the land, swing it round until it finds a way in.
-      // It must reach the map edge over land; if there's no land that way at
-      // all (an island), it's a ferry: the one road allowed to end at water.
-      var tries = slot.destination ? FORCED_SWING : [0];
-      for (var t = 0; t < tries.length && !way; t++) way = net.routeApproach(grid, hub, slot.angle + tries[t], size.step, !!slot.destination);
+      // A road must reach the map edge over land, a ferry must reach open
+      // water. If there's no such way at all, take whatever there is (a road
+      // with no land anywhere, an island, has to be a ferry).
+      var tries = slot.destination ? FORCED_SWING : [0], need = slot.destination ? (slot.ferry ? 'water' : 'land') : null;
+      for (var t = 0; t < tries.length && !way; t++) way = net.routeApproach(grid, hub, slot.angle + tries[t], size.step, need);
       if (!way && slot.destination) way = net.routeApproach(grid, hub, slot.angle, size.step);
       if (!way) return;
       if (slot.destination) {

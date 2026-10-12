@@ -67,6 +67,13 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-12: Roads and ferries only connect to their own kind. No road
+  leads to an island; a ferry only lands on an island or the coast, and
+  the way back is a ferry from that town's waterfront (a coastal town's
+  landing becomes "ferry to …"). Atlas links record `ferry`, and required
+  roads can swing all the way round to find land (or water, for a ferry).
+  The atlas map draws ferry crossings as dashed blue lines.
+
 - 2026-10-12: Roads no longer lead "to Bramham" straight into the sea. An
   approach road with open water between it and the map edge is a
   **landing** (⚓, named Quay Road, Harbour Road…) with no destination, so

@@ -96,7 +96,10 @@ and road:
   that runs down to open water is a **landing** (⚓): it has no destination
   and you can't travel from it. An island, with no land road out at all,
   runs **ferries** instead ("⛴ ferry to Kilpool"), and a road back that
-  can't find land becomes a ferry too.
+  can't find land becomes a ferry too. Roads and ferries only connect to
+  their own kind: no road leads to an island, a ferry only lands on an
+  island or the coast, and you come back the way you went (on the atlas
+  map, ferries are dashed blue).
 - **New seed** reshapes the current town in place: same name, same roads,
   a tweak like any other. **Random** steps off the atlas to a brand-new
   town; travelling from it starts a separate journey in the same atlas.
@@ -151,7 +154,7 @@ moves; if water blocks the bearing it swings round until it finds land.
 
 The atlas JSON (`format: "village-gen-atlas"`) holds `world`, `places`
 (`name`, `seed`, `base` settings, `settings` when locked, `locked`,
-`generator`, `from`), `links` (`from`, `to`, `bearing`, stored both ways)
+`generator`, `from`), `links` (`from`, `to`, `bearing`, `ferry`, stored both ways)
 and `trail`.
 
 **Download JSON** in the panel exports it. Terrain heights and trees are

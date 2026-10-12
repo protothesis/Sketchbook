@@ -5,7 +5,8 @@
 // are nudged apart where branches collide. Separate journeys (atlas places
 // you started from scratch) sit side by side, each starting at a square.
 //
-// Unexplored roads out of the current town are drawn as dashed stubs. Click
+// Ferry crossings are dashed blue lines. Unexplored roads out of the current
+// town are drawn as dashed stubs. Click
 // a station to go there, a stub to travel along it. Drag to pan, scroll to
 // zoom, double-click to fit.
 (function (global) {
@@ -136,13 +137,20 @@
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.strokeStyle = muted; ctx.globalAlpha = 0.7;
     ctx.lineWidth = Math.max(2, Math.min(5, unitPx * 0.07));
-    ctx.beginPath();
-    A.links.forEach(function (l) {
-      if (l.from > l.to || !P[l.from] || !P[l.to]) return;
-      var a = S(P[l.from]), b = S(P[l.to]);
-      ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
-    });
-    ctx.stroke();
+    function lines(ferry) {
+      ctx.beginPath();
+      A.links.forEach(function (l) {
+        if (l.from > l.to || !P[l.from] || !P[l.to] || !!l.ferry !== ferry) return;
+        var a = S(P[l.from]), b = S(P[l.to]);
+        ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+      });
+      ctx.stroke();
+    }
+    lines(false);
+    // Ferry crossings: dashed, in water blue.
+    ctx.strokeStyle = '#4f95cf'; ctx.setLineDash([5, 4]);
+    lines(true);
+    ctx.setLineDash([]);
     ctx.globalAlpha = 1;
 
     // Roads out of here that nobody has walked yet.
