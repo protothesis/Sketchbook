@@ -92,6 +92,11 @@ and road:
   locked place and **Save changes** / **Revert** appear. Unlocked places
   forget tweaks when you leave. Locking a town you haven't left yet adds it
   to the atlas.
+- Roads only lead somewhere if they reach the map edge over land. A road
+  that runs down to open water is a **landing** (⚓): it has no destination
+  and you can't travel from it. An island, with no land road out at all,
+  runs **ferries** instead ("⛴ ferry to Kilpool"), and a road back that
+  can't find land becomes a ferry too.
 - **New seed** reshapes the current town in place: same name, same roads,
   a tweak like any other. **Random** steps off the atlas to a brand-new
   town; travelling from it starts a separate journey in the same atlas.
@@ -124,7 +129,8 @@ centred on (0, 0):
 - `network`: `nodes`, `edges` (with `length`, `kind`, `bridge`), `ways`
   (named roads as node chains; roads off the map also have `destination`,
   `rim` and `bearing` in compass degrees, and `forced` if a constraint asked
-  for them). `VillageGen.findPath(s, fromNode, toNode)` gives the shortest
+  for them; `landing` marks a road that ends at open water with no
+  destination, `ferry` one whose destination is across water). `VillageGen.findPath(s, fromNode, toNode)` gives the shortest
   walking route.
 - `generatorVersion`, and `constraints` when it was generated with any.
 - `fields[]`: `crop`, `polygon`, `area`, `hectares`, `furlong`.

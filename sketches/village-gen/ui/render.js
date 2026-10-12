@@ -654,11 +654,18 @@
     // Where the roads go: a tab you can click to travel there. Places
     // already in the atlas are green.
     S.network.ways.forEach(function (w) {
+      if (w.landing && w.rim && w.epoch <= t) {
+        // A lane down to the water: marked, but it leads nowhere.
+        var q = screen(w.rim.x, w.rim.y);
+        if (q[0] > -40 && q[1] > -20 && q[0] < view.w + 40 && q[1] < view.h + 20) halo('⚓ landing', q[0], q[1] + 12, 'italic 11px Georgia, serif', '#56708a');
+        lastFont = null;
+        return;
+      }
       if (!w.destination || !w.rim) return;
       var r = Math.hypot(w.rim.x, w.rim.y) || 1, k = Math.min(1, (S.bounds.size * 0.4) / r);
       var p = screen(w.rim.x * k, w.rim.y * k);
       if (p[0] < -80 || p[1] < -20 || p[0] > view.w + 80 || p[1] > view.h + 20) return;
-      var text = 'to ' + w.destination + ' →', known = self.isKnown && self.isKnown(w.destination), hov = self.hoverDest === w;
+      var text = (w.ferry ? '⛴ ferry to ' : 'to ') + w.destination + ' →', known = self.isKnown && self.isKnown(w.destination), hov = self.hoverDest === w;
       ctx.font = 'italic 12px Georgia, serif'; lastFont = null;
       var tw = ctx.measureText(text).width, x0 = p[0] - tw / 2 - 7, y0 = p[1] - 10, bw = tw + 14, bh = 20;
       ctx.beginPath();

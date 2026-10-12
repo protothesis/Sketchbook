@@ -58,7 +58,8 @@
 
   // Bumped whenever a change to the rules would change what an existing seed
   // generates. Locked atlas places record the version they were made with.
-  var GENERATOR_VERSION = 1;
+  // 2: roads that run into open water are landings, not routes onward.
+  var GENERATOR_VERSION = 2;
 
   // Compass bearings (0 = north, clockwise, degrees) ↔ map angles (radians,
   // x east, y south).
@@ -164,12 +165,22 @@
       var way = null;
       // A road we were told to build has to exist: if its bearing runs into
       // water or off the land, swing it round until it finds a way in.
+      // It must reach the map edge over land; if there's no land that way at
+      // all (an island), it's a ferry: the one road allowed to end at water.
       var tries = slot.destination ? FORCED_SWING : [0];
-      for (var t = 0; t < tries.length && !way; t++) way = net.routeApproach(grid, hub, slot.angle + tries[t], size.step);
+      for (var t = 0; t < tries.length && !way; t++) way = net.routeApproach(grid, hub, slot.angle + tries[t], size.step, !!slot.destination);
+      if (!way && slot.destination) way = net.routeApproach(grid, hub, slot.angle, size.step);
       if (!way) return;
-      if (slot.destination) { way.destination = slot.destination; way.forced = true; }
+      if (slot.destination) {
+        way.destination = slot.destination; way.forced = true;
+        if (way.toWater) way.ferry = true;
+      } else if (way.toWater) way.landing = true; // a lane down to the water, not a road onward
       approaches.push(way);
     });
+    // No road out over land at all (an island): the landings run ferries.
+    if (approaches.length && approaches.every(function (w) { return w.toWater; })) {
+      approaches.forEach(function (w) { if (w.landing) { w.landing = false; w.ferry = true; } });
+    }
     lap('approach');
 
     // --- Size estimate -------------------------------------------------------
@@ -345,12 +356,18 @@
     taken[S.name] = 1;
     approaches.forEach(function (w) { if (w.destination) taken[w.destination] = 1; });
     approaches.forEach(function (w, i) {
+      if (w.landing) { // a lane down to the water: named for it, leads nowhere
+        var r = R.createRng(nameSeed, 'landing|' + i);
+        w.name = claim(i === 0 && S.sizeIdx >= 1 ? 'High Street' : r.pick(S.params.environment === 'lakeside' ?
+          ['Landing Lane', 'Boat Lane', 'Mere Lane'] : ['Quay Road', 'Harbour Road', 'Landing Road', 'Strand Road']));
+        return;
+      }
       // A road somewhere else already goes to (or is) this name: draw again.
       for (var k = 0; !w.destination && k < 6; k++) {
         var d = VG.names.neighbour(R.createRng(nameSeed, 'dest|' + i + (k ? '|' + k : '')), S.params.environment);
         if (!taken[d]) { w.destination = d; taken[d] = 1; }
       }
-      w.name = claim(i === 0 && S.sizeIdx >= 1 ? 'High Street' : w.destination + ' Road');
+      w.name = claim(i === 0 && S.sizeIdx >= 1 ? 'High Street' : w.destination + (w.ferry ? ' Ferry' : ' Road'));
     });
     var byWay = {};
     S.buildings.forEach(function (b) { if (b.wayId !== null) (byWay[b.wayId] = byWay[b.wayId] || []).push(b); });
@@ -494,6 +511,8 @@
         o.bearing = angleToBearing(Math.atan2(w.rim.y, w.rim.x));
       }
       if (w.forced) o.forced = true;
+      if (w.landing) o.landing = true;
+      if (w.ferry) o.ferry = true;
       return o;
     });
     var hidden = { terrain: T, net: net, placer: S._placer, fieldHash: S.fieldHash };

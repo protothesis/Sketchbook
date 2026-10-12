@@ -67,6 +67,18 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-12: Roads no longer lead "to Bramham" straight into the sea. An
+  approach road with open water between it and the map edge is a
+  **landing** (⚓, named Quay Road, Harbour Road…) with no destination, so
+  no journey continues from it. Roads the atlas requires must reach the
+  edge over land and swing round to find it. A town with no land road out
+  at all (an island) runs **ferries** from its landings instead, and a
+  required road with no land within reach becomes a ferry too. Roads may
+  also start in a river at the edge rather than on its bank mid-map.
+  `GENERATOR_VERSION` is now 2: coastal and island towns, and atlas places
+  whose roads ran into water, can come out differently; others are
+  unchanged.
+
 - 2026-10-12: Fields and buildings no longer sit on rivers or lake edges;
   rivers stop at lakes and the sea instead of being drawn across them.
 

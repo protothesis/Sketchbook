@@ -136,7 +136,10 @@ remembered as `base` (a setting change picks from a table of plausible
 neighbours; sliders drift but are pulled back toward typical values);
 **Lock** stores `settings` plus the generator version. New seed reshapes a
 place in place; Random starts a separate journey (its own component in the
-atlas graph). The world seed is the first town's land seed. Arriving at a known
+atlas graph). Roads only lead onward if they reach the map edge over land:
+otherwise they're landings (no destination), except on a town with no land
+road out at all, where they're ferries. Ferries are the seed of the "routes
+over water" idea; a region map would decide them properly. The world seed is the first town's land seed. Arriving at a known
 place by a new road adds a road to it, which can shift its layout, even
 when locked (see *Open questions*).
 

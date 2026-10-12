@@ -332,7 +332,7 @@
     if (dw) {
       renderer.hover = null;
       canvas.classList.add('pointing');
-      tip.textContent = 'Travel to ' + dw.destination + (known(dw.destination) ? ' (in your atlas)' : '');
+      tip.textContent = (dw.ferry ? 'Take the ferry to ' : 'Travel to ') + dw.destination + (known(dw.destination) ? ' (in your atlas)' : '');
       tip.style.left = p[0] + 'px'; tip.style.top = p[1] + 'px'; tip.style.display = 'block';
       return;
     }
@@ -391,7 +391,8 @@
     } else {
       pill.textContent = VG.ROAD_KINDS[it.kind].label; pill.style.background = '#9a8a72';
       rows.push(['Length', it.length.toLocaleString() + ' m']);
-      if (it.destination) rows.push(['Leads to', it.destination + (known(it.destination) ? ' (in your atlas)' : '')]);
+      if (it.destination) rows.push(['Leads to', it.destination + (it.ferry ? ', by ferry' : '') + (known(it.destination) ? ' (in your atlas)' : '')]);
+      if (it.landing) rows.push(['Ends at', 'a landing on the water: no road on from here']);
       var n = S.buildings.filter(function (b) { return b.wayId === it.id; }).length;
       rows.push(['Buildings', n]);
     }
@@ -399,7 +400,7 @@
     $('iroute').hidden = hit.kind !== 'building';
     var dest = hit.kind === 'way' && it.destination;
     $('itravel').hidden = !dest;
-    if (dest) $('itravel').textContent = 'Travel to ' + it.destination + ' →';
+    if (dest) $('itravel').textContent = (it.ferry ? 'Take the ferry to ' : 'Travel to ') + it.destination + ' →';
     drawPlan(hit.kind === 'building' ? it : null);
   }
   function esc(s) { return s.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
