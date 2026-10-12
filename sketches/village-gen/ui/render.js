@@ -88,6 +88,208 @@
     return o;
   }
 
+  // --- Patterns -----------------------------------------------------------------
+  // A style's `patterns` are procedural tiles, one period square, built once
+  // per style (and paper colour) into CanvasPatterns. Sizes are in metres:
+  // a pattern belongs to the ground, so its transform maps a tile period to
+  // `spacing` metres in world space, and it doesn't swim when the view pans.
+
+  var PATTERN_TILE = 64;  // tile pixels per period
+  var PATTERN_MIN_PX = 3; // finer than this on screen, a pattern shows as its flat ground
+
+  /** Draw one period of a pattern into a tile canvas (k = tile pixels per metre). */
+  var TILES = {
+    lines: function (c, D, k, T) { var w = D.width * k; c.fillRect(0, T / 2 - w / 2, T, w); },
+    grid: function (c, D, k, T) { var w = D.width * k; c.fillRect(0, T / 2 - w / 2, T, w); c.fillRect(T / 2 - w / 2, 0, w, T); },
+    dots: function (c, D, k, T) { spots(c, T, D.stagger, function (x, y) { c.moveTo(x + D.radius * k, y); c.arc(x, y, D.radius * k, 0, Math.PI * 2); }); c.fill(); },
+    // Overlapping round crowns, each over the last, staggered by default.
+    crowns: function (c, D, k, T, col) {
+      var edge = D.edge ? col(D.edge) : null;
+      c.lineWidth = (D.edgeWidth || 0.3) * k;
+      spots(c, T, D.stagger !== false, function (x, y) {
+        c.beginPath(); c.arc(x, y, D.radius * k, 0, Math.PI * 2); c.fill();
+        if (edge) { c.strokeStyle = edge; c.stroke(); }
+      });
+    },
+    dashes: function (c, D, k, T) {
+      var l = (D.length != null ? D.length : D.spacing / 2) * k, w = D.width * k;
+      spots(c, T, D.stagger, function (x, y) { c.rect(x - l / 2, y - w / 2, l, w); });
+      c.fill();
+    },
+    waves: function (c, D, k, T) {
+      var a = (D.amplitude != null ? D.amplitude : D.spacing * 0.15) * k;
+      c.lineWidth = D.width * k; c.lineCap = 'round';
+      c.beginPath();
+      for (var x = 0; x <= T; x++) c.lineTo(x, T / 2 + a * Math.sin(x / T * Math.PI * 2));
+      c.stroke();
+    }
+  };
+
+  /** Call fn at the tile centre (and the corners when staggered), wrapped so shapes tile seamlessly. */
+  function spots(c, T, stagger, fn) {
+    var pts = stagger ? [[T / 2, T / 2], [0, 0]] : [[T / 2, T / 2]];
+    c.beginPath();
+    pts.forEach(function (p) {
+      for (var ox = -T; ox <= T; ox += T) for (var oy = -T; oy <= T; oy += T) fn(p[0] + ox, p[1] + oy);
+    });
+  }
+
+  /**
+   * A pattern ready to fill with, anchored in world metres (the fill runs
+   * under the world transform): rotated by `angle` (radians) on top of the
+   * pattern's own, with a period's corner at (ox, oy). Null when there's no
+   * such pattern or it would come out finer than its minPx at this zoom, so
+   * the caller falls back to a flat colour.
+   */
+  function usePattern(set, name, sc, angle, ox, oy) {
+    var p = set[name];
+    if (!p || p.spacing * sc < p.minPx) return null;
+    var s = p.spacing / PATTERN_TILE, a = p.angle + (angle || 0), c = Math.cos(a), n = Math.sin(a);
+    if (p.pattern.setTransform) p.pattern.setTransform(new DOMMatrix([c * s, n * s, -n * s, c * s, ox || 0, oy || 0]));
+    return p.pattern;
+  }
+
+  /** Build a style's patterns: name → { pattern, spacing, angle, ground, minPx }. */
+  function buildPatterns(style, paper) {
+    var defs = style.patterns || {}, out = {}, col = function (ref) { return color(style, ref, paper); };
+    Object.keys(defs).forEach(function (name) {
+      var D = defs[name], draw = TILES[D.kind];
+      if (!draw || !(D.spacing > 0)) return;
+      var T = PATTERN_TILE, cv = makeCanvas(T, T), c = cv.getContext('2d');
+      if (D.ground) { c.fillStyle = col(D.ground); c.fillRect(0, 0, T, T); }
+      c.fillStyle = c.strokeStyle = col(D.color);
+      draw(c, D, T / D.spacing, T, col);
+      out[name] = { pattern: c.createPattern(cv, 'repeat'), spacing: D.spacing, angle: (D.angle || 0) * Math.PI / 180,
+        ground: D.ground ? col(D.ground) : null, minPx: D.minPx != null ? D.minPx : PATTERN_MIN_PX };
+    });
+    return out;
+  }
+
+  // --- Areas ------------------------------------------------------------------
+  // `area.<kind>` features: polygons the generator will provide as S.areas
+  // (notes/style-system.md, step 5). Until it does, a few kinds have a
+  // renderer-side stop-gap here, behind the same key; anything else simply
+  // doesn't exist and draws nothing.
+
+  /**
+   * An S.areas entry as rings: an area or a list of them, each with a
+   * `polygon` (one ring) or `rings`, or bare rings.
+   */
+  function areaRings(src) {
+    var out = [];
+    (Array.isArray(src) && !(src[0] && typeof src[0][0] === 'number') ? src : [src]).forEach(function (a) {
+      if (!a) return;
+      if (a.rings) out.push.apply(out, a.rings);
+      else if (a.polygon) out.push(a.polygon);
+      else if (Array.isArray(a) && Array.isArray(a[0]) && Array.isArray(a[0][0])) out.push.apply(out, a);
+      else if (Array.isArray(a)) out.push(a);
+    });
+    return out;
+  }
+
+  var STOPGAP_AREAS = {
+    /**
+     * The settlement's boundary: the farmed extent (fields, buildings and
+     * squares) grown by `margin` metres and smoothed. Rasterised onto a
+     * coarse grid, dilated, blurred, then traced back out with marching
+     * squares and rounded with Chaikin. Not yet pulled to a contour or cut
+     * by water; the generator's S.areas.boundary will do that.
+     */
+    boundary: function (S) {
+      var margin = 30, W = S.bounds.size, cell = Math.max(6, W / 256), n = Math.ceil(W / cell);
+      var cv = makeCanvas(n, n), c = cv.getContext('2d');
+      c.setTransform(1 / cell, 0, 0, 1 / cell, n / 2, n / 2);
+      c.beginPath();
+      S.fields.forEach(function (f) { polyPath(c, f.polygon); });
+      S.buildings.forEach(function (b) { polyPath(c, b.polygon); });
+      S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
+      c.fill();
+      var px = c.getImageData(0, 0, n, n).data, N = n + 2, v = new Float32Array(N * N), any = false;
+      for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) {
+        if (px[(j * n + i) * 4 + 3] > 64) { v[(j + 1) * N + i + 1] = 1; any = true; }
+      }
+      if (!any) return null;
+      var r = Math.max(1, Math.round(margin / cell));
+      v = gridPass(gridPass(v, N, r, true, true), N, r, true, false);  // dilate by the margin
+      v = gridPass(gridPass(v, N, r, false, true), N, r, false, false); // soften the corners
+      // Outer rings only: unfarmed ground inside the town is still inside it.
+      var rings = traceRings(v, N, 0.5, cell, W);
+      return rings.filter(function (ring) {
+        return !rings.some(function (o) { return o !== ring && G.pointInPoly(ring[0][0], ring[0][1], o); });
+      }).map(chaikin);
+    }
+  };
+
+  /** Inside an area's rings (evenodd, so holes count). */
+  function inArea(A, x, y) {
+    var b = A.bounds, k = 0;
+    if (x < b[0] || y < b[1] || x > b[2] || y > b[3]) return false;
+    A.rings.forEach(function (r) { if (G.pointInPoly(x, y, r)) k++; });
+    return k % 2 === 1;
+  }
+
+  /** One separable pass of a max (dilate) or box (blur) filter of radius r over an N×N grid. */
+  function gridPass(v, N, r, max, horizontal) {
+    var out = new Float32Array(N * N);
+    for (var j = 1; j < N - 1; j++) for (var i = 1; i < N - 1; i++) {
+      var acc = 0;
+      for (var d = -r; d <= r; d++) {
+        var ii = horizontal ? i + d : i, jj = horizontal ? j : j + d;
+        if (ii < 1 || jj < 1 || ii > N - 2 || jj > N - 2) continue;
+        var x = v[jj * N + ii];
+        if (max) { if (x > acc) acc = x; } else acc += x;
+      }
+      out[j * N + i] = max ? acc : acc / (2 * r + 1);
+    }
+    return out;
+  }
+
+  /** Closed rings where grid value crosses `lvl` (grid has a 1-cell empty border), in world metres. */
+  function traceRings(v, N, lvl, cell, W) {
+    var pts = {}, next = {};
+    function P(i, j) { return [(i - 0.5) * cell - W / 2, (j - 0.5) * cell - W / 2]; }
+    for (var j = 0; j < N - 1; j++) for (var i = 0; i < N - 1; i++) {
+      var a = v[j * N + i], b = v[j * N + i + 1], c = v[(j + 1) * N + i + 1], d = v[(j + 1) * N + i];
+      var idx = (a > lvl ? 8 : 0) | (b > lvl ? 4 : 0) | (c > lvl ? 2 : 0) | (d > lvl ? 1 : 0);
+      if (idx === 0 || idx === 15) continue;
+      // Edge ids: horizontal edges even, vertical odd.
+      var ids = [(j * N + i) * 2, ((j * N + i + 1) * 2) + 1, (((j + 1) * N + i) * 2), (j * N + i) * 2 + 1];
+      var p0 = P(i, j), p1 = P(i + 1, j + 1);
+      var at = [
+        [p0[0] + (p1[0] - p0[0]) * (lvl - a) / (b - a), p0[1]], [p1[0], p0[1] + (p1[1] - p0[1]) * (lvl - b) / (c - b)],
+        [p0[0] + (p1[0] - p0[0]) * (lvl - d) / (c - d), p1[1]], [p0[0], p0[1] + (p1[1] - p0[1]) * (lvl - a) / (d - a)]
+      ];
+      MS[idx].forEach(function (sg) {
+        var e = ids[sg[0]], f = ids[sg[1]];
+        pts[e] = at[sg[0]]; pts[f] = at[sg[1]];
+        (next[e] = next[e] || []).push(f);
+        (next[f] = next[f] || []).push(e);
+      });
+    }
+    var seen = {}, rings = [];
+    Object.keys(next).forEach(function (start) {
+      if (seen[start]) return;
+      var ring = [], prev = null, cur = start;
+      while (cur != null && !seen[cur]) {
+        seen[cur] = true; ring.push(pts[cur]);
+        var nb = next[cur], go = nb[0] == prev && nb.length > 1 ? nb[1] : nb[0];
+        prev = cur; cur = String(go);
+      }
+      if (ring.length > 2) rings.push(ring);
+    });
+    return rings;
+  }
+
+  /** One round of Chaikin corner cutting on a closed ring. */
+  function chaikin(ring) {
+    var out = [];
+    for (var i = 0; i < ring.length; i++) {
+      var a = ring[i], b = ring[(i + 1) % ring.length];
+      out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+    }
+    return out;
+  }
+
   // --- Terrain ----------------------------------------------------------------
 
   function lerpColor(stops, t) {
@@ -238,6 +440,8 @@
   Renderer.prototype.setStyle = function (id) {
     this.style = VG.styles[id] || VG.styles.natural;
     this._paint = {};
+    this._patterns = null;
+    this._exitFrom = null;
     if (this.S) this.setSettlement(this.S, this.biome);
   };
 
@@ -282,6 +486,8 @@
     this.treeImg = trees ? bakeTrees(S, this.paint(trees)) : null;
     this.trees = treeGrid(S);
     this.bakes = {};
+    this._areas = {};
+    this._exitFrom = null;
     this.selected = null;
     this.hover = null;
   };
@@ -297,14 +503,84 @@
     env.view = view;
     this.destHits = [];
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    var focus = this.style.focus;
+    function place(fn) {
+      if (fn.screen) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      else ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc));
+    }
     // Each layer in order, if its checkbox is on and it's in its zoom range.
     this.style.layers.forEach(function (L) {
       var fn = DRAW[L.draw];
       if (!fn || (L.toggle && !self.layers[L.toggle]) || !inZoom(L.zoom, sc)) return;
-      if (fn.screen) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      else ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc));
+      var where = focus && L.focus && L.focus !== 'any' && !fn.unclipped ? L.focus : null;
+      if (!where) {
+        place(fn);
+        return fn(ctx, zoomed(self.paint(L), sc), env, L);
+      }
+      // Focus: clipped to the focus area, or to everything outside it.
+      ctx.save();
+      self.clipFocus(ctx, view, focus, where);
+      place(fn);
+      var ways = fn.ways && /^way(\.|$)/.test(L.match || '');
+      env.wayMode = ways ? 'body' : null;
       fn(ctx, zoomed(self.paint(L), sc), env, L);
+      ctx.restore();
+      // A road's run on to its exit is drawn outside every clip.
+      if (ways) {
+        env.wayMode = 'exit';
+        place(fn);
+        fn(ctx, zoomed(self.paint(L), sc), env, L);
+      }
+      env.wayMode = null;
     });
+  };
+
+  /**
+   * Clip to the style's focus area ('inside') or its complement
+   * ('outside'). An area that doesn't exist is empty: nothing is inside it.
+   */
+  Renderer.prototype.clipFocus = function (ctx, view, focus, where) {
+    var sc = view.scale, dpr = view.dpr, A = this.area(focus.area), vb = view.bounds(), pad = 100 / sc;
+    ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc));
+    ctx.beginPath();
+    if (where === 'outside') ctx.rect(vb[0] - pad, vb[1] - pad, vb[2] - vb[0] + 2 * pad, vb[3] - vb[1] + 2 * pad);
+    if (A) A.rings.forEach(function (ring) { polyPath(ctx, ring); });
+    ctx.clip('evenodd');
+  };
+
+  /**
+   * An area feature by key ('area.boundary' or 'boundary') as { rings,
+   * bounds }, or null if there's none: S.areas when the generator provides
+   * it, else the renderer's stop-gap. Cached per settlement.
+   */
+  Renderer.prototype.area = function (key) {
+    var kind = String(key).replace(/^area\./, ''), S = this.S, c = this._areas;
+    if (!S) return null;
+    if (kind in c) return c[kind];
+    var rings = S.areas && S.areas[kind] ? areaRings(S.areas[kind]) : STOPGAP_AREAS[kind] ? STOPGAP_AREAS[kind](S) : null;
+    if (!rings || !rings.length) return (c[kind] = null);
+    var b = [Infinity, Infinity, -Infinity, -Infinity];
+    rings.forEach(function (r) { var rb = G.polyBounds(r); b = [Math.min(b[0], rb[0]), Math.min(b[1], rb[1]), Math.max(b[2], rb[2]), Math.max(b[3], rb[3])]; });
+    return (c[kind] = { rings: rings, bounds: b });
+  };
+
+  /**
+   * Where a way with an exit last leaves the focus area: the index of its
+   * last node inside it (0 if none is). From there on it's drawn unclipped.
+   */
+  Renderer.prototype.exitFrom = function (w) {
+    var c = this._exitFrom || (this._exitFrom = new Map());
+    if (c.has(w)) return c.get(w);
+    var A = this.style.focus ? this.area(this.style.focus.area) : null, N = this.S.network.nodes, i = w.nodes.length - 1;
+    while (i > 0 && !(A && inArea(A, N[w.nodes[i]].x, N[w.nodes[i]].y))) i--;
+    c.set(w, i);
+    return i;
+  };
+
+  /** The active style's patterns, built once per style and paper colour. */
+  Renderer.prototype.patterns = function (paper) {
+    if (!this._patterns || this._patterns.paper !== paper) this._patterns = { paper: paper, set: buildPatterns(this.style, paper) };
+    return this._patterns.set;
   };
 
   /** What a draw function gets besides its paint. */
@@ -314,7 +590,9 @@
       r: this, S: this.S, style: style, vb: vb, sc: sc, px: 1 / sc, t: t, paper: paper,
       selected: selected, hover: this.hover, highlight: this.highlightCat, layers: this.layers,
       color: function (ref) { return color(style, ref, paper); },
-      paint: function (L, key) { return self.paint(L, key); }
+      paint: function (L, key) { return self.paint(L, key); },
+      pattern: function (name, angle, ox, oy) { return usePattern(self.patterns(paper), name, sc, angle, ox, oy); },
+      wayMode: null
     };
   };
 
@@ -365,6 +643,16 @@
     ctx.moveTo(poly[0][0], poly[0][1]);
     for (var i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
     ctx.closePath();
+  }
+
+  /** A plaza's slightly wobbly outline. */
+  function plazaRing(p) {
+    var ring = [];
+    for (var i = 0; i < 18; i++) {
+      var a = (i / 18) * Math.PI * 2, r = p.r * (1 + 0.12 * Math.sin(a * 3 + p.x) + 0.06 * Math.cos(a * 5 + p.y));
+      ring.push([p.x + Math.cos(a) * r, p.y + Math.sin(a) * r]);
+    }
+    return ring;
   }
 
   function mid(a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; }
@@ -498,11 +786,7 @@
     env.S.plazas.forEach(function (p) {
       var Pk = env.paint(L, p.kind);
       ctx.beginPath();
-      for (var i = 0; i <= 18; i++) {
-        var a = (i / 18) * Math.PI * 2, r = p.r * (1 + 0.12 * Math.sin(a * 3 + p.x) + 0.06 * Math.cos(a * 5 + p.y));
-        if (i) ctx.lineTo(p.x + Math.cos(a) * r, p.y + Math.sin(a) * r); else ctx.moveTo(p.x + Math.cos(a) * r, p.y + Math.sin(a) * r);
-      }
-      ctx.closePath();
+      polyPath(ctx, plazaRing(p));
       ctx.fillStyle = env.color(Pk.fill);
       ctx.fill();
       ctx.strokeStyle = env.color(Pk.stroke);
@@ -540,12 +824,22 @@
   /**
    * A way's path. A road that leads somewhere is always traced on to its
    * exit past the map's edge, so it runs on under the fade instead of
-   * stopping: a renderer rule, not a style option.
+   * stopping: a renderer rule, not a style option. Under a focus clip, a
+   * way layer is drawn twice (env.wayMode): 'body' clipped, then 'exit'
+   * unclipped. A way with an exit splits where it last leaves the focus
+   * area, so its run out of town and on to the exit is never clipped away.
    */
-  function traceWay(ctx, N, w) {
-    ctx.moveTo(N[w.nodes[0]].x, N[w.nodes[0]].y);
-    for (var i = 1; i < w.nodes.length; i++) ctx.lineTo(N[w.nodes[i]].x, N[w.nodes[i]].y);
-    if (w.exit) ctx.lineTo(w.exit.x, w.exit.y);
+  function traceWay(ctx, N, w, env) {
+    var mode = env && env.wayMode, n = w.nodes.length, i0 = 0, i1 = n - 1;
+    if (mode) {
+      var cut = w.exit ? env.r.exitFrom(w) : n - 1;
+      if (mode === 'exit') { if (!w.exit) return; i0 = cut; } else i1 = cut;
+    }
+    if (i1 > i0 || !w.exit) {
+      ctx.moveTo(N[w.nodes[i0]].x, N[w.nodes[i0]].y);
+      for (var i = i0 + 1; i <= i1; i++) ctx.lineTo(N[w.nodes[i]].x, N[w.nodes[i]].y);
+    } else ctx.moveTo(N[w.nodes[i0]].x, N[w.nodes[i0]].y);
+    if (w.exit && mode !== 'body') ctx.lineTo(w.exit.x, w.exit.y);
   }
 
   // A way's own width (its kind's, in metres) is the `m` of its fill; the
@@ -556,12 +850,14 @@
       var Pk = env.paint(L, kind);
       if (!Pk.stroke) return;
       ctx.beginPath();
-      visible.forEach(function (w) { if (w.kind === kind) traceWay(ctx, N, w); });
+      visible.forEach(function (w) { if (w.kind === kind) traceWay(ctx, N, w, env); });
       ctx.strokeStyle = env.color(Pk.stroke);
       ctx.lineWidth = Math.max(K[kind].width + pad.m, (Pk.px + pad.px) * env.px);
       ctx.stroke();
     });
   };
+
+  DRAW.casing.ways = true;
 
   DRAW.bridges = function (ctx, P, env) {
     var S = env.S, N = S.network.nodes;
@@ -580,7 +876,7 @@
     P.order.forEach(function (kind) {
       var Pk = env.paint(L, kind);
       ctx.beginPath();
-      visible.forEach(function (w) { if (w.kind === kind) traceWay(ctx, N, w); });
+      visible.forEach(function (w) { if (w.kind === kind) traceWay(ctx, N, w, env); });
       ctx.strokeStyle = env.color(Pk.stroke);
       if (Pk.dash) ctx.setLineDash(Pk.dash.map(function (d) { return width(d, px); }));
       ctx.lineWidth = Math.max(K[kind].width, Pk.px * px);
@@ -589,12 +885,14 @@
     });
     var sel = env.selected, st = env.style.states.select;
     if (sel && sel.kind === 'way') {
-      ctx.beginPath(); traceWay(ctx, N, sel.item);
+      ctx.beginPath(); traceWay(ctx, N, sel.item, env);
       ctx.strokeStyle = env.color(st.way);
       ctx.lineWidth = Math.max(K[sel.item.kind].width + st.wayWidth.m, st.wayWidth.px * px);
       ctx.stroke();
     }
   };
+
+  DRAW.ways.ways = true;
 
   DRAW['trees.baked'] = function (ctx, P, env) {
     var W = env.S.bounds.size;
@@ -780,6 +1078,150 @@
     }
   };
 
+  // --- Generic draw functions ------------------------------------------------------
+  // `fill` and `stroke` draw whatever feature type the layer's `match` names,
+  // so most new looks need only a style. (`natural` keeps its purpose-built
+  // functions above.) FEATURES[collection](env) lists a collection's items in
+  // view at this point in the town's growth, each as { key, item } plus its
+  // geometry: `ring` (a closed polygon), `rings` (an area, filled evenodd),
+  // `way` (traced on to its exit) or `path` (a prebuilt Path2D).
+
+  var FEATURES = {
+    field: function (env) {
+      return env.S.fields.filter(function (f) { return f.epoch <= env.t && seen(env, f, f.polygon, 0); })
+        .map(function (f) { return { key: f.crop, item: f, ring: f.polygon }; });
+    },
+    building: function (env) {
+      return env.S.buildings.filter(function (b) { return b.epoch <= env.t && seen(env, b, b.polygon, 2); })
+        .map(function (b) { return { key: b.category, item: b, ring: b.polygon }; });
+    },
+    plaza: function (env) {
+      return env.S.plazas.map(function (p) { return { key: p.kind, item: p, ring: plazaRing(p) }; });
+    },
+    way: function (env) {
+      return visibleWays(env).map(function (w) { return { key: w.kind, item: w, way: w }; });
+    },
+    area: function (env, key) {
+      // An area exists as a whole or not at all; '*' isn't enumerable yet.
+      var A = key && key !== '*' ? env.r.area(key) : null;
+      return A && inView(env.vb, A.bounds, 0) ? [{ key: key, item: A, rings: A.rings }] : [];
+    },
+    contour: function (env) {
+      var C = env.r.contours;
+      return [{ key: 'minor', path: C.minor }, { key: 'major', path: C.major }];
+    },
+    shore: function (env) { return [{ key: null, path: env.r.contours.shore }]; }
+  };
+
+  function seen(env, o, poly, pad) {
+    if (!o._b) o._b = G.polyBounds(poly);
+    return inView(env.vb, o._b, pad);
+  }
+
+  /**
+   * The items a layer draws: its `match` ('field.*', 'area.boundary',
+   * 'shore'…) and optional `filter` ({ type: ['inn', 'manor'], landing: true }:
+   * every property must equal the value, or be one of a list).
+   */
+  function features(env, L) {
+    var m = String(L.match || ''), i = m.indexOf('.'), coll = i < 0 ? m : m.slice(0, i), key = i < 0 ? null : m.slice(i + 1);
+    var get = FEATURES[coll];
+    if (!get) return [];
+    var items = get(env, key), F = L.filter;
+    return items.filter(function (it) {
+      if (key && key !== '*' && it.key !== key) return false;
+      for (var k in F || {}) {
+        var v = it.item && it.item[k];
+        if (Array.isArray(F[k]) ? F[k].indexOf(v) < 0 : v !== F[k]) return false;
+      }
+      return true;
+    });
+  }
+
+  /** Add an item's geometry to the current path. */
+  function traceItem(ctx, it, env) {
+    if (it.ring) polyPath(ctx, it.ring);
+    else if (it.rings) it.rings.forEach(function (r) { polyPath(ctx, r); });
+    else if (it.way) traceWay(ctx, env.S.network.nodes, it.way, env);
+  }
+
+  /** The angle of a quad's long axis: field rows run along it. */
+  function longAxis(p) {
+    var ax = p[1][0] - p[0][0], ay = p[1][1] - p[0][1], bx = p[3][0] - p[0][0], by = p[3][1] - p[0][1];
+    return ax * ax + ay * ay >= bx * bx + by * by ? Math.atan2(ay, ax) : Math.atan2(by, bx);
+  }
+
+  /**
+   * Paint: { fill, pattern, align, alpha, stroke, width }. A pattern draws
+   * its own `ground`, or over `fill` if it has none; too fine to see at this
+   * zoom, it falls back to its ground (else `fill`). `align: 'field'` turns
+   * each field's pattern to its long axis. An optional `stroke` outlines the
+   * same shapes.
+   */
+  DRAW.fill = function (ctx, P, env, L) {
+    var groups = {}, order = [], sc = env.sc, sets = env.r.patterns(env.paper);
+    features(env, L).forEach(function (it) {
+      if (it.path) return;
+      var Pk = zoomed(env.paint(L, it.key), sc), pat = Pk.pattern && sets[Pk.pattern];
+      var vis = pat && pat.spacing * sc >= pat.minPx;
+      var aligned = vis && Pk.align === 'field' && it.ring && it.ring.length === 4;
+      var id = aligned ? 'item' + order.length : [Pk.fill, vis ? Pk.pattern : '', Pk.alpha, Pk.stroke, it.rings ? 'eo' : ''].join('|');
+      var g = groups[id];
+      if (!g) { g = groups[id] = { P: Pk, pat: vis ? Pk.pattern : null, flat: pat && !vis ? pat.ground : null, aligned: aligned, list: [] }; order.push(id); }
+      g.list.push(it);
+    });
+    order.forEach(function (id) {
+      var g = groups[id], Pk = g.P, list = g.list, rule = list[0].rings ? 'evenodd' : 'nonzero';
+      var fill = function () { ctx.fill(rule); };
+      var trace = function (i) { traceItem(ctx, list[i], env); };
+      ctx.globalAlpha = Pk.alpha != null ? Pk.alpha : 1;
+      if (g.pat) {
+        if (Pk.fill && !sets[g.pat].ground) { ctx.fillStyle = env.color(Pk.fill); batched(ctx, list.length, 1, trace, fill); }
+        var r0 = list[0].ring;
+        ctx.fillStyle = g.aligned ? env.pattern(g.pat, longAxis(r0), r0[0][0], r0[0][1]) : env.pattern(g.pat);
+        batched(ctx, list.length, 1, trace, fill);
+      } else if (g.flat || Pk.fill) {
+        ctx.fillStyle = g.flat || env.color(Pk.fill);
+        batched(ctx, list.length, 1, trace, fill);
+      }
+      if (Pk.stroke) {
+        ctx.strokeStyle = env.color(Pk.stroke);
+        ctx.lineWidth = width(Pk.width || { px: 1 }, env.px);
+        batched(ctx, list.length, 1, trace, function () { ctx.stroke(); });
+      }
+    });
+    ctx.globalAlpha = 1;
+  };
+
+  /**
+   * Paint: { stroke, width, dash, alpha, pattern }: outlines of polygons,
+   * ways (traced on to their exits) and contour lines. Widths and dashes
+   * are { m, px }; `pattern` strokes with a pattern instead of a colour.
+   */
+  DRAW.stroke = function (ctx, P, env, L) {
+    var groups = {}, order = [], sc = env.sc, px = env.px;
+    features(env, L).forEach(function (it) {
+      if (env.wayMode === 'exit' && !(it.way && it.way.exit)) return;
+      var Pk = zoomed(env.paint(L, it.key), sc), id = JSON.stringify([Pk.stroke, Pk.width, Pk.dash, Pk.alpha, Pk.pattern]);
+      var g = groups[id];
+      if (!g) { g = groups[id] = { P: Pk, list: [] }; order.push(id); }
+      g.list.push(it);
+    });
+    order.forEach(function (id) {
+      var Pk = groups[id].P, list = groups[id].list;
+      ctx.globalAlpha = Pk.alpha != null ? Pk.alpha : 1;
+      ctx.strokeStyle = (Pk.pattern && env.pattern(Pk.pattern)) || env.color(Pk.stroke);
+      ctx.lineWidth = width(Pk.width || { px: 1 }, px);
+      if (Pk.dash) ctx.setLineDash(Pk.dash.map(function (d) { return typeof d === 'number' ? d * px : width(d, px); }));
+      var paths = list.filter(function (it) { return it.path; }), rest = list.filter(function (it) { return !it.path; });
+      paths.forEach(function (it) { ctx.stroke(it.path); });
+      batched(ctx, rest.length, 1, function (i) { traceItem(ctx, rest[i], env); }, function () { ctx.stroke(); });
+      ctx.setLineDash([]);
+    });
+    ctx.globalAlpha = 1;
+  };
+  DRAW.stroke.ways = true;
+
   // Labels, in screen pixels.
 
   function screenOf(env) {
@@ -833,6 +1275,7 @@
     });
   };
   DRAW['labels.destination'].screen = true;
+  DRAW['labels.destination'].unclipped = true; // never clipped away by a focus
 
   // Street names along their middle segment.
   DRAW['labels.street'] = function (ctx, P, env) {
@@ -899,7 +1342,7 @@
   DRAW.scaleBar.screen = true;
 
   VG.render = {
-    Renderer: Renderer, CAT_LABELS: CAT_LABELS, draw: DRAW, localToWorld: localToWorld,
+    Renderer: Renderer, CAT_LABELS: CAT_LABELS, draw: DRAW, features: FEATURES, localToWorld: localToWorld,
     color: color, width: width, atZoom: atZoom
   };
 })(window);

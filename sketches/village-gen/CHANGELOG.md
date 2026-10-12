@@ -7,6 +7,28 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-12: Style system, step 4 (renderer only; no style uses it yet,
+  so no visual change):
+  - **Focus clip.** A style's `focus: { area: 'area.boundary' }` plus a
+    layer's `focus: 'inside' | 'outside'` clips that layer to the area or
+    to everything outside it.
+  - **Stop-gap boundary.** `area.boundary` is the farmed extent (fields,
+    buildings and squares) grown by 30 m and smoothed. It's computed once
+    per settlement in the renderer, and `S.areas` replaces it once the
+    generator provides one. Other `area.*` kinds don't exist yet and draw
+    nothing.
+  - **Roads never clipped away.** A road with a destination is drawn
+    unclipped from where it last leaves the focus area on to its exit.
+    Destination tabs and landing marks ignore the focus.
+  - **Procedural patterns.** A style's `patterns` (`lines`, `dots`,
+    `crowns`, `waves`, `dashes`, `grid`) are built once per style into
+    canvas patterns. They're anchored in world metres so they don't swim
+    when panning, `align: 'field'` turns them along each field, and a
+    pattern finer than about 3 screen px shows its flat ground colour.
+  - **Generic `fill` and `stroke` draw functions.** They draw whatever a
+    layer's `match` names (fields, buildings, squares, ways, areas,
+    contours, shore), with an optional `filter`. `board` will use them.
+
 - 2026-10-12: The atlas map shows every visited place's roads not taken as
   a short spur (remembered as `roads` on each place when you visit it).
   Hovering a place, or being in it, draws them long and labels where they
