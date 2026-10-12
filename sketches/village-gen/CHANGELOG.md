@@ -44,6 +44,13 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-10-12: Style system, step 3: the renderer draws by looping over
+  the style's `layers`, each with its checkbox (`toggle`), zoom range and
+  draw function, instead of a fixed sequence. Zoom thresholds live in
+  layer `zoom` ranges and paint (the place name's fade is a zoom stop).
+  No visual change, except that a renderer's very first frame now strokes
+  contours with round caps, like every frame after it already did.
+
 - 2026-10-12: Style system, step 2: today's look is now the `natural`
   style (`ui/styles/natural.js`, a classic script setting
   `VG.styles.natural`). Every colour, width (`{ m, px }`), font and zoom

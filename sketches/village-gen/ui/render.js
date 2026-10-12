@@ -1,9 +1,9 @@
 // Map renderer. What the map looks like comes from a style (ui/styles/*.js,
-// see notes/style-system.md): palette, paint and zoom values, and the draw
-// functions in the registry below read them. The renderer owns everything
-// that isn't look: the view transform, level of detail, baking and
-// batching. Everything is drawn in world metres through one transform, then
-// labels in screen pixels.
+// see notes/style-system.md): an ordered list of layers, each naming a draw
+// function from the registry below plus the paint, zoom range and checkbox
+// it draws with. The renderer owns everything that isn't look: the view
+// transform, level of detail, baking and batching. World layers are drawn
+// in metres through one transform, labels in screen pixels.
 //
 // Level of detail: a city has thousands of buildings and fields and tens of
 // thousands of trees, and a canvas call per shape is what makes zooming out
@@ -241,10 +241,10 @@
     if (this.S) this.setSettlement(this.S, this.biome);
   };
 
-  /** A layer of the active style by id. */
-  Renderer.prototype.layer = function (id) {
+  /** The active style's first layer drawn by the named draw function. */
+  Renderer.prototype.layerDrawnBy = function (name) {
     var ls = this.style.layers;
-    for (var i = 0; i < ls.length; i++) if (ls[i].id === id) return ls[i];
+    for (var i = 0; i < ls.length; i++) if (ls[i].draw === name) return ls[i];
     return null;
   };
 
@@ -273,7 +273,8 @@
     this.S = S;
     this.biome = biome;
     this._paint = {};
-    var terrain = this.layer('terrain'), trees = this.layer('trees-baked');
+    // Rasters are baked once per settlement (and per style).
+    var terrain = this.layerDrawnBy('terrain.hypso'), trees = this.layerDrawnBy('trees.baked');
     // A biome the style has no ramp for gets the first one it lists.
     var key = terrain && terrain.byKey && !terrain.byKey[biome] ? Object.keys(terrain.byKey)[0] : biome;
     this.terrainImg = terrain ? bakeHypso(S, this.paint(terrain, key)) : null;
@@ -291,40 +292,19 @@
     ctx.fillStyle = paper;
     ctx.fillRect(0, 0, cv.width, cv.height);
     if (!S) return;
-    var sc = view.scale, layers = this.layers;
+    var sc = view.scale;
     var env = this.env(view.bounds(), sc, this.history, this.selected, paper);
     env.view = view;
-    function run(id) {
-      var L = self.layer(id);
-      DRAW[L.draw](ctx, zoomed(self.paint(L), sc), env, L);
-    }
-    ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc));
-    run('terrain');
-    if (layers.contours) run('contours');
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    run('river');
-    run('shore');
-    if (layers.fields) run('fields');
-    run('plazas');
-    run('landmarks');
-    run('road-casing');
-    run('bridges');
-    run('roads');
-    if (layers.trees && inZoom(this.layer('trees-baked').zoom, sc)) run('trees-baked');
-    run('buildings');
-    if (layers.trees && inZoom(this.layer('trees').zoom, sc)) run('trees');
-    run('vignette');
-    run('selection');
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.destHits = [];
-    if (layers.labels) {
-      run('label-destination');
-      if (inZoom(this.layer('label-street').zoom, sc)) run('label-street');
-      if (inZoom(this.layer('label-building').zoom, sc)) run('label-building');
-      if (inZoom(this.layer('label-place').zoom, sc)) run('label-place');
-    }
-    run('scale-bar');
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    // Each layer in order, if its checkbox is on and it's in its zoom range.
+    this.style.layers.forEach(function (L) {
+      var fn = DRAW[L.draw];
+      if (!fn || (L.toggle && !self.layers[L.toggle]) || !inZoom(L.zoom, sc)) return;
+      if (fn.screen) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      else ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc));
+      fn(ctx, zoomed(self.paint(L), sc), env, L);
+    });
   };
 
   /** What a draw function gets besides its paint. */
