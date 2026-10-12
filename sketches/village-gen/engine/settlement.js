@@ -56,6 +56,44 @@
 
   function now() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
 
+  // Bumped whenever a change to the rules would change what an existing seed
+  // generates. Locked atlas places record the version they were made with.
+  var GENERATOR_VERSION = 1;
+
+  // Compass bearings (0 = north, clockwise, degrees) ↔ map angles (radians,
+  // x east, y south).
+  function bearingToAngle(b) { return (b - 90) * Math.PI / 180; }
+  function angleToBearing(a) { var d = a * 180 / Math.PI + 90; return Math.round(((d % 360) + 360) % 360); }
+  function angDiff(a, b) { var d = Math.abs(a - b) % (Math.PI * 2); return d > Math.PI ? Math.PI * 2 - d : d; }
+  var FORCED_SWING = [0, 0.12, -0.12, 0.25, -0.25, 0.4, -0.4, 0.6, -0.6, 0.85, -0.85, 1.2, -1.2];
+
+  /**
+   * Fit required roads into the approach slots: each takes over the free slot
+   * nearest its bearing (so the rest of the town barely moves), and any extra
+   * ones are added on. Without required roads nothing changes.
+   */
+  function claimSlots(slots, roads) {
+    roads.forEach(function (rd) {
+      var a = bearingToAngle(rd.bearing), best = null;
+      slots.forEach(function (s) {
+        if (!s.destination && (!best || angDiff(s.angle, a) < angDiff(best.angle, a))) best = s;
+      });
+      if (!best) slots.push(best = { angle: a });
+      // Within a degree is the road that's already there (bearings are stored
+      // rounded): keep its exact angle so the town comes out identical.
+      if (angDiff(best.angle, a) > Math.PI / 180) best.angle = a;
+      best.destination = rd.destination;
+    });
+  }
+
+  /**
+   * Options are the settings (see DEFAULTS) plus constraints a parent (the
+   * atlas, later a region) can impose:
+   *   name:  the settlement's name, instead of one drawn from the seed.
+   *   roads: [{ destination: 'Millford', bearing: 270 }] roads that must
+   *          leave the map towards those places (compass degrees from the
+   *          map centre).
+   */
   function generate(options) {
     var P = {}, k;
     for (k in DEFAULTS) P[k] = options && options[k] !== undefined ? options[k] : DEFAULTS[k];
@@ -68,6 +106,10 @@
     var timings = {}, t0 = now(), tt = t0;
     function lap(name) { var t = now(); timings[name] = Math.round(t - tt); tt = t; }
 
+    var forcedName = options && options.name ? String(options.name) : null;
+    var roads = (options && options.roads || []).filter(function (r) { return r && r.destination && isFinite(+r.bearing); })
+      .map(function (r) { return { destination: String(r.destination), bearing: +r.bearing }; });
+
     var sizeIdx = classify(P.population), size = SIZES[sizeIdx], pop = P.population;
     var W = CLASS_W[sizeIdx];
     var T = VG.terrain.build({ W: W, seed: seeds.land, environment: P.environment, river: P.river });
@@ -75,7 +117,7 @@
     lap('terrain');
 
     var S = {
-      version: 2, generator: 'village-gen', seed: P.seed, seeds: seeds, params: P,
+      version: 2, generator: 'village-gen', generatorVersion: GENERATOR_VERSION, seed: P.seed, seeds: seeds, params: P,
       size: { id: size.id, label: size.label }, sizeIdx: sizeIdx,
       environment: { id: P.environment, label: env.label }, env: env,
       units: 'metres', bounds: { size: W, minX: -W / 2, minY: -W / 2, maxX: W / 2, maxY: W / 2 },
@@ -114,12 +156,20 @@
     var rr2 = R.createRng(seeds.town, 'roads');
     var grid = VG.network.makeCostGrid(T, 129);
     var nApproach = size.approach + (rr2() < 0.4 ? 1 : 0), base = rr2() * Math.PI * 2;
+    var slots = [];
+    for (i = 0; i < nApproach; i++) slots.push({ angle: base + (i + (rr2() - 0.5) * 0.7) * (Math.PI * 2 / nApproach) });
+    claimSlots(slots, roads);
     var approaches = [];
-    for (i = 0; i < nApproach; i++) {
-      var ang = base + (i + (rr2() - 0.5) * 0.7) * (Math.PI * 2 / nApproach);
-      var way = net.routeApproach(grid, hub, ang, size.step);
-      if (way) approaches.push(way);
-    }
+    slots.forEach(function (slot) {
+      var way = null;
+      // A road we were told to build has to exist: if its bearing runs into
+      // water or off the land, swing it round until it finds a way in.
+      var tries = slot.destination ? FORCED_SWING : [0];
+      for (var t = 0; t < tries.length && !way; t++) way = net.routeApproach(grid, hub, slot.angle + tries[t], size.step);
+      if (!way) return;
+      if (slot.destination) { way.destination = slot.destination; way.forced = true; }
+      approaches.push(way);
+    });
     lap('approach');
 
     // --- Size estimate -------------------------------------------------------
@@ -181,7 +231,8 @@
     lap('trees');
 
     // --- Names and history -------------------------------------------------------
-    S.name = VG.names.settlement(R.createRng(seeds.names, 'settlement'), P.environment, size.id);
+    S.name = forcedName || VG.names.settlement(R.createRng(seeds.names, 'settlement'), P.environment, size.id);
+    if (forcedName || roads.length) S.constraints = { name: forcedName, roads: roads };
     nameWays(S, approaches, seeds.names);
     history(S, R.createRng(seeds.names, 'history'), best, seeds.town);
     S.stats = stats(S);
@@ -290,8 +341,15 @@
       if (!used[alt]) { used[alt] = 1; return alt; }
       return null;
     }
+    var taken = {};
+    taken[S.name] = 1;
+    approaches.forEach(function (w) { if (w.destination) taken[w.destination] = 1; });
     approaches.forEach(function (w, i) {
-      w.destination = VG.names.neighbour(R.createRng(nameSeed, 'dest|' + i), S.params.environment);
+      // A road somewhere else already goes to (or is) this name: draw again.
+      for (var k = 0; !w.destination && k < 6; k++) {
+        var d = VG.names.neighbour(R.createRng(nameSeed, 'dest|' + i + (k ? '|' + k : '')), S.params.environment);
+        if (!taken[d]) { w.destination = d; taken[d] = 1; }
+      }
       w.name = claim(i === 0 && S.sizeIdx >= 1 ? 'High Street' : w.destination + ' Road');
     });
     var byWay = {};
@@ -431,7 +489,11 @@
       }
       var o = { id: w.id, kind: w.kind, name: w.name, nodes: w.nodes.slice(), length: Math.round(len), epoch: w.epoch };
       if (w.destination) o.destination = w.destination;
-      if (w.rim) o.rim = { x: Math.round(w.rim.x), y: Math.round(w.rim.y) };
+      if (w.rim) {
+        o.rim = { x: Math.round(w.rim.x), y: Math.round(w.rim.y) };
+        o.bearing = angleToBearing(Math.atan2(w.rim.y, w.rim.x));
+      }
+      if (w.forced) o.forced = true;
       return o;
     });
     var hidden = { terrain: T, net: net, placer: S._placer, fieldHash: S.fieldHash };
@@ -519,6 +581,9 @@
     return out;
   }
 
+  VG.GENERATOR_VERSION = GENERATOR_VERSION;
+  VG.bearingToAngle = bearingToAngle;
+  VG.angleToBearing = angleToBearing;
   VG.SIZES = SIZES;
   VG.CLASS_W = CLASS_W;
   VG.parseSeed = parseSeed;

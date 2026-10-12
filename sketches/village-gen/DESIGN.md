@@ -126,6 +126,17 @@ What's real in the first version:
 What's faked: distance, terrain continuity between towns, and loops (1→2→3
 gives no guarantee that town 3 has a road to town 1).
 
+**As built (2026-10-12):** `engine/atlas.js` plus `generate({ name, roads })`.
+Every walked road is stored both ways and passed back as a `roads`
+constraint, which is what makes revisits exact. A forced road takes over
+the nearest approach-road slot (one within 1° is left untouched). New
+places' settings are discovered once (seeded by world + name, leaning on
+the origin's setting and sliders, or a setting the name implies) and
+remembered as `base`; **Lock** stores `settings` plus the generator
+version. The world seed is the first town's land seed. Arriving at a known
+place by a new road adds a road to it, which can shift its layout, even
+when locked (see *Open questions*).
+
 **Where it lives:** a separate file inside `village-gen` for now, because it's
 small and the village generator is the only thing using it. Conceptually it's
 the world layer, not part of the settlement generator. When the region sketch

@@ -69,6 +69,34 @@ Household size, the share of people on farms and the service mix all follow
 the class. Population density (people per hectare of built-up area) is
 reported in the overview.
 
+## Travelling: the atlas
+
+The "to Ashby →" tabs at the map's edge are roads out. Click one (or select
+the road and press **Travel to Ashby** in the inspector) and you arrive in
+Ashby, on a road that leads back to where you came from, entering from the
+opposite side of the map. The atlas (`engine/atlas.js`) records each place
+and road:
+
+- A destination's seed is the world seed (the first town's land seed) plus
+  its name, so the same name is always the same town, however you reach it.
+- A new place's settings are discovered once, from that seed and the place
+  you came from: it usually shares its neighbour's setting and character,
+  and a name like "Lynport" puts it on the coast. The atlas remembers them.
+- Every road you've walked is held as a constraint when its towns are
+  generated, so going back gives exactly the same place.
+- **Lock place** saves the current settings: revisits use them. Change a
+  locked place and **Save changes** / **Revert** appear. Unlocked places
+  forget tweaks when you leave. Locking a town you haven't left yet adds it
+  to the atlas.
+- **Random** and **New seed** step off the atlas to a new town; travelling
+  from it starts a new branch of the same atlas.
+
+**← Back** (B) walks back along your trail, and browser Back/Forward work
+too. The atlas is saved in this browser automatically; **Export atlas**
+writes it as JSON and **Import atlas** loads one, which is the reliable way
+to keep or move it. It's topological: it knows which towns connect and in
+which direction, not distances or the land between them.
+
 ## The data
 
 `VillageGen.generate(options)` returns plain data in metres, with the map
@@ -81,12 +109,31 @@ centred on (0, 0):
   order), `rooms[]` (ground-floor plan in local coordinates: x along the
   frontage, y from the front wall), `upperFloors`, `tags`.
 - `network`: `nodes`, `edges` (with `length`, `kind`, `bridge`), `ways`
-  (named roads as node chains). `VillageGen.findPath(s, fromNode, toNode)`
-  gives the shortest walking route.
+  (named roads as node chains; roads off the map also have `destination`,
+  `rim` and `bearing` in compass degrees, and `forced` if a constraint asked
+  for them). `VillageGen.findPath(s, fromNode, toNode)` gives the shortest
+  walking route.
+- `generatorVersion`, and `constraints` when it was generated with any.
 - `fields[]`: `crop`, `polygon`, `area`, `hectares`, `furlong`.
 - `trees[]` as `[x, y, radius, kind]`, `plazas`, `landmarks`, `terrain` (the
   height grid, water level, relief and river polyline), `stats`, `founded`,
   `presentYear`.
+
+A parent (the atlas now, a region later) can constrain a settlement:
+
+```js
+VillageGen.generate({ seed: 'ash', population: 300, name: 'Millford',
+  roads: [{ destination: 'Ashby', bearing: 80 }] }); // a road must leave east-ish to Ashby
+```
+
+Each required road takes over the approach road nearest its bearing (one
+within a degree is kept exactly as it was), so the rest of the town barely
+moves; if water blocks the bearing it swings round until it finds land.
+
+The atlas JSON (`format: "village-gen-atlas"`) holds `world`, `places`
+(`name`, `seed`, `base` settings, `settings` when locked, `locked`,
+`generator`, `from`), `links` (`from`, `to`, `bearing`, stored both ways)
+and `trail`.
 
 **Download JSON** in the panel exports it. Terrain heights and trees are
 optional because they're big. `window.settlement` holds the current one in
@@ -97,7 +144,7 @@ the same order as `index.html`:
 
 ```html
 <script src="../village-gen/engine/rng.js"></script>
-<!-- terrain, network, names, buildings, fields, settlement -->
+<!-- terrain, network, names, buildings, fields, settlement, (atlas) -->
 <script>
   var town = VillageGen.generate({ seed: 'ash', population: 120, environment: 'valley' });
 </script>
@@ -117,7 +164,9 @@ the same order as `index.html`:
 - The padlock next to each setting keeps it fixed when you press Random.
 
 Drag to pan; scroll, pinch or double-click to zoom; arrow keys pan; Esc
-closes the inspector. The seed and every setting live in the URL hash, so
+closes the inspector; B goes back along the journey. Zoomed out, fields and
+buildings on big maps are drawn from baked images and switch back to full
+detail as you zoom in. The seed and every setting live in the URL hash, so
 **Copy link** brings back exactly the same place.
 
 ### Seeds, and what stays put
@@ -157,6 +206,6 @@ or moves the camera.
 - Population as growth: make a bigger town a strict superset of a smaller
   one with the same seed, so the slider grows the place instead of
   reflowing it.
-- Neighbouring settlements at the "to …" road ends, so the map can stitch
-  into a region.
+- Real geography between neighbouring towns (the region sketch), so the
+  atlas's subway map gets distances and land.
 - History that actually changes the map: fires, a new bridge, a mill closing.

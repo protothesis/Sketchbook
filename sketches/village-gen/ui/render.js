@@ -2,6 +2,14 @@
 // contours underneath vector fields, roads, buildings and trees. Detail
 // fades in with zoom (field furrows, street names, door notches, then room
 // plans). Everything is drawn in world metres through one transform.
+//
+// Level of detail: a city has thousands of buildings and fields and tens of
+// thousands of trees, and a canvas call per shape is what makes zooming out
+// slow. So zoomed out, fields and buildings come from images baked once per
+// settlement (like the trees), at a resolution that's sharp down to the zoom
+// where the renderer switches back to vectors. Up close nothing changes.
+// Shapes that share a colour are also drawn together, a few hundred to a
+// path: one path per shape costs GPU time, one giant path costs JS time.
 (function (global) {
   'use strict';
   var VG = (global.VillageGen = global.VillageGen || {});
@@ -153,6 +161,13 @@
     return cv;
   }
 
+  // Baked layers: [image size cap, metres per image pixel, the largest
+  // screen-to-image pixel ratio to use it at]. Shown near 1:1 a baked image
+  // goes soft, so it's only used once it's being shrunk; closer in, the
+  // batched vectors take over. Only worth it for bigger places.
+  var BAKES = { fields: [3072, 2.6, 0.9], buildings: [4096, 1.95, 0.75] };
+  var BAKE_MIN_BUILDINGS = 400;
+
   function treeGrid(S) {
     var cell = 80, map = new Map();
     S.trees.forEach(function (t) {
@@ -182,6 +197,7 @@
     this.contours = buildContours(S);
     this.treeImg = bakeTrees(S);
     this.trees = treeGrid(S);
+    this.bakes = {};
     this.selected = null;
     this.hover = null;
   };
@@ -226,13 +242,22 @@
     ctx.lineWidth = px * 1.2;
     ctx.stroke(this.contours.shore);
 
-    if (this.layers.fields) this.drawFields(ctx, vb, sc, px, t);
+    if (this.layers.fields) {
+      var fieldImg = this.bakedLayer('fields', sc * dpr, t);
+      if (fieldImg) {
+        ctx.drawImage(fieldImg, -W / 2, -W / 2, W, W);
+        var sf = this.selected;
+        if (sf && sf.kind === 'field') { ctx.beginPath(); polyPath(ctx, sf.item.polygon); ctx.strokeStyle = '#1f6feb'; ctx.lineWidth = px * 2.5; ctx.stroke(); }
+      } else this.drawFields(ctx, vb, sc, px, t);
+    }
     this.drawPlazas(ctx, px);
     this.drawRoads(ctx, vb, sc, px, t);
 
     var vectorTrees = sc > 0.9;
     if (this.layers.trees && !vectorTrees) ctx.drawImage(this.treeImg, -W / 2, -W / 2, W, W);
-    this.drawBuildings(ctx, vb, sc, px, t);
+    var buildingImg = this.bakedLayer('buildings', sc * dpr, t);
+    if (buildingImg) ctx.drawImage(buildingImg, -W / 2, -W / 2, W, W);
+    else this.drawBuildings(ctx, vb, sc, px, t);
     if (this.layers.trees && vectorTrees) this.drawTrees(ctx, vb, sc);
 
     // Vignette: the land dissolves into paper at the map's edge.
@@ -246,8 +271,32 @@
     this.drawSelection(ctx, sc, px);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.destHits = [];
     if (this.layers.labels) this.drawLabels(ctx, view, t);
     this.drawScaleBar(ctx, view);
+  };
+
+  /**
+   * The baked image for a layer if it's good enough at this zoom (device
+   * pixels per metre), else null. Baked lazily, once per settlement, showing
+   * everything (t = 1) with nothing highlighted, so growth playback and the
+   * legend highlight fall back to vectors.
+   */
+  Renderer.prototype.bakedLayer = function (which, devPerM, t) {
+    var S = this.S, cfg = BAKES[which], W = S.bounds.size;
+    if (t < 1 || this.highlightCat || S.buildings.length < BAKE_MIN_BUILDINGS) return null;
+    var size = Math.min(cfg[0], Math.ceil(W / cfg[1])), k = size / W;
+    if (devPerM > k * cfg[2]) return null;
+    if (this.bakes[which]) return this.bakes[which];
+    var cv = makeCanvas(size, size), bctx = cv.getContext('2d'), sel = this.selected;
+    bctx.setTransform(k, 0, 0, k, size / 2, size / 2);
+    bctx.lineJoin = 'round'; bctx.lineCap = 'round';
+    this.selected = null;
+    var vb = [-W / 2, -W / 2, W / 2, W / 2];
+    if (which === 'fields') this.drawFields(bctx, vb, k, 1 / k, 1);
+    else this.drawBuildings(bctx, vb, k, 1 / k, 1);
+    this.selected = sel;
+    return (this.bakes[which] = cv);
   };
 
   function hexA(color, a) {
@@ -260,6 +309,19 @@
     return b[2] >= vb[0] - pad && b[0] <= vb[2] + pad && b[3] >= vb[1] - pad && b[1] <= vb[3] + pad;
   }
 
+  /**
+   * Paint items in batches: `trace(i)` adds item i to the current path,
+   * `paint()` fills/strokes it. Items i = 0, step, 2·step… below n.
+   */
+  var BATCH = 400;
+  function batched(ctx, n, step, trace, paint) {
+    for (var s = 0; s < n; s += step * BATCH) {
+      ctx.beginPath();
+      for (var i = s, e = Math.min(n, s + step * BATCH); i < e; i += step) trace(i);
+      paint();
+    }
+  }
+
   function polyPath(ctx, poly) {
     ctx.moveTo(poly[0][0], poly[0][1]);
     for (var i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
@@ -268,51 +330,62 @@
 
   Renderer.prototype.drawFields = function (ctx, vb, sc, px, t) {
     var S = this.S, furrows = sc > 0.9, sel = this.selected;
+    var fills = {}, outline = sc > 0.25, lines = furrows ? [] : null, groves = furrows ? {} : null;
     S.fields.forEach(function (f) {
       if (f.epoch > t) return;
       if (!f._b) f._b = G.polyBounds(f.polygon);
       if (!inView(vb, f._b, 0)) return;
-      ctx.beginPath();
-      polyPath(ctx, f.polygon);
-      ctx.fillStyle = CROP_COLORS[f.crop] || '#c8c08a';
-      ctx.globalAlpha = 0.92;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      if (sc > 0.25) {
-        ctx.strokeStyle = 'rgba(96, 120, 70, 0.55)';
-        ctx.lineWidth = Math.max(px, 0.8);
-        ctx.stroke();
-      }
-      if (furrows) {
-        var p = f.polygon, n = Math.max(2, Math.floor(f.width / (f.crop === 'vineyard' ? 2.2 : 3.2)));
-        var pasture = f.crop === 'pasture' || f.crop === 'meadow';
-        if (VG.CROPS[f.crop].trees) {
-          // Orchards and groves: a grid of little trees.
-          ctx.fillStyle = f.crop === 'olives' ? '#7f9466' : '#6f9b55';
-          var rows = Math.max(2, Math.floor(f.length / 7)), cols = Math.max(1, Math.floor(f.width / 7));
-          for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
-            var u = (c + 0.5) / cols, v = (r + 0.5) / rows;
-            var x = p[0][0] + (p[1][0] - p[0][0]) * u + (p[3][0] - p[0][0]) * v;
-            var y = p[0][1] + (p[1][1] - p[0][1]) * u + (p[3][1] - p[0][1]) * v;
-            ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
-          }
-        } else if (!pasture) {
-          ctx.strokeStyle = 'rgba(120, 92, 50, 0.22)';
-          ctx.lineWidth = Math.max(px * 0.8, 0.35);
-          ctx.beginPath();
-          for (var k = 1; k < n; k++) {
-            var q = k / n;
-            ctx.moveTo(p[0][0] + (p[1][0] - p[0][0]) * q, p[0][1] + (p[1][1] - p[0][1]) * q);
-            ctx.lineTo(p[3][0] + (p[2][0] - p[3][0]) * q, p[3][1] + (p[2][1] - p[3][1]) * q);
-          }
-          ctx.stroke();
+      var col = CROP_COLORS[f.crop] || '#c8c08a';
+      (fills[col] = fills[col] || []).push(f.polygon);
+      if (!furrows) return;
+      var p = f.polygon, n = Math.max(2, Math.floor(f.width / (f.crop === 'vineyard' ? 2.2 : 3.2)));
+      if (VG.CROPS[f.crop].trees) {
+        // Orchards and groves: a grid of little trees.
+        var gc = f.crop === 'olives' ? '#7f9466' : '#6f9b55', g = groves[gc] = groves[gc] || [];
+        var rows = Math.max(2, Math.floor(f.length / 7)), cols = Math.max(1, Math.floor(f.width / 7));
+        for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
+          var u = (c + 0.5) / cols, v = (r + 0.5) / rows;
+          g.push(p[0][0] + (p[1][0] - p[0][0]) * u + (p[3][0] - p[0][0]) * v, p[0][1] + (p[1][1] - p[0][1]) * u + (p[3][1] - p[0][1]) * v);
+        }
+      } else if (f.crop !== 'pasture' && f.crop !== 'meadow') {
+        for (var k = 1; k < n; k++) {
+          var q = k / n;
+          lines.push(p[0][0] + (p[1][0] - p[0][0]) * q, p[0][1] + (p[1][1] - p[0][1]) * q,
+            p[3][0] + (p[2][0] - p[3][0]) * q, p[3][1] + (p[2][1] - p[3][1]) * q);
         }
       }
-      if (sel && sel.kind === 'field' && sel.item === f) {
-        ctx.beginPath(); polyPath(ctx, f.polygon);
-        ctx.strokeStyle = '#1f6feb'; ctx.lineWidth = px * 2.5; ctx.stroke();
-      }
     });
+    var cols = Object.keys(fills);
+    ctx.globalAlpha = 0.92;
+    var fill = function () { ctx.fill(); };
+    cols.forEach(function (col) {
+      var list = fills[col];
+      ctx.fillStyle = col;
+      batched(ctx, list.length, 1, function (i) { polyPath(ctx, list[i]); }, fill);
+    });
+    ctx.globalAlpha = 1;
+    if (outline) {
+      ctx.strokeStyle = 'rgba(96, 120, 70, 0.55)';
+      ctx.lineWidth = Math.max(px, 0.8);
+      cols.forEach(function (col) {
+        var list = fills[col];
+        batched(ctx, list.length, 1, function (i) { polyPath(ctx, list[i]); }, function () { ctx.stroke(); });
+      });
+    }
+    if (furrows) {
+      Object.keys(groves).forEach(function (gc) {
+        var g = groves[gc];
+        ctx.fillStyle = gc;
+        batched(ctx, g.length, 2, function (i) { ctx.moveTo(g[i] + 2.2, g[i + 1]); ctx.arc(g[i], g[i + 1], 2.2, 0, Math.PI * 2); }, fill);
+      });
+      ctx.strokeStyle = 'rgba(120, 92, 50, 0.22)';
+      ctx.lineWidth = Math.max(px * 0.8, 0.35);
+      batched(ctx, lines.length, 4, function (i) { ctx.moveTo(lines[i], lines[i + 1]); ctx.lineTo(lines[i + 2], lines[i + 3]); }, function () { ctx.stroke(); });
+    }
+    if (sel && sel.kind === 'field' && sel.item.epoch <= t) {
+      ctx.beginPath(); polyPath(ctx, sel.item.polygon);
+      ctx.strokeStyle = '#1f6feb'; ctx.lineWidth = px * 2.5; ctx.stroke();
+    }
   };
 
   Renderer.prototype.drawPlazas = function (ctx, px) {
@@ -398,51 +471,77 @@
   Renderer.prototype.drawBuildings = function (ctx, vb, sc, px, t) {
     var S = this.S, self = this, arid = this.palette === 'arid';
     var rooms = this.layers.interiors && sc >= 7, ridges = sc >= 1.1 && !arid, hl = this.highlightCat;
+    // Closed buildings are gathered per colour (and per highlight fade) and
+    // drawn in one go; only buildings opened up to show rooms go one by one.
+    var groups = {}, order = [], openList = [], mills = sc > 0.8 ? [] : null, doors = sc >= 4 ? [] : null;
     S.buildings.forEach(function (b) {
       if (b.epoch > t) return;
       if (!b._b) b._b = G.polyBounds(b.polygon);
       if (!inView(vb, b._b, 2)) return;
       var p = b.polygon, open = rooms || (self.selected && self.selected.item === b && sc >= 3 && self.layers.interiors);
-      ctx.beginPath();
-      polyPath(ctx, p);
-      var col = CAT_COLORS[b.category];
-      if (arid && b.category === 'residential') col = '#dcb68e';
-      ctx.fillStyle = open ? '#f4ead7' : col;
-      ctx.globalAlpha = hl && hl !== b.category ? 0.25 : 1;
-      ctx.fill();
-      ctx.strokeStyle = open ? '#4a3a2c' : 'rgba(70, 50, 36, 0.75)';
-      ctx.lineWidth = open ? Math.max(0.35, px * 1.4) : Math.max(px * 0.9, 0.18);
-      ctx.stroke();
-      if (open) self.drawRooms(ctx, b, sc, px);
-      else if (ridges) {
+      var faded = hl && hl !== b.category;
+      if (open) openList.push(b);
+      else {
+        var col = CAT_COLORS[b.category];
+        if (arid && b.category === 'residential') col = '#dcb68e';
+        var key = col + (faded ? '~' : ''), g = groups[key];
+        if (!g) { g = groups[key] = { col: col, faded: faded, list: [] }; order.push(key); }
+        g.list.push(b);
+      }
+      if (mills && b.tags.indexOf('windmill') >= 0) mills.push(b);
+      if (doors) doors.push(b);
+    });
+    order.forEach(function (key) {
+      var g = groups[key];
+      var list = g.list;
+      ctx.globalAlpha = g.faded ? 0.25 : 1;
+      ctx.fillStyle = g.col;
+      ctx.strokeStyle = 'rgba(70, 50, 36, 0.75)';
+      ctx.lineWidth = Math.max(px * 0.9, 0.18);
+      batched(ctx, list.length, 1, function (i) { polyPath(ctx, list[i].polygon); }, function () { ctx.fill(); ctx.stroke(); });
+      if (ridges) {
         // Roof ridge along the long axis: a cheap hint of gables.
-        var long = b.width >= b.depth;
-        var a = long ? mid(p[0], p[3]) : mid(p[0], p[1]), c = long ? mid(p[1], p[2]) : mid(p[3], p[2]);
-        var inset = 0.12;
-        ctx.beginPath();
-        ctx.moveTo(a[0] + (c[0] - a[0]) * inset, a[1] + (c[1] - a[1]) * inset);
-        ctx.lineTo(c[0] - (c[0] - a[0]) * inset, c[1] - (c[1] - a[1]) * inset);
         ctx.strokeStyle = 'rgba(255, 240, 220, 0.45)';
         ctx.lineWidth = Math.max(px, 0.25);
-        ctx.stroke();
-      }
-      if (b.tags.indexOf('windmill') >= 0 && sc > 0.8) {
-        var r = Math.max(b.width, b.depth) * 0.9;
-        ctx.beginPath();
-        ctx.moveTo(b.x - r, b.y - r); ctx.lineTo(b.x + r, b.y + r);
-        ctx.moveTo(b.x + r, b.y - r); ctx.lineTo(b.x - r, b.y + r);
-        ctx.strokeStyle = '#5d4b3b'; ctx.lineWidth = Math.max(0.6, px * 1.5); ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      if (sc >= 4) {
-        ctx.fillStyle = '#5a3d2a';
-        var e = b.entrance, fx = b.front[0], fy = b.front[1];
-        ctx.beginPath();
-        ctx.moveTo(e.x - fy * 0.6, e.y + fx * 0.6); ctx.lineTo(e.x + fy * 0.6, e.y - fx * 0.6);
-        ctx.lineTo(e.x + fy * 0.6 - fx * 0.5, e.y - fx * 0.6 - fy * 0.5); ctx.lineTo(e.x - fy * 0.6 - fx * 0.5, e.y + fx * 0.6 - fy * 0.5);
-        ctx.fill();
+        batched(ctx, list.length, 1, function (i) {
+          var b = list[i], p = b.polygon, long = b.width >= b.depth, inset = 0.12;
+          var a = long ? mid(p[0], p[3]) : mid(p[0], p[1]), c = long ? mid(p[1], p[2]) : mid(p[3], p[2]);
+          ctx.moveTo(a[0] + (c[0] - a[0]) * inset, a[1] + (c[1] - a[1]) * inset);
+          ctx.lineTo(c[0] - (c[0] - a[0]) * inset, c[1] - (c[1] - a[1]) * inset);
+        }, function () { ctx.stroke(); });
       }
     });
+    ctx.globalAlpha = 1;
+    openList.forEach(function (b) {
+      ctx.globalAlpha = hl && hl !== b.category ? 0.25 : 1;
+      ctx.beginPath();
+      polyPath(ctx, b.polygon);
+      ctx.fillStyle = '#f4ead7';
+      ctx.fill();
+      ctx.strokeStyle = '#4a3a2c';
+      ctx.lineWidth = Math.max(0.35, px * 1.4);
+      ctx.stroke();
+      self.drawRooms(ctx, b, sc, px);
+      ctx.globalAlpha = 1;
+    });
+    if (mills && mills.length) {
+      ctx.beginPath();
+      mills.forEach(function (b) {
+        var r = Math.max(b.width, b.depth) * 0.9;
+        ctx.moveTo(b.x - r, b.y - r); ctx.lineTo(b.x + r, b.y + r);
+        ctx.moveTo(b.x + r, b.y - r); ctx.lineTo(b.x - r, b.y + r);
+      });
+      ctx.strokeStyle = '#5d4b3b'; ctx.lineWidth = Math.max(0.6, px * 1.5); ctx.stroke();
+    }
+    if (doors && doors.length) {
+      ctx.fillStyle = '#5a3d2a';
+      batched(ctx, doors.length, 1, function (i) {
+        var b = doors[i], e = b.entrance, fx = b.front[0], fy = b.front[1];
+        ctx.moveTo(e.x - fy * 0.6, e.y + fx * 0.6); ctx.lineTo(e.x + fy * 0.6, e.y - fx * 0.6);
+        ctx.lineTo(e.x + fy * 0.6 - fx * 0.5, e.y - fx * 0.6 - fy * 0.5); ctx.lineTo(e.x - fy * 0.6 - fx * 0.5, e.y + fx * 0.6 - fy * 0.5);
+        ctx.closePath();
+      }, function () { ctx.fill(); });
+    }
   };
 
   function mid(a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; }
@@ -480,6 +579,24 @@
   Renderer.prototype.drawTrees = function (ctx, vb, sc) {
     var g = this.trees, cell = g.cell;
     var shadow = sc > 2;
+    if (!shadow) {
+      // Mid zoom: no shadows or outlines, so one path per crown colour.
+      var lists = TREE_COLORS.map(function () { return []; });
+      for (var jx = Math.floor(vb[0] / cell) - 1; jx <= Math.floor(vb[2] / cell) + 1; jx++) {
+        for (var jy = Math.floor(vb[1] / cell) - 1; jy <= Math.floor(vb[3] / cell) + 1; jy++) {
+          var bk = g.map.get(jx * 100003 + jy);
+          if (bk) for (var k = 0; k < bk.length; k++) lists[bk[k][3]].push(bk[k]);
+        }
+      }
+      lists.forEach(function (list, i) {
+        ctx.fillStyle = TREE_COLORS[i];
+        batched(ctx, list.length, 1, function (j) {
+          var tr = list[j];
+          ctx.moveTo(tr[0] + tr[2], tr[1]); ctx.arc(tr[0], tr[1], tr[2], 0, Math.PI * 2);
+        }, function () { ctx.fill(); });
+      });
+      return;
+    }
     for (var ix = Math.floor(vb[0] / cell) - 1; ix <= Math.floor(vb[2] / cell) + 1; ix++) {
       for (var iy = Math.floor(vb[1] / cell) - 1; iy <= Math.floor(vb[3] / cell) + 1; iy++) {
         var b = g.map.get(ix * 100003 + iy);
@@ -522,27 +639,44 @@
   };
 
   Renderer.prototype.drawLabels = function (ctx, view, t) {
-    var S = this.S, sc = view.scale, N = S.network.nodes;
+    var S = this.S, sc = view.scale, N = S.network.nodes, self = this, lastFont = null;
     function screen(x, y) { return [(x - view.cx) * sc + view.w / 2, (y - view.cy) * sc + view.h / 2]; }
     function halo(text, x, y, font, fill) {
-      ctx.font = font;
+      // Parsing a font string is slow; with hundreds of street names it adds up.
+      if (font !== lastFont) { ctx.font = font; lastFont = font; }
       ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(250, 246, 236, 0.9)'; ctx.lineJoin = 'round';
       ctx.strokeText(text, x, y);
       ctx.fillStyle = fill; ctx.fillText(text, x, y);
     }
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var hits = this.destHits = [];
 
-    // Where the roads go.
+    // Where the roads go: a tab you can click to travel there. Places
+    // already in the atlas are green.
     S.network.ways.forEach(function (w) {
       if (!w.destination || !w.rim) return;
       var r = Math.hypot(w.rim.x, w.rim.y) || 1, k = Math.min(1, (S.bounds.size * 0.4) / r);
       var p = screen(w.rim.x * k, w.rim.y * k);
-      if (p[0] < -50 || p[1] < -20 || p[0] > view.w + 50 || p[1] > view.h + 20) return;
-      halo('to ' + w.destination, p[0], p[1], 'italic 12px Georgia, serif', '#6b5a48');
+      if (p[0] < -80 || p[1] < -20 || p[0] > view.w + 80 || p[1] > view.h + 20) return;
+      var text = 'to ' + w.destination + ' →', known = self.isKnown && self.isKnown(w.destination), hov = self.hoverDest === w;
+      ctx.font = 'italic 12px Georgia, serif'; lastFont = null;
+      var tw = ctx.measureText(text).width, x0 = p[0] - tw / 2 - 7, y0 = p[1] - 10, bw = tw + 14, bh = 20;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x0, y0, bw, bh, 10); else ctx.rect(x0, y0, bw, bh);
+      ctx.fillStyle = hov ? 'rgba(255, 252, 244, 0.97)' : 'rgba(250, 246, 236, 0.86)';
+      ctx.fill();
+      ctx.lineWidth = hov ? 1.6 : 1;
+      ctx.strokeStyle = known ? '#2f7d62' : hov ? '#6b5a48' : 'rgba(120, 100, 80, 0.55)';
+      ctx.stroke();
+      ctx.fillStyle = known ? '#2f7d62' : '#6b5a48';
+      ctx.fillText(text, p[0], p[1] + 0.5);
+      hits.push({ way: w, x0: x0, y0: y0, x1: x0 + bw, y1: y0 + bh });
     });
 
     // Street names along their middle segment.
     if (sc > 1.4) {
+      // Set outside save/restore, which would otherwise undo it behind the cache.
+      ctx.font = lastFont = '500 11px system-ui, sans-serif';
       S.network.ways.forEach(function (w) {
         if (!w.name || w.epoch > t || w.length < 40) return;
         var m = w.nodes.length >> 1, a = N[w.nodes[Math.max(0, m - 1)]], b = N[w.nodes[Math.min(w.nodes.length - 1, m + 1)]];

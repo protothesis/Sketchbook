@@ -66,7 +66,24 @@
     $('reseed').disabled = keeps.land && keeps.town && keeps.names;
   }
 
+  // --- Atlas state -----------------------------------------------------------------
+  // `placeId` is the atlas place on screen, or null for a town that isn't in
+  // the atlas yet. `linkPlace` is a name and roads carried by a shared link
+  // whose place this browser's atlas doesn't know.
+  var AT = VG.atlas, atlas = AT.load(), placeId = null, linkPlace = null;
+  var pushNext = false, frameNext = false;
+
   var params = readHash();
+  if (!location.hash.slice(1) && atlas && atlas.trail.length) {
+    // Pick the journey back up where it was left.
+    placeId = atlas.trail[atlas.trail.length - 1];
+    params = settingsFrom(AT.optionsFor(atlas, placeId));
+  }
+  function settingsFrom(o) {
+    var p = {};
+    for (var k in VG.DEFAULTS) p[k] = o[k] !== undefined ? o[k] : VG.DEFAULTS[k];
+    return p;
+  }
   function readHash() {
     var p = {}, d = VG.DEFAULTS;
     for (var k in d) p[k] = d[k];
@@ -74,12 +91,38 @@
     var q = new URLSearchParams(location.hash.slice(1));
     var map = { s: 'seed', p: 'population', e: 'environment', r: 'river', pl: 'planning', de: 'density', fa: 'farmland', wo: 'woodland' };
     for (var key in map) if (q.has(key)) p[map[key]] = key === 's' || key === 'e' || key === 'r' ? q.get(key) : +q.get(key);
+    placeId = null; linkPlace = null;
+    var n = q.get('n'), id = q.get('id');
+    if (n) {
+      var known = atlas && (id && atlas.places[id] || AT.placeByName(atlas, n));
+      if (known) placeId = known.id;
+      else linkPlace = { name: n, roads: parseRoads(q.get('rd')) };
+    }
     return p;
+  }
+  function parseRoads(str) {
+    return (str || '').split(',').filter(Boolean).map(function (r) {
+      var i = r.lastIndexOf('~');
+      return { destination: r.slice(0, i), bearing: +r.slice(i + 1) };
+    }).filter(function (r) { return r.destination && isFinite(r.bearing); });
+  }
+  /** The name and roads this town is held to: from the atlas, or from the link. */
+  function constraints() {
+    if (placeId && atlas && atlas.places[placeId]) return { name: atlas.places[placeId].name, roads: AT.roadsFor(atlas, placeId) };
+    return linkPlace;
   }
   function writeHash() {
     var q = 's=' + encodeURIComponent(params.seed).replace(/%2F/g, '/') + '&p=' + params.population + '&e=' + params.environment +
       '&r=' + params.river + '&pl=' + params.planning + '&de=' + params.density + '&fa=' + params.farmland + '&wo=' + params.woodland;
-    try { history.replaceState(null, '', '#' + q); } catch (e) { location.hash = q; }
+    var c = constraints();
+    if (c) {
+      q += '&n=' + encodeURIComponent(c.name);
+      if (placeId && placeId !== AT.idFor(c.name)) q += '&id=' + placeId;
+      if (c.roads.length) q += '&rd=' + c.roads.map(function (r) { return encodeURIComponent(r.destination) + '~' + r.bearing; }).join(',');
+    }
+    var push = pushNext;
+    pushNext = false;
+    try { history[push ? 'pushState' : 'replaceState'](null, '', '#' + q); } catch (e) { location.hash = q; }
   }
   function syncControls() {
     var c = cls();
@@ -107,13 +150,15 @@
     ['land', 'town', 'names'].forEach(function (k) { if (!keeps[k]) sd[k] = fresh; });
     params.seed = VG.formatSeed(sd);
   }
+  /** Random and New seed make a new town: step off the atlas place. */
+  function leavePlace() { placeId = null; linkPlace = null; }
   function reseed() {
     if (keeps.land && keeps.town && keeps.names) return;
-    rerollSeed(); syncControls(); regenSoon(0);
+    leavePlace(); rerollSeed(); syncControls(); regenSoon(0);
   }
   /** Random settlement: reroll the seed and every unlocked setting. */
   function randomize() {
-    rerollSeed();
+    leavePlace(); rerollSeed();
     var r = Math.random, c = cls();
     if (!held('size') && !locks.population) {
       c = VG.SIZES[pickWeighted([0.2, 0.4, 0.26, 0.14])];
@@ -162,10 +207,14 @@
   }
 
   function regen() {
-    var keepView = S && landSignature(S.params) === landSignature(params);
-    var selKey = renderer.selected && renderer.selected.kind === 'building' ? renderer.selected.item.key : null;
+    var keepView = !frameNext && S && landSignature(S.params) === landSignature(params);
+    var selKey = !frameNext && renderer.selected && renderer.selected.kind === 'building' ? renderer.selected.item.key : null;
+    frameNext = false;
+    var opts = {}, c = constraints(), k;
+    for (k in params) opts[k] = params[k];
+    if (c) { opts.name = c.name; opts.roads = c.roads; }
     var t0 = performance.now();
-    S = VG.generate(params);
+    S = VG.generate(opts);
     var ms = Math.round(performance.now() - t0);
     renderer.setSettlement(S, VG.ENVIRONMENTS[params.environment].palette);
     renderer.history = 1;
@@ -180,12 +229,14 @@
       if (again) inspect({ kind: 'building', item: again });
     }
     describe();
+    updatePlace();
     writeHash();
     $('status').textContent = S.stats.buildings.toLocaleString() + ' buildings · ' + ms + ' ms';
     $('busy').classList.remove('on');
     dirty = true;
     window.settlement = S; // handy from the console
     window.villageView = view;
+    window.villageRenderer = renderer;
   }
 
   function frameTown(animate) {
@@ -261,9 +312,29 @@
     return hit;
   }
 
+  /** A "to Ashby" label under screen point p, or null. */
+  function destAt(p) {
+    var hits = renderer.destHits || [];
+    for (var i = 0; i < hits.length; i++) {
+      var h = hits[i];
+      if (p[0] >= h.x0 && p[0] <= h.x1 && p[1] >= h.y0 && p[1] <= h.y1) return h.way;
+    }
+    return null;
+  }
+  function toScreen(w) { return [(w[0] - view.cx) * view.scale + view.w / 2, (w[1] - view.cy) * view.scale + view.h / 2]; }
+
   view.onHover = function (w, p) {
     var tip = $('tip');
-    if (!w || !S) { tip.style.display = 'none'; renderer.hover = null; canvas.classList.remove('pointing'); dirty = true; return; }
+    if (!w || !S) { tip.style.display = 'none'; renderer.hover = null; renderer.hoverDest = null; canvas.classList.remove('pointing'); dirty = true; return; }
+    var dw = destAt(p);
+    if (dw !== renderer.hoverDest) { renderer.hoverDest = dw; dirty = true; }
+    if (dw) {
+      renderer.hover = null;
+      canvas.classList.add('pointing');
+      tip.textContent = 'Travel to ' + dw.destination + (known(dw.destination) ? ' (in your atlas)' : '');
+      tip.style.left = p[0] + 'px'; tip.style.top = p[1] + 'px'; tip.style.display = 'block';
+      return;
+    }
     var hit = pickAt(w);
     renderer.hover = hit && hit.kind === 'building' ? hit : null;
     canvas.classList.toggle('pointing', !!hit);
@@ -275,6 +346,8 @@
   };
   view.onTap = function (w) {
     if (!S) return;
+    var dw = destAt(toScreen(w));
+    if (dw) { travelVia(dw); return; }
     var hit = pickAt(w);
     if (hit) inspect(hit); else closeInspector();
   };
@@ -317,12 +390,15 @@
     } else {
       pill.textContent = VG.ROAD_KINDS[it.kind].label; pill.style.background = '#9a8a72';
       rows.push(['Length', it.length.toLocaleString() + ' m']);
-      if (it.destination) rows.push(['Leads to', it.destination]);
+      if (it.destination) rows.push(['Leads to', it.destination + (known(it.destination) ? ' (in your atlas)' : '')]);
       var n = S.buildings.filter(function (b) { return b.wayId === it.id; }).length;
       rows.push(['Buildings', n]);
     }
     $('iprops').innerHTML = rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + esc(String(r[1])) + '</td></tr>'; }).join('');
     $('iroute').hidden = hit.kind !== 'building';
+    var dest = hit.kind === 'way' && it.destination;
+    $('itravel').hidden = !dest;
+    if (dest) $('itravel').textContent = 'Travel to ' + it.destination + ' →';
     drawPlan(hit.kind === 'building' ? it : null);
   }
   function esc(s) { return s.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
@@ -332,6 +408,9 @@
     renderer.selected = null; dirty = true;
   }
   $('iclose').addEventListener('click', closeInspector);
+  $('itravel').addEventListener('click', function () {
+    if (renderer.selected && renderer.selected.kind === 'way') travelVia(renderer.selected.item);
+  });
   $('izoom').addEventListener('click', function () {
     var it = renderer.selected && renderer.selected.item;
     if (!it) return;
@@ -409,6 +488,7 @@
     var k = e.key, pan = 80 / view.scale;
     if (k === 'r' || k === 'R') randomize();
     else if (k === 'n' || k === 'N') reseed();
+    else if (k === 'b' || k === 'B') goBack();
     else if (k === '+' || k === '=') view.zoomAt(1.4, view.w / 2, view.h / 2);
     else if (k === '-' || k === '_') view.zoomAt(1 / 1.4, view.w / 2, view.h / 2);
     else if (k === 'ArrowLeft') { view.cx -= pan; dirty = true; }
@@ -442,6 +522,170 @@
       ta.remove();
     }
   }
+
+  // --- Atlas: travel, back, lock --------------------------------------------------
+  function known(name) { return !!(atlas && AT.placeByName(atlas, name)); }
+  renderer.isKnown = known;
+  function saveAtlas() { AT.save(atlas); }
+  function ensureAtlas() { if (!atlas) atlas = AT.create(VG.parseSeed(params.seed).land); }
+  function sizeLabel(pop) { return VG.SIZES[VG.classify(pop)].label; }
+
+  /** Show atlas place `id` with its saved (locked) or discovered settings. */
+  function go(id) {
+    if (!atlas || !atlas.places[id]) return;
+    placeId = id; linkPlace = null;
+    params = settingsFrom(AT.optionsFor(atlas, id));
+    AT.visit(atlas, id); saveAtlas();
+    closeInspector();
+    pushNext = true; frameNext = true;
+    syncControls(); regenSoon(0);
+  }
+
+  /** Follow a road off the map edge to the town it leads to. */
+  function travelVia(way) {
+    if (!way || !way.destination || !S) return;
+    ensureAtlas();
+    var res = AT.travel(atlas, placeId, S, params, way);
+    if (!placeId) { placeId = res.from; writeHash(); } // the start of a journey: this page is now a place
+    AT.visit(atlas, res.from);
+    go(res.to);
+  }
+
+  function backTarget() {
+    if (!atlas) return null;
+    var t = atlas.trail, i = t.length - 1;
+    if (placeId && t[i] === placeId) i--;
+    return i >= 0 && atlas.places[t[i]] ? t[i] : null;
+  }
+  function goBack() {
+    var id = backTarget();
+    if (!id) return;
+    if (placeId && atlas.trail[atlas.trail.length - 1] === placeId) atlas.trail.pop();
+    go(id);
+  }
+  $('back').addEventListener('click', goBack);
+
+  $('placelock').addEventListener('click', function () {
+    if (!S) return;
+    ensureAtlas();
+    var p = placeId && atlas.places[placeId];
+    if (!p) {
+      // Lock a town that isn't in the atlas yet: it becomes a place.
+      p = AT.addPlace(atlas, S.name, params, null, true);
+      placeId = p.id; linkPlace = null;
+      AT.visit(atlas, p.id);
+      AT.lock(atlas, p.id, params);
+    } else if (p.locked) AT.unlock(atlas, p.id);
+    else AT.lock(atlas, p.id, params);
+    saveAtlas(); writeHash(); updatePlace();
+  });
+  $('placesave').addEventListener('click', function () {
+    if (placeId) { AT.lock(atlas, placeId, params); saveAtlas(); updatePlace(); }
+  });
+  $('placerevert').addEventListener('click', function () {
+    var p = placeId && atlas.places[placeId];
+    if (!p || !p.settings) return;
+    params = settingsFrom(p.settings);
+    syncControls(); regenSoon(0);
+  });
+
+  /** The journey bar, the note under the name and the atlas list. */
+  function updatePlace() {
+    var p = placeId && atlas && atlas.places[placeId], notes = [];
+    var back = backTarget();
+    $('back').hidden = !back;
+    if (back) $('back').textContent = '← ' + atlas.places[back].name;
+    var lockBtn = $('placelock'), changed = p && !AT.sameSettings(params, p.locked ? p.settings : p.base);
+    lockBtn.setAttribute('aria-pressed', p && p.locked ? 'true' : 'false');
+    lockBtn.textContent = p && p.locked ? 'Locked' : 'Lock place';
+    lockBtn.title = p && p.locked ? 'Locked: revisits use the saved settings. Click to unlock.' :
+      'Keep this place’s current settings in the atlas, so revisits look exactly like this';
+    $('placesave').hidden = $('placerevert').hidden = !(p && p.locked && changed);
+    if (!p) {
+      notes.push(linkPlace ? 'Opened from a link; not in your atlas.' :
+        'Not in the atlas yet. Click a “to …” road label at the map’s edge to travel; this town becomes the start of the journey.');
+    } else {
+      if (p.from && atlas.places[p.from]) notes.push('First reached from ' + atlas.places[p.from].name + '.');
+      if (p.locked && changed) notes.push('Changed since it was locked.');
+      else if (changed) notes.push('Unlocked, so these changes are forgotten when you leave. Lock to keep them.');
+      if (p.locked && p.generator !== VG.GENERATOR_VERSION) notes.push('Locked with generator v' + p.generator + '; this is v' + VG.GENERATOR_VERSION + ', so it may look different.');
+    }
+    $('placenote').textContent = notes.join(' ');
+
+    if (!atlas || !Object.keys(atlas.places).length) {
+      $('atlasline').textContent = 'Empty. Travel along a road or lock a place to start one. Saved in this browser; export it to keep it safe.';
+      $('places').innerHTML = '';
+    } else {
+      var ids = Object.keys(atlas.places), nRoads = atlas.links.length / 2;
+      $('atlasline').textContent = ids.length + ' place' + (ids.length > 1 ? 's' : '') + ' · ' + nRoads + ' road' + (nRoads === 1 ? '' : 's') +
+        ' · world seed ' + atlas.world + '. Saved in this browser; export it to keep it safe.';
+      $('places').innerHTML = ids.sort(function (a, b) { return atlas.places[a].name.localeCompare(atlas.places[b].name); }).map(function (id) {
+        var q = atlas.places[id], st = q.locked ? q.settings : q.base;
+        var to = AT.linksFrom(atlas, id).map(function (l) { return atlas.places[l.to].name; });
+        return '<li data-place="' + esc(id) + '"' + (id === placeId ? ' class="here"' : '') + '><span>' + (q.locked ? '🔒 ' : '') + esc(q.name) +
+          (to.length ? ' <span class="via">→ ' + esc(to.join(', ')) + '</span>' : '') + '</span><span class="n">' + sizeLabel(st.population) + '</span></li>';
+      }).join('');
+    }
+    dirty = true;
+  }
+  $('places').addEventListener('click', function (e) {
+    var li = e.target.closest('li');
+    if (li && li.dataset.place !== placeId) go(li.dataset.place);
+  });
+
+  function atlasMsg(t) {
+    $('atlasmsg').textContent = t;
+    if (t) setTimeout(function () { if ($('atlasmsg').textContent === t) $('atlasmsg').textContent = ''; }, 6000);
+  }
+  $('atlasexport').addEventListener('click', function () {
+    if (!atlas) { atlasMsg('Nothing to export yet.'); return; }
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([AT.toJSON(atlas)], { type: 'application/json' }));
+    a.download = 'village-atlas-' + atlas.world.replace(/[^a-z0-9]+/gi, '-') + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  });
+  $('atlasimport').addEventListener('click', function () { $('atlasfile').click(); });
+  $('atlasfile').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    this.value = '';
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function () { importAtlas(String(fr.result)); };
+    fr.onerror = function () { atlasMsg('Couldn’t read that file.'); };
+    fr.readAsText(f);
+  });
+  /** Replace the atlas with one from JSON text and go to where it left off. */
+  function importAtlas(text) {
+    try { atlas = AT.fromJSON(text); } catch (e) { atlasMsg('Not imported: ' + e.message); return false; }
+    saveAtlas();
+    var n = Object.keys(atlas.places).length;
+    atlasMsg('Imported ' + n + ' place' + (n === 1 ? '' : 's') + '.');
+    var id = atlas.trail[atlas.trail.length - 1] || Object.keys(atlas.places)[0];
+    if (id) go(id); else { leavePlace(); updatePlace(); }
+    return true;
+  }
+  $('atlasclear').addEventListener('click', function () {
+    var n = atlas ? Object.keys(atlas.places).length : 0;
+    if (n && !window.confirm('Forget all ' + n + ' places in the atlas? Export it first if you want to keep it.')) return;
+    AT.clear(); atlas = null; leavePlace(); writeHash(); updatePlace();
+  });
+
+  // Browser back/forward walks the same journey.
+  window.addEventListener('popstate', function () {
+    params = readHash(); closeInspector(); frameNext = true;
+    syncControls(); regenSoon(0);
+  });
+  // Handy from the console.
+  window.villageAtlas = {
+    get: function () { return atlas; },
+    importText: importAtlas,
+    travel: function (name) {
+      var w = S && S.network.ways.filter(function (x) { return x.destination === name; })[0];
+      if (w) travelVia(w);
+      return !!w;
+    }
+  };
 
   // --- Loop -------------------------------------------------------------------
   function paper() { return getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() || '#efe8d8'; }
