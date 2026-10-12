@@ -222,7 +222,7 @@
     $('hist').value = 1000;
     stopPlay();
     view.minScale = Math.min(view.w, view.h) / (S.bounds.size * 1.15);
-    if (!keepView) frameTown(false);
+    if (!keepView) frameMap(false); // the whole map: the roads in and out, not just the town
     closeInspector();
     // Buildings keep their identity across tweaks: follow the selected one.
     if (selKey) {
@@ -230,16 +230,19 @@
       if (again) inspect({ kind: 'building', item: again });
     }
     describe();
+    rememberRoads();
     updatePlace();
     writeHash();
     $('status').textContent = S.stats.buildings.toLocaleString() + ' buildings · ' + ms + ' ms';
     $('busy').classList.remove('on');
+    if (pendingTravel) setTimeout(takePendingRoad, 0);
     dirty = true;
     window.settlement = S; // handy from the console
     window.villageView = view;
     window.villageRenderer = renderer;
   }
 
+  function frameMap(animate) { view.fit(0, 0, S.bounds.size * 1.02, animate); }
   function frameTown(animate) {
     view.fit(S.center.x, S.center.y, Math.max(260, S.radius * 3.2), animate);
   }
@@ -480,7 +483,7 @@
   $('zin').addEventListener('click', function () { view.zoomAt(1.6, view.w / 2, view.h / 2); });
   $('zout').addEventListener('click', function () { view.zoomAt(1 / 1.6, view.w / 2, view.h / 2); });
   $('ztown').addEventListener('click', function () { frameTown(true); });
-  $('zmap').addEventListener('click', function () { view.fit(0, 0, S.bounds.size * 1.02, true); });
+  $('zmap').addEventListener('click', function () { frameMap(true); });
   Array.prototype.forEach.call(document.querySelectorAll('[data-layer]'), function (el) {
     el.addEventListener('change', function () { renderer.layers[el.dataset.layer] = el.checked; dirty = true; });
   });
@@ -550,6 +553,7 @@
     ensureAtlas();
     var res = AT.travel(atlas, placeId, S, params, way);
     if (!placeId) { placeId = res.from; writeHash(); } // the start of a journey: this page is now a place
+    rememberRoads();
     AT.visit(atlas, res.from);
     go(res.to);
   }
@@ -632,16 +636,43 @@
     }
     dirty = true;
   }
+  /**
+   * Note the roads out of this place (as it's saved, not mid-tweak), so the
+   * atlas map can show the ones not taken yet without generating it again.
+   */
+  function rememberRoads() {
+    var p = placeId && atlas && atlas.places[placeId];
+    if (!p || !S || !AT.sameSettings(params, p.locked ? p.settings : p.base)) return;
+    var roads = S.network.ways.filter(function (w) { return w.destination && w.rim; }).map(function (w) {
+      var o = { destination: w.destination, bearing: w.bearing };
+      if (w.ferry) o.ferry = true;
+      return o;
+    });
+    if (JSON.stringify(roads) !== JSON.stringify(p.roads)) { p.roads = roads; saveAtlas(); }
+  }
+
   // The atlas as a subway map, in the panel and (bigger) over the map.
+  // Clicking a road not taken from another place goes there, then takes it.
+  var pendingTravel = null;
   function pickOnMap(kind, item) {
     if (kind === 'place') { if (item !== placeId) { closeAtlasMap(); go(item); } }
-    else if (kind === 'road') { closeAtlasMap(); travelVia(item.way); }
+    else if (kind === 'road') {
+      closeAtlasMap();
+      if (item.way) travelVia(item.way);
+      else { pendingTravel = item.destination; go(item.place); }
+    }
+  }
+  function takePendingRoad() {
+    var name = pendingTravel;
+    pendingTravel = null;
+    var w = name && S.network.ways.filter(function (x) { return x.destination === name; })[0];
+    if (w) travelVia(w);
   }
   var amap = new VG.AtlasMap($('amap'), pickOnMap), amap2 = new VG.AtlasMap($('amap2'), pickOnMap);
   function drawAtlasMaps() {
-    // Roads out of here that don't lead anywhere in the atlas yet.
-    var stubs = !S || !placeId ? [] : S.network.ways.filter(function (w) { return w.destination && w.rim && !known(w.destination); })
-      .map(function (w) { return { destination: w.destination, bearing: w.bearing, way: w }; });
+    // Roads out of here as they are right now (the map leaves out walked ones).
+    var stubs = !S || !placeId ? [] : S.network.ways.filter(function (w) { return w.destination && w.rim; })
+      .map(function (w) { return { destination: w.destination, bearing: w.bearing, ferry: !!w.ferry, way: w, place: placeId }; });
     amap.set(atlas, placeId, stubs);
     if (!$('amapover').hidden) amap2.set(atlas, placeId, stubs);
     var used = {};

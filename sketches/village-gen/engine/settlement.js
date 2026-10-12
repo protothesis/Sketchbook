@@ -518,6 +518,15 @@
       if (w.rim) {
         o.rim = { x: Math.round(w.rim.x), y: Math.round(w.rim.y) };
         o.bearing = angleToBearing(Math.atan2(w.rim.y, w.rim.x));
+        // A road that leads somewhere carries on past the map's edge: `exit`
+        // is a point beyond the rim to draw it to, so it runs on under the
+        // fade instead of visibly stopping.
+        if (o.destination && !w.ferry && w.nodes.length > 1) {
+          var E = net.nodes[w.nodes[w.nodes.length - 1]], F = net.nodes[w.nodes[w.nodes.length - 2]];
+          var sx = E.x - F.x, sy = E.y - F.y, sl = Math.hypot(sx, sy) || 1, rl = Math.hypot(E.x, E.y) || 1;
+          var dx = sx / sl + E.x / rl, dy = sy / sl + E.y / rl, dl = Math.hypot(dx, dy) || 1;
+          o.exit = { x: Math.round(E.x + dx / dl * T.W * 0.1), y: Math.round(E.y + dy / dl * T.W * 0.1) };
+        }
       }
       if (w.forced) o.forced = true;
       if (w.landing) o.landing = true;

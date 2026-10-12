@@ -7,6 +7,11 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-12: The atlas map shows every visited place's roads not taken as
+  a short spur (remembered as `roads` on each place when you visit it).
+  Hovering a place, or being in it, draws them long and labels where they
+  lead; clicking one goes to that place and takes that road.
+
 - 2026-10-12: **Atlas map** (`ui/atlasmap.js`): the atlas drawn as a subway
   map in the panel, and bigger over the main map with ⤢ (or M). Stations
   are coloured by setting and sized by class; a journey's start is a
@@ -38,6 +43,10 @@ All notable changes to this sketch are logged here, per
   building has a stable `key` and the inspector follows it across tweaks.
 
 ### Changed
+
+- 2026-10-12: A new town opens showing the whole map (◎ still frames the
+  town). Roads that lead somewhere carry on past the map's edge (`exit` on
+  the way) so they run on under the fade instead of visibly stopping.
 
 - 2026-10-12: **New seed** in an atlas town now reshapes that town in place
   (same name and roads) instead of leaving the atlas; **Random** still

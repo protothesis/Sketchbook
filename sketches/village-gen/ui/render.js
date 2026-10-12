@@ -428,6 +428,7 @@
     function trace(w) {
       ctx.moveTo(N[w.nodes[0]].x, N[w.nodes[0]].y);
       for (var i = 1; i < w.nodes.length; i++) ctx.lineTo(N[w.nodes[i]].x, N[w.nodes[i]].y);
+      if (w.exit) ctx.lineTo(w.exit.x, w.exit.y); // on past the edge, under the fade
     }
     function minPx(kind) { return { road: 2.6, street: 1.8, lane: 1.2, track: 0.9 }[kind]; }
     // Casings first (all kinds), then fills, so junctions merge cleanly.

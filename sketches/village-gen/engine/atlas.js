@@ -8,6 +8,8 @@
 //   place: { id, name, seed, base, settings, locked, generator, from, found }
 //     base      settings it was discovered with (what it shows when unlocked)
 //     settings  the locked settings (null unless locked)
+//     roads     the roads out it had when last seen, [{ destination, bearing,
+//               ferry }], so the atlas map can show roads not yet taken
 //   link:  { from, to, bearing } a road leaving `from` at a compass bearing.
 //          Every road is stored both ways.
 // A place's links become the `roads` constraint when it is generated, so a
@@ -202,6 +204,8 @@
         generator: +p.generator || 1, from: p.from || null, found: p.found || null
       };
       if (p.lockedOn) A.places[id].lockedOn = p.lockedOn;
+      if (Array.isArray(p.roads)) A.places[id].roads = p.roads.filter(function (r) { return r && r.destination && isFinite(+r.bearing); })
+        .map(function (r) { var o = { destination: String(r.destination), bearing: +r.bearing }; if (r.ferry) o.ferry = true; return o; });
     });
     o.links.forEach(function (l) {
       if (l && A.places[l.from] && A.places[l.to] && isFinite(+l.bearing)) {

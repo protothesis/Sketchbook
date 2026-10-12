@@ -110,9 +110,10 @@ The **atlas map** under *Atlas* shows every place and road as a subway map
 (⤢ or M opens it big over the main map). There are no distances in the
 atlas, so it's laid out by dead reckoning: each road is one step in the
 direction it leaves, snapped to 45°, with north up. Squares are where a
-journey started, colours are settings, dashed stubs are roads out of the
-current town you haven't taken. Click a place to go there or a stub to
-travel along it.
+journey started, colours are settings. Every place you've visited shows its
+roads not taken as short spurs; hover a place (or be in it) to stretch them
+out and see where they lead. Click a place to go there, or a spur to go
+there and take that road.
 
 **← Back** (B) walks back along your trail, and browser Back/Forward work
 too. The atlas is saved in this browser automatically; **Export atlas**
@@ -133,7 +134,8 @@ centred on (0, 0):
   frontage, y from the front wall), `upperFloors`, `tags`.
 - `network`: `nodes`, `edges` (with `length`, `kind`, `bridge`), `ways`
   (named roads as node chains; roads off the map also have `destination`,
-  `rim` and `bearing` in compass degrees, and `forced` if a constraint asked
+  `rim` and `bearing` in compass degrees, `exit` (a point past the map's
+  edge to draw the road on to, under the fade), and `forced` if a constraint asked
   for them; `landing` marks a road that ends at open water with no
   destination, `ferry` one whose destination is across water). `VillageGen.findPath(s, fromNode, toNode)` gives the shortest
   walking route.
@@ -156,7 +158,7 @@ moves; if water blocks the bearing it swings round until it finds land.
 
 The atlas JSON (`format: "village-gen-atlas"`) holds `world`, `places`
 (`name`, `seed`, `base` settings, `settings` when locked, `locked`,
-`generator`, `from`), `links` (`from`, `to`, `bearing`, `ferry`, stored both ways)
+`generator`, `from`, `roads` out as last seen), `links` (`from`, `to`, `bearing`, `ferry`, stored both ways)
 and `trail`.
 
 **Download JSON** in the panel exports it. Terrain heights and trees are

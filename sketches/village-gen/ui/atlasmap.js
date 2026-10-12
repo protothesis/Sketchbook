@@ -5,8 +5,9 @@
 // are nudged apart where branches collide. Separate journeys (atlas places
 // you started from scratch) sit side by side, each starting at a square.
 //
-// Ferry crossings are dashed blue lines. Unexplored roads out of the current
-// town are drawn as dashed stubs. Click
+// Ferry crossings are dashed blue lines. Every place shows the roads out of
+// it not taken yet as a short spur (known from its last visit); hovering a
+// place, or being in it, draws them longer with where they lead. Click
 // a station to go there, a stub to travel along it. Drag to pan, scroll to
 // zoom, double-click to fit.
 (function (global) {
@@ -89,7 +90,7 @@
     this._bind();
   }
 
-  /** atlas, current place id (or null), unexplored roads [{ destination, bearing, way }]. */
+  /** atlas, current place id (or null), the current town's roads out [{ destination, bearing, ferry, way }]. */
   AtlasMap.prototype.set = function (A, here, stubs) {
     this.A = A; this.here = here; this.stubs = stubs || [];
     var sig = A ? Object.keys(A.places).length + '|' + A.links.length : '';
@@ -100,15 +101,33 @@
   AtlasMap.prototype.fit = function (w, h) {
     var P = this.L.pos, b = [Infinity, Infinity, -Infinity, -Infinity], self = this;
     Object.keys(P).forEach(function (id) { var p = P[id]; b[0] = Math.min(b[0], p[0]); b[1] = Math.min(b[1], p[1]); b[2] = Math.max(b[2], p[0]); b[3] = Math.max(b[3], p[1]); });
-    if (this.here && P[this.here]) this.stubs.forEach(function (s) {
-      var u = unit(s.bearing, true), p = P[self.here];
-      b[0] = Math.min(b[0], p[0] + u[0] * 0.5); b[2] = Math.max(b[2], p[0] + u[0] * 0.5);
-      b[1] = Math.min(b[1], p[1] + u[1] * 0.5); b[3] = Math.max(b[3], p[1] + u[1] * 0.5);
+    Object.keys(P).forEach(function (id) {
+      self.spurs(id).forEach(function (s) {
+        var u = unit(s.bearing, false), p = P[id], k = id === self.here ? 0.5 : 0.2;
+        b[0] = Math.min(b[0], p[0] + u[0] * k); b[2] = Math.max(b[2], p[0] + u[0] * k);
+        b[1] = Math.min(b[1], p[1] + u[1] * k); b[3] = Math.max(b[3], p[1] + u[1] * k);
+      });
     });
     // Wider at the sides: names sit beside the stations.
     var px = Math.min(70, w * 0.14), py = 26;
     var k = Math.min((w - px * 2) / Math.max(0.5, b[2] - b[0]), (h - py * 2) / Math.max(0.5, b[3] - b[1]), 70);
     return { k: k, ox: w / 2 - (b[0] + b[2]) / 2 * k, oy: h / 2 - (b[1] + b[3]) / 2 * k };
+  };
+
+  /** Roads out of a place that haven't been walked: live for here, remembered for the rest. */
+  AtlasMap.prototype.spurs = function (id) {
+    var A = this.A, p = A.places[id];
+    var walked = {};
+    A.links.forEach(function (l) { if (l.from === id && A.places[l.to]) walked[A.places[l.to].name] = 1; });
+    var list = id === this.here && this.stubs.length ? this.stubs : (p.roads || []).map(function (r) {
+      return { destination: r.destination, bearing: r.bearing, ferry: !!r.ferry, place: id };
+    });
+    return list.filter(function (s) { return !walked[s.destination]; });
+  };
+
+  /** Spur length in px: short for every place, long for here and the hovered one. */
+  AtlasMap.prototype.spurLen = function (id, unitPx) {
+    return id === this.here || id === this.hover ? Math.max(24, unitPx * 0.45) : Math.max(7, unitPx * 0.16);
   };
 
   AtlasMap.prototype.draw = function () {
@@ -153,22 +172,29 @@
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
 
-    // Roads out of here that nobody has walked yet.
-    var hereP = this.here && P[this.here] ? S(P[this.here]) : null;
-    if (hereP) {
-      ctx.setLineDash([3, 3]); ctx.strokeStyle = accent; ctx.lineWidth = 2;
-      this.stubs.forEach(function (s) {
-        var u = unit(s.bearing, false), len = Math.max(18, unitPx * 0.42), e = [hereP[0] + u[0] * len, hereP[1] + u[1] * len];
-        ctx.beginPath(); ctx.moveTo(hereP[0], hereP[1]); ctx.lineTo(e[0], e[1]); ctx.stroke();
-        self.hits.push({ kind: 'road', item: s, x: e[0], y: e[1], r: 9, label: 'Travel to ' + s.destination });
+    // Roads not taken: a dash and a dot from every place, longer (and
+    // labelled, below) for where you are and the place under the pointer.
+    var spurLabels = [];
+    this.stationPos = {};
+    Object.keys(P).forEach(function (id) {
+      var c = S(P[id]), long = id === self.here || id === self.hover, len = self.spurLen(id, unitPx);
+      self.stationPos[id] = c;
+      self.spurs(id).forEach(function (s) {
+        var u = unit(s.bearing, false), e = [c[0] + u[0] * len, c[1] + u[1] * len], col = s.ferry ? '#4f95cf' : accent;
+        ctx.setLineDash(long ? [3, 3] : []);
+        ctx.strokeStyle = col; ctx.lineWidth = long ? 2 : 1.4; ctx.globalAlpha = long ? 1 : 0.8;
+        ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.lineTo(e[0], e[1]); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.arc(e[0], e[1], long ? 3 : 1.8, 0, Math.PI * 2);
+        ctx.fillStyle = long ? bg : col; ctx.fill();
+        if (long) { ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke(); }
+        ctx.globalAlpha = 1;
+        if (long) {
+          spurLabels.push({ s: s, x: e[0] + u[0] * 6, y: e[1] + u[1] * 6, u: u, col: col });
+          self.hits.push({ kind: 'road', item: s, x: e[0], y: e[1], r: 9, label: (s.ferry ? 'Ferry to ' : 'Travel to ') + s.destination });
+        }
       });
-      ctx.setLineDash([]);
-      this.stubs.forEach(function (s) {
-        var u = unit(s.bearing, false), len = Math.max(18, unitPx * 0.42), e = [hereP[0] + u[0] * len, hereP[1] + u[1] * len];
-        ctx.beginPath(); ctx.arc(e[0], e[1], 3, 0, Math.PI * 2);
-        ctx.fillStyle = bg; ctx.fill(); ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.stroke();
-      });
-    }
+    });
 
     // Stations.
     var ids = Object.keys(P);
@@ -201,6 +227,16 @@
     var boxes = [];
     ids.forEach(function (id) { var s = S(P[id]), rr = radius(id); boxes.push([s[0] - rr, s[1] - rr, s[0] + rr, s[1] + rr]); });
     ctx.textBaseline = 'middle';
+    // Where the long spurs lead: labelled at their ends, ahead of station names.
+    ctx.font = 'italic 10.5px system-ui, sans-serif';
+    spurLabels.forEach(function (L) {
+      var text = (L.s.ferry ? '⛴ ' : '') + L.s.destination, tw = ctx.measureText(text).width;
+      var x0 = L.u[0] < -0.3 ? L.x - tw : L.u[0] > 0.3 ? L.x : L.x - tw / 2, y0 = L.y + L.u[1] * 4;
+      ctx.textAlign = 'left';
+      ctx.lineWidth = 3; ctx.strokeStyle = bg; ctx.strokeText(text, x0, y0);
+      ctx.fillStyle = L.col; ctx.fillText(text, x0, y0);
+      boxes.push([x0 - 1, y0 - 7, x0 + tw + 1, y0 + 7]);
+    });
     rank.forEach(function (rk) {
       var id = rk[0], p = A.places[id], s = S(P[id]), rr = radius(id);
       var bold = id === self.here || id === self.hover;
@@ -253,6 +289,11 @@
         return;
       }
       var h = self.hitAt(p[0], p[1]), id = h && h.kind === 'place' ? h.item : null;
+      // Stay on a place while the pointer heads out along its long spurs.
+      if (!id && self.hover && self.stationPos && self.stationPos[self.hover]) {
+        var c = self.stationPos[self.hover], r = cv.getBoundingClientRect(), v = self.view || self.fit(r.width, r.height);
+        if (Math.hypot(p[0] - c[0], p[1] - c[1]) <= self.spurLen(self.hover, v.k) + 14) id = self.hover;
+      }
       cv.style.cursor = h ? 'pointer' : 'grab';
       cv.title = h ? h.label : '';
       if (id !== self.hover) { self.hover = id; self.draw(); }
