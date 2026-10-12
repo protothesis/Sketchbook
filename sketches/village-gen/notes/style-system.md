@@ -97,6 +97,7 @@ registry (see *Draw functions*).
     waves:   { kind: 'waves',  spacing: 4,   width: 0.4,  color: 'water', ground: 'shallow~0.5' }
   },
   focus: { area: 'area.boundary' },   // which area counts as "inside"; omit for none
+  frame: { shape: 'circle', centre: 'origin', r: 0.48 },  // r as a fraction of tile width; null = no frame
   layers: [ /* ordered, bottom to top; see below */ ],
   states: {                   // interaction overrides
     highlight: { 'building.*': { fill: '@category', stroke: '#ffffff', width: { px: 1 } } },
@@ -156,6 +157,13 @@ fades and growing widths without an expression language.
   water, no destination) get a landing marker, and `ferry` ways get a
   ferry destination label. Both are `label.destination` /
   `landmark`-style symbols that a style can restyle but not drop.
+- **`frame`** is a second, geometric clip: the hard-edged circle that
+  ends open water and context drawing (it replaces the radial vignette;
+  `natural` keeps the vignette as its own layer). Layers clip to it by
+  default. A layer sets `frame: false` to run past it, as roads to their
+  exits and optionally the coastline do. `centre` is `'origin'` (the
+  default, matching today's vignette, which always fits the tile) or
+  `'settlement'` (radius then clamped to stay on the tile).
 - **`toggle`** maps layers onto the existing checkboxes (`contours`,
   `trees`, `fields`, `labels`, `interiors`), so the UI keeps working, and
   a style can decide what each checkbox covers.
@@ -286,7 +294,7 @@ Each step is shippable on its own:
    loop over `style.layers`, using the draw-function registry. Zoom
    thresholds move into layer `zoom` and paint stops. Again no visual
    change.
-4. **Focus clip and patterns.** Add the `focus` clip, with a renderer-side
+4. **Frame, focus clip and patterns.** Add the `frame` circle and the `focus` clip, with a renderer-side
    stop-gap boundary (farmed extent) until the generator provides one, and
    the procedural pattern builder.
 5. **Generator areas.** `S.areas` with `boundary` (farmed extent pulled to

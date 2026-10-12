@@ -128,6 +128,13 @@ No hillshade in the board style.
 - Where it comes from: the **farmed extent** (outer edge of the fields
   plus a margin), pulled toward a nearby **contour** so it follows the
   land. It's cut by the coast and rivers.
+- **Open water has no natural edge**, so it gets the one geometric
+  boundary: a **frame circle** with a clean, hard arc, replacing today's
+  transparency vignette (no gradient). It's centred where the vignette is
+  now, on the map origin rather than the settlement centre, with a radius
+  just inside the terrain tile so it never runs off the tile. The same
+  circle is where the context drawing (grey hairlines, outlines) stops.
+  The coastline hairline may run on past it, as in `c0dd`.
 - Roads, rivers and the coastline keep going past the edge onto the paper.
   **A road that leads somewhere must never visibly dead-end**: it runs on
   to its `exit` point beyond the map rim, past any boundary or fade.
@@ -190,8 +197,6 @@ Town, any analysis. Every area polygon should have a stable ID.
 
 - Will it be too busy with everything showing? Try it, then thin out.
   Patterns are the likeliest thing to cut.
-- How far past the boundary should the context drawing go before plain
-  paper: the whole terrain tile, or a margin?
 - How do the destination arrows stay obviously clickable without becoming
   UI-ish pills again?
 - Should the boundary come from the atlas once neighbours exist (a
