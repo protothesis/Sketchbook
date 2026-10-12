@@ -7,6 +7,14 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-12: **Atlas map** (`ui/atlasmap.js`): the atlas drawn as a subway
+  map in the panel, and bigger over the main map with ⤢ (or M). Stations
+  are coloured by setting and sized by class; a journey's start is a
+  square; separate journeys sit side by side. The layout dead-reckons from
+  the road bearings (snapped to 45°, north up). Unexplored roads out of the
+  current town are dashed stubs. Click a station to go there, a stub to
+  travel; drag, scroll and double-click to pan, zoom and fit.
+
 - 2026-10-12: **Atlas** (`engine/atlas.js`): the road labels at the map's
   edge ("to Ashby →") are clickable and take you to that town. Its seed comes
   from the world seed plus its name, so a name is always the same town, and

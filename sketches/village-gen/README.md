@@ -91,6 +91,14 @@ and road:
 - **Random** and **New seed** step off the atlas to a new town; travelling
   from it starts a new branch of the same atlas.
 
+The **atlas map** under *Atlas* shows every place and road as a subway map
+(⤢ or M opens it big over the main map). There are no distances in the
+atlas, so it's laid out by dead reckoning: each road is one step in the
+direction it leaves, snapped to 45°, with north up. Squares are where a
+journey started, colours are settings, dashed stubs are roads out of the
+current town you haven't taken. Click a place to go there or a stub to
+travel along it.
+
 **← Back** (B) walks back along your trail, and browser Back/Forward work
 too. The atlas is saved in this browser automatically; **Export atlas**
 writes it as JSON and **Import atlas** loads one, which is the reliable way

@@ -495,7 +495,8 @@
     else if (k === 'ArrowRight') { view.cx += pan; dirty = true; }
     else if (k === 'ArrowUp') { view.cy -= pan; dirty = true; }
     else if (k === 'ArrowDown') { view.cy += pan; dirty = true; }
-    else if (k === 'Escape') closeInspector();
+    else if (k === 'Escape') { if (!$('amapover').hidden) closeAtlasMap(); else closeInspector(); }
+    else if (k === 'm' || k === 'M') { if ($('amapover').hidden) $('amapbig').click(); else closeAtlasMap(); }
     else return;
     if (k.indexOf('Arrow') === 0) e.preventDefault();
   });
@@ -612,6 +613,7 @@
     }
     $('placenote').textContent = notes.join(' ');
 
+    drawAtlasMaps();
     if (!atlas || !Object.keys(atlas.places).length) {
       $('atlasline').textContent = 'Empty. Travel along a road or lock a place to start one. Saved in this browser; export it to keep it safe.';
       $('places').innerHTML = '';
@@ -628,6 +630,34 @@
     }
     dirty = true;
   }
+  // The atlas as a subway map, in the panel and (bigger) over the map.
+  function pickOnMap(kind, item) {
+    if (kind === 'place') { if (item !== placeId) { closeAtlasMap(); go(item); } }
+    else if (kind === 'road') { closeAtlasMap(); travelVia(item.way); }
+  }
+  var amap = new VG.AtlasMap($('amap'), pickOnMap), amap2 = new VG.AtlasMap($('amap2'), pickOnMap);
+  function drawAtlasMaps() {
+    // Roads out of here that don't lead anywhere in the atlas yet.
+    var stubs = !S || !placeId ? [] : S.network.ways.filter(function (w) { return w.destination && w.rim && !known(w.destination); })
+      .map(function (w) { return { destination: w.destination, bearing: w.bearing, way: w }; });
+    amap.set(atlas, placeId, stubs);
+    if (!$('amapover').hidden) amap2.set(atlas, placeId, stubs);
+    var used = {};
+    if (atlas) Object.keys(atlas.places).forEach(function (id) { var p = atlas.places[id]; used[(p.locked && p.settings ? p.settings : p.base).environment] = 1; });
+    var journeys = amap.L ? amap.L.journeys : 0;
+    $('amapkey').innerHTML = Object.keys(VG.ENV_COLORS).filter(function (e) { return used[e]; }).map(function (e) {
+      return '<span><i style="background:' + VG.ENV_COLORS[e] + '"></i>' + esc(VG.ENVIRONMENTS[e].label) + '</span>';
+    }).join('') + (journeys > 1 ? '<span>· ' + journeys + ' separate journeys</span>' : '');
+  }
+  function closeAtlasMap() { $('amapover').hidden = true; }
+  $('amapbig').addEventListener('click', function () {
+    $('amapover').hidden = false;
+    amap2.view = null;
+    drawAtlasMaps();
+  });
+  $('amapclose').addEventListener('click', closeAtlasMap);
+  window.addEventListener('resize', function () { amap.draw(); if (!$('amapover').hidden) amap2.draw(); });
+
   $('places').addEventListener('click', function (e) {
     var li = e.target.closest('li');
     if (li && li.dataset.place !== placeId) go(li.dataset.place);
