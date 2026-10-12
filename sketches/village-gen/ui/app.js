@@ -266,10 +266,11 @@
       var c = cats[b.category] || (cats[b.category] = { n: 0, types: {} });
       c.n++; c.types[b.type] = (c.types[b.type] || 0) + 1;
     });
-    $('legend').innerHTML = Object.keys(VG.render.CAT_COLORS).filter(function (c) { return cats[c]; }).map(function (c) {
+    var colors = renderer.categoryColors();
+    $('legend').innerHTML = Object.keys(colors).filter(function (c) { return cats[c]; }).map(function (c) {
       var types = Object.keys(cats[c].types).sort(function (a, b) { return cats[c].types[b] - cats[c].types[a]; })
         .map(function (t) { return T[t].label.toLowerCase() + (cats[c].types[t] > 1 ? ' ×' + cats[c].types[t] : ''); }).join(', ');
-      return '<li data-cat="' + c + '"><span class="sw" style="background:' + VG.render.CAT_COLORS[c] + '"></span><span>' +
+      return '<li data-cat="' + c + '"><span class="sw" style="background:' + colors[c] + '"></span><span>' +
         VG.render.CAT_LABELS[c] + '<span class="types">' + types + '</span></span><span class="n">' + cats[c].n + '</span></li>';
     }).join('');
     updateYear();
@@ -363,7 +364,6 @@
     return (it.name || VG.ROAD_KINDS[it.kind].label) + (it.destination ? ' → ' + it.destination : '');
   }
 
-  var CAT_PILL = VG.render.CAT_COLORS;
   function inspect(hit) {
     renderer.selected = hit; dirty = true;
     var it = hit.item, rows = [], ways = S.network.ways;
@@ -371,7 +371,7 @@
     $('iname').textContent = hit.kind === 'building' ? (it.name || (it.family ? 'The ' + it.family + ' ' + it.label.toLowerCase() : it.label)) : title(hit);
     var pill = $('ipill');
     if (hit.kind === 'building') {
-      pill.textContent = it.label; pill.style.background = CAT_PILL[it.category];
+      pill.textContent = it.label; pill.style.background = renderer.categoryColors()[it.category];
       rows.push(['Category', VG.render.CAT_LABELS[it.category]]);
       if (it.trade) rows.push(['Trade', it.trade]);
       if (it.family) rows.push(['Household', it.family + (it.households > 1 ? ' + ' + (it.households - 1) + ' more' : '')]);

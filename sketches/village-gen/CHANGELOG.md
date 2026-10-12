@@ -44,6 +44,14 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-10-12: Style system, step 2: today's look is now the `natural`
+  style (`ui/styles/natural.js`, a classic script setting
+  `VG.styles.natural`). Every colour, width (`{ m, px }`), font and zoom
+  threshold moved out of `render.js` into its palette, category colours,
+  fonts and per-layer paint; the draw functions (a `VG.render.draw`
+  registry) read them from the active style. The legend and inspector pill
+  take category colours from the style. No visual change.
+
 - 2026-10-12: Style system, step 1 (see `notes/style-system.md`): the
   environments' `palette` is now `biome`. It sets the crop mix in the
   engine and picks the terrain ramp in the renderer. No visual change.
