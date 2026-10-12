@@ -40,13 +40,18 @@
 
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+  // Always the same number of draws in the same order, so a seed keeps its
+  // name's stem whatever the setting or size, and only the ending and the
+  // Little/Great flourish follow the place.
   function settlement(rand, env, size) {
-    if (env === 'arid') return rand.pick(ARID_A) + rand.pick(ARID_B);
-    var name = rand.pick(PRE) + rand.pick(SUF[env] || SUF.plains);
+    var a = rand(), b = rand(), c = rand(), d = rand(), e = rand();
+    var at = function (list, u) { return list[Math.floor(u * list.length)]; };
+    if (env === 'arid') return at(ARID_A, a) + at(ARID_B, b);
+    var name = at(PRE, a) + at(SUF[env] || SUF.plains, b);
     name = name.replace(/([a-z])\1\1/, '$1$1');
-    if (size === 'hamlet' && rand() < 0.3) name = 'Little ' + name;
-    else if (size === 'city' && rand() < 0.15) name = 'Great ' + name;
-    else if (rand() < 0.07) name += rand.pick([' Cross', ' St. ' + rand.pick(SAINTS), ' Magna', ' on the Hill']);
+    if (size === 'hamlet' && c < 0.3) name = 'Little ' + name;
+    else if (size === 'city' && c < 0.15) name = 'Great ' + name;
+    else if (c > 0.93) name += at([' Cross', ' St. ' + at(SAINTS, e), ' Magna', ' on the Hill'], d);
     return name;
   }
 

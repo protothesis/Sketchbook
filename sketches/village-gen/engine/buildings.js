@@ -95,18 +95,7 @@
     this.hash = new G.SpatialHash(24);
   }
 
-  /** Distance between a segment and a convex quad (0 if they touch). */
-  function segQuadDist(ax, ay, bx, by, q) {
-    if (G.pointInPoly(ax, ay, q) || G.pointInPoly(bx, by, q)) return 0;
-    var d = Infinity;
-    for (var i = 0; i < 4; i++) {
-      var c = q[i], n = q[(i + 1) & 3];
-      if (G.segIntersect(ax, ay, bx, by, c[0], c[1], n[0], n[1])) return 0;
-      d = Math.min(d, G.distToSeg(c[0], c[1], ax, ay, bx, by),
-        G.distToSeg(ax, ay, c[0], c[1], n[0], n[1]), G.distToSeg(bx, by, c[0], c[1], n[0], n[1]));
-    }
-    return d;
-  }
+  var segQuadDist = G.segQuadDist;
 
   /** Can this footprint go here? */
   Placer.prototype.fits = function (poly, x, y, maxSlope) {
@@ -117,7 +106,7 @@
       var c = poly[i];
       if (Math.hypot(c[0], c[1]) > lim || T.isWater(c[0], c[1])) return false;
     }
-    if (T.isWater(x, y) || T.slopeAt(x, y) > maxSlope) return false;
+    if (T.isWater(x, y) || T.slopeAt(x, y) > maxSlope || T.riverNearPoly(poly, 1)) return false;
     for (i = 0; i < S.plazas.length; i++) {
       var p = S.plazas[i];
       for (var k = 0; k < 4; k++) if (Math.hypot(poly[k][0] - p.x, poly[k][1] - p.y) < p.r) return false;
@@ -173,16 +162,18 @@
   }
 
   /** Try to place a special building with a location preference. */
-  Placer.prototype.placeSpecial = function (type, pref, rand) {
+  Placer.prototype.placeSpecial = function (type, pref, rand, ent) {
     var S = this.S, T = this.T, net = this.net, def = TYPES[type], R = S.radius;
-    var ways = net.ways, cands = [];
+    // Farm tracks are never candidates: they're added last and shouldn't
+    // move the town's services around.
+    var ways = net.ways.filter(function (w) { return w.kind !== 'track'; }), cands = [];
+    // The building's own size comes from its key; only its spot is searched.
+    var w = ent.rand.range(def.w[0], def.w[1]), d = ent.rand.range(def.d[0], def.d[1]);
+    if (def.long && ent.rand() < 0.5) { var tmp = w; w = d; d = tmp; }
     for (var k = 0; k < 260; k++) {
       var way = rand.pick(ways), L = way._cum[way._cum.length - 1];
       if (L < 6) continue;
       if (pref === 'main' && way.kind !== 'road' && way.kind !== 'street') continue;
-      if (way.kind === 'track' && pref !== 'mill' && pref !== 'high' && pref !== 'edge') continue;
-      var w = rand.range(def.w[0], def.w[1]), d = rand.range(def.d[0], def.d[1]);
-      if (def.long && rand() < 0.5) { var tmp = w; w = d; d = tmp; }
       var pose = poseOnWay(way, rand() * L, rand() < 0.5 ? 1 : -1, w, d, rand.range(0.8, 3), net);
       var dc = Math.hypot(pose.x - S.center.x, pose.y - S.center.y) / R, score;
       switch (pref) {
@@ -203,7 +194,7 @@
     cands.sort(function (a, b) { return a.score - b.score; });
     for (var i = 0; i < cands.length; i++) {
       var c = cands[i];
-      if (this.fits(c.polygon, c.x, c.y, 0.24)) return this.add(makeBuilding(type, c, rand, S));
+      if (this.fits(c.polygon, c.x, c.y, 0.24)) return this.add(makeBuilding(type, c, ent, S));
     }
     return null;
   };
@@ -231,13 +222,18 @@
 
   /** Walk every way and propose residential lots on both sides. */
   Placer.prototype.residentialCandidates = function (rand) {
-    var S = this.S, net = this.net, out = [], densityMul = G.lerp(1.9, 0.45, S.params.density);
-    // Two passes with different starting offsets: the second fills gaps the
-    // first leaves where lots collide on bends and at junctions.
-    for (var pass = 0; pass < 2; pass++)
+    var S = this.S, net = this.net, out = [], dens = S.params.density;
+    var densityMul = G.lerp(2.6, 0.45, dens);
+    // Sprawling places build out of order: some families take a plot out on
+    // the edge while gaps remain nearer the centre. Compact ones fill in.
+    var spread = G.lerp(0.55, 0.05, dens);
+    // Two passes with different starting offsets (the second fills gaps the
+    // first leaves on bends and at junctions), then farm tracks on their own,
+    // last, so adding tracks never shifts the town's lots.
+    for (var pass = 0; pass < 3; pass++)
     for (var wi = 0; wi < net.ways.length; wi++) {
       var way = net.ways[wi], L = way._cum[way._cum.length - 1];
-      if (pass && way.kind === 'track') continue;
+      if ((way.kind === 'track') !== (pass === 2)) continue;
       for (var side = -1; side <= 1; side += 2) {
         var s = pass ? rand.range(5, 12) : rand.range(2, 6);
         while (s < L - 3) {
@@ -246,7 +242,7 @@
           var t = lotTemplate(z, S.sizeIdx, densityMul, rand, way.kind === 'track');
           var pose = poseOnWay(way, s + t.w / 2, side, t.w, t.d, t.setback, net);
           pose.way = way; pose.type = t.type; pose.z = z;
-          pose.key = z + rand.gauss() * 0.12 + (way.kind === 'track' ? 2 : 0) + pass * 0.04;
+          pose.key = z + rand.gauss() * (0.1 + spread * Math.min(1, z)) + (way.kind === 'track' ? 2 : 0) + (pass === 1 ? 0.04 : 0);
           pose.rural = t.type === 'farmhouse';
           out.push(pose);
           s += t.w + t.gap;
@@ -257,9 +253,9 @@
   };
 
   /** Farmhouse + barn (and sometimes a second outbuilding) as a farmstead. */
-  Placer.prototype.placeFarmstead = function (c, rand) {
+  Placer.prototype.placeFarmstead = function (c, ent, barnEnt) {
     if (!this.fits(c.polygon, c.x, c.y, 0.22)) return null;
-    var house = this.add(makeBuilding('farmhouse', c, rand, this.S));
+    var house = this.add(makeBuilding('farmhouse', c, ent, this.S)), rand = barnEnt.rand;
     var bw = rand.range(12, 20), bd = rand.range(8, 12), ca = Math.cos(c.angle), sa = Math.sin(c.angle);
     var back = [-c.front[0], -c.front[1]];
     var tries = [
@@ -273,7 +269,7 @@
       var poly = G.rectCorners(x, y, bw, bd, ang);
       if (this.fits(poly, x, y, 0.25)) {
         var barn = this.add(makeBuilding('barn', { x: x, y: y, angle: ang, w: bw, d: bd, front: c.front, polygon: poly,
-          door: c.door, node: c.node, way: c.way }, rand, this.S));
+          door: c.door, node: c.node, way: c.way }, barnEnt, this.S));
         barn.farmstead = house.id; house.farmstead = house.id;
         break;
       }
@@ -283,13 +279,18 @@
 
   // --- Building records -----------------------------------------------------
 
-  function makeBuilding(type, pose, rand, S) {
-    var def = TYPES[type], env = S.params.environment;
+  /**
+   * `ent` is the building's identity: { key, rand, names }. `rand` drives its
+   * physical details, `names` its family, trade and name, so the Names part
+   * of the seed can be kept while the layout is rerolled (and vice versa).
+   */
+  function makeBuilding(type, pose, ent, S) {
+    var def = TYPES[type], env = S.params.environment, rand = ent.rand, nr = ent.names;
     var floors = rand.int(def.floors[0], def.floors[1]);
     if (type === 'townhouse' && S.sizeIdx === 3 && rand() < 0.5) floors++;
     var area = pose.w * pose.d, floorArea = area * floors;
     var b = {
-      id: -1, type: type, label: def.label, category: def.cat, name: null,
+      id: -1, key: ent.key, type: type, label: def.label, category: def.cat, name: null,
       x: round(pose.x), y: round(pose.y), angle: round(pose.angle, 3),
       width: round(pose.w), depth: round(pose.d),
       polygon: pose.polygon.map(function (p) { return [round(p[0]), round(p[1])]; }),
@@ -302,16 +303,16 @@
       tags: []
     };
     occupancy(b, rand, S);
-    if (b.households) b.family = VG.names.surname(rand, env);
-    if (type === 'inn' || type === 'tavern') b.name = VG.names.inn(rand);
-    else if (type === 'chapel') b.name = VG.names.shrine(rand);
-    else if (type === 'church' || type === 'cathedral') b.name = VG.names.church(rand);
+    var family = VG.names.surname(nr, env), trade = TRADES[type] ? nr.pick(TRADES[type]) : null;
+    if (b.households) b.family = family;
+    if (type === 'inn' || type === 'tavern') b.name = VG.names.inn(nr);
+    else if (type === 'chapel') b.name = VG.names.shrine(nr);
+    else if (type === 'church' || type === 'cathedral') b.name = VG.names.church(nr);
     else if (type === 'manor') b.name = (b.family || 'The') + ' Hall';
     else if (type === 'mill') b.name = S.terrain.river ? 'Watermill' : 'Windmill';
-    if (TRADES[type]) b.trade = rand.pick(TRADES[type]);
+    if (trade) b.trade = trade;
     if (type === 'workshop' || type === 'shop' || type === 'shophouse' || type === 'smithy' || type === 'bakery') {
-      var who = b.family || VG.names.surname(rand, env);
-      b.name = who + '’s ' + (b.trade || def.label).toLowerCase();
+      b.name = family + '’s ' + (b.trade || def.label).toLowerCase();
     }
     if (type === 'mill' && !S.terrain.river) b.tags.push('windmill');
     b.rooms = interior(b, def, rand);

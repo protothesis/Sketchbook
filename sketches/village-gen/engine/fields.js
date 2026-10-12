@@ -47,7 +47,15 @@
         if (Math.hypot(c[0], c[1]) > lim || T.isWater(c[0], c[1]) || T.slopeAt(c[0], c[1]) > maxSlope) return false;
         if (Math.hypot(c[0] - S.center.x, c[1] - S.center.y) < R * 0.75) return false;
       }
-      if (T.isWater(cx, cy)) return false;
+      // No farming the river or the lake: sample the strip's interior too.
+      for (var u = 0.25; u < 1; u += 0.25) {
+        for (var v = 0.25; v < 1; v += 0.25) {
+          var sx = poly[0][0] + (poly[1][0] - poly[0][0]) * u + (poly[3][0] - poly[0][0]) * v;
+          var sy = poly[0][1] + (poly[1][1] - poly[0][1]) * u + (poly[3][1] - poly[0][1]) * v;
+          if (T.heightAt(sx, sy) < T.wl) return false;
+        }
+      }
+      if (T.isWater(cx, cy) || T.riverNearPoly(poly, 2)) return false;
       var b = G.polyBounds(poly);
       if (hash.query(b[0], b[1], b[2], b[3], function (f) { return G.quadsOverlap(poly, f.polygon); })) return false;
       if (placer.hash.query(b[0] - 3, b[1] - 3, b[2] + 3, b[3] + 3, function (o) { return G.quadsOverlap(poly, o.polygon); })) return false;

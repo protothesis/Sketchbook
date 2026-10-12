@@ -6,9 +6,16 @@
   var view = new VG.View(canvas, function () { dirty = true; });
 
   // --- Controls ---------------------------------------------------------------
-  var LOG_MAX = Math.log(VG.MAX_POP / VG.MIN_POP);
-  function sliderToPop(v) { return Math.round(VG.MIN_POP * Math.exp((v / 1000) * LOG_MAX)); }
-  function popToSlider(p) { return Math.round((Math.log(p / VG.MIN_POP) / LOG_MAX) * 1000); }
+  // The Size select sets the population range; the slider moves within it
+  // on a log scale, so every class gets the slider's full travel.
+  function cls() { return VG.SIZES[VG.classify(params.population)]; }
+  function sliderToPop(v, c) {
+    // The top of one class is the bottom of the next: stop just short of it.
+    var r = c.range, top = c === VG.SIZES[VG.SIZES.length - 1] ? r[1] : r[1] - 1;
+    return Math.min(top, Math.round(r[0] * Math.pow(r[1] / r[0], v / 1000)));
+  }
+  function popToSlider(p, c) { var r = c.range; return Math.round(Math.log(p / r[0]) / Math.log(r[1] / r[0]) * 1000); }
+  function randomPop(c) { return sliderToPop(Math.random() * 1000, c); }
 
   VG.SIZES.forEach(function (s, i) {
     var o = document.createElement('option');
@@ -21,6 +28,44 @@
     $('env').appendChild(o);
   });
 
+  // Locks (which settings Random leaves alone) and keeps (which parts of the
+  // seed survive New seed and Random). Remembered per browser.
+  var SLIDERS = ['planning', 'density', 'farmland', 'woodland'];
+  var LOCKABLE = ['size', 'population', 'environment', 'river'].concat(SLIDERS);
+  var LAND_HOLDS = ['size', 'environment', 'river'];
+  var locks = {}, keeps = { land: false, town: false, names: false };
+  try {
+    var saved = JSON.parse(localStorage.getItem('village-gen:locks') || '{}');
+    if (saved.locks) locks = saved.locks;
+    if (saved.keeps) keeps = saved.keeps;
+  } catch (e) { /* storage unavailable: start unlocked */ }
+  function saveLocks() {
+    try { localStorage.setItem('village-gen:locks', JSON.stringify({ locks: locks, keeps: keeps })); } catch (e) { /* ignore */ }
+  }
+  function held(k) { return !!locks[k] || (keeps.land && LAND_HOLDS.indexOf(k) >= 0); }
+
+  var LOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
+    '<path class="shackle" d="M8 11V8a4 4 0 0 1 8 0v3"/><rect x="5" y="11" width="14" height="10" rx="2"/></svg>';
+  Array.prototype.forEach.call(document.querySelectorAll('[data-lock]'), function (b) {
+    b.innerHTML = LOCK_SVG;
+    b.addEventListener('click', function () { locks[b.dataset.lock] = !locks[b.dataset.lock]; saveLocks(); syncLocks(); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-keep]'), function (b) {
+    b.addEventListener('click', function () { keeps[b.dataset.keep] = !keeps[b.dataset.keep]; saveLocks(); syncLocks(); });
+  });
+  function syncLocks() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-lock]'), function (b) {
+      var k = b.dataset.lock, byLand = keeps.land && LAND_HOLDS.indexOf(k) >= 0;
+      b.setAttribute('aria-pressed', held(k) ? 'true' : 'false');
+      b.disabled = byLand;
+      b.title = byLand ? 'Held by Keep land' : held(k) ? 'Locked: Random leaves this alone' : 'Unlocked: Random may change this';
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-keep]'), function (b) {
+      b.setAttribute('aria-pressed', keeps[b.dataset.keep] ? 'true' : 'false');
+    });
+    $('reseed').disabled = keeps.land && keeps.town && keeps.names;
+  }
+
   var params = readHash();
   function readHash() {
     var p = {}, d = VG.DEFAULTS;
@@ -32,18 +77,21 @@
     return p;
   }
   function writeHash() {
-    var q = 's=' + encodeURIComponent(params.seed) + '&p=' + params.population + '&e=' + params.environment +
+    var q = 's=' + encodeURIComponent(params.seed).replace(/%2F/g, '/') + '&p=' + params.population + '&e=' + params.environment +
       '&r=' + params.river + '&pl=' + params.planning + '&de=' + params.density + '&fa=' + params.farmland + '&wo=' + params.woodland;
     try { history.replaceState(null, '', '#' + q); } catch (e) { location.hash = q; }
   }
   function syncControls() {
+    var c = cls();
     $('seed').value = params.seed;
-    $('pop').value = popToSlider(params.population);
-    $('popv').textContent = params.population.toLocaleString();
     $('size').value = VG.classify(params.population);
+    $('pop').value = popToSlider(params.population, c);
+    $('popv').textContent = params.population.toLocaleString();
+    $('popmin').textContent = c.range[0].toLocaleString();
+    $('popmax').textContent = c.range[1].toLocaleString();
     $('env').value = params.environment;
     $('river').value = params.river;
-    ['planning', 'density', 'farmland', 'woodland'].forEach(function (k) { $(k).value = params[k]; });
+    SLIDERS.forEach(function (k) { $(k).value = params[k]; });
   }
 
   var timer = null;
@@ -53,27 +101,69 @@
     timer = setTimeout(regen, delay === undefined ? 180 : delay);
   }
 
-  $('seed').addEventListener('change', function () { params.seed = this.value.trim() || VG.rng.randomSeed(); regenSoon(0); });
+  /** Fresh seed parts for everything that isn't kept. */
+  function rerollSeed() {
+    var sd = VG.parseSeed(params.seed), fresh = VG.rng.randomSeed();
+    ['land', 'town', 'names'].forEach(function (k) { if (!keeps[k]) sd[k] = fresh; });
+    params.seed = VG.formatSeed(sd);
+  }
+  function reseed() {
+    if (keeps.land && keeps.town && keeps.names) return;
+    rerollSeed(); syncControls(); regenSoon(0);
+  }
+  /** Random settlement: reroll the seed and every unlocked setting. */
+  function randomize() {
+    rerollSeed();
+    var r = Math.random, c = cls();
+    if (!held('size') && !locks.population) {
+      c = VG.SIZES[pickWeighted([0.2, 0.4, 0.26, 0.14])];
+    }
+    if (!locks.population) params.population = randomPop(c);
+    if (!held('environment')) params.environment = pick(Object.keys(VG.ENVIRONMENTS));
+    if (!held('river')) params.river = r() < 0.7 ? 'auto' : r() < 0.5 ? 'yes' : 'no';
+    if (!locks.planning) params.planning = round2(Math.pow(r(), 1.7));
+    if (!locks.density) params.density = round2(0.1 + r() * 0.85);
+    if (!locks.farmland) params.farmland = round2(0.15 + r() * 0.85);
+    if (!locks.woodland) params.woodland = round2(0.1 + r() * 0.85);
+    syncControls(); regenSoon(0);
+  }
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function pickWeighted(w) {
+    var x = Math.random() * w.reduce(function (a, b) { return a + b; }, 0);
+    for (var i = 0; i < w.length; i++) { x -= w[i]; if (x <= 0) return i; }
+    return w.length - 1;
+  }
+  function round2(x) { return Math.round(x * 20) / 20; }
+
+  $('random').addEventListener('click', randomize);
   $('reseed').addEventListener('click', reseed);
-  function reseed() { params.seed = VG.rng.randomSeed(); syncControls(); regenSoon(0); }
+  $('seed').addEventListener('change', function () {
+    params.seed = VG.formatSeed(VG.parseSeed(this.value.trim() || VG.rng.randomSeed()));
+    syncControls(); regenSoon(0);
+  });
   $('size').addEventListener('change', function () {
     params.population = VG.SIZES[+this.value].def;
     syncControls(); regenSoon(0);
   });
   $('pop').addEventListener('input', function () {
-    params.population = sliderToPop(+this.value);
+    params.population = sliderToPop(+this.value, cls());
     $('popv').textContent = params.population.toLocaleString();
-    $('size').value = VG.classify(params.population);
     regenSoon(params.population > 3000 ? 450 : 220);
   });
   $('env').addEventListener('change', function () { params.environment = this.value; regenSoon(0); });
   $('river').addEventListener('change', function () { params.river = this.value; regenSoon(0); });
-  ['planning', 'density', 'farmland', 'woodland'].forEach(function (k) {
+  SLIDERS.forEach(function (k) {
     $(k).addEventListener('input', function () { params[k] = +this.value; regenSoon(); });
   });
 
+  /** Same land ⇒ same site, so the camera can stay exactly where it is. */
+  function landSignature(p) {
+    return [VG.parseSeed(p.seed).land, p.environment, p.river, VG.classify(p.population)].join('|');
+  }
+
   function regen() {
-    var keepView = S && S.seed === params.seed && S.params.environment === params.environment && S.params.population === params.population;
+    var keepView = S && landSignature(S.params) === landSignature(params);
+    var selKey = renderer.selected && renderer.selected.kind === 'building' ? renderer.selected.item.key : null;
     var t0 = performance.now();
     S = VG.generate(params);
     var ms = Math.round(performance.now() - t0);
@@ -84,6 +174,11 @@
     view.minScale = Math.min(view.w, view.h) / (S.bounds.size * 1.15);
     if (!keepView) frameTown(false);
     closeInspector();
+    // Buildings keep their identity across tweaks: follow the selected one.
+    if (selKey) {
+      var again = S.buildings.filter(function (b) { return b.key === selKey; })[0];
+      if (again) inspect({ kind: 'building', item: again });
+    }
     describe();
     writeHash();
     $('status').textContent = S.stats.buildings.toLocaleString() + ' buildings · ' + ms + ' ms';
@@ -312,7 +407,8 @@
     if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key, pan = 80 / view.scale;
-    if (k === 'r' || k === 'R') reseed();
+    if (k === 'r' || k === 'R') randomize();
+    else if (k === 'n' || k === 'N') reseed();
     else if (k === '+' || k === '=') view.zoomAt(1.4, view.w / 2, view.h / 2);
     else if (k === '-' || k === '_') view.zoomAt(1 / 1.4, view.w / 2, view.h / 2);
     else if (k === 'ArrowLeft') { view.cx -= pan; dirty = true; }
@@ -362,6 +458,7 @@
   window.addEventListener('resize', function () { view.resize(); });
   view.resize();
   syncControls();
+  syncLocks();
   regen();
   requestAnimationFrame(frame);
 })();
