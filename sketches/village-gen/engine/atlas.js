@@ -55,21 +55,38 @@
    * The draws come from world + name, so the same first visit always
    * discovers the same town; after that the atlas remembers it.
    */
+  // Settings that plausibly sit a road apart. A change of setting picks one
+  // of these, so a lakeside town doesn't lead straight into the desert.
+  var NEAR_ENVS = {
+    valley: ['plains', 'forest', 'lakeside', 'highlands'], plains: ['valley', 'forest', 'coast', 'lakeside', 'arid'],
+    coast: ['plains', 'valley', 'island', 'highlands', 'arid'], highlands: ['valley', 'forest', 'lakeside', 'coast', 'arid'],
+    forest: ['valley', 'plains', 'highlands', 'lakeside'], lakeside: ['valley', 'forest', 'plains', 'highlands'],
+    island: ['coast'], arid: ['plains', 'highlands', 'coast']
+  };
+  // Where the sliders drift back to, so a long road doesn't run away to the
+  // extremes: each town moves a fifth of the way back, plus some noise.
+  var TYPICAL = { planning: 0.25, density: 0.5, farmland: 0.6, woodland: 0.5 };
+
   function discover(world, name, origin) {
     var rand = R.createRng(String(world), 'discover|' + slug(name)), op = origin && origin.params || VG.DEFAULTS;
-    var envs = Object.keys(VG.ENVIRONMENTS).filter(function (e) { return e !== 'island'; });
+    var envs = NEAR_ENVS[op.environment] || NEAR_ENVS.valley;
     var u = rand(), cls = u < 0.3 ? 0 : u < 0.72 ? 1 : u < 0.92 ? 2 : 3, c = VG.SIZES[cls];
     var top = cls === VG.SIZES.length - 1 ? c.range[1] : c.range[1] - 1;
     var pop = Math.min(top, Math.round(c.range[0] * Math.pow(c.range[1] / c.range[0], rand())));
     // The name can say where it is ("Lynport" is on the coast); otherwise
     // it mostly shares its neighbour's land.
-    var sameLand = rand() < (op.environment === 'arid' ? 0.9 : 0.6), other = envs[Math.floor(rand() * envs.length)];
-    var hint = VG.names.envHint(name), useHint = rand() < 0.6;
+    var sameLand = rand() < 0.6, other = envs[Math.floor(rand() * envs.length)];
+    // Desert towns only ever name desert-sounding neighbours, so an arid
+    // hint is weak or deserts would never end.
+    var hint = VG.names.envHint(name), useHint = rand() < (hint === 'arid' ? 0.3 : 0.6);
     var env = hint && useHint ? hint : sameLand ? op.environment : other;
     sameLand = env === op.environment;
     var riverRoll = rand();
     var river = sameLand && origin && origin.river && riverRoll < 0.7 ? 'yes' : 'auto';
-    function near(k) { return Math.round(G.clamp(+op[k] + rand.gauss() * 0.15, 0, 1) * 20) / 20; }
+    function near(k) {
+      var v = +op[k] + (TYPICAL[k] - op[k]) * 0.2 + rand.gauss() * 0.15;
+      return Math.round(G.clamp(v, 0, 1) * 20) / 20;
+    }
     return {
       seed: seedFor(world, name), population: pop, environment: env, river: river,
       planning: near('planning'), density: near('density'), farmland: near('farmland'), woodland: near('woodland')

@@ -132,8 +132,11 @@ constraint, which is what makes revisits exact. A forced road takes over
 the nearest approach-road slot (one within 1° is left untouched). New
 places' settings are discovered once (seeded by world + name, leaning on
 the origin's setting and sliders, or a setting the name implies) and
-remembered as `base`; **Lock** stores `settings` plus the generator
-version. The world seed is the first town's land seed. Arriving at a known
+remembered as `base` (a setting change picks from a table of plausible
+neighbours; sliders drift but are pulled back toward typical values);
+**Lock** stores `settings` plus the generator version. New seed reshapes a
+place in place; Random starts a separate journey (its own component in the
+atlas graph). The world seed is the first town's land seed. Arriving at a known
 place by a new road adds a road to it, which can shift its layout, even
 when locked (see *Open questions*).
 

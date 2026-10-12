@@ -80,16 +80,21 @@ and road:
 - A destination's seed is the world seed (the first town's land seed) plus
   its name, so the same name is always the same town, however you reach it.
 - A new place's settings are discovered once, from that seed and the place
-  you came from: it usually shares its neighbour's setting and character,
-  and a name like "Lynport" puts it on the coast. The atlas remembers them.
+  you came from: it usually shares its neighbour's setting, or moves to a
+  plausible neighbouring one (valley to plains, forest, lakeside or
+  highlands…), and a name like "Lynport" puts it on the coast. Its sliders
+  wander from its neighbour's but drift back toward typical values, so a
+  long road changes character without running away. The atlas remembers
+  them.
 - Every road you've walked is held as a constraint when its towns are
   generated, so going back gives exactly the same place.
 - **Lock place** saves the current settings: revisits use them. Change a
   locked place and **Save changes** / **Revert** appear. Unlocked places
   forget tweaks when you leave. Locking a town you haven't left yet adds it
   to the atlas.
-- **Random** and **New seed** step off the atlas to a new town; travelling
-  from it starts a new branch of the same atlas.
+- **New seed** reshapes the current town in place: same name, same roads,
+  a tweak like any other. **Random** steps off the atlas to a brand-new
+  town; travelling from it starts a separate journey in the same atlas.
 
 The **atlas map** under *Atlas* shows every place and road as a subway map
 (⤢ or M opens it big over the main map). There are no distances in the

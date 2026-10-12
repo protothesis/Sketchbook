@@ -150,11 +150,12 @@
     ['land', 'town', 'names'].forEach(function (k) { if (!keeps[k]) sd[k] = fresh; });
     params.seed = VG.formatSeed(sd);
   }
-  /** Random and New seed make a new town: step off the atlas place. */
+  /** Random makes a new town: step off the atlas place (a new journey). */
   function leavePlace() { placeId = null; linkPlace = null; }
+  /** New seed rerolls this town in place: same name and roads, a tweak like any other. */
   function reseed() {
     if (keeps.land && keeps.town && keeps.names) return;
-    leavePlace(); rerollSeed(); syncControls(); regenSoon(0);
+    rerollSeed(); syncControls(); regenSoon(0);
   }
   /** Random settlement: reroll the seed and every unlocked setting. */
   function randomize() {

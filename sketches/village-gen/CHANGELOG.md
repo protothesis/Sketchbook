@@ -39,6 +39,14 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-10-12: **New seed** in an atlas town now reshapes that town in place
+  (same name and roads) instead of leaving the atlas; **Random** still
+  starts a new journey. Discovering new places: a change of setting picks a
+  plausible neighbouring one, deserts no longer trap a journey (arid was
+  31% of towns with runs of 8 on average, now 9% and 2.3), and sliders
+  drift back toward typical values instead of random-walking to extremes.
+  Only affects places discovered from now on.
+
 - 2026-10-12: Level-of-detail rendering. Zoomed out, fields and buildings
   are drawn from images baked once per settlement (for places with 400+
   buildings), and everything else that shares a colour is drawn a few
