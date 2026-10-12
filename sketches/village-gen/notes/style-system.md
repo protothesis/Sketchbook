@@ -1,8 +1,8 @@
 # Style system: draft spec
 
-**Started:** 2026-10-12. **Status:** draft, agreed in a design session, not
-built. The look it should produce first is in
-[`visual-direction.md`](visual-direction.md).
+**Started:** 2026-10-12. **Status:** agreed in a design session; migration
+steps 1–3 built on 2026-10-12 (see *As built so far* at the end). The look
+it should produce first is in [`visual-direction.md`](visual-direction.md).
 
 ## Goal
 
@@ -315,3 +315,36 @@ Each step is shippable on its own:
   UI chrome?
 - Do style IDs get saved with locked places in the atlas, or is style
   always a view choice?
+
+## As built so far (steps 1–3)
+
+Where the code differs from the draft above, for whoever picks up step 4:
+
+- **Draw signature** is `VG.render.draw[name](ctx, paint, env, layer)`.
+  There's no generic `items` argument yet: each function reads its own
+  features from `env.S` using the layer's `match` as documentation, and
+  looks up per-key paint with `env.paint(layer, key)`. `env` also has
+  `color(ref)`, `vb`, `sc`, `px`, `t`, `selected`, `hover`, `highlight`,
+  `layers` (the checkboxes), `view` and `paper`. Functions marked
+  `.screen = true` draw in CSS pixels; the rest in world metres.
+- **`natural` uses purpose-built draw functions** that hold today's
+  techniques (`fields`, `buildings`, `trees`, `trees.baked`, `casing`,
+  `ways`, `bridges`, `contours`, `river`, `shore`, `plazas`, `landmarks`,
+  `vignette`, `selection`, `labels.*`, `scaleBar`) rather than the generic
+  `fill` / `stroke` / `circles`, which don't exist yet. `board` will want
+  the generic ones.
+- **`byBiome`** sits next to `byKey` on a layer and is merged first (paint
+  → byBiome → byKey). `natural` uses it for arid towns' flat roofs and
+  adobe homes. The terrain layer's ramps are `byKey` by biome, as planned.
+- **Ways:** a way's own width (its kind's, in metres) is the `m` of its
+  fill; the casing layer adds `pad: { m, px }` to both parts. Tracing on to
+  `w.exit` lives in `traceWay()` in the renderer, not in the style.
+- **Selection and highlight** colours are in `style.states` (`select`,
+  `highlight.fade`), and halos in `style.halo`.
+- **Zoom ranges are `[min, max)`**. A few thresholds used to be strict
+  (`>`), so behaviour exactly at a threshold scale can differ; nowhere
+  else.
+- `Renderer.setStyle(id)` exists and rebakes; nothing calls it yet (the
+  switcher is step 6). `renderer.categoryColors()` gives the legend its
+  colours.
+

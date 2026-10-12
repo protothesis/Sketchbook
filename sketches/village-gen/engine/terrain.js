@@ -13,15 +13,16 @@
   // reliefPerKm: metres of relief per km of map width.
   // river: chance of a river when River is "auto".
   // forest: base woodland cover. fields: how farmable the land feels.
+  // biome: the climate, which sets the crop mix (and the renderer's terrain ramp).
   var ENVIRONMENTS = {
-    valley:    { label: 'River valley',      reliefPerKm: 48, river: 1,    forest: 0.45, fields: 1.0, palette: 'temperate' },
-    plains:    { label: 'Open plains',       reliefPerKm: 30,  river: 0.5,  forest: 0.2,  fields: 1.2, palette: 'temperate' },
-    coast:     { label: 'Coast',             reliefPerKm: 55,  river: 0.45, forest: 0.3,  fields: 0.9, palette: 'temperate' },
-    highlands: { label: 'Highlands',         reliefPerKm: 60, river: 0.6,  forest: 0.35, fields: 0.55, palette: 'highland', maxSlope: 0.3 },
-    forest:    { label: 'Forest clearing',   reliefPerKm: 40,  river: 0.45, forest: 0.85, fields: 0.6, palette: 'temperate' },
-    lakeside:  { label: 'Lakeside',          reliefPerKm: 50,  river: 0.35, forest: 0.4,  fields: 0.9, palette: 'temperate' },
-    island:    { label: 'Island',            reliefPerKm: 60, river: 0,    forest: 0.3,  fields: 0.8, palette: 'temperate' },
-    arid:      { label: 'Arid oasis',        reliefPerKm: 35,  river: 0.4,  forest: 0.06, fields: 0.5, palette: 'arid' }
+    valley:    { label: 'River valley',      reliefPerKm: 48, river: 1,    forest: 0.45, fields: 1.0, biome: 'temperate' },
+    plains:    { label: 'Open plains',       reliefPerKm: 30,  river: 0.5,  forest: 0.2,  fields: 1.2, biome: 'temperate' },
+    coast:     { label: 'Coast',             reliefPerKm: 55,  river: 0.45, forest: 0.3,  fields: 0.9, biome: 'temperate' },
+    highlands: { label: 'Highlands',         reliefPerKm: 60, river: 0.6,  forest: 0.35, fields: 0.55, biome: 'highland', maxSlope: 0.3 },
+    forest:    { label: 'Forest clearing',   reliefPerKm: 40,  river: 0.45, forest: 0.85, fields: 0.6, biome: 'temperate' },
+    lakeside:  { label: 'Lakeside',          reliefPerKm: 50,  river: 0.35, forest: 0.4,  fields: 0.9, biome: 'temperate' },
+    island:    { label: 'Island',            reliefPerKm: 60, river: 0,    forest: 0.3,  fields: 0.8, biome: 'temperate' },
+    arid:      { label: 'Arid oasis',        reliefPerKm: 35,  river: 0.4,  forest: 0.06, fields: 0.5, biome: 'arid' }
   };
 
   var RES = 257;
