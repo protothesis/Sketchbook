@@ -27,9 +27,9 @@
     arid:      { millet: 3, barley: 2, wheat: 1, fallow: 1.5, vegetables: 1.5, dates: 2.5, olives: 2, vineyard: 1 }
   };
 
-  function pickCrop(rand, palette, slope) {
-    var mix = CROP_MIX[palette] || CROP_MIX.temperate, keys = Object.keys(mix);
-    if (slope > 0.12 && palette !== 'highland' && rand() < 0.5) return rand() < 0.5 ? 'vineyard' : 'pasture';
+  function pickCrop(rand, biome, slope) {
+    var mix = CROP_MIX[biome] || CROP_MIX.temperate, keys = Object.keys(mix);
+    if (slope > 0.12 && biome !== 'highland' && rand() < 0.5) return rand() < 0.5 ? 'vineyard' : 'pasture';
     return rand.weighted(keys, function (k) { return mix[k]; });
   }
 
@@ -79,7 +79,7 @@
         var dep = depth * rand.range(0.85, 1.1);
         // Strips run *away* from the road: long axis along the normal.
         var poly = G.rectCorners(cx, cy, stripW * 0.97, dep, dir + (rot || 0));
-        var c = rand() < 0.25 ? pickCrop(rand, S.env.palette, T.slopeAt(cx, cy)) : crop;
+        var c = rand() < 0.25 ? pickCrop(rand, S.env.biome, T.slopeAt(cx, cy)) : crop;
         if (!fieldFits(poly, cx, cy)) continue;
         var f = {
           id: fields.length, furlong: id, crop: c, label: CROPS[c].label,
@@ -107,7 +107,7 @@
           var dc = Math.hypot(pose.x - S.center.x, pose.y - S.center.y);
           if (dc < R * 0.8 || dc > reach || rand() > 0.35 + P.farmland * 0.6) continue;
           var dir = pose.angle + rand.gauss() * 0.06, depth = rand.range(50, 140) * scale;
-          var crop = pickCrop(rand, S.env.palette, T.slopeAt(pose.x, pose.y));
+          var crop = pickCrop(rand, S.env.biome, T.slopeAt(pose.x, pose.y));
           var ox = pose.x - pose.front[0] * 1, oy = pose.y - pose.front[1] * 1;
           var nx = -pose.front[0], ny = -pose.front[1];
           // The furlong's base line sits on the road edge; strips extend away.
@@ -116,7 +116,7 @@
             // A second furlong behind, turned 90° → patchwork.
             var bx = ox + nx * (depth + 6), by = oy + ny * (depth + 6);
             furlongAt(bx, by, ang + Math.PI / 2 * (rand() < 0.5 ? 1 : -1), depth * rand.range(0.8, 1.4),
-              chunk * rand.range(0.6, 1.1), pickCrop(rand, S.env.palette, T.slopeAt(bx, by)), 0);
+              chunk * rand.range(0.6, 1.1), pickCrop(rand, S.env.biome, T.slopeAt(bx, by)), 0);
           }
         }
         s += chunk + rand.range(5, 40) * scale;
@@ -137,7 +137,7 @@
       var tx = Math.cos(ang), ty = Math.sin(ang);
       if (-ty * mx + tx * my < 0) ang += Math.PI;
       furlongAt(bx, by, ang, rand.range(40, 130) * scale, rand.range(45, 130) * scale,
-        pickCrop(rand, S.env.palette, T.slopeAt(bx, by)), 0);
+        pickCrop(rand, S.env.biome, T.slopeAt(bx, by)), 0);
     }
     S.fieldHash = hash;
     return fields;
@@ -149,7 +149,7 @@
     var nz = T.noise.forest, ox = T.noise.ox, oy = T.noise.oy, W = T.W, lim = W * 0.47;
     var spacing = Math.max(6, W / 340), trees = [];
     var cover = G.clamp((S.env.forest || 0.3) * (0.4 + S.params.woodland * 1.2), 0, 1);
-    var arid = S.env.palette === 'arid';
+    var arid = S.env.biome === 'arid';
 
     function blocked(x, y, r) {
       if (T.isWater(x, y)) return true;

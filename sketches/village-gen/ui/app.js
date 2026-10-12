@@ -217,7 +217,7 @@
     var t0 = performance.now();
     S = VG.generate(opts);
     var ms = Math.round(performance.now() - t0);
-    renderer.setSettlement(S, VG.ENVIRONMENTS[params.environment].palette);
+    renderer.setSettlement(S, VG.ENVIRONMENTS[params.environment].biome);
     renderer.history = 1;
     $('hist').value = 1000;
     stopPlay();

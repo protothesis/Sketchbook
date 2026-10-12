@@ -65,12 +65,12 @@
   }
 
   /** Bake terrain colour + hillshade into an offscreen canvas. */
-  function bakeTerrain(S, palette) {
+  function bakeTerrain(S, biome) {
     var T = S._.terrain, W = T.W, size = 1024, cv = makeCanvas(size, size), ctx = cv.getContext('2d');
     var img = ctx.createImageData(size, size), d = img.data;
     var maxH = 0;
     for (var k = 0; k < T.heights.length; k++) if (T.heights[k] > maxH) maxH = T.heights[k];
-    var span = Math.max(0.05, maxH - T.wl), stops = HYPSO[palette] || HYPSO.temperate;
+    var span = Math.max(0.05, maxH - T.wl), stops = HYPSO[biome] || HYPSO.temperate;
     var px = W / size, exag = 1.7 / (1 + T.reliefPerKm / 60);
     var L = [-0.55, -0.65, 0.52], Ll = Math.hypot(L[0], L[1], L[2]);
     L = [L[0] / Ll, L[1] / Ll, L[2] / Ll];
@@ -190,10 +190,10 @@
     this.highlightCat = null;
   }
 
-  Renderer.prototype.setSettlement = function (S, palette) {
+  Renderer.prototype.setSettlement = function (S, biome) {
     this.S = S;
-    this.palette = palette;
-    this.terrainImg = bakeTerrain(S, palette);
+    this.biome = biome;
+    this.terrainImg = bakeTerrain(S, biome);
     this.contours = buildContours(S);
     this.treeImg = bakeTrees(S);
     this.trees = treeGrid(S);
@@ -470,7 +470,7 @@
   };
 
   Renderer.prototype.drawBuildings = function (ctx, vb, sc, px, t) {
-    var S = this.S, self = this, arid = this.palette === 'arid';
+    var S = this.S, self = this, arid = this.biome === 'arid';
     var rooms = this.layers.interiors && sc >= 7, ridges = sc >= 1.1 && !arid, hl = this.highlightCat;
     // Closed buildings are gathered per colour (and per highlight fade) and
     // drawn in one go; only buildings opened up to show rooms go one by one.

@@ -44,6 +44,10 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-10-12: Style system, step 1 (see `notes/style-system.md`): the
+  environments' `palette` is now `biome`. It sets the crop mix in the
+  engine and picks the terrain ramp in the renderer. No visual change.
+
 - 2026-10-12: A new town opens showing the whole map (◎ still frames the
   town). Roads that lead somewhere carry on past the map's edge (`exit` on
   the way) so they run on under the fade instead of visibly stopping.
