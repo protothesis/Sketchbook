@@ -67,6 +67,10 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-12: Coastal towns run ferries too: a landing facing the open sea
+  (not a lake) is a ferry about 60% of the time, so a journey that starts
+  inland can reach islands. `GENERATOR_VERSION` 3 (coastal towns only).
+
 - 2026-10-12: Roads and ferries only connect to their own kind. No road
   leads to an island; a ferry only lands on an island or the coast, and
   the way back is a ferry from that town's waterfront (a coastal town's

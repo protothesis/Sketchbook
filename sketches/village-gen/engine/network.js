@@ -238,6 +238,9 @@
       var wx = Math.cos(angle) * r2 * W, wy = Math.sin(angle) * r2 * W;
       if (T.isWaterBody(wx, wy) || T.heightAt(wx, wy) < T.wl) toWater = true;
     }
+    // Open sea: still water at the very edge (a lake has its far shore on the map).
+    var ex = Math.cos(angle) * 0.475 * W, ey = Math.sin(angle) * 0.475 * W;
+    var toSea = toWater && (T.isWaterBody(ex, ey) || T.heightAt(ex, ey) < T.wl);
     if ((need === 'land' && toWater) || (need === 'water' && !toWater)) return null;
     var ti = Math.round((hub.x / W + 0.5) * (res - 1)), tj = Math.round((hub.y / W + 0.5) * (res - 1));
     var path = astar(grid, si, sj, ti, tj);
@@ -269,6 +272,7 @@
     var w = self.addWay('road', ids, 0);
     w.rim = { x: pts[0][0], y: pts[0][1] };
     if (toWater) w.toWater = true;
+    if (toSea) w.toSea = true;
     return w;
   };
 

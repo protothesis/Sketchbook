@@ -141,7 +141,9 @@ otherwise they're landings (no destination), except on a town with no land
 road out at all, where they're ferries. Ferries are the seed of the "routes
 over water" idea; a region map would decide them properly. Links are
 typed (road or ferry) and both ends match: islands are only reached by
-ferry, ferries only land on islands or coasts. Open idea: a landing serving
+ferry, ferries only land on islands or coasts. Coastal landings facing open sea run
+ferries ~60% of the time (lakes never), so islands are reachable from
+inland. Open idea: a landing serving
 several ferry destinations, which roads can't do. The world seed is the first town's land seed. Arriving at a known
 place by a new road adds a road to it, which can shift its layout, even
 when locked (see *Open questions*).

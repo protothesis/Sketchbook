@@ -59,7 +59,8 @@
   // Bumped whenever a change to the rules would change what an existing seed
   // generates. Locked atlas places record the version they were made with.
   // 2: roads that run into open water are landings, not routes onward.
-  var GENERATOR_VERSION = 2;
+  // 3: some landings on the open sea run ferries.
+  var GENERATOR_VERSION = 3;
 
   // Compass bearings (0 = north, clockwise, degrees) ↔ map angles (radians,
   // x east, y south).
@@ -185,6 +186,10 @@
     if (approaches.length && approaches.every(function (w) { return w.toWater; })) {
       approaches.forEach(function (w) { if (w.landing) { w.landing = false; w.ferry = true; } });
     }
+    // On the open sea (not a lake), some landings run a ferry to somewhere
+    // over the water: that's how a journey from inland reaches an island.
+    var fr = R.createRng(seeds.town, 'ferries');
+    approaches.forEach(function (w) { if (w.landing && w.toSea && fr() < 0.6) { w.landing = false; w.ferry = true; } });
     lap('approach');
 
     // --- Size estimate -------------------------------------------------------
