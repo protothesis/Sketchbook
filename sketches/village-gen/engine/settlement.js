@@ -23,6 +23,9 @@
     { id: 'city',     label: 'City',     range: [3000, 15000], def: 5000, approach: 5, plazaR: 32, rural: 0.04, step: 16, hh: 7.5 }
   ];
   var MAX_POP = 15000, MIN_POP = 5;
+  // Map width per class. The land is drawn at this scale, so moving the
+  // population or density sliders within a class never reshapes the terrain.
+  var CLASS_W = [900, 1700, 3400, 8000];
 
   function classify(pop) {
     for (var i = SIZES.length - 1; i >= 0; i--) if (pop >= SIZES[i].range[0]) return i;
@@ -34,12 +37,30 @@
     planning: 0.15, density: 0.5, farmland: 0.6, woodland: 0.5
   };
 
+  /**
+   * A seed has three independent parts, so each can be kept while the others
+   * are rerolled: the land (terrain, river, site), the layout (roads, lots,
+   * fields) and the names (settlement, families, inns, history).
+   * "ash" means all three are "ash"; "ash/kova/ash" sets them separately
+   * (a missing part falls back to the first).
+   */
+  function parseSeed(seed) {
+    if (seed && typeof seed === 'object') return { land: String(seed.land), town: String(seed.town), names: String(seed.names) };
+    var parts = String(seed).split('/').map(function (x) { return x.trim(); });
+    var a = parts[0] || 'meadow';
+    return { land: a, town: parts[1] || a, names: parts[2] || a };
+  }
+  function formatSeed(sd) {
+    return sd.land === sd.town && sd.town === sd.names ? sd.land : sd.land + '/' + sd.town + '/' + sd.names;
+  }
+
   function now() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
 
   function generate(options) {
     var P = {}, k;
     for (k in DEFAULTS) P[k] = options && options[k] !== undefined ? options[k] : DEFAULTS[k];
-    P.seed = String(P.seed);
+    var seeds = parseSeed(P.seed);
+    P.seed = formatSeed(seeds);
     P.population = Math.round(G.clamp(+P.population || DEFAULTS.population, MIN_POP, MAX_POP));
     if (!VG.ENVIRONMENTS[P.environment]) P.environment = DEFAULTS.environment;
     ['planning', 'density', 'farmland', 'woodland'].forEach(function (key) { P[key] = G.clamp(+P[key], 0, 1); });
@@ -48,21 +69,27 @@
     function lap(name) { var t = now(); timings[name] = Math.round(t - tt); tt = t; }
 
     var sizeIdx = classify(P.population), size = SIZES[sizeIdx], pop = P.population;
-    var W = Math.round(G.clamp((560 + 70 * Math.sqrt(pop)) * G.lerp(1.2, 0.85, P.density), 600, 12000));
-    var T = VG.terrain.build({ W: W, seed: P.seed, environment: P.environment, river: P.river });
+    var W = CLASS_W[sizeIdx];
+    var T = VG.terrain.build({ W: W, seed: seeds.land, environment: P.environment, river: P.river });
     var env = VG.ENVIRONMENTS[P.environment];
     lap('terrain');
 
     var S = {
-      version: 1, generator: 'village-gen', seed: P.seed, params: P,
+      version: 2, generator: 'village-gen', seed: P.seed, seeds: seeds, params: P,
       size: { id: size.id, label: size.label }, sizeIdx: sizeIdx,
       environment: { id: P.environment, label: env.label }, env: env,
       units: 'metres', bounds: { size: W, minX: -W / 2, minY: -W / 2, maxX: W / 2, maxY: W / 2 },
-      terrain: T, plazas: [], landmarks: [], buildSlope: (env.maxSlope || 0.2) + 0.02
+      terrain: T, plazas: [], landmarks: [], buildSlope: (env.maxSlope || 0.2) + 0.02,
+      // Every building draws its details from its own key ("home:12",
+      // "svc:inn:0"), so it keeps its name, family and character when the
+      // layout around it shifts.
+      entity: function (key) {
+        return { key: key, rand: R.createRng(seeds.town, 'e|' + key), names: R.createRng(seeds.names, 'e|' + key) };
+      }
     };
 
     // --- Site --------------------------------------------------------------
-    var rs = R.createRng(P.seed, 'site'), best = null;
+    var rs = R.createRng(seeds.land, 'site'), best = null;
     for (var i = 0; i < 500; i++) {
       var rr = Math.sqrt(rs()) * 0.17 * W, a = rs() * Math.PI * 2;
       var x = Math.cos(a) * rr, y = Math.sin(a) * rr;
@@ -84,7 +111,7 @@
     var net = new VG.network.Network(T);
     S.network = net;
     var hub = net.addNode(best.x, best.y);
-    var rr2 = R.createRng(P.seed, 'roads');
+    var rr2 = R.createRng(seeds.town, 'roads');
     var grid = VG.network.makeCostGrid(T, 129);
     var nApproach = size.approach + (rr2() < 0.4 ? 1 : 0), base = rr2() * Math.PI * 2;
     var approaches = [];
@@ -100,7 +127,7 @@
     services.forEach(function (s) { nServices += s.count; });
     var townPop = pop * (1 - size.rural);
     var homes = townPop / size.hh;
-    var lotArea = G.lerp(520, 170, P.density) * (sizeIdx === 0 ? 1.8 : 1) * (sizeIdx >= 2 ? 0.75 : 1);
+    var lotArea = G.lerp(700, 160, P.density) * (sizeIdx === 0 ? 1.8 : 1) * (sizeIdx >= 2 ? 0.75 : 1);
     S.radius = Math.sqrt((homes + nServices) * lotArea / Math.PI) * 1.1 + 30;
     if (size.plazaR) S.plazas.push({ x: hub.x, y: hub.y, r: size.plazaR, kind: sizeIdx === 1 ? 'green' : 'square', main: true });
 
@@ -131,28 +158,32 @@
       var need = (homes + nServices) * 13 * G.lerp(1.5, 0.75, P.density) * (sizeIdx === 0 ? 0.6 : 1) - inner;
       if (round > 0) need = Math.max(need, (homes + nServices) * 3);
       if (need > 0) net.growStreets(need, GP, rr2, streetKinds);
-      if (round === 0) growTracks(S, net, rr2, GP, size, sizeIdx, P);
       lap('streets' + round);
 
-      placer = placeBuildings(S, services, R.createRng(P.seed, 'build' + round), size);
+      placer = placeBuildings(S, services, R.createRng(seeds.town, 'build' + round), size);
       lap('buildings' + round);
       if (placer.residents >= pop * 0.97 && placer.spill <= pop * 0.04 + 10) break;
       GP.maxR *= 1.15; S.radius *= 1.1;
+    }
+    // Farm tracks come last, from their own stream, so Farmland only changes
+    // the countryside. Then place once more so farmsteads can use them.
+    if (growTracks(S, net, R.createRng(seeds.town, 'tracks'), GP, size, sizeIdx, P)) {
+      placer = placeBuildings(S, services, R.createRng(seeds.town, 'build' + Math.min(round, 5)), size);
+      lap('tracks');
     }
     S._placer = placer;
     S.buildings = placer.list;
 
     // --- Countryside -----------------------------------------------------------
-    S.fields = VG.fields.layFields(S, R.createRng(P.seed, 'fields'));
+    S.fields = VG.fields.layFields(S, R.createRng(seeds.town, 'fields'));
     lap('fields');
-    S.trees = VG.fields.plantTrees(S, R.createRng(P.seed, 'trees'));
+    S.trees = VG.fields.plantTrees(S, R.createRng(seeds.land, 'trees'));
     lap('trees');
 
     // --- Names and history -------------------------------------------------------
-    var rn = R.createRng(P.seed, 'names');
-    S.name = VG.names.settlement(rn, P.environment, size.id);
-    nameWays(S, approaches, rn);
-    history(S, rn, best);
+    S.name = VG.names.settlement(R.createRng(seeds.names, 'settlement'), P.environment, size.id);
+    nameWays(S, approaches, seeds.names);
+    history(S, R.createRng(seeds.names, 'history'), best, seeds.town);
     S.stats = stats(S);
     timings.total = Math.round(now() - t0);
     S.timings = timings;
@@ -168,6 +199,7 @@
     TP.maxR = reach; TP.minLen = 120; TP.maxLen = 520 * Math.sqrt(T.W / 1500);
     TP.wiggle = 0.12; TP.steer = 0.3; TP.planning = P.planning * 0.5; TP.clearance = 45; TP.maxSlope = 0.26;
     TP.junctionGap = 60;
+    var before = net.ways.length;
     var count = Math.round(G.lerp(2, 9, P.farmland) * (1 + sizeIdx * 0.6) * (S.env.fields || 1));
     var cands = net.nodes.filter(function (n) {
       var d = Math.hypot(n.x - GP.cx, n.y - GP.cy);
@@ -179,6 +211,7 @@
       var w = net.growWay(n, heading, 'track', Math.round(rand.range(TP.minLen, TP.maxLen) / TP.step), TP, rand);
       if (w && --count <= 0) break;
     }
+    return net.ways.length > before;
   }
 
   function placeBuildings(S, services, rand, size) {
@@ -200,7 +233,7 @@
     var order = { centre: 0, main: 1, mill: 2, water: 2, high: 2, edge: 3, any: 4 };
     services.slice().sort(function (a, b) { return order[a.pref] - order[b.pref]; }).forEach(function (s) {
       for (var i = 0; i < s.count; i++) {
-        var b = placer.placeSpecial(s.type, s.pref, rand);
+        var b = placer.placeSpecial(s.type, s.pref, rand, S.entity('svc:' + s.type + ':' + i));
         if (b) residents += b.residents;
       }
     });
@@ -209,22 +242,27 @@
     var rural = cands.filter(function (c) { return c.rural; });
     var town = cands.filter(function (c) { return !c.rural; }).sort(function (a, b) { return a.key - b.key; });
     rand.shuffle(rural);
-    var ruralTarget = pop * size.rural, ri = 0;
+    var ruralTarget = pop * size.rural, ri = 0, farms = 0, homes = 0;
+    function farm() {
+      var h = placer.placeFarmstead(rural[ri++], S.entity('farm:' + farms), S.entity('barn:' + farms));
+      if (h) farms++;
+      return h;
+    }
     while (residents < ruralTarget && ri < rural.length) {
-      var h = placer.placeFarmstead(rural[ri++], rand);
+      var h = farm();
       if (h) residents += h.residents;
     }
     for (var i = 0; i < town.length && residents < pop; i++) {
       var c = town[i];
       if (!placer.fits(c.polygon, c.x, c.y, 0.22)) continue;
-      var type = c.type;
-      if (type === 'townhouse' && c.way.kind !== 'lane' && rand() < 0.3) type = 'shophouse';
-      residents += placer.add(B.makeBuilding(type, c, rand, S)).residents;
+      var ent = S.entity('home:' + homes++), type = c.type;
+      if (type === 'townhouse' && c.way.kind !== 'lane' && ent.rand() < 0.3) type = 'shophouse';
+      residents += placer.add(B.makeBuilding(type, c, ent, S)).residents;
     }
     // Town lots ran out: spill onto farms (and tell the caller to grow more).
     var spill = 0;
     while (residents < pop && ri < rural.length) {
-      var h2 = placer.placeFarmstead(rural[ri++], rand);
+      var h2 = farm();
       if (h2) { residents += h2.residents; spill += h2.residents; }
     }
     placer.residents = residents;
@@ -243,8 +281,8 @@
   };
   var SUFFIX = ['Lane', 'Row', 'Street', 'Close', 'Walk', 'Way', 'Yard', 'Gate'];
 
-  function nameWays(S, approaches, rand) {
-    var net = S.network, T = S.terrain, used = {};
+  function nameWays(S, approaches, nameSeed) {
+    var net = S.network, T = S.terrain, used = {}, rand = R.createRng(nameSeed, 'claims');
     function claim(n) {
       if (!n) return null;
       if (!used[n]) { used[n] = 1; return n; }
@@ -253,7 +291,7 @@
       return null;
     }
     approaches.forEach(function (w, i) {
-      w.destination = VG.names.neighbour(rand, S.params.environment);
+      w.destination = VG.names.neighbour(R.createRng(nameSeed, 'dest|' + i), S.params.environment);
       w.name = claim(i === 0 && S.sizeIdx >= 1 ? 'High Street' : w.destination + ' Road');
     });
     var byWay = {};
@@ -261,7 +299,7 @@
     net.ways.forEach(function (w) {
       if (w.name || w.kind === 'road') return;
       if (w.kind === 'track') { w.name = null; return; }
-      var bs = byWay[w.id] || [], named = null;
+      var bs = byWay[w.id] || [], named = null, rand = R.createRng(nameSeed, 'way|' + w.id);
       for (var i = 0; i < bs.length && !named; i++) if (STREET_BY_TYPE[bs[i].type]) named = claim(STREET_BY_TYPE[bs[i].type]);
       if (!named) {
         var mid = net.nodes[w.nodes[w.nodes.length >> 1]];
@@ -290,7 +328,14 @@
     valley: ['the valley floor', 'a meeting of valley roads']
   };
 
-  function history(S, rand, site) {
+  /** A stable ~N(0,1) value from a building's key. */
+  function keyGauss(key, salt) {
+    var s = 0;
+    for (var i = 0; i < 3; i++) s += (R.hash(key, salt + i * 7919) % 100000) / 100000;
+    return (s - 1.5) * 1.414;
+  }
+
+  function history(S, rand, site, townSeed) {
     var age = Math.round(rand.range(70, 180) + S.sizeIdx * rand.range(110, 260));
     var founded = rand.int(780, 1500);
     var reasonKey = S.params.environment;
@@ -300,10 +345,10 @@
 
     var R0 = S.radius, c = S.center;
     var keyed = S.buildings.map(function (b) {
-      var z = Math.hypot(b.x - c.x, b.y - c.y) / R0, key = z + rand.gauss() * 0.12;
+      var z = Math.hypot(b.x - c.x, b.y - c.y) / R0, key = z + keyGauss(b.key + townSeed, 11) * 0.12;
       if (b.type === 'chapel' || b.type === 'church' || b.type === 'manor' || b.type === 'mill') key *= 0.4;
       if (b.type === 'cathedral' || b.type === 'townhall' || b.type === 'guildhall') key = key * 0.6 + 0.35;
-      if (b.type === 'farmhouse' || b.type === 'barn') key = key * 0.4 + rand() * 0.6;
+      if (b.type === 'farmhouse' || b.type === 'barn') key = key * 0.4 + (keyGauss(b.key + townSeed, 23) * 0.29 + 0.5) * 0.6;
       if (b.type === 'school' || b.type === 'bathhouse' || b.type === 'warehouse') key += 0.4;
       return [b, key];
     }).sort(function (a, b) { return a[1] - b[1]; });
@@ -316,7 +361,7 @@
     S.buildings.forEach(function (b) {
       if (b.type === 'barn' && b.farmstead !== undefined) {
         var h = S.buildings[b.farmstead];
-        b.epoch = h.epoch; b.built = h.built + rand.int(0, 25);
+        b.epoch = h.epoch; b.built = h.built + Math.round(Math.abs(keyGauss(b.key + townSeed, 37)) * 10);
       }
     });
 
@@ -337,7 +382,7 @@
     var reach = 0;
     S.fields.forEach(function (f) { reach = Math.max(reach, Math.hypot(f.x - c.x, f.y - c.y)); });
     S.fields.forEach(function (f) {
-      f.epoch = Math.round(G.clamp(Math.hypot(f.x - c.x, f.y - c.y) / (reach || 1) * 0.8 + rand() * 0.2 - 0.1, 0, 1) * 1000) / 1000;
+      f.epoch = Math.round(G.clamp(Math.hypot(f.x - c.x, f.y - c.y) / (reach || 1) * 0.8 + keyGauss('f' + f.id + townSeed, 41) * 0.06, 0, 1) * 1000) / 1000;
     });
   }
 
@@ -390,11 +435,15 @@
       return o;
     });
     var hidden = { terrain: T, net: net, placer: S._placer, fieldHash: S.fieldHash };
-    delete S._placer; delete S.fieldHash; delete S.env; delete S.sizeIdx; delete S.buildSlope;
+    delete S._placer; delete S.fieldHash; delete S.env; delete S.sizeIdx; delete S.buildSlope; delete S.entity;
     S.network = { nodes: nodes, edges: edges, ways: ways };
     S.terrain = {
       res: T.res, cell: T.cell, waterLevel: T.wl, relief: Math.round(T.relief), heights: T.heights,
-      river: T.river ? { points: T.river.points.map(function (p) { return [Math.round(p[0]), Math.round(p[1])]; }), halfWidth: Math.round(T.river.halfWidth * 10) / 10 } : null
+      river: T.river ? {
+        points: T.river.points.map(function (p) { return [Math.round(p[0]), Math.round(p[1])]; }),
+        runs: T.river.runs.map(function (r) { return r.map(function (p) { return [Math.round(p[0]), Math.round(p[1])]; }); }),
+        halfWidth: Math.round(T.river.halfWidth * 10) / 10
+      } : null
     };
     S.radius = Math.round(S.radius);
     Object.defineProperty(S, '_', { value: hidden, enumerable: false });
@@ -471,6 +520,9 @@
   }
 
   VG.SIZES = SIZES;
+  VG.CLASS_W = CLASS_W;
+  VG.parseSeed = parseSeed;
+  VG.formatSeed = formatSeed;
   VG.MAX_POP = MAX_POP;
   VG.MIN_POP = MIN_POP;
   VG.DEFAULTS = DEFAULTS;

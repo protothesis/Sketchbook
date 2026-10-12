@@ -74,7 +74,7 @@ reported in the overview.
 `VillageGen.generate(options)` returns plain data in metres, with the map
 centred on (0, 0):
 
-- `buildings[]`: `type`, `category`, `name`, `family`, `trade`, `polygon`,
+- `buildings[]`: `key` (stable across tweaks), `type`, `category`, `name`, `family`, `trade`, `polygon`,
   `width`/`depth`/`area`, `floors`, `floorArea`, `residents`, `households`,
   `workers`, `capacity`, `beds`, `storage`, `entrance` (point plus the road
   node it opens onto), `wayId`, `elevation`, `built`, `epoch` (0–1 growth
@@ -105,9 +105,46 @@ the same order as `index.html`:
 
 ## Controls
 
-Drag to pan; scroll, pinch or double-click to zoom; **R** to reseed; arrow
-keys to pan; Esc to close the inspector. The seed and every setting live in
-the URL hash, so **Copy link** brings back exactly the same place.
+- **🎲 Random settlement** (R) rerolls every setting that isn't locked, and
+  every part of the seed you aren't keeping. With nothing locked it's a
+  completely fresh place. Lock the size and setting, say, to get endless
+  random towns within those conditions.
+- **New seed** (N) keeps all the settings and rerolls the seed.
+- **Size** picks the class; the **Population** slider moves within that
+  class's range (log scale, so the whole travel is usable).
+- **Density** goes from *sprawling* (wide gaps, homes scattered out along the
+  roads ahead of the infill) to *compact* (tight terraces, a solid core).
+- The padlock next to each setting keeps it fixed when you press Random.
+
+Drag to pan; scroll, pinch or double-click to zoom; arrow keys pan; Esc
+closes the inspector. The seed and every setting live in the URL hash, so
+**Copy link** brings back exactly the same place.
+
+### Seeds, and what stays put
+
+A seed has three parts that can be kept independently with the **Keep**
+chips: **Land** (terrain, river, site), **Layout** (roads, lots, fields) and
+**Names** (the settlement, families, inns, streets, founding year). One word
+like `ash` sets all three; `ash/kova/ash` sets them separately. Keeping Land
+also holds the setting, river and size, because those shape the land too.
+
+What each setting is allowed to change:
+
+| Change | Land | Streets & lots | Which buildings, their names & families |
+|---|---|---|---|
+| Woodland | — | — | — |
+| Farmland | — | countryside only | — |
+| Planning, Density, Population (within a class) | — | reflows | kept (~95%) |
+| Size class, Setting, River | redrawn | reflows | mostly kept |
+| New Names seed | — | — | renamed |
+| New Layout seed | — | new | kept by key |
+
+This works because every building has a stable `key` (`home:12`,
+`svc:inn:0`, `farm:3`) that its own details come from, so it keeps its
+character when the streets around it move. The inspector follows the
+selected building across tweaks. The map is drawn at a fixed scale per size
+class, so changing the population or density no longer redraws the terrain
+or moves the camera.
 
 ## Possible directions
 
@@ -117,6 +154,9 @@ the URL hash, so **Copy link** brings back exactly the same place.
 - Town walls with gates for cities, a harbour with quays, bridges as named
   places.
 - Districts and wealth: richer streets, a poor quarter by the tannery.
+- Population as growth: make a bigger town a strict superset of a smaller
+  one with the same seed, so the slider grows the place instead of
+  reflowing it.
 - Neighbouring settlements at the "to …" road ends, so the map can stitch
   into a region.
 - History that actually changes the map: fires, a new bridge, a mill closing.

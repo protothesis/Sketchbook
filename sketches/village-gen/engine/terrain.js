@@ -177,6 +177,18 @@
       return Math.hypot(gx, gy) * T.relief;
     };
 
+    // Where the river crosses a lake or reaches the sea it stops being a
+    // channel: keep only the runs over land, for drawing.
+    if (T.river) {
+      var runs = [], cur = [];
+      T.river.points.forEach(function (p) {
+        if (T.heightAt(p[0], p[1]) < T.wl) { if (cur.length > 1) runs.push(cur); cur = []; }
+        else cur.push(p);
+      });
+      if (cur.length > 1) runs.push(cur);
+      T.river.runs = runs;
+    }
+
     // River segment hash for fast distance lookups.
     var rh = null;
     if (T.river) {
@@ -195,6 +207,14 @@
         if (d < best) best = d;
       });
       return best;
+    };
+    /** Does the river channel (plus `pad` metres) touch this convex quad? */
+    T.riverNearPoly = function (poly, pad) {
+      if (!rh) return false;
+      var r = T.river.halfWidth + (pad || 0), b = G.polyBounds(poly);
+      return rh.query(b[0] - r, b[1] - r, b[2] + r, b[3] + r, function (s) {
+        return G.segQuadDist(s[0], s[1], s[2], s[3], poly) < r;
+      });
     };
     T.isRiver = function (x, y) { return !!rh && T.riverDist(x, y) < T.river.halfWidth; };
     /** Standing water (sea, lake, pond), as opposed to the river. */

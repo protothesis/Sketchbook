@@ -215,7 +215,9 @@
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     if (T.river) {
       ctx.beginPath();
-      T.river.points.forEach(function (p, i) { if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+      (T.river.runs || [T.river.points]).forEach(function (run) {
+        run.forEach(function (p, i) { if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+      });
       ctx.strokeStyle = 'rgb(140, 188, 210)';
       ctx.lineWidth = Math.max(T.river.halfWidth * 2, px * 2.2);
       ctx.stroke();

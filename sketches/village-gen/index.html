@@ -88,11 +88,28 @@
   .tiles span { font-size: 11px; color: var(--text-muted); }
   .muted { color: var(--text-muted); }
   .small { font-size: 12px; }
-  .ctl { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 6px 10px; }
-  .ctl label { color: var(--text-muted); font-size: 13px; }
+  .ctl { display: grid; grid-template-columns: 88px 1fr 30px; align-items: center; gap: 6px 8px; }
+  .ctl label { color: var(--text-muted); font-size: 13px; grid-column: 1; }
+  .seedrow button { white-space: nowrap; flex-shrink: 0; }
   .ctl output { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 54px; text-align: right; }
   .ctl .wide { grid-column: 2 / 4; }
-  .ctl .ends { grid-column: 2 / 4; display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: -6px; }
+  .ctl .ends { grid-column: 2 / 3; display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: -6px; }
+  .ctl .ends output { color: var(--text); font-weight: 600; font-size: 12px; }
+  button.big { width: 100%; padding: 9px 12px; font-size: 14px; }
+  .hint { font-size: 12px; color: var(--text-muted); margin: 6px 0 12px; }
+  .hint b { color: var(--text); font-weight: 600; }
+  .keeps { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin: -2px 0 4px; }
+  .keeps .muted { margin-right: 2px; }
+  .chip { padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+  .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
+  .lock { width: 30px; height: 28px; padding: 0; display: grid; place-items: center; color: var(--text-muted); background: transparent; border-color: transparent; }
+  .lock:hover { border-color: var(--border); }
+  .lock svg { width: 15px; height: 15px; }
+  .lock .shackle { transition: transform .15s; transform-origin: 16px 9px; }
+  .lock[aria-pressed="false"] .shackle { transform: translateY(-2.5px) rotate(18deg); }
+  .lock[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+  .lock:disabled { opacity: 0.55; cursor: default; }
+  .ctl select, .ctl input[type=range] { min-width: 0; }
   input[type=range] { width: 100%; accent-color: var(--accent); }
   input[type=text], select, button {
     font: inherit; font-size: 13px; color: var(--text); background: var(--bg);
@@ -167,36 +184,52 @@
     </section>
 
     <h2>Shape it</h2>
+    <button id="random" class="primary big" title="Reroll everything that isn't kept or locked (R)">🎲 Random settlement</button>
+    <p class="hint">Random rerolls every setting that isn’t locked and every part of the seed you aren’t keeping. <b>New seed</b> keeps all the settings.</p>
     <div class="ctl">
       <label for="seed">Seed</label>
-      <div class="seedrow wide"><input id="seed" type="text" spellcheck="false" autocomplete="off" /><button id="reseed" class="primary" title="New random seed (R)">Reseed</button></div>
+      <div class="seedrow wide"><input id="seed" type="text" spellcheck="false" autocomplete="off" title="One word for everything, or land/layout/names" /><button id="reseed" title="New seed, same settings (N)">New seed</button></div>
+      <span></span>
+      <div class="keeps wide"><span class="small muted">Keep</span>
+        <button class="chip" data-keep="land" aria-pressed="false" title="Keep the terrain, river and site. Also holds the setting, river and size, which shape the land">Land</button>
+        <button class="chip" data-keep="town" aria-pressed="false" title="Keep the roads, lots and fields (as long as the sliders that shape them stay put)">Layout</button>
+        <button class="chip" data-keep="names" aria-pressed="false" title="Keep the settlement’s name, its families, inns, streets and founding year">Names</button>
+      </div>
 
       <label for="size">Size</label>
-      <select id="size" class="wide"></select>
+      <select id="size"></select>
+      <button class="lock" data-lock="size"></button>
 
       <label for="pop">Population</label>
       <input id="pop" type="range" min="0" max="1000" step="1" />
-      <output id="popv"></output>
+      <button class="lock" data-lock="population"></button>
+      <div class="ends"><span id="popmin"></span><output id="popv"></output><span id="popmax"></span></div>
 
       <label for="env">Setting</label>
-      <select id="env" class="wide"></select>
+      <select id="env"></select>
+      <button class="lock" data-lock="environment"></button>
 
       <label for="river">River</label>
-      <select id="river" class="wide"><option value="auto">Depends on setting</option><option value="yes">Always</option><option value="no">Never</option></select>
+      <select id="river"><option value="auto">Depends on setting</option><option value="yes">Always</option><option value="no">Never</option></select>
+      <button class="lock" data-lock="river"></button>
 
       <label for="planning">Planning</label>
-      <input id="planning" type="range" min="0" max="1" step="0.05" class="wide" />
+      <input id="planning" type="range" min="0" max="1" step="0.05" />
+      <button class="lock" data-lock="planning"></button>
       <div class="ends"><span>organic</span><span>planned</span></div>
 
       <label for="density">Density</label>
-      <input id="density" type="range" min="0" max="1" step="0.05" class="wide" />
+      <input id="density" type="range" min="0" max="1" step="0.05" />
+      <button class="lock" data-lock="density"></button>
       <div class="ends"><span>sprawling</span><span>compact</span></div>
 
       <label for="farmland">Farmland</label>
-      <input id="farmland" type="range" min="0" max="1" step="0.05" class="wide" />
+      <input id="farmland" type="range" min="0" max="1" step="0.05" />
+      <button class="lock" data-lock="farmland"></button>
 
       <label for="woodland">Woodland</label>
-      <input id="woodland" type="range" min="0" max="1" step="0.05" class="wide" />
+      <input id="woodland" type="range" min="0" max="1" step="0.05" />
+      <button class="lock" data-lock="woodland"></button>
     </div>
 
     <h2>Growth</h2>

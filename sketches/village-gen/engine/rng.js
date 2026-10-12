@@ -191,6 +191,19 @@
     return true;
   }
 
+  /** Distance between a segment and a convex quad (0 if they touch). */
+  function segQuadDist(ax, ay, bx, by, q) {
+    if (pointInPoly(ax, ay, q) || pointInPoly(bx, by, q)) return 0;
+    var d = Infinity;
+    for (var i = 0; i < 4; i++) {
+      var c = q[i], n = q[(i + 1) & 3];
+      if (segIntersect(ax, ay, bx, by, c[0], c[1], n[0], n[1])) return 0;
+      d = Math.min(d, distToSeg(c[0], c[1], ax, ay, bx, by),
+        distToSeg(ax, ay, c[0], c[1], n[0], n[1]), distToSeg(bx, by, c[0], c[1], n[0], n[1]));
+    }
+    return d;
+  }
+
   function pointInPoly(x, y, poly) {
     var inside = false;
     for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -215,6 +228,6 @@
   VG.geom = {
     clamp: clamp, lerp: lerp, smoothstep: smoothstep, SpatialHash: SpatialHash,
     distToSeg: distToSeg, segIntersect: segIntersect, rectCorners: rectCorners,
-    quadsOverlap: quadsOverlap, pointInPoly: pointInPoly, polyBounds: polyBounds
+    quadsOverlap: quadsOverlap, pointInPoly: pointInPoly, polyBounds: polyBounds, segQuadDist: segQuadDist
   };
 })(typeof window !== 'undefined' ? window : globalThis);
