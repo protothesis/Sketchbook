@@ -129,6 +129,8 @@ No hillshade in the board style.
   plus a margin), pulled toward a nearby **contour** so it follows the
   land. It's cut by the coast and rivers.
 - Roads, rivers and the coastline keep going past the edge onto the paper.
+  **A road that leads somewhere must never visibly dead-end**: it runs on
+  to its `exit` point beyond the map rim, past any boundary or fade.
 
 **Buildings:**
 - Inside the boundary: **white fill, no outline**, on the settled-ground
@@ -146,7 +148,8 @@ streets, buildings, the "to X →" destinations). No halos where the
 background is calm enough.
 
 **Destinations:** the "to Ashby →" tabs become edge arrows plus caps
-labels, as in `01a0` and `3332`. They still need to be clearly clickable.
+labels, as in `01a0` and `3332`. They still need to be clearly clickable. Ferry destinations
+and landings (roads ending at water) need board-style symbols too.
 
 **Dark mode:** no change. The map surround keeps following the theme's
 `--paper` as it does today. The board palette is tuned for light paper

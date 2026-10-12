@@ -57,6 +57,7 @@ collection and the second is the attribute that styles care about:
 | `landmark.<type>` | `S.landmarks` | `pond`, … |
 | `way.<kind>` | `S.network.ways` | `road`, `street`, `lane`, `track` |
 | `bridge` | `S.network.edges` with `bridge` | none |
+| `way.*` flags | `w.exit`, `w.landing`, `w.ferry` (atlas branch, 0761d30) | filterable: `filter: { landing: true }` |
 | `building.<category>` | `S.buildings` | `residential`, `civic`, … (`type` available to filters) |
 | `room` | `building.rooms` | none |
 | `tree` | `S.trees` | none |
@@ -147,6 +148,14 @@ fades and growing widths without an expression language.
   clipped to it, and `outside` draws clipped to its complement. That's
   the whole subject/context mechanism. The boundary is drawn as a fill
   with no outline because nothing strokes it.
+- **Roads that lead somewhere never dead-end.** A way with an `exit`
+  point is always traced on to it (today's `trace()` does
+  `lineTo(w.exit)` after the last node), and that continuation is drawn
+  **outside every clip**: `focus`, the boundary and any edge treatment.
+  This is a renderer rule, not a style option. `landing` ways (ending at
+  water, no destination) get a landing marker, and `ferry` ways get a
+  ferry destination label. Both are `label.destination` /
+  `landmark`-style symbols that a style can restyle but not drop.
 - **`toggle`** maps layers onto the existing checkboxes (`contours`,
   `trees`, `fields`, `labels`, `interiors`), so the UI keeps working, and
   a style can decide what each checkbox covers.
