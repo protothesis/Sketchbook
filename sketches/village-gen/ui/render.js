@@ -148,8 +148,10 @@
   function usePattern(set, name, sc, angle, ox, oy) {
     var p = set[name];
     if (!p) return null;
-    // `px`: never finer than this many screen pixels (the period grows when zoomed out).
-    var spacing = p.px ? Math.max(p.spacing, p.px / sc) : p.spacing;
+    // `px`: never finer than this many screen pixels (the period grows when
+    // zoomed out). Kept to whole pixels so fine lines land the same way each
+    // period instead of flickering.
+    var spacing = p.px && p.px / sc > p.spacing ? Math.round(p.px) / sc : p.spacing;
     if (spacing * sc < p.minPx) return null;
     var s = spacing / PATTERN_TILE, a = p.angle + (angle || 0), c = Math.cos(a), n = Math.sin(a);
     if (p.pattern.setTransform) p.pattern.setTransform(new DOMMatrix([c * s, n * s, -n * s, c * s, ox || 0, oy || 0]));
@@ -251,19 +253,21 @@
 
   /**
    * The territory as a grid (cached per settlement): a smoothed 0–1 field
-   * where above 0.5 is inside. Built in three steps:
+   * where above 0.5 is inside. Built in four steps:
    *
    * 1. Use: fields, buildings and squares grown by 60 m and smoothed,
    *    unioned with 70 m arms along the roads that taper to nothing past
    *    the farmland's reach, and roughened with seeded noise.
-   * 2. Land: the ground is split into its contour bands (connected runs of
-   *    the same band). A band that's mostly inside (55%+) and closes up
-   *    nearby (its outside part is under half the territory's size, and it
-   *    doesn't reach the map's edge) is taken in whole. A band that's
-   *    mostly outside (20% or less) and only clips the territory (under
-   *    15% of it) is carved out, except within 35 m of fields, buildings
-   *    and squares. So the edge follows contours where it can.
-   * 3. A light blur, so it's traced smooth.
+   * 2. Joined: an outlying piece with fields or buildings in it (a
+   *    farmstead, say) is joined to the town by a corridor along the road
+   *    that reaches it.
+   * 3. Snapped to the land: where a contour line runs close outside the
+   *    edge (within 150 m), the pocket between them is taken in, so the edge
+   *    runs along the contour; where one runs close inside (within 80 m),
+   *    the pocket is carved away, except within 35 m of fields, buildings
+   *    and squares. A pocket is a run of one contour band that's bounded by
+   *    a contour on its far side (it barely touches the ground beyond).
+   * 4. A light blur, so it's traced smooth.
    */
   function territoryGrid(S, R) {
     var cache = R._areas;
@@ -274,51 +278,133 @@
       S.buildings.forEach(function (b) { polyPath(c, b.polygon); });
       S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
     }
-    var farm = rasterGrid(S, { cell: cell, dilate: 60, blur: 70 }, addUse), core = rasterGrid(S, { cell: cell, dilate: 35 }, addUse);
-    var Nd = S.network.nodes;
-    var roads = rasterGrid(S, { cell: cell, stroke: 70, blur: 35 }, function (c) {
+    function addRoads(c) {
+      var Nd = S.network.nodes;
       S.network.ways.forEach(function (w) {
         w.nodes.forEach(function (id, k) { if (k) c.lineTo(Nd[id].x, Nd[id].y); else c.moveTo(Nd[id].x, Nd[id].y); });
       });
-    });
+    }
+    var farm = rasterGrid(S, { cell: cell, dilate: 60, blur: 70 }, addUse), core = rasterGrid(S, { cell: cell, dilate: 35 }, addUse);
+    var roads = rasterGrid(S, { cell: cell, stroke: 70, blur: 35 }, addRoads), lanes = rasterGrid(S, { cell: cell, stroke: Math.max(20, cell * 2) }, addRoads);
     if (!farm && !roads) return (cache._tgrid = null);
     var d = S.fields.map(function (f) { return Math.hypot(f.x - C.x, f.y - C.y); }).sort(function (a, b) { return a - b; });
     var reach = Math.max(S.radius || 100, d.length ? d[Math.floor(d.length * 0.9)] : 0), taper = reach * 0.7 + 150;
     var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'territory')), lam = Math.max(90, reach * 0.3);
-    var bin = new Uint8Array(N * N), band = new Int16Array(N * N), interval = R.contours.interval, total = 0, k, i, j;
+    var bin = new Uint8Array(N * N), band = new Int16Array(N * N), interval = R.contours.interval, k, i, j;
     for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
       var x = (i - 0.5) * cell - W / 2, y = (j - 0.5) * cell - W / 2;
       k = j * N + i;
       var fall = G.clamp(1 - (Math.hypot(x - C.x, y - C.y) - reach) / taper, 0, 1);
       var v = Math.max(farm ? farm[k] : 0, roads ? 0.9 * roads[k] * fall : 0) + 0.12 * VG.rng.fbm(noise, x / lam, y / lam, 3);
-      if (v > 0.5) { bin[k] = 1; total++; }
+      if (v > 0.5) bin[k] = 1;
       var h = T.heightAt(x, y);
       band[k] = h < T.wl ? -1 : Math.floor((h - T.wl) * T.relief / interval);
     }
-    // Contour bands: flood-fill runs of the same band, then judge each.
-    var seen = new Int32Array(N * N).fill(-1), out = new Float32Array(N * N), stack = [];
+    var ci = Math.floor((C.x + W / 2) / cell) + 1, cj = Math.floor((C.y + W / 2) / cell) + 1;
+    joinAlongRoads(bin, N, lanes, core, cj * N + ci, Math.max(1, Math.round(25 / cell)));
+    snapToContours(bin, band, N, Math.round(150 / cell), true, core);
+    snapToContours(bin, band, N, Math.round(80 / cell), false, core);
+    var out = new Float32Array(N * N);
     for (k = 0; k < N * N; k++) out[k] = bin[k];
-    for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
-      var s0 = j * N + i;
-      if (seen[s0] >= 0 || band[s0] < 0) continue;
-      var cells = [], inside = 0, edge = false, b0 = band[s0];
-      seen[s0] = s0; stack.push(s0);
-      while (stack.length) {
-        var q = stack.pop(), qi = q % N, qj = (q - qi) / N;
-        cells.push(q); inside += bin[q];
-        if (qi <= 1 || qj <= 1 || qi >= N - 2 || qj >= N - 2) edge = true;
-        [q - 1, q + 1, q - N, q + N].forEach(function (nb) {
-          var ni = nb % N, nj = (nb - ni) / N;
-          if (ni < 1 || nj < 1 || ni > N - 2 || nj > N - 2 || seen[nb] >= 0 || band[nb] !== b0) return;
-          seen[nb] = s0; stack.push(nb);
-        });
-      }
-      var share = inside / cells.length;
-      if (share >= 0.55 && cells.length - inside < 0.5 * total && !edge) cells.forEach(function (c) { out[c] = 1; });
-      else if (share <= 0.2 && inside < 0.15 * total) cells.forEach(function (c) { if (!(core && core[c] > 0.5)) out[c] = 0; });
-    }
     out = gridPass(gridPass(out, N, 1, false, true), N, 1, false, false);
     return (cache._tgrid = { inside: out, N: N, cell: cell });
+  }
+
+  /** The 4-neighbours of grid cell k that aren't on the border. */
+  function nbs(k, N, fn) {
+    var i = k % N, j = (k - i) / N;
+    if (i > 1) fn(k - 1);
+    if (i < N - 2) fn(k + 1);
+    if (j > 1) fn(k - N);
+    if (j < N - 2) fn(k + N);
+  }
+
+  /** Label the connected runs of cells where same(k, start) holds: Int32 labels (−1 for none) and their cells. */
+  function labelRuns(N, take, same) {
+    var label = new Int32Array(N * N).fill(-1), runs = [], stack = [];
+    for (var j = 1; j < N - 1; j++) for (var i = 1; i < N - 1; i++) {
+      var s = j * N + i;
+      if (label[s] >= 0 || !take(s)) continue;
+      var id = runs.length, cells = [];
+      label[s] = id; stack.push(s);
+      while (stack.length) {
+        var q = stack.pop();
+        cells.push(q);
+        nbs(q, N, function (n) { if (label[n] < 0 && take(n) && same(n, s)) { label[n] = id; stack.push(n); } });
+      }
+      runs.push(cells);
+    }
+    return { label: label, runs: runs };
+  }
+
+  /** Grid distance (in cells, chamfer 1 / √2) from the cells where src(k) holds. */
+  function chamfer(N, src) {
+    var d = new Float32Array(N * N), D = 1.4142, i, j, k;
+    for (k = 0; k < N * N; k++) d[k] = src(k) ? 0 : 1e9;
+    for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
+      k = j * N + i;
+      d[k] = Math.min(d[k], d[k - 1] + 1, d[k - N] + 1, d[k - N - 1] + D, d[k - N + 1] + D);
+    }
+    for (j = N - 2; j >= 1; j--) for (i = N - 2; i >= 1; i--) {
+      k = j * N + i;
+      d[k] = Math.min(d[k], d[k + 1] + 1, d[k + N] + 1, d[k + N + 1] + D, d[k + N - 1] + D);
+    }
+    return d;
+  }
+
+  /**
+   * Join outlying pieces of `bin` that hold fields or buildings (`core`) to
+   * the piece at `start` (else the largest), along the roads (`lanes`): a
+   * search out from the town through road cells; each new piece it reaches
+   * is joined by its path, widened by `r` cells.
+   */
+  function joinAlongRoads(bin, N, lanes, core, start, r) {
+    if (!lanes) return;
+    var L = labelRuns(N, function (k) { return bin[k]; }, function () { return true; });
+    if (L.runs.length < 2) return;
+    var main = L.label[start] >= 0 ? L.label[start] : L.runs.reduce(function (b, c, i, a) { return c.length > a[b].length ? i : b; }, 0);
+    var useful = L.runs.map(function (cells) { return cells.some(function (c) { return core && core[c] > 0.5; }); });
+    var parent = new Int32Array(N * N).fill(-1), queue = new Int32Array(N * N), head = 0, tail = 0, joined = {}, path = new Float32Array(N * N);
+    joined[main] = true;
+    L.runs[main].forEach(function (c) { parent[c] = c; queue[tail++] = c; });
+    while (head < tail) {
+      var q = queue[head++];
+      nbs(q, N, function (n) {
+        if (parent[n] >= 0 || !(bin[n] || lanes[n] > 0.5)) return;
+        parent[n] = q; queue[tail++] = n;
+        var id = L.label[n];
+        if (id >= 0 && !joined[id] && useful[id]) {
+          joined[id] = true;
+          for (var c = q; !bin[c]; c = parent[c]) path[c] = 1;
+        }
+      });
+    }
+    path = gridPass(gridPass(path, N, r, true, true), N, r, true, false);
+    for (var k = 0; k < N * N; k++) if (path[k] > 0) bin[k] = 1;
+  }
+
+  /**
+   * Pull the edge of `bin` to nearby contours (see territoryGrid, step 3):
+   * `outward` takes in pockets within `D` cells outside it, else carves
+   * pockets within `D` cells inside it (sparing `core`).
+   */
+  function snapToContours(bin, band, N, D, outward, core) {
+    if (D < 1) return;
+    var near = chamfer(N, function (k) { return outward ? bin[k] : !bin[k]; });
+    var zone = function (k) { return band[k] >= 0 && (outward ? !bin[k] : bin[k]) && near[k] > 0 && near[k] <= D; };
+    var P = labelRuns(N, zone, function (n, s) { return band[n] === band[s]; });
+    P.runs.forEach(function (cells) {
+      var far = 0, touch = 0;
+      cells.forEach(function (c) {
+        nbs(c, N, function (n) {
+          if (P.label[n] >= 0) return;
+          if ((outward ? bin[n] : !bin[n])) touch++;
+          else if (band[n] === band[c]) far++; // the same ground carries on beyond: no contour closes it
+        });
+      });
+      if (!touch || far > Math.max(3, cells.length * 0.08)) return;
+      cells.forEach(function (c) { if (outward) bin[c] = 1; else if (!(core && core[c] > 0.5)) bin[c] = 0; });
+    });
   }
 
   /**
@@ -675,7 +761,7 @@
     this.bakes = {};
     this._areas = {};
     this._exitFrom = null;
-    this._terrain = null; this._grid = null; this._bandTop = null; this._focusMask = undefined; this._grids = null; this._treesOut = null;
+    this._terrain = null; this._grid = null; this._bandTop = null; this._focusMask = undefined; this._grids = null; this._treesOut = null; this._halftone = null;
     this.selected = null;
     this.hover = null;
   };
@@ -705,7 +791,7 @@
       if (!fn || (L.toggle && !self.layers[L.toggle]) || !inZoom(L.zoom, sc)) return;
       var where = focus && L.focus && L.focus !== 'any' && !fn.unclipped ? L.focus : null;
       var framed = frame && L.frame !== false && !fn.screen && !fn.unclipped;
-      if (L.fade) return self.drawFaded(fn, zoomed(self.paint(L), sc), env, view, L);
+      if (L.fade) return self.drawFaded(fn, zoomed(self.paint(L), sc), env, view, L, where);
       if (!where && !framed && !L.within) {
         place(fn);
         return fn(ctx, zoomed(self.paint(L), sc), env, L);
@@ -743,10 +829,10 @@
    * A layer with `fade` is drawn offscreen, then masked and composited.
    * `{ inner, outer }` (shares of the map's size) fades it out radially from
    * the map's origin. `'focus'` fades it out with distance from the focus
-   * area instead, softly and unevenly (see focusMask). Focus and frame don't
-   * apply to a faded layer.
+   * area instead, softly and unevenly (see focusMask). Its `focus` (`where`)
+   * applies, with the roads' exit rule; the frame doesn't.
    */
-  Renderer.prototype.drawFaded = function (fn, P, env, view, L) {
+  Renderer.prototype.drawFaded = function (fn, P, env, view, L, where) {
     var cv = this.canvas, off = this._fadeCanvas || (this._fadeCanvas = makeCanvas(1, 1)), dpr = view.dpr, sc = view.scale;
     if (off.width !== cv.width || off.height !== cv.height) { off.width = cv.width; off.height = cv.height; }
     var c = off.getContext('2d'), F = L.fade, W = this.S.bounds.size, vb = env.vb;
@@ -755,8 +841,25 @@
     c.globalCompositeOperation = 'source-over';
     c.clearRect(0, 0, off.width, off.height);
     c.lineJoin = 'round'; c.lineCap = 'round';
-    if (fn.screen) c.setTransform(dpr, 0, 0, dpr, 0, 0); else c.setTransform.apply(c, world);
-    fn(c, P, env, L);
+    var self = this, focus = this.style.focus;
+    function run() {
+      if (fn.screen) c.setTransform(dpr, 0, 0, dpr, 0, 0); else c.setTransform.apply(c, world);
+      fn(c, P, env, L);
+    }
+    if (!where) run();
+    else {
+      var ways = fn.ways && /^way(\.|$)/.test(L.match || '');
+      c.save(); self.clipFocus(c, view, focus, where);
+      env.wayMode = ways ? 'body' : null; run();
+      c.restore();
+      if (ways) {
+        env.wayMode = 'exit';
+        if (where === 'outside') { c.save(); self.clipFocus(c, view, focus, where); }
+        run();
+        if (where === 'outside') c.restore();
+      }
+      env.wayMode = null; env.lastFont = null; env.ls = null;
+    }
     c.globalCompositeOperation = 'destination-in';
     c.setTransform.apply(c, world);
     if (F === 'focus') {
@@ -919,12 +1022,14 @@
     return (c[which] = rings);
   };
 
-  /** The tree grid without the trees inside an area, cached per settlement. */
-  Renderer.prototype.treesOutside = function (key) {
-    var c = this._treesOut || (this._treesOut = {});
+  /** The tree grid without the trees centred in area `out`, and only those in `inn` if given; cached. */
+  Renderer.prototype.treesWhere = function (out, inn) {
+    var c = this._treesOut || (this._treesOut = {}), key = out + '|' + inn;
     if (c[key]) return c[key];
-    var grid = this.areaGrid(key), S = this.S;
-    return (c[key] = treeGrid({ trees: S.trees.filter(function (t) { return !grid.has(t[0], t[1]); }) }));
+    var no = out && this.areaGrid(out), yes = inn && this.areaGrid(inn);
+    return (c[key] = treeGrid({ trees: this.S.trees.filter(function (t) {
+      return !(no && no.has(t[0], t[1])) && !(yes && !yes.has(t[0], t[1]));
+    }) }));
   };
 
   /** The active style's patterns, built once per style and paper colour. */
@@ -1382,9 +1487,10 @@
   }
 
   // `outside: 'area.forest'` leaves out the trees inside that area (a wood
-  // drawn as an area); `edgeWidth: 0` draws crowns without an outline.
+  // drawn as an area); `inside: 'area.x'` keeps only trees centred in that
+  // one, each drawn whole; `edgeWidth: 0` draws crowns without an outline.
   DRAW.trees = function (ctx, P, env) {
-    var g = P.outside ? env.r.treesOutside(P.outside) : env.r.trees, cell = g.cell, vb = env.vb, colors = P.colors;
+    var g = P.outside || P.inside ? env.r.treesWhere(P.outside, P.inside) : env.r.trees, cell = g.cell, vb = env.vb, colors = P.colors;
     if (P.alpha != null) {
       // Fading in: drawn at `alpha`, then put back.
       ctx.globalAlpha = G.clamp(P.alpha, 0, 1);
@@ -1454,6 +1560,47 @@
       ctx.stroke();
       ctx.setLineDash([]);
     }
+  };
+
+  // A halftone fade off an area's edge: dots on a staggered grid (`spacing`
+  // metres) just outside `area`, shrinking from `radius` to nothing over
+  // `reach` metres, and only in patches (seeded noise between `patches`).
+  DRAW.halftone = function (ctx, P, env, L) {
+    var dots = env.r.halftone(L.id, P), vb = env.vb, n = dots.length;
+    if (!n) return;
+    ctx.fillStyle = env.color(P.color);
+    ctx.beginPath();
+    for (var i = 0; i < n; i += 3) {
+      var x = dots[i], y = dots[i + 1], r = dots[i + 2];
+      if (x < vb[0] - r || x > vb[2] + r || y < vb[1] - r || y > vb[3] + r) continue;
+      ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  };
+
+  /** The dots for a halftone layer (x, y, r triples), cached per settlement. */
+  Renderer.prototype.halftone = function (id, P) {
+    var c = this._halftone || (this._halftone = {});
+    if (c[id]) return c[id];
+    var S = this.S, A = this.area(P.area), out = [];
+    if (A) {
+      var W = S.bounds.size, gn = 512, cell = W / gn, N = gn + 2, grid = this.areaGrid(P.area);
+      var dist = chamfer(N, function (k) { var i = k % N, j = (k - i) / N; return grid.has((i - 0.5) * cell - W / 2, (j - 0.5) * cell - W / 2); });
+      var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'halftone:' + id)), lam = P.patchSize || 120;
+      var b = A.bounds, s = P.spacing, h = s * Math.sqrt(3) / 2, row = 0;
+      for (var y = b[1] - P.reach; y <= b[3] + P.reach; y += h, row++) {
+        for (var x = b[0] - P.reach + (row % 2 ? s / 2 : 0); x <= b[2] + P.reach; x += s) {
+          var gi = Math.floor((x + W / 2) / cell) + 1, gj = Math.floor((y + W / 2) / cell) + 1;
+          if (gi < 1 || gj < 1 || gi > N - 2 || gj > N - 2) continue;
+          var d = dist[gj * N + gi] * cell;
+          if (d <= 0 || d >= P.reach) continue;
+          var w = G.smoothstep(P.patches[0], P.patches[1], VG.rng.fbm(noise, x / lam, y / lam, 2));
+          var r = P.radius * (1 - d / P.reach) * w;
+          if (r >= (P.minRadius || 0.4)) out.push(x, y, r);
+        }
+      }
+    }
+    return (c[id] = new Float32Array(out));
   };
 
   // --- Generic draw functions ------------------------------------------------------
