@@ -147,8 +147,11 @@
    */
   function usePattern(set, name, sc, angle, ox, oy) {
     var p = set[name];
-    if (!p || p.spacing * sc < p.minPx) return null;
-    var s = p.spacing / PATTERN_TILE, a = p.angle + (angle || 0), c = Math.cos(a), n = Math.sin(a);
+    if (!p) return null;
+    // `px`: never finer than this many screen pixels (the period grows when zoomed out).
+    var spacing = p.px ? Math.max(p.spacing, p.px / sc) : p.spacing;
+    if (spacing * sc < p.minPx) return null;
+    var s = spacing / PATTERN_TILE, a = p.angle + (angle || 0), c = Math.cos(a), n = Math.sin(a);
     if (p.pattern.setTransform) p.pattern.setTransform(new DOMMatrix([c * s, n * s, -n * s, c * s, ox || 0, oy || 0]));
     return p.pattern;
   }
@@ -164,7 +167,7 @@
       c.fillStyle = c.strokeStyle = col(D.color);
       draw(c, D, T / D.spacing, T, col);
       out[name] = { pattern: c.createPattern(cv, 'repeat'), spacing: D.spacing, angle: (D.angle || 0) * Math.PI / 180,
-        ground: D.ground ? col(D.ground) : null, minPx: D.minPx != null ? D.minPx : PATTERN_MIN_PX };
+        ground: D.ground ? col(D.ground) : null, minPx: D.minPx != null ? D.minPx : PATTERN_MIN_PX, px: D.px || 0 };
     });
     return out;
   }
@@ -206,38 +209,31 @@
       });
     },
     /**
-     * The settlement's territory: what the settlement uses, a good deal
-     * wider than the farmed extent but shaped by it. Fields, buildings and
-     * squares are grown by 60 m and smoothed; roads add arms 70 m wide that
-     * taper off past the farmland (to nothing at about 1.7 × its reach). A seeded
-     * noise roughens the edge. A stand-in for a generator area.
+     * The settlement's territory: what the settlement uses, shaped by it
+     * and bent to the land (see territoryGrid). A stand-in for a generator
+     * area.
      */
-    territory: function (S) {
-      var W = S.bounds.size, cell = Math.max(6, W / 256), N = Math.ceil(W / cell) + 2, C = S.center;
-      var farm = rasterGrid(S, { cell: cell, dilate: 60, blur: 70 }, function (c) {
-        S.fields.forEach(function (f) { polyPath(c, f.polygon); });
-        S.buildings.forEach(function (b) { polyPath(c, b.polygon); });
-        S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
-      });
-      var Nd = S.network.nodes;
-      var roads = rasterGrid(S, { cell: cell, stroke: 70, blur: 35 }, function (c) {
-        S.network.ways.forEach(function (w) {
-          w.nodes.forEach(function (id, k) { if (k) c.lineTo(Nd[id].x, Nd[id].y); else c.moveTo(Nd[id].x, Nd[id].y); });
-        });
-      });
-      if (!farm && !roads) return null;
-      // How far the farmland reaches from the centre (90th percentile).
-      var d = S.fields.map(function (f) { return Math.hypot(f.x - C.x, f.y - C.y); }).sort(function (a, b) { return a - b; });
-      var reach = Math.max(S.radius || 100, d.length ? d[Math.floor(d.length * 0.9)] : 0), taper = reach * 0.7 + 150;
-      var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'territory')), lam = Math.max(90, reach * 0.3);
-      var out = new Float32Array(N * N);
-      for (var j = 1; j < N - 1; j++) for (var i = 1; i < N - 1; i++) {
-        var x = (i - 0.5) * cell - W / 2, y = (j - 0.5) * cell - W / 2, k = j * N + i;
-        var fall = G.clamp(1 - (Math.hypot(x - C.x, y - C.y) - reach) / taper, 0, 1);
-        out[k] = Math.max(farm ? farm[k] : 0, roads ? 0.9 * roads[k] * fall : 0) + 0.12 * VG.rng.fbm(noise, x / lam, y / lam, 3);
-      }
-      return traceArea(out, N, { cell: cell, holes: false, minArea: 20000, smooth: 2 }, W);
+    territory: function (S, R) {
+      var g = territoryGrid(S, R);
+      return g && traceArea(g.inside, g.N, { cell: g.cell, holes: false, minArea: 20000, smooth: 2 }, S.bounds.size);
     },
+    /**
+     * The territory's reach: the territory grown by about 60 m with its own
+     * uneven edge. What a style shades "near" the territory, past its edge.
+     */
+    reach: function (S, R) {
+      var g = territoryGrid(S, R);
+      if (!g) return null;
+      var N = g.N, cell = g.cell, W = S.bounds.size, r = Math.max(1, Math.round(60 / cell));
+      var v = gridPass(gridPass(g.inside, N, r, false, true), N, r, false, false);
+      var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'reach')), lam = 70;
+      for (var j = 1; j < N - 1; j++) for (var i = 1; i < N - 1; i++) {
+        v[j * N + i] += 0.12 * VG.rng.fbm(noise, ((i - 0.5) * cell - W / 2) / lam, ((j - 0.5) * cell - W / 2) / lam, 2);
+      }
+      return traceArea(v, N, { cell: cell, level: 0.25, holes: false, minArea: 20000, smooth: 2 }, W);
+    },
+    /** Standing water (sea and lakes), traced from the terrain at the water line. */
+    water: function (S, R) { return R.terrainRings('water'); },
     /** Settled ground: the built-up footprint, buildings and squares grown by 9 m. */
     settled: function (S) {
       return rasterArea(S, { cell: Math.max(3, S.bounds.size / 640), dilate: 9, blur: 7, holes: true, minArea: 1500 }, function (c) {
@@ -252,6 +248,78 @@
       });
     }
   };
+
+  /**
+   * The territory as a grid (cached per settlement): a smoothed 0–1 field
+   * where above 0.5 is inside. Built in three steps:
+   *
+   * 1. Use: fields, buildings and squares grown by 60 m and smoothed,
+   *    unioned with 70 m arms along the roads that taper to nothing past
+   *    the farmland's reach, and roughened with seeded noise.
+   * 2. Land: the ground is split into its contour bands (connected runs of
+   *    the same band). A band that's mostly inside (55%+) and closes up
+   *    nearby (its outside part is under half the territory's size, and it
+   *    doesn't reach the map's edge) is taken in whole. A band that's
+   *    mostly outside (20% or less) and only clips the territory (under
+   *    15% of it) is carved out, except within 35 m of fields, buildings
+   *    and squares. So the edge follows contours where it can.
+   * 3. A light blur, so it's traced smooth.
+   */
+  function territoryGrid(S, R) {
+    var cache = R._areas;
+    if (cache._tgrid !== undefined) return cache._tgrid;
+    var W = S.bounds.size, T = S._.terrain, cell = Math.max(6, W / 256), N = Math.ceil(W / cell) + 2, C = S.center;
+    function addUse(c) {
+      S.fields.forEach(function (f) { polyPath(c, f.polygon); });
+      S.buildings.forEach(function (b) { polyPath(c, b.polygon); });
+      S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
+    }
+    var farm = rasterGrid(S, { cell: cell, dilate: 60, blur: 70 }, addUse), core = rasterGrid(S, { cell: cell, dilate: 35 }, addUse);
+    var Nd = S.network.nodes;
+    var roads = rasterGrid(S, { cell: cell, stroke: 70, blur: 35 }, function (c) {
+      S.network.ways.forEach(function (w) {
+        w.nodes.forEach(function (id, k) { if (k) c.lineTo(Nd[id].x, Nd[id].y); else c.moveTo(Nd[id].x, Nd[id].y); });
+      });
+    });
+    if (!farm && !roads) return (cache._tgrid = null);
+    var d = S.fields.map(function (f) { return Math.hypot(f.x - C.x, f.y - C.y); }).sort(function (a, b) { return a - b; });
+    var reach = Math.max(S.radius || 100, d.length ? d[Math.floor(d.length * 0.9)] : 0), taper = reach * 0.7 + 150;
+    var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'territory')), lam = Math.max(90, reach * 0.3);
+    var bin = new Uint8Array(N * N), band = new Int16Array(N * N), interval = R.contours.interval, total = 0, k, i, j;
+    for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
+      var x = (i - 0.5) * cell - W / 2, y = (j - 0.5) * cell - W / 2;
+      k = j * N + i;
+      var fall = G.clamp(1 - (Math.hypot(x - C.x, y - C.y) - reach) / taper, 0, 1);
+      var v = Math.max(farm ? farm[k] : 0, roads ? 0.9 * roads[k] * fall : 0) + 0.12 * VG.rng.fbm(noise, x / lam, y / lam, 3);
+      if (v > 0.5) { bin[k] = 1; total++; }
+      var h = T.heightAt(x, y);
+      band[k] = h < T.wl ? -1 : Math.floor((h - T.wl) * T.relief / interval);
+    }
+    // Contour bands: flood-fill runs of the same band, then judge each.
+    var seen = new Int32Array(N * N).fill(-1), out = new Float32Array(N * N), stack = [];
+    for (k = 0; k < N * N; k++) out[k] = bin[k];
+    for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
+      var s0 = j * N + i;
+      if (seen[s0] >= 0 || band[s0] < 0) continue;
+      var cells = [], inside = 0, edge = false, b0 = band[s0];
+      seen[s0] = s0; stack.push(s0);
+      while (stack.length) {
+        var q = stack.pop(), qi = q % N, qj = (q - qi) / N;
+        cells.push(q); inside += bin[q];
+        if (qi <= 1 || qj <= 1 || qi >= N - 2 || qj >= N - 2) edge = true;
+        [q - 1, q + 1, q - N, q + N].forEach(function (nb) {
+          var ni = nb % N, nj = (nb - ni) / N;
+          if (ni < 1 || nj < 1 || ni > N - 2 || nj > N - 2 || seen[nb] >= 0 || band[nb] !== b0) return;
+          seen[nb] = s0; stack.push(nb);
+        });
+      }
+      var share = inside / cells.length;
+      if (share >= 0.55 && cells.length - inside < 0.5 * total && !edge) cells.forEach(function (c) { out[c] = 1; });
+      else if (share <= 0.2 && inside < 0.15 * total) cells.forEach(function (c) { if (!(core && core[c] > 0.5)) out[c] = 0; });
+    }
+    out = gridPass(gridPass(out, N, 1, false, true), N, 1, false, false);
+    return (cache._tgrid = { inside: out, N: N, cell: cell });
+  }
 
   /**
    * An area traced from a raster: `add(ctx)` adds shapes (in metres) to a
@@ -607,7 +675,7 @@
     this.bakes = {};
     this._areas = {};
     this._exitFrom = null;
-    this._terrain = null; this._grid = null; this._bandTop = null; this._focusMask = undefined; this._focusGrid = null;
+    this._terrain = null; this._grid = null; this._bandTop = null; this._focusMask = undefined; this._grids = null; this._treesOut = null;
     this.selected = null;
     this.hover = null;
   };
@@ -638,7 +706,7 @@
       var where = focus && L.focus && L.focus !== 'any' && !fn.unclipped ? L.focus : null;
       var framed = frame && L.frame !== false && !fn.screen && !fn.unclipped;
       if (L.fade) return self.drawFaded(fn, zoomed(self.paint(L), sc), env, view, L);
-      if (!where && !framed) {
+      if (!where && !framed && !L.within) {
         place(fn);
         return fn(ctx, zoomed(self.paint(L), sc), env, L);
       }
@@ -649,6 +717,8 @@
         ctx.beginPath(); ctx.arc(frame.x, frame.y, frame.r, 0, Math.PI * 2); ctx.clip();
       }
       if (where) self.clipFocus(ctx, view, focus, where);
+      // `within`: also clipped to the inside of another area (none: nothing).
+      if (L.within) self.clipFocus(ctx, view, { area: L.within }, 'inside');
       place(fn);
       var ways = fn.ways && /^way(\.|$)/.test(L.match || '');
       env.wayMode = ways ? 'body' : null;
@@ -705,22 +775,27 @@
 
   /**
    * A soft, uneven mask (a small canvas over the map tile) that's opaque in
-   * the focus area and fades out over about a fifth of the map's size
-   * around it, roughened by seeded noise. Cached per settlement and style.
+   * the focus area and fades out over nearly half the map's size around
+   * it, roughened by seeded noise, to a faint floor that itself fades out
+   * before the tile's edge. Cached per settlement and style.
    */
   Renderer.prototype.focusMask = function () {
     if (this._focusMask !== undefined) return this._focusMask;
     var S = this.S, A = this.style.focus && this.area(this.style.focus.area);
     if (!A) return (this._focusMask = null);
-    var W = S.bounds.size, n = 192, cell = W / n, reach = Math.max(250, W * 0.2);
+    var W = S.bounds.size, n = 192, cell = W / n, reach = Math.max(400, W * 0.45);
     var v = rasterGrid(S, { cell: cell, blur: reach / 2 }, function (c) { A.rings.forEach(function (r) { polyPath(c, r); }); });
+    var top = 0;
+    if (v) for (var t = 0; t < v.length; t++) if (v[t] > top) top = v[t];
     var cv = makeCanvas(n, n), c = cv.getContext('2d'), img = c.createImageData(n, n), d = img.data, N = n + 2;
     var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'focus-mask')), lam = reach * 0.6;
     for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) {
       var x = (i + 0.5) * cell - W / 2, y = (j + 0.5) * cell - W / 2, o = (j * n + i) * 4;
-      var a = v ? v[(j + 1) * N + i + 1] : 0;
-      // A blurred edge is 0.5, falling to 0 a full `reach` out. Noise moves the falloff.
-      a = G.smoothstep(0, 0.45, a + 0.1 * VG.rng.fbm(noise, x / lam, y / lam, 3));
+      // The blur, scaled to peak at 1, falls to 0 a full `reach` out; noise
+      // moves the falloff. Past it a faint floor stays, itself fading out
+      // before the terrain tile's edge.
+      var a = v && top ? v[(j + 1) * N + i + 1] / top : 0, edge = 1 - G.smoothstep(0.36 * W, 0.5 * W, Math.hypot(x, y));
+      a = Math.max(G.smoothstep(0, 0.15, a + 0.04 * VG.rng.fbm(noise, x / lam, y / lam, 3)), 0.45 * edge) * edge;
       d[o + 3] = Math.round(255 * a);
     }
     c.putImageData(img, 0, 0);
@@ -771,22 +846,37 @@
     if (part.focusShare != null) return part.focusShare;
     var F = this.style.focus && this.area(this.style.focus.area);
     if (!F) return (part.focusShare = this.style.focus ? 0 : 1);
-    // The focus area rasterised once, for quick inside tests.
-    var W = this.S.bounds.size, g = this._focusGrid, gn = 512;
-    if (!g) {
-      var cv = makeCanvas(gn, gn), c = cv.getContext('2d');
-      c.setTransform(gn / W, 0, 0, gn / W, gn / 2, gn / 2);
-      c.beginPath(); F.rings.forEach(function (r) { polyPath(c, r); }); c.fill('evenodd');
-      g = this._focusGrid = c.getImageData(0, 0, gn, gn).data;
-    }
+    var g = this.areaGrid(this.style.focus.area);
     var b = part.bounds, step = Math.max(4, Math.sqrt((b[2] - b[0]) * (b[3] - b[1]) / 1600)), n = 0, k = 0;
     for (var y = b[1] + step / 2; y < b[3]; y += step) for (var x = b[0] + step / 2; x < b[2]; x += step) {
       if (!inArea(part, x, y)) continue;
       n++;
-      var gi = Math.floor((x / W + 0.5) * gn), gj = Math.floor((y / W + 0.5) * gn);
-      if (gi >= 0 && gj >= 0 && gi < gn && gj < gn && g[(gj * gn + gi) * 4 + 3] > 127) k++;
+      if (g.has(x, y)) k++;
     }
     return (part.focusShare = n ? k / n : 0);
+  };
+
+  /**
+   * An area rasterised once (512², cached per settlement) for quick inside
+   * tests: `.has(x, y)`. A missing area has nothing in it.
+   */
+  Renderer.prototype.areaGrid = function (key) {
+    var c = this._grids || (this._grids = {});
+    if (c[key]) return c[key];
+    var A = this.area(key), W = this.S.bounds.size, gn = 512, data = null;
+    if (A) {
+      var cv = makeCanvas(gn, gn), x = cv.getContext('2d');
+      x.setTransform(gn / W, 0, 0, gn / W, gn / 2, gn / 2);
+      x.beginPath(); A.rings.forEach(function (r) { polyPath(x, r); }); x.fill('evenodd');
+      data = x.getImageData(0, 0, gn, gn).data;
+    }
+    return (c[key] = {
+      has: function (px, py) {
+        if (!data) return false;
+        var i = Math.floor((px / W + 0.5) * gn), j = Math.floor((py / W + 0.5) * gn);
+        return i >= 0 && j >= 0 && i < gn && j < gn && data[(j * gn + i) * 4 + 3] > 127;
+      }
+    });
   };
 
   /**
@@ -827,6 +917,14 @@
     } else lvl = T.wl + which * this.contours.interval / T.relief;
     rings = traceRings(v, N, lvl, cell, W, -1).filter(function (r) { return r.length > 3; }).map(chaikin);
     return (c[which] = rings);
+  };
+
+  /** The tree grid without the trees inside an area, cached per settlement. */
+  Renderer.prototype.treesOutside = function (key) {
+    var c = this._treesOut || (this._treesOut = {});
+    if (c[key]) return c[key];
+    var grid = this.areaGrid(key), S = this.S;
+    return (c[key] = treeGrid({ trees: S.trees.filter(function (t) { return !grid.has(t[0], t[1]); }) }));
   };
 
   /** The active style's patterns, built once per style and paper colour. */
@@ -1283,8 +1381,10 @@
     });
   }
 
+  // `outside: 'area.forest'` leaves out the trees inside that area (a wood
+  // drawn as an area); `edgeWidth: 0` draws crowns without an outline.
   DRAW.trees = function (ctx, P, env) {
-    var g = env.r.trees, cell = g.cell, vb = env.vb, colors = P.colors;
+    var g = P.outside ? env.r.treesOutside(P.outside) : env.r.trees, cell = g.cell, vb = env.vb, colors = P.colors;
     if (P.alpha != null) {
       // Fading in: drawn at `alpha`, then put back.
       ctx.globalAlpha = G.clamp(P.alpha, 0, 1);
@@ -1321,7 +1421,7 @@
           ctx.beginPath(); ctx.arc(t[0] + t[2] * off[0], t[1] + t[2] * off[1], t[2], 0, Math.PI * 2); ctx.fill();
           ctx.fillStyle = colors[t[3]];
           ctx.beginPath(); ctx.arc(t[0], t[1], t[2], 0, Math.PI * 2); ctx.fill();
-          ctx.strokeStyle = P.edges[t[3]]; ctx.lineWidth = t[2] * P.edgeWidth; ctx.stroke();
+          if (P.edgeWidth) { ctx.strokeStyle = P.edges[t[3]]; ctx.lineWidth = t[2] * P.edgeWidth; ctx.stroke(); }
         }
       }
     }
@@ -1391,7 +1491,17 @@
       });
     },
     // Standing water (sea and lakes) as one item, traced from the terrain.
-    water: function (env) { return [{ key: 'body', item: null, rings: env.r.terrainRings('water') }]; },
+    // Each body of water, with `sea` (it runs off the map's edge, so it's
+    // open water rather than a lake) and `focusShare`.
+    water: function (env) {
+      var A = env.r.area('water'), W = env.S.bounds.size, e = W / 2 - W / 200;
+      if (!A) return [];
+      return A.parts.filter(function (p) { return inView(env.vb, p.bounds, 0); }).map(function (p) {
+        if (p.sea == null) { var b = p.bounds; p.sea = b[0] < -e || b[1] < -e || b[2] > e || b[3] > e; }
+        env.r.focusShare(p);
+        return { key: p.sea ? 'sea' : 'lake', item: p, rings: p.rings };
+      });
+    },
     contour: function (env) {
       var C = env.r.contours;
       return [{ key: 'minor', path: C.minor }, { key: 'major', path: C.major }];
@@ -1471,7 +1581,7 @@
     features(env, L).forEach(function (it) {
       if (it.path) return;
       var Pk = hl(zoomed(env.paint(L, it.key), sc), it), pat = Pk.pattern && sets[Pk.pattern];
-      var vis = pat && pat.spacing * sc >= pat.minPx;
+      var vis = pat && Math.max(pat.spacing, pat.px / sc) * sc >= pat.minPx;
       var aligned = vis && Pk.align === 'field' && it.ring && it.ring.length === 4;
       var id = aligned ? 'item' + order.length : [Pk.fill, vis ? Pk.pattern : '', Pk.alpha, Pk.stroke, it.rings ? 'eo' : ''].join('|');
       var g = groups[id];
