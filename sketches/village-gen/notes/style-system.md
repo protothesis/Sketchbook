@@ -542,3 +542,42 @@ Revised after the third look (2026-10-12):
 - The first frame now costs about 1.2 s (band flood fill, areas, wood
   and lake shares, mask, terrain rings). Fine for a sketch; caching or
   moving it to the engine (step 5) would cut it.
+
+Revised after the fourth look (2026-10-12):
+
+- **`territoryGrid` steps are now use → join → snap → blur.** The old
+  whole-band take-in and carve rule is gone; it rarely fired, and when it
+  carved it shrank the town too far.
+  - **Join** (`joinAlongRoads`): from the town's piece, a breadth-first
+    search runs through territory and road cells. Road cells come from the
+    ways rasterised 20 m (or 2 cells) wide. Each other piece with fields
+    or buildings in it that the search reaches is joined by its path,
+    widened 25 m.
+  - **Snap** (`snapToContours`): the zone within 150 m outside the edge
+    (and, carving, 80 m inside it) is split into runs of one contour band.
+    A run that touches the territory and barely meets the same band
+    beyond the zone (at most 3 cells or 8%) is closed off by a contour,
+    so it's taken in or carved out. Carving spares cells within 35 m of
+    fields, buildings and squares. Water counts as a closing edge. In the
+    valley test town it adds about 17% and carves about 5%.
+- **`DRAW.halftone`:** paint `{ area, color, spacing, radius, reach,
+  patches, patchSize, minRadius }`. The dots sit on a staggered lattice
+  outside the area, with radius `radius × (1 − d / reach) × patch`, where
+  `d` is a chamfer distance on a 512² raster of the area and `patch` is a
+  smoothstepped fbm. They're cached per layer and settlement.
+- **Faded layers** take the focus clip and the exit rule, so board's
+  outside road casing fades out with the contours and no road end shows.
+- **Pattern `px`** periods are rounded to whole screen pixels, which
+  stopped thin horizontal hatches flickering.
+- **Trees `inside`:** only trees centred in that area are kept, drawn
+  whole and unclipped.
+- **Board:**
+  - Woods sit over the band shading, so the shading no longer stops
+    visibly at the territory edge across a wood.
+  - Lakes are all-or-nothing and unframed, so only the sea meets the
+    frame.
+  - Roads are the paper's colour.
+  - The hatches are a fixed 6 px apart with 1.1 px lines, and their
+    outlines are 1.1 px.
+- The first frame of a small town in board is about 1.4 s now; the
+  generator should own this work (step 5).
