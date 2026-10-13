@@ -24,13 +24,17 @@
 
   // --- Style values -----------------------------------------------------------
 
-  /** A colour reference: palette name, 'name~0.4' (40% of the way to paper), or a literal. */
+  /**
+   * A colour reference: palette name, 'name~0.4' (40% of the way to paper),
+   * or a literal. Tints mix toward the palette's own `paper` if it has one
+   * (so they don't change with the theme), else the map's paper.
+   */
   function color(style, ref, paper) {
     if (ref == null) return ref;
     var pal = style.palette || {};
     if (pal[ref] !== undefined) return pal[ref];
     var i = ref.indexOf('~');
-    if (i > 0 && pal[ref.slice(0, i)] !== undefined) return mix(pal[ref.slice(0, i)], paper, +ref.slice(i + 1));
+    if (i > 0 && pal[ref.slice(0, i)] !== undefined) return mix(pal[ref.slice(0, i)], pal.paper || paper, +ref.slice(i + 1));
     return ref;
   }
 
@@ -190,35 +194,71 @@
   var STOPGAP_AREAS = {
     /**
      * The settlement's boundary: the farmed extent (fields, buildings and
-     * squares) grown by `margin` metres and smoothed. Rasterised onto a
-     * coarse grid, dilated, blurred, then traced back out with marching
-     * squares and rounded with Chaikin. Not yet pulled to a contour or cut
-     * by water; the generator's S.areas.boundary will do that.
+     * squares) grown by 30 m and smoothed, without holes: unfarmed ground
+     * inside the town is still inside it. Not yet pulled to a contour or
+     * cut by water; the generator's S.areas.boundary will do that.
      */
     boundary: function (S) {
-      var margin = 30, W = S.bounds.size, cell = Math.max(6, W / 256), n = Math.ceil(W / cell);
-      var cv = makeCanvas(n, n), c = cv.getContext('2d');
-      c.setTransform(1 / cell, 0, 0, 1 / cell, n / 2, n / 2);
-      c.beginPath();
-      S.fields.forEach(function (f) { polyPath(c, f.polygon); });
-      S.buildings.forEach(function (b) { polyPath(c, b.polygon); });
-      S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
-      c.fill();
-      var px = c.getImageData(0, 0, n, n).data, N = n + 2, v = new Float32Array(N * N), any = false;
-      for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) {
-        if (px[(j * n + i) * 4 + 3] > 64) { v[(j + 1) * N + i + 1] = 1; any = true; }
-      }
-      if (!any) return null;
-      var r = Math.max(1, Math.round(margin / cell));
-      v = gridPass(gridPass(v, N, r, true, true), N, r, true, false);  // dilate by the margin
-      v = gridPass(gridPass(v, N, r, false, true), N, r, false, false); // soften the corners
-      // Outer rings only: unfarmed ground inside the town is still inside it.
-      var rings = traceRings(v, N, 0.5, cell, W);
-      return rings.filter(function (ring) {
-        return !rings.some(function (o) { return o !== ring && G.pointInPoly(ring[0][0], ring[0][1], o); });
-      }).map(chaikin);
+      return rasterArea(S, { cell: Math.max(6, S.bounds.size / 256), dilate: 30, blur: 30, holes: false }, function (c) {
+        S.fields.forEach(function (f) { polyPath(c, f.polygon); });
+        S.buildings.forEach(function (b) { polyPath(c, b.polygon); });
+        S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
+      });
+    },
+    /** Settled ground: the built-up footprint, buildings and squares grown by 9 m. */
+    settled: function (S) {
+      return rasterArea(S, { cell: Math.max(3, S.bounds.size / 640), dilate: 9, blur: 7, holes: true, minArea: 1500 }, function (c) {
+        S.buildings.forEach(function (b) { polyPath(c, b.polygon); });
+        S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
+      });
+    },
+    /** Woodland: where tree crowns cover most of the ground, so lone trees and hedgerows drop out. */
+    forest: function (S) {
+      return rasterArea(S, { cell: Math.max(5, S.bounds.size / 400), blur: 12, level: 0.42, soft: true, holes: true, minArea: 4000 }, function (c) {
+        S.trees.forEach(function (t) { c.moveTo(t[0] + t[2] * 1.3, t[1]); c.arc(t[0], t[1], t[2] * 1.3, 0, Math.PI * 2); });
+      });
     }
   };
+
+  /**
+   * An area traced from a raster: `add(ctx)` adds shapes (in metres) to a
+   * path, which is filled onto a grid of `cell` metres; covered cells (or,
+   * `soft`, their coverage) are dilated by `dilate` metres, box-blurred by
+   * `blur`, traced at `level` with marching squares and rounded with
+   * Chaikin. `holes: false` keeps outer rings only; rings under `minArea`
+   * square metres are dropped. Null if nothing's covered.
+   */
+  function rasterArea(S, o, add) {
+    var W = S.bounds.size, cell = o.cell, n = Math.ceil(W / cell);
+    var cv = makeCanvas(n, n), c = cv.getContext('2d');
+    c.setTransform(1 / cell, 0, 0, 1 / cell, n / 2, n / 2);
+    c.beginPath();
+    add(c);
+    c.fill();
+    var px = c.getImageData(0, 0, n, n).data, N = n + 2, v = new Float32Array(N * N), any = false;
+    for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) {
+      var a = px[(j * n + i) * 4 + 3];
+      if (o.soft ? a : a > 64) { v[(j + 1) * N + i + 1] = o.soft ? a / 255 : 1; any = true; }
+    }
+    if (!any) return null;
+    var r;
+    if (o.dilate) { r = Math.max(1, Math.round(o.dilate / cell)); v = gridPass(gridPass(v, N, r, true, true), N, r, true, false); }
+    if (o.blur) { r = Math.max(1, Math.round(o.blur / cell)); v = gridPass(gridPass(v, N, r, false, true), N, r, false, false); }
+    var rings = traceRings(v, N, o.level || 0.5, cell, W);
+    if (o.minArea) rings = rings.filter(function (ring) { return Math.abs(ringArea(ring)) >= o.minArea; });
+    if (o.holes === false) {
+      rings = rings.filter(function (ring) {
+        return !rings.some(function (q) { return q !== ring && G.pointInPoly(ring[0][0], ring[0][1], q); });
+      });
+    }
+    return rings.map(chaikin);
+  }
+
+  function ringArea(ring) {
+    var a = 0;
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
+    return a / 2;
+  }
 
   /** Inside an area's rings (evenodd, so holes count). */
   function inArea(A, x, y) {
@@ -344,6 +384,37 @@
     return cv;
   }
 
+  /**
+   * Bake flat stepped bands: one tint per contour interval, from none at
+   * the water's edge to `alpha` of `fill` at the top, over `ground` (or
+   * transparent, so the paper shows through), and flat `water` below the
+   * water line, `shallow` within `shallowDepth` metres of it.
+   */
+  function bakeBands(S, P, interval, style) {
+    var T = S._.terrain, W = T.W, size = 1024, cv = makeCanvas(size, size), ctx = cv.getContext('2d');
+    var img = ctx.createImageData(size, size), d = img.data, px = W / size, maxH = 0;
+    for (var k = 0; k < T.heights.length; k++) if (T.heights[k] > maxH) maxH = T.heights[k];
+    var top = Math.max(1, Math.ceil((maxH - T.wl) * T.relief / interval));
+    var land = rgb(color(style, P.fill)) || [0, 0, 0], water = rgb(color(style, P.water)) || [0, 0, 0];
+    var ground = P.ground ? rgb(color(style, P.ground)) : null;
+    var shallow = P.shallow ? rgb(color(style, P.shallow)) : null, shelf = (P.shallowDepth || 0) / T.relief;
+    for (var j = 0; j < size; j++) {
+      var y = (j + 0.5) * px - W / 2;
+      for (var i = 0; i < size; i++) {
+        var x = (i + 0.5) * px - W / 2, h = T.heightAt(x, y), o = (j * size + i) * 4, c, a;
+        if (h < T.wl) { c = shallow && T.wl - h < shelf ? shallow : water; a = 255; }
+        else {
+          var k = P.alpha * Math.floor((h - T.wl) * T.relief / interval) / top;
+          if (ground) { c = [ground[0] + (land[0] - ground[0]) * k, ground[1] + (land[1] - ground[1]) * k, ground[2] + (land[2] - ground[2]) * k]; a = 255; }
+          else { c = land; a = Math.round(255 * k); }
+        }
+        d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = a;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv;
+  }
+
   /** Marching-squares contours → Path2D (minor and major lines). */
   function buildContours(S) {
     var T = S._.terrain, res = T.res, H = T.heights, W = T.W, cell = T.cell;
@@ -442,7 +513,11 @@
     this._paint = {};
     this._patterns = null;
     this._exitFrom = null;
-    if (this.S) this.setSettlement(this.S, this.biome);
+    if (this.S) {
+      var sel = this.selected, hov = this.hover;
+      this.setSettlement(this.S, this.biome);
+      this.selected = sel; this.hover = hov;
+    }
   };
 
   /** The active style's first layer drawn by the named draw function. */
@@ -478,11 +553,12 @@
     this.biome = biome;
     this._paint = {};
     // Rasters are baked once per settlement (and per style).
-    var terrain = this.layerDrawnBy('terrain.hypso'), trees = this.layerDrawnBy('trees.baked');
+    var terrain = this.layerDrawnBy('terrain.hypso'), trees = this.layerDrawnBy('trees.baked'), bands = this.layerDrawnBy('terrain.bands');
     // A biome the style has no ramp for gets the first one it lists.
     var key = terrain && terrain.byKey && !terrain.byKey[biome] ? Object.keys(terrain.byKey)[0] : biome;
     this.terrainImg = terrain ? bakeHypso(S, this.paint(terrain, key)) : null;
     this.contours = buildContours(S);
+    this.bandsImg = bands ? bakeBands(S, this.paint(bands), this.contours.interval, this.style) : null;
     this.treeImg = trees ? bakeTrees(S, this.paint(trees)) : null;
     this.trees = treeGrid(S);
     this.bakes = {};
@@ -503,7 +579,8 @@
     env.view = view;
     this.destHits = [];
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    var focus = this.style.focus;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    var focus = this.style.focus, frame = this.style.frame ? this.frameCircle() : null;
     function place(fn) {
       if (fn.screen) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       else ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc));
@@ -513,18 +590,24 @@
       var fn = DRAW[L.draw];
       if (!fn || (L.toggle && !self.layers[L.toggle]) || !inZoom(L.zoom, sc)) return;
       var where = focus && L.focus && L.focus !== 'any' && !fn.unclipped ? L.focus : null;
-      if (!where) {
+      var framed = frame && L.frame !== false && !fn.screen && !fn.unclipped;
+      if (!where && !framed) {
         place(fn);
         return fn(ctx, zoomed(self.paint(L), sc), env, L);
       }
-      // Focus: clipped to the focus area, or to everything outside it.
+      // Clipped to the frame circle, then to the focus area or everything outside it.
       ctx.save();
-      self.clipFocus(ctx, view, focus, where);
+      if (framed) {
+        place(fn);
+        ctx.beginPath(); ctx.arc(frame.x, frame.y, frame.r, 0, Math.PI * 2); ctx.clip();
+      }
+      if (where) self.clipFocus(ctx, view, focus, where);
       place(fn);
       var ways = fn.ways && /^way(\.|$)/.test(L.match || '');
       env.wayMode = ways ? 'body' : null;
       fn(ctx, zoomed(self.paint(L), sc), env, L);
       ctx.restore();
+      env.lastFont = null; env.ls = null; // restore() put the font and spacing back
       // A road's run on to its exit is drawn outside every clip.
       if (ways) {
         env.wayMode = 'exit';
@@ -533,6 +616,15 @@
       }
       env.wayMode = null;
     });
+  };
+
+  /**
+   * The style's frame circle in metres: centred on the map's origin or the
+   * settlement, radius `r` × the map's size, kept on the terrain tile.
+   */
+  Renderer.prototype.frameCircle = function () {
+    var F = this.style.frame, W = this.S.bounds.size, c = F.centre === 'settlement' ? this.S.center : { x: 0, y: 0 };
+    return { x: c.x, y: c.y, r: Math.max(0, Math.min(F.r * W, W / 2 - Math.abs(c.x), W / 2 - Math.abs(c.y))) };
   };
 
   /**
@@ -677,6 +769,12 @@
     var W = env.S.bounds.size;
     ctx.imageSmoothingEnabled = true;
     if (env.r.terrainImg) ctx.drawImage(env.r.terrainImg, -W / 2, -W / 2, W, W);
+  };
+
+  DRAW['terrain.bands'] = function (ctx, P, env) {
+    var W = env.S.bounds.size;
+    ctx.imageSmoothingEnabled = true;
+    if (env.r.bandsImg) ctx.drawImage(env.r.bandsImg, -W / 2, -W / 2, W, W);
   };
 
   DRAW.contours = function (ctx, P, env, L) {
@@ -1152,6 +1250,26 @@
   }
 
   /**
+   * The "what's here" highlight for a layer: items of the highlighted
+   * category get the style's `states.highlight[layer.match]` paint on top
+   * of their own, where '@category' is the category's colour.
+   */
+  function highlighter(env, L) {
+    var st = env.style.states, H = env.highlight && st && st.highlight && st.highlight[L.match], cache = {};
+    if (!H) return function (Pk) { return Pk; };
+    return function (Pk, it) {
+      var cat = it.item && it.item.category;
+      if (cat !== env.highlight) return Pk;
+      var id = it.key + '|' + cat;
+      if (cache[id]) return cache[id];
+      var out = merge(Pk, H), cc = env.style.categoryColors || {};
+      ['fill', 'stroke'].forEach(function (k) { if (out[k] === '@category') out[k] = cc[cat]; });
+      out.pattern = H.pattern || null;
+      return (cache[id] = out);
+    };
+  }
+
+  /**
    * Paint: { fill, pattern, align, alpha, stroke, width }. A pattern draws
    * its own `ground`, or over `fill` if it has none; too fine to see at this
    * zoom, it falls back to its ground (else `fill`). `align: 'field'` turns
@@ -1159,10 +1277,10 @@
    * same shapes.
    */
   DRAW.fill = function (ctx, P, env, L) {
-    var groups = {}, order = [], sc = env.sc, sets = env.r.patterns(env.paper);
+    var groups = {}, order = [], sc = env.sc, sets = env.r.patterns(env.paper), hl = highlighter(env, L);
     features(env, L).forEach(function (it) {
       if (it.path) return;
-      var Pk = zoomed(env.paint(L, it.key), sc), pat = Pk.pattern && sets[Pk.pattern];
+      var Pk = hl(zoomed(env.paint(L, it.key), sc), it), pat = Pk.pattern && sets[Pk.pattern];
       var vis = pat && pat.spacing * sc >= pat.minPx;
       var aligned = vis && Pk.align === 'field' && it.ring && it.ring.length === 4;
       var id = aligned ? 'item' + order.length : [Pk.fill, vis ? Pk.pattern : '', Pk.alpha, Pk.stroke, it.rings ? 'eo' : ''].join('|');
@@ -1203,6 +1321,7 @@
     features(env, L).forEach(function (it) {
       if (env.wayMode === 'exit' && !(it.way && it.way.exit)) return;
       var Pk = zoomed(env.paint(L, it.key), sc), id = JSON.stringify([Pk.stroke, Pk.width, Pk.dash, Pk.alpha, Pk.pattern]);
+      if (!Pk.stroke && !Pk.pattern) return; // stroke: null turns a key off
       var g = groups[id];
       if (!g) { g = groups[id] = { P: Pk, list: [] }; order.push(id); }
       g.list.push(it);
@@ -1230,12 +1349,25 @@
   }
 
   /** Text with a halo. Parsing a font string is slow, so it's only set when it changes. */
-  function halo(ctx, env, text, x, y, f, fill) {
-    var H = env.style.halo;
+  function halo(ctx, env, text, x, y, f, fill, name) {
+    var H = env.style.halo, def = name && env.style.fonts[name];
     if (f !== env.lastFont) { ctx.font = f; env.lastFont = f; }
-    ctx.lineWidth = H.width; ctx.strokeStyle = env.color(H.stroke); ctx.lineJoin = 'round';
-    ctx.strokeText(text, x, y);
+    if (def) { text = caps(def, text); spacing(ctx, env, def); }
+    if (H && H.width) {
+      ctx.lineWidth = H.width; ctx.strokeStyle = env.color(H.stroke); ctx.lineJoin = 'round';
+      ctx.strokeText(text, x, y);
+    }
     ctx.fillStyle = fill; ctx.fillText(text, x, y);
+  }
+
+  /** A font's `caps: true` sets its labels in capitals. */
+  function caps(def, text) { return def && def.caps ? text.toUpperCase() : text; }
+
+  /** A font's `tracking` (in ems) as letter spacing, where the canvas supports it. */
+  function spacing(ctx, env, def) {
+    var ls = def && def.tracking ? def.tracking * def.size : 0;
+    if (ls !== env.ls && 'letterSpacing' in ctx) ctx.letterSpacing = ls + 'px';
+    env.ls = ls;
   }
 
   // Where the roads go: a tab you can click to travel there (places already
@@ -1251,7 +1383,7 @@
       if (w.landing && w.rim && w.epoch <= env.t) {
         // A lane down to the water: marked, but it leads nowhere.
         var q = screen(w.rim.x, w.rim.y);
-        if (q[0] > -40 && q[1] > -20 && q[0] < view.w + 40 && q[1] < view.h + 20) halo(ctx, env, P.landing.text, q[0], q[1] + P.landing.dy, landFont, env.color(P.landing.color));
+        if (q[0] > -40 && q[1] > -20 && q[0] < view.w + 40 && q[1] < view.h + 20) halo(ctx, env, P.landing.text, q[0], q[1] + P.landing.dy, landFont, env.color(P.landing.color), P.landing.font);
         env.lastFont = null;
         return;
       }
@@ -1259,8 +1391,9 @@
       var rr = Math.hypot(w.rim.x, w.rim.y) || 1, k = Math.min(1, (S.bounds.size * P.reach) / rr);
       var p = screen(w.rim.x * k, w.rim.y * k);
       if (p[0] < -80 || p[1] < -20 || p[0] > view.w + 80 || p[1] > view.h + 20) return;
-      var text = (w.ferry ? '⛴ ferry to ' : 'to ') + w.destination + ' →', known = r.isKnown && r.isKnown(w.destination), hov = r.hoverDest === w;
+      var text = caps(style.fonts[P.font], (w.ferry ? '⛴ ferry to ' : 'to ') + w.destination + ' →'), known = r.isKnown && r.isKnown(w.destination), hov = r.hoverDest === w;
       ctx.font = tabFont; env.lastFont = null;
+      spacing(ctx, env, style.fonts[P.font]);
       var tw = ctx.measureText(text).width, x0 = p[0] - tw / 2 - P.padX, y0 = p[1] - P.height / 2, bw = tw + P.padX * 2, bh = P.height;
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(x0, y0, bw, bh, P.radius); else ctx.rect(x0, y0, bw, bh);
@@ -1283,6 +1416,7 @@
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     // Set outside save/restore, which would otherwise undo it behind the cache.
     ctx.font = env.lastFont = f;
+    spacing(ctx, env, env.style.fonts[P.font]);
     S.network.ways.forEach(function (w) {
       if (!w.name || w.epoch > env.t || w.length < P.minLength) return;
       var m = w.nodes.length >> 1, a = N[w.nodes[Math.max(0, m - 1)]], b = N[w.nodes[Math.min(w.nodes.length - 1, m + 1)]];
@@ -1292,7 +1426,7 @@
       if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
       ctx.save();
       ctx.translate(p[0], p[1]); ctx.rotate(ang);
-      halo(ctx, env, w.name, 0, 0, f, fill);
+      halo(ctx, env, w.name, 0, 0, f, fill, P.font);
       ctx.restore();
     });
   };
@@ -1312,7 +1446,7 @@
       if (!b.name || b.epoch > env.t || !shown(b)) return;
       var p = screen(b.x, b.y);
       if (p[0] < -60 || p[1] < -20 || p[0] > view.w + 60 || p[1] > view.h + 20) return;
-      halo(ctx, env, b.name, p[0], p[1] - Math.max(b.width, b.depth) * sc * 0.5 - P.gap, f, fill);
+      halo(ctx, env, b.name, p[0], p[1] - Math.max(b.width, b.depth) * sc * 0.5 - P.gap, f, fill, P.font);
     });
   };
   DRAW['labels.building'].screen = true;
@@ -1322,8 +1456,8 @@
     var S = env.S, c = screenOf(env)(S.center.x, S.center.y - S.radius * P.above), y = Math.max(P.minY, c[1]);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.globalAlpha = G.clamp(P.alpha, 0, 1);
-    halo(ctx, env, S.name, c[0], y, font(env.style, P.font), env.color(P.color));
-    halo(ctx, env, S.size.label + ' · pop. ' + S.stats.population.toLocaleString(), c[0], y + P.sub.dy, font(env.style, P.sub.font), env.color(P.sub.color));
+    halo(ctx, env, S.name, c[0], y, font(env.style, P.font), env.color(P.color), P.font);
+    halo(ctx, env, S.size.label + ' · pop. ' + S.stats.population.toLocaleString(), c[0], y + P.sub.dy, font(env.style, P.sub.font), env.color(P.sub.color), P.sub.font);
     ctx.globalAlpha = 1;
   };
   DRAW['labels.place'].screen = true;
