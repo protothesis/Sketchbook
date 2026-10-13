@@ -13,17 +13,24 @@ All notable changes to this sketch are logged here, per
     contours that fade out before the map's edge.
   - Crisp vector water with no outline, ended by a hard frame circle, so
     a coast meets the arc.
-  - Inside the settlement's territory (shaped by its fields, buildings
-    and roads): grass ground, patterned fields (row hatches turned along
-    each field, stipple pasture, dotted orchards, dashed fallow) and
-    stepped height shading. Buildings, squares and roads are white with
-    no outline.
-  - A wood that's mostly inside the territory is filled whole in darker
-    green, past the edge too. One that's mostly outside gets a light
-    outline and hatch that fades out with distance.
-  - Contour lines run over everything and fade out unevenly with distance
-    from the territory, a little stronger closer in.
-  - Trees fade in from zoom 0.8.
+  - Inside the settlement's territory: grass ground, stepped height
+    shading, and patterned fields (row hatches turned along each field,
+    stipple pasture, dotted orchards, dashed fallow). Buildings, squares
+    and roads are white with no outline.
+  - The territory is shaped by the fields, buildings and roads, and bent
+    to the land: a contour band that's mostly inside and closes up nearby
+    is taken in whole, and one that's mostly outside is carved away
+    (never through fields or buildings).
+  - Woods: one mostly inside the territory is shaded whole, past the edge
+    too. Any other is shaded where it's near the territory, and hatched
+    and outlined beyond, fading with distance. The hatch is always shown.
+  - The open sea is solid. Lakes mostly inside the territory are solid;
+    other lakes are solid near it and a light horizontal hatch beyond.
+  - Topography sits over the ground and under the fields. Contour lines
+    run across most of the map, fading out unevenly far from the
+    territory, and are a little stronger closer in.
+  - Lone and edge trees are solid crowns (no outline) that fade in from
+    zoom 0.8. Trees inside a wood aren't drawn, since the wood is.
   - Outside the territory: grey outlines for roads. Roads with a
     destination run on to the map's edge.
   - Labels are spaced capitals. Hovering the legend colours that
@@ -37,6 +44,12 @@ All notable changes to this sketch are logged here, per
     uneven falloff with distance from the focus area.
   - Areas come in parts (each wood, say) with `focusShare`, how much of
     each lies inside the focus area. Filters can take `{ min, max }`.
+  - Layer `within: 'area.x'` clips to another area. Stop-gap
+    `area.reach` is the territory grown by about 60 m with its own uneven
+    edge. Water is an area too, in parts with a `sea` flag.
+  - A pattern's `px` keeps it at least that many screen pixels apart, so
+    it stays visible zoomed out. Trees can skip an area (`outside`) and
+    drop their outline (`edgeWidth: 0`).
   - A style `paper` colour of its own.
   - `terrain.bands`: vector stepped bands traced from the height field.
   - `water.*` features: standing water traced from the height field as

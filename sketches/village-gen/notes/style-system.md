@@ -506,3 +506,39 @@ Revised after the second look (2026-10-12):
   0.3 at zoom 0.08 to 0.5 at zoom 1) run everywhere with the focus fade.
 - The first frame of a town in board costs about 0.9 s (areas, wood
   shares, the mask and the terrain rings), then 5–45 ms a frame.
+
+Revised after the third look (2026-10-12):
+
+- **Territory is bent to the land** (`territoryGrid`). After the "use"
+  field (fields, buildings, squares and tapering road arms), the ground
+  is split into contour-band regions by flood fill on the 256² grid.
+  - A region at least 55% inside is taken in whole if it closes up
+    nearby: its outside part is under half the territory and it doesn't
+    touch the map edge.
+  - A region at most 20% inside that clips under 15% of the territory is
+    carved out, except within 35 m of fields, buildings and squares.
+  - Then a light blur, and tracing.
+  - `area.reach` is that grid blurred about 60 m, roughened, and traced
+    at 0.25.
+- **Layer `within: 'area.x'`** adds an inside-clip to another area (none:
+  nothing). Board shades woods and lakes that are mostly outside within
+  `area.reach`, so the shading runs a little past the territory edge on a
+  crisp, uneven line, not an opacity fade. Beyond it they're hatched.
+- **Water is an area:** `STOPGAP_AREAS.water` gives the terrain rings, so
+  water gets parts, `focusShare`, and a `sea` flag (the part runs off the
+  tile's edge). It's keyed `water.sea` / `water.lake`.
+- **`renderer.areaGrid(key)`** is a 512² raster of any area with
+  `.has(x, y)`. `focusShare` and the trees' `outside` use it.
+  `renderer.treesOutside(key)` caches a tree grid without the trees in
+  that area.
+- **Patterns:** `px` makes the period at least that many screen pixels,
+  so the hatch shows at any zoom. It scales with zoom then, by design.
+- **`focusMask`:** the blur (over about 0.45 W) is normalised to its
+  peak, smoothstepped from 0 to 0.15, given a floor of 0.45, and faded to
+  0 between 0.36 W and 0.5 W from the origin. Contours now show faintly
+  across most of the map.
+- **Board's order:** territory, then wood hatch and wood shading, then
+  bands and contours, then fields, squares and water.
+- The first frame now costs about 1.2 s (band flood fill, areas, wood
+  and lake shares, mask, terrain rings). Fine for a sketch; caching or
+  moving it to the engine (step 5) would cut it.

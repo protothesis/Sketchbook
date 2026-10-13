@@ -48,7 +48,8 @@
       stipple: { kind: 'dots',   spacing: 4,   radius: 0.45, color: 'treeEdge', ground: 'grass~0.3', stagger: true },
       orchard: { kind: 'dots',   spacing: 7,   radius: 1.8,  color: 'tree', ground: 'grass~0.25' },
       sparse:  { kind: 'dashes', spacing: 7,   width: 0.5, length: 2.4, color: 'wheatLine', ground: 'wheat~0.5', stagger: true },
-      hatch:   { kind: 'lines',  spacing: 7,   width: 0.6,  color: 'line', angle: 45, minPx: 4 }
+      hatch:   { kind: 'lines',  spacing: 7,   width: 0.6,  color: 'line', angle: 45, px: 5 },
+      ripple:  { kind: 'lines',  spacing: 6,   width: 0.7,  color: 'water~0.35', px: 4 }
     },
     // Detail inside the territory: the settlement and its land, most of the
     // way out to the frame.
@@ -63,13 +64,23 @@
     layers: [
       // Grass under everything inside the territory; its edge is fill only.
       { id: 'territory', match: 'area.territory', draw: 'fill', frame: false, paint: { fill: 'grass' } },
-      // A wood that's mostly inside the territory is filled whole, past its
-      // edge too; one mostly outside gets a light outline and hatch that
-      // fades out with the topography.
-      { id: 'forest', match: 'area.forest', filter: { focusShare: { min: 0.4 } }, draw: 'fill', frame: false, toggle: 'trees',
+      // Woods: every wood is hatched and outlined (fading out with distance
+      // from the territory), then shaded over that. A wood mostly inside
+      // the territory is shaded whole, past its edge too; any other is
+      // shaded only where it's near the territory (its reach).
+      { id: 'forest-hatch', match: 'area.forest', filter: { focusShare: { max: 0.4 } }, draw: 'fill', frame: false, fade: 'focus',
+        paint: { pattern: 'hatch', stroke: 'line', width: { px: 0.7 } } },
+      { id: 'forest', match: 'area.forest', filter: { focusShare: { min: 0.4 } }, draw: 'fill', frame: false, paint: { fill: 'woods' } },
+      { id: 'forest-near', match: 'area.forest', filter: { focusShare: { max: 0.4 } }, draw: 'fill', frame: false, within: 'area.reach',
         paint: { fill: 'woods' } },
-      { id: 'forest-context', match: 'area.forest', filter: { focusShare: { max: 0.4 } }, draw: 'fill', frame: false, fade: 'focus',
-        toggle: 'trees', paint: { pattern: 'hatch', stroke: 'line', width: { px: 0.7 } } },
+      // Topography over the ground and under what's on it: stepped shading
+      // inside the territory only; contour lines everywhere, fading out
+      // unevenly far from it, and a little stronger closer in.
+      { id: 'bands', match: 'terrain', draw: 'terrain.bands', focus: 'inside', frame: false,
+        paint: { fill: 'ink', alpha: 0.2 } },
+      { id: 'contours', match: 'contour.*', draw: 'stroke', toggle: 'contours', frame: false, fade: 'focus',
+        paint: { stroke: 'ink', width: { px: 0.55 }, alpha: { z: [[0.08, 0.3], [1, 0.5]] } },
+        byKey: { major: { width: { px: 1 } } } },
       { id: 'fields', match: 'field.*', draw: 'fill', focus: 'inside', toggle: 'fields',
         paint: { fill: 'wheat~0.25', pattern: 'rows', align: 'field' },
         byKey: {
@@ -81,16 +92,15 @@
       { id: 'fields-context', match: 'field.*', draw: 'stroke', focus: 'outside', toggle: 'fields',
         paint: { stroke: 'line', width: { px: 0.6 } } },
       { id: 'plazas', match: 'plaza.*', draw: 'fill', focus: 'inside', paint: { fill: 'white' } },
-      // Topography over the ground: stepped shading inside the territory
-      // only; contour lines everywhere, fading out unevenly with distance
-      // from it, and a little stronger closer in.
-      { id: 'bands', match: 'terrain', draw: 'terrain.bands', focus: 'inside', frame: false,
-        paint: { fill: 'ink', alpha: 0.2 } },
-      { id: 'contours', match: 'contour.*', draw: 'stroke', toggle: 'contours', frame: false, fade: 'focus',
-        paint: { stroke: 'ink', width: { px: 0.55 }, alpha: { z: [[0.08, 0.3], [1, 0.5]] } },
-        byKey: { major: { width: { px: 1 } } } },
-      // Water: crisp vector fills with no outline, ended by the frame.
-      { id: 'water', match: 'water.*', draw: 'fill', paint: { fill: 'water' } },
+      // Water, crisp with no outline and ended by the frame. The open sea and
+      // lakes mostly inside the territory are solid; other lakes are solid
+      // only near it and a light horizontal hatch beyond.
+      { id: 'water', match: 'water.*', filter: { sea: true }, draw: 'fill', paint: { fill: 'water' } },
+      { id: 'lakes', match: 'water.lake', filter: { focusShare: { min: 0.4 } }, draw: 'fill', paint: { fill: 'water' } },
+      { id: 'lakes-hatch', match: 'water.lake', filter: { focusShare: { max: 0.4 } }, draw: 'fill', frame: false, fade: 'focus',
+        paint: { pattern: 'ripple' } },
+      { id: 'lakes-near', match: 'water.lake', filter: { focusShare: { max: 0.4 } }, draw: 'fill', within: 'area.reach',
+        paint: { fill: 'water' } },
       { id: 'river', match: 'water.river', draw: 'river', paint: { stroke: 'water', width: { px: 1.6 } } },
       { id: 'landmarks', match: 'landmark.*', draw: 'landmarks', focus: 'inside',
         paint: { fill: 'line', radius: 1.4, stroke: 'white', width: { px: 0.6 } },
@@ -106,10 +116,11 @@
         paint: { stroke: 'white' },
         byKey: { road: { width: { m: 6.5, px: 2 } }, street: { width: { m: 5, px: 1.5 } }, lane: { width: { m: 3.4, px: 1 } },
           track: { width: { m: 2.4, px: 0.8 }, dash: [3, 2.5] } } },
-      // Trees fade in between zoom 0.8 and 1.3. (Colours here are literals.)
+      // Lone and edge trees (not those in a wood, which is drawn as an area),
+      // solid crowns fading in between zoom 0.8 and 1.3. Colours are literals.
       { id: 'trees', match: 'tree', draw: 'trees', toggle: 'trees', focus: 'inside', zoom: [0.8, Infinity],
-        paint: { colors: ['#6f7f52', '#687a4c', '#76865a', '#6b7b4f'], edges: ['#55653d', '#55653d', '#55653d', '#55653d'],
-          edgeWidth: 0.12, alpha: { z: [[0.8, 0], [1.3, 1]] },
+        paint: { colors: ['#6f7f52', '#687a4c', '#76865a', '#6b7b4f'], edges: [], edgeWidth: 0, outside: 'area.forest',
+          alpha: { z: [[0.8, 0], [1.3, 1]] },
           shadow: { fill: 'rgba(0, 0, 0, 0.12)', offset: [0.25, 0.3], zoom: [2.5, Infinity] } } },
       // Buildings: white with no outline inside; a grey outline outside.
       { id: 'buildings', match: 'building.*', draw: 'fill', focus: 'inside', paint: { fill: 'white' } },
