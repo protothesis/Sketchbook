@@ -13,14 +13,19 @@ All notable changes to this sketch are logged here, per
     contours that fade out before the map's edge.
   - Crisp vector water with no outline, ended by a hard frame circle, so
     a coast meets the arc.
-  - Inside a large, organic territory: grass ground, darker flat woods
-    and patterned fields (row hatches turned along each field, stipple
-    pasture, dotted orchards, dashed fallow). Buildings, squares and
-    roads are white with no outline.
+  - Inside the settlement's territory (shaped by its fields, buildings
+    and roads): grass ground, patterned fields (row hatches turned along
+    each field, stipple pasture, dotted orchards, dashed fallow) and
+    stepped height shading. Buildings, squares and roads are white with
+    no outline.
+  - A wood that's mostly inside the territory is filled whole in darker
+    green, past the edge too. One that's mostly outside gets a light
+    outline and hatch that fades out with distance.
+  - Contour lines run over everything and fade out unevenly with distance
+    from the territory, a little stronger closer in.
   - Trees fade in from zoom 0.8.
-  - Outside the territory: topography, and grey outlines for fields,
-    buildings and roads. Roads with a destination run on to the map's
-    edge.
+  - Outside the territory: grey outlines for roads. Roads with a
+    destination run on to the map's edge.
   - Labels are spaced capitals. Hovering the legend colours that
     category's buildings.
 - 2026-10-12: **Look** switcher (under Layers, or V) between Natural and
@@ -28,13 +33,16 @@ All notable changes to this sketch are logged here, per
 - 2026-10-12: Renderer support for the board look (natural is unchanged):
   - The style `frame` circle, a hard clip that layers opt out of with
     `frame: false`.
-  - A layer `fade` that dissolves it radially toward the map's edge.
+  - A layer `fade`: radial from the map's origin, or `'focus'`, a soft,
+    uneven falloff with distance from the focus area.
+  - Areas come in parts (each wood, say) with `focusShare`, how much of
+    each lies inside the focus area. Filters can take `{ min, max }`.
   - A style `paper` colour of its own.
   - `terrain.bands`: vector stepped bands traced from the height field.
   - `water.*` features: standing water traced from the height field as
     crisp vector rings.
-  - Stop-gap areas: `area.territory` (an organic area most of the way to
-    the frame, around the farmed extent, pulled in over high ground),
+  - Stop-gap areas: `area.territory` (the farmed extent and buildings
+    grown and smoothed, with tapering arms along roads and a noisy edge),
     `area.settled` (built-up footprint) and `area.forest` (where tree
     crowns cover most of the ground).
   - Trees can fade in with an `alpha` zoom stop.

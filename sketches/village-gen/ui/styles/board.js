@@ -14,7 +14,6 @@
   VG.styles = VG.styles || {};
 
   var SANS = 'system-ui, -apple-system, "Segoe UI", sans-serif';
-  var FADE = { inner: 0.4, outer: 0.5 };
 
   VG.styles.board = {
     id: 'board',
@@ -48,7 +47,8 @@
       vines:   { kind: 'lines',  spacing: 2.2, width: 0.4,  color: 'wheatLine', ground: 'wheat~0.35' },
       stipple: { kind: 'dots',   spacing: 4,   radius: 0.45, color: 'treeEdge', ground: 'grass~0.3', stagger: true },
       orchard: { kind: 'dots',   spacing: 7,   radius: 1.8,  color: 'tree', ground: 'grass~0.25' },
-      sparse:  { kind: 'dashes', spacing: 7,   width: 0.5, length: 2.4, color: 'wheatLine', ground: 'wheat~0.5', stagger: true }
+      sparse:  { kind: 'dashes', spacing: 7,   width: 0.5, length: 2.4, color: 'wheatLine', ground: 'wheat~0.5', stagger: true },
+      hatch:   { kind: 'lines',  spacing: 7,   width: 0.6,  color: 'line', angle: 45, minPx: 4 }
     },
     // Detail inside the territory: the settlement and its land, most of the
     // way out to the frame.
@@ -61,15 +61,15 @@
         way: 'selectWay', wayWidth: { m: 2, px: 5 }, path: 'selectPath', pathWidth: { px: 3 }, pathDash: [{ px: 6 }, { px: 4 }] }
     },
     layers: [
-      // Topography everywhere, unframed: faint steps and hairlines that fade
-      // out before the terrain tile's edge.
-      { id: 'bands', match: 'terrain', draw: 'terrain.bands', frame: false, fade: FADE,
-        paint: { fill: 'context', alpha: 0.24 } },
-      { id: 'contours', match: 'contour.*', draw: 'stroke', toggle: 'contours', frame: false, fade: FADE,
-        paint: { stroke: 'line', width: { px: 0.5 }, alpha: 0.75 }, byKey: { major: { width: { px: 0.9 } } } },
       // Grass under everything inside the territory; its edge is fill only.
       { id: 'territory', match: 'area.territory', draw: 'fill', frame: false, paint: { fill: 'grass' } },
-      { id: 'forest', match: 'area.forest', draw: 'fill', focus: 'inside', toggle: 'trees', paint: { fill: 'woods' } },
+      // A wood that's mostly inside the territory is filled whole, past its
+      // edge too; one mostly outside gets a light outline and hatch that
+      // fades out with the topography.
+      { id: 'forest', match: 'area.forest', filter: { focusShare: { min: 0.4 } }, draw: 'fill', frame: false, toggle: 'trees',
+        paint: { fill: 'woods' } },
+      { id: 'forest-context', match: 'area.forest', filter: { focusShare: { max: 0.4 } }, draw: 'fill', frame: false, fade: 'focus',
+        toggle: 'trees', paint: { pattern: 'hatch', stroke: 'line', width: { px: 0.7 } } },
       { id: 'fields', match: 'field.*', draw: 'fill', focus: 'inside', toggle: 'fields',
         paint: { fill: 'wheat~0.25', pattern: 'rows', align: 'field' },
         byKey: {
@@ -81,6 +81,14 @@
       { id: 'fields-context', match: 'field.*', draw: 'stroke', focus: 'outside', toggle: 'fields',
         paint: { stroke: 'line', width: { px: 0.6 } } },
       { id: 'plazas', match: 'plaza.*', draw: 'fill', focus: 'inside', paint: { fill: 'white' } },
+      // Topography over the ground: stepped shading inside the territory
+      // only; contour lines everywhere, fading out unevenly with distance
+      // from it, and a little stronger closer in.
+      { id: 'bands', match: 'terrain', draw: 'terrain.bands', focus: 'inside', frame: false,
+        paint: { fill: 'ink', alpha: 0.2 } },
+      { id: 'contours', match: 'contour.*', draw: 'stroke', toggle: 'contours', frame: false, fade: 'focus',
+        paint: { stroke: 'ink', width: { px: 0.55 }, alpha: { z: [[0.08, 0.3], [1, 0.5]] } },
+        byKey: { major: { width: { px: 1 } } } },
       // Water: crisp vector fills with no outline, ended by the frame.
       { id: 'water', match: 'water.*', draw: 'fill', paint: { fill: 'water' } },
       { id: 'river', match: 'water.river', draw: 'river', paint: { stroke: 'water', width: { px: 1.6 } } },

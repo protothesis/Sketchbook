@@ -480,3 +480,29 @@ Revised after the first look (2026-10-12):
 - Board drops settled ground and the woodland crown pattern: roads,
   squares and buildings are white with no outline on grass, and woods
   are flat, darker green.
+
+Revised after the second look (2026-10-12):
+
+- **`area.territory`** no longer has a disc; it was too big and
+  disconnected. It's the fields, buildings and squares grown by 60 m and
+  smoothed, unioned with 70 m arms along the roads. The arms taper to
+  nothing between the farmland's reach (its 90th-percentile distance from
+  the centre) and about 1.7 × that, with a seeded fbm edge. An outlying
+  farmstead with fields can make a separate island.
+- **Area parts:** `renderer.area(key)` returns `{ rings, bounds, parts }`.
+  `parts` is each outer ring with its holes (`areaParts`), and
+  `features('area.x')` gives one item per part. `renderer.focusShare(part)`
+  samples how much of a part is inside the focus area (cached; the focus
+  area is rasterised at 512² for the test). Board uses it to fill a wood
+  whole when it's at least 40% inside, or else to hatch and outline it.
+- **Filters:** a value can be `{ min, max }`, meaning [min, max).
+- **`fade: 'focus'`** masks a faded layer with `renderer.focusMask()`: the
+  focus area rasterised at 192², box-blurred over about a fifth of the
+  map, roughened with fbm and smoothstepped. It's drawn with smoothing
+  over the tile, so it's soft and uneven rather than a circle. Board's
+  contours and outside-wood hatch use it.
+- **Board's topography sits over the ground now:** bands (ink at 0.2
+  across all levels) are `focus: 'inside'` only, and contours (ink, alpha
+  0.3 at zoom 0.08 to 0.5 at zoom 1) run everywhere with the focus fade.
+- The first frame of a town in board costs about 0.9 s (areas, wood
+  shares, the mask and the terrain rings), then 5–45 ms a frame.
