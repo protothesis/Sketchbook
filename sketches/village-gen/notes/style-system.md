@@ -1,7 +1,8 @@
 # Style system: draft spec
 
 **Started:** 2026-10-12. **Status:** agreed in a design session; migration
-steps 1–3 built on 2026-10-12 (see *As built so far* at the end). The look
+steps 1–4 built on 2026-10-12, except step 4's frame circle (see *As built
+so far* at the end). The look
 it should produce first is in [`visual-direction.md`](visual-direction.md).
 
 ## Goal
@@ -316,7 +317,7 @@ Each step is shippable on its own:
 - Do style IDs get saved with locked places in the atlas, or is style
   always a view choice?
 
-## As built so far (steps 1–3)
+## As built so far (steps 1–4)
 
 Where the code differs from the draft above, for whoever picks up step 4:
 
@@ -347,4 +348,59 @@ Where the code differs from the draft above, for whoever picks up step 4:
 - `Renderer.setStyle(id)` exists and rebakes; nothing calls it yet (the
   switcher is step 6). `renderer.categoryColors()` gives the legend its
   colours.
+
+Step 4 (focus clip and patterns; the frame circle isn't built yet):
+
+- **Focus clip.** A layer's `focus` ('inside' / 'outside', default 'any')
+  only applies when the style has `focus: { area }`. The renderer wraps
+  the layer in `save()` / `clip('evenodd')` / `restore()`; 'outside' clips
+  to a rect round the view minus the area. An area that doesn't exist is
+  empty, so 'inside' draws nothing and 'outside' draws everything.
+  `labels.destination` (tabs and landing marks) is marked `.unclipped`
+  and ignores focus.
+- **Roads under a clip.** This is stricter than "the run to `w.exit`":
+  that alone still left a gap when a road leaves the boundary well before
+  its last node. Draw functions that trace ways are marked `.ways`.
+  Under a clip, a `way.*` layer is drawn twice: `env.wayMode = 'body'`
+  clipped, then `'exit'` unclipped. A way with an exit splits at its last
+  node inside the focus area (`renderer.exitFrom(w)`; the whole way if
+  none is inside), so everything from there to the exit is unclipped.
+  `traceWay(ctx, N, w, env)` does the split.
+- **Areas.** `renderer.area('area.boundary')` returns `{ rings, bounds }`
+  or null, cached per settlement. It reads `S.areas[kind]` when that
+  exists: an area or a list of them, each with `polygon` (one ring) or
+  `rings`, or bare rings. Otherwise it uses `STOPGAP_AREAS[kind]`. Only
+  `boundary` has a stop-gap: fields, buildings and plazas rasterised to a
+  grid of about W/256 (at least 6 m), dilated 30 m, box-blurred, traced at
+  0.5 with marching squares, outer rings only (no holes), then one Chaikin
+  pass. It takes about 15–35 ms per settlement. It isn't pulled to a
+  contour or cut by water. Swapping it out is just providing
+  `S.areas.boundary`.
+- **Patterns** are built per style and paper colour
+  (`renderer.patterns(paper)`) as 64 px tiles of one period. Fills run
+  under the world transform, so `pattern.setTransform(scale(spacing / 64)
+  · rotate)` anchors them in metres. Parameters: all kinds take
+  `spacing`, `color`, `ground` (optional), `angle` (degrees) and `minPx`
+  (default 3). `lines`, `grid`, `waves` and `dashes` take `width`;
+  `waves` also takes `amplitude` and `dashes` takes `length`. `dots` and
+  `crowns` take `radius`, plus `edge` / `edgeWidth` on crowns. `dots` and
+  `dashes` take `stagger: true`, which adds a second, offset row; crowns
+  are staggered unless it's `false`. A draw function gets a
+  ready-anchored pattern from `env.pattern(name, angle, ox, oy)`, or null
+  when it's too fine.
+- **Generic draw functions.** `fill` and `stroke` read features through
+  `VG.render.features[collection](env, key)`: `field`, `building`,
+  `plaza`, `way`, `area`, `contour`, `shore`. These are culled to the view
+  and to growth playback. `water.*`, `landmark.*`, `tree` and `room`
+  aren't wired yet. A layer `filter` is `{ prop: value | [values] }` on
+  the item. Paint for `fill` is `{ fill, pattern, align, alpha, stroke,
+  width }`. A pattern with a `ground` replaces `fill`; one without a
+  ground draws over `fill`. When a pattern is too fine it falls back to
+  its ground, else `fill`. `align: 'field'` turns the pattern to the
+  quad's long axis, anchored at its first corner, which costs one fill
+  per field. Paint for `stroke` is `{ stroke, width, dash, alpha, pattern
+  }`, where a dash entry is screen px (a number) or `{ m, px }`. Neither
+  function handles highlight or selection states yet.
+- `natural` uses none of this and is pixel-identical (diff harness, 7
+  towns × 16 zooms and states).
 
