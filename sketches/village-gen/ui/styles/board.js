@@ -56,6 +56,10 @@
     // Detail inside the territory: the settlement and its land, most of the
     // way out to the frame.
     focus: { area: 'area.territory' },
+    // Linework outside the territory (`fade: 'halftone'`) is broken up by a
+    // halftone of dots that shrink with distance from it: nearly whole at the
+    // edge, little bits by `reach` (a share of the map's size).
+    halftoneFade: { area: 'area.territory', spacing: 9, minPx: 7, reach: 0.4, size: 0.62, gamma: 0.9 },
     // Ends open water (and any layer that doesn't opt out).
     frame: { shape: 'circle', centre: 'origin', r: 0.47 },
     states: {
@@ -68,22 +72,27 @@
       // with a patchy halftone of shrinking dots coming off it here and there.
       { id: 'territory', match: 'area.territory', draw: 'fill', frame: false, paint: { fill: 'grass' } },
       { id: 'territory-halftone', match: 'area.territory', draw: 'halftone', frame: false, zoom: [0.3, Infinity],
-        paint: { area: 'area.territory', color: 'grass', spacing: 8, radius: 3.6, reach: 50, patches: [0.05, 0.3], patchSize: 140 } },
+        paint: { area: 'area.territory', color: 'grass', spacing: 8, radius: 3.6, reach: 50, patches: [0.05, 0.3], patchSize: 140,
+          shade: { fill: 'ink', alpha: 0.2 } } },
       // Stepped height shading, inside the territory only.
       { id: 'bands', match: 'terrain', draw: 'terrain.bands', focus: 'inside', frame: false,
         paint: { fill: 'ink', alpha: 0.2 } },
       // Woods, flat and opaque over the shading: every wood that isn't shaded
-      // whole is hatched and outlined (fading out with distance from the
-      // territory). A wood mostly inside the territory is shaded whole, past
-      // its edge too; any other is shaded only near the territory (its reach).
-      { id: 'forest-hatch', match: 'area.forest', filter: { focusShare: { max: 0.4 } }, draw: 'fill', frame: false, fade: 'focus',
+      // whole is hatched and outlined: whole if it lies mostly on the visible
+      // side of the halftone fade, else broken up by it. A wood mostly inside
+      // the territory is shaded whole, past its edge too; any other is shaded
+      // only near the territory (its reach).
+      { id: 'forest-hatch', match: 'area.forest', filter: { focusShare: { max: 0.4 }, fadeShare: { min: 0.5 } }, draw: 'fill', frame: false,
         paint: { pattern: 'hatch', stroke: 'line', width: { px: 1.1 } } },
+      { id: 'forest-hatch-fade', match: 'area.forest', filter: { focusShare: { max: 0.4 }, fadeShare: { max: 0.5 } }, draw: 'fill', frame: false,
+        fade: 'halftone', paint: { pattern: 'hatch', stroke: 'line', width: { px: 1.1 } } },
       { id: 'forest', match: 'area.forest', filter: { focusShare: { min: 0.4 } }, draw: 'fill', frame: false, paint: { fill: 'woods' } },
       { id: 'forest-near', match: 'area.forest', filter: { focusShare: { max: 0.4 } }, draw: 'fill', frame: false, within: 'area.reach',
         paint: { fill: 'woods' } },
       // Contour lines over the ground and under what's on it, everywhere,
-      // fading out unevenly far from the territory, a little stronger closer in.
-      { id: 'contours', match: 'contour.*', draw: 'stroke', toggle: 'contours', frame: false, fade: 'focus',
+      // broken up by the halftone fade outside the territory, a little
+      // stronger closer in.
+      { id: 'contours', match: 'contour.*', draw: 'stroke', toggle: 'contours', frame: false, fade: 'halftone',
         paint: { stroke: 'ink', width: { px: 0.55 }, alpha: { z: [[0.08, 0.3], [1, 0.5]] } },
         byKey: { major: { width: { px: 1 } } } },
       { id: 'fields', match: 'field.*', draw: 'fill', focus: 'inside', toggle: 'fields',
@@ -109,9 +118,9 @@
         paint: { fill: 'line', radius: 1.4, stroke: 'white', width: { px: 0.6 } },
         byKey: { pond: { fill: 'water', radius: 3.2, stroke: 'water' } } },
       // Roads in the paper's colour, so they're gaps in the ground and blend
-      // into the paper. Outside the territory a grey edge, fading out with
+      // into the paper. Outside the territory a grey edge, broken up with
       // distance like the contours, so no road visibly ends.
-      { id: 'road-casing', match: 'way.*', draw: 'stroke', focus: 'outside', fade: 'focus',
+      { id: 'road-casing', match: 'way.*', draw: 'stroke', focus: 'outside', fade: 'halftone',
         paint: { stroke: 'line' },
         byKey: { road: { width: { m: 6.5 + 1.4, px: 3.2 } }, street: { width: { m: 5 + 1.2, px: 2.4 } },
           lane: { width: { m: 3.4 + 1, px: 2 }, alpha: 0.7 }, track: { stroke: null } } },

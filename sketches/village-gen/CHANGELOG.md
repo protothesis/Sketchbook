@@ -20,20 +20,26 @@ All notable changes to this sketch are logged here, per
   - The territory is shaped by the fields, buildings and roads. Outlying
     farmsteads are joined to the town along their road. Its edge snaps to
     contour lines running close to it, taking in or carving out the
-    pocket between, but never carving through fields or buildings. A
-    patchy halftone of shrinking dots comes off the edge here and there.
+    pocket between, but never carving through fields or buildings. Where
+    it snaps, its edge *is* that contour line. A patchy halftone of
+    shrinking dots comes off the edge here and there, shaded like the
+    ground it stands on.
   - Woods are flat and opaque. One mostly inside the territory is shaded
     whole, past the edge too. Any other is shaded where it's near the
-    territory, and hatched and outlined beyond, fading with distance. The
-    hatch and outline share one weight and are always shown.
+    territory, and hatched and outlined beyond. A wood that lies mostly on
+    the visible side is hatched whole; one mostly far out, or cut off by
+    the map's edge, is broken up by the halftone fade. The hatch and
+    outline share one weight.
   - The open sea is solid and ended by the frame. A lake is drawn whole:
     solid if any of it is inside the territory, else a light horizontal
     hatch with a matching outline.
-  - Outside the territory, roads get a grey edge that fades out with
-    distance, so no road visibly ends.
+  - Outside the territory, roads get a grey edge that the halftone fade
+    breaks up with distance, so no road visibly ends.
   - Topography sits over the ground and under the fields. Contour lines
-    run across most of the map, fading out unevenly far from the
-    territory, and are a little stronger closer in.
+    run across most of the map. Outside the territory they're broken up by
+    a halftone fade (dots shrinking with distance), nearly whole at the
+    edge and just bits by the map's edge. They're a little stronger
+    closer in.
   - Lone and edge trees are solid crowns (no outline) close to the woods'
     green that fade in from zoom 0.8. They're drawn whole wherever the tree
     stands inside the territory. Trees inside a wood aren't drawn, since
@@ -59,6 +65,11 @@ All notable changes to this sketch are logged here, per
   - A `halftone` draw function: shrinking dots coming off an area's edge,
     in patches.
   - A faded layer keeps its `focus` clip and the roads' exit rule.
+  - `fade: 'halftone'` with a style's `halftoneFade` (dots shrinking with
+    distance from an area). Area parts carry `fadeShare`, how much of each
+    lies on its visible side.
+  - Terrain is traced once, on one grid, for water, bands, the generic
+    contour lines and the territory's edge, so they line up exactly.
   - A style `paper` colour of its own.
   - `terrain.bands`: vector stepped bands traced from the height field.
   - `water.*` features: standing water traced from the height field as

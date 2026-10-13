@@ -581,3 +581,43 @@ Revised after the fourth look (2026-10-12):
     outlines are 1.1 px.
 - The first frame of a small town in board is about 1.4 s now; the
   generator should own this work (step 5).
+
+Revised after the fifth look (2026-10-12):
+
+- **One trace for the land.** `renderer.heightGrid()` (the terrain grid
+  upsampled 2×) is now the only source for water, bands
+  (`terrainRings(k)`), the generic `contour.*` lines (built from the same
+  rings, every fifth level major, with the segments along the map's edge
+  left out) and the territory's edge. natural's `contours` function still
+  uses `buildContours`.
+- **`traceTerritory`.** The coarse territory grid (use, join, snap) now
+  records what each step changed (`mark`: joined, or the band of a pocket
+  taken in or carved out) and keeps the smooth use field (`base`). Each
+  height-grid node is then inside or out from that: a pocket node only if
+  it's in that pocket's own band. Its marching-squares value is signed:
+  - A node with an across-the-edge neighbour in a different band gets
+    |h − L|, with L the contour level between the two bands (the water
+    line for water). So that edge crosses exactly where the band and
+    contour rings cross.
+  - Other nodes get |base − 0.5| scaled to one interval.
+  - Then one Chaikin pass, like the rings.
+  - The coarse `inside` field still drives `reach` and the focus mask.
+- **Halftone dots** carry their band and are shaded with the bands' paint
+  (`shade: { fill, alpha }`): band b mixes ground toward fill by
+  1 − (1 − alpha / levels)^b, the same as the stacked band fills.
+- **`fade: 'halftone'`** uses the style's `halftoneFade: { area, spacing,
+  minPx, reach, size, gamma }`.
+  - Per frame, a mask canvas gets the area filled, then hex-grid dots of
+    radius `size × spacing × cover`. `cover` is (1 − d / reach)^gamma,
+    with d from `areaDistance` (a 512² chamfer) and reach a share of W,
+    also faded to 0 between 0.36 W and 0.49 W of the map's square edge.
+  - The grid is world-anchored, and its spacing doubles until it's at
+    least `minPx` on screen.
+  - The layer is composited `destination-in` through the mask.
+  - `renderer.fadeShare(part)` is the mean cover over a part, or 0 if the
+    part reaches past 0.46 W, where trees and so woods stop. Board hatches
+    a wood whole at 0.5 or more, else through the fade.
+- Board's contours, outside road casing and far woods use the halftone
+  fade; the focus (transparency) fade is still available.
+- The first frame of the test hamlet is about 1.9 s: territory 0.7 s,
+  wood shares and the distance field 0.5 s, the rest rings and areas.
