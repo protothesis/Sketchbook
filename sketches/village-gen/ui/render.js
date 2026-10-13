@@ -290,12 +290,13 @@
     var d = S.fields.map(function (f) { return Math.hypot(f.x - C.x, f.y - C.y); }).sort(function (a, b) { return a - b; });
     var reach = Math.max(S.radius || 100, d.length ? d[Math.floor(d.length * 0.9)] : 0), taper = reach * 0.7 + 150;
     var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'territory')), lam = Math.max(90, reach * 0.3);
-    var bin = new Uint8Array(N * N), band = new Int16Array(N * N), interval = R.contours.interval, k, i, j;
+    var bin = new Uint8Array(N * N), band = new Int16Array(N * N), field = new Float32Array(N * N), interval = R.contours.interval, k, i, j;
     for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
       var x = (i - 0.5) * cell - W / 2, y = (j - 0.5) * cell - W / 2;
       k = j * N + i;
       var fall = G.clamp(1 - (Math.hypot(x - C.x, y - C.y) - reach) / taper, 0, 1);
       var v = Math.max(farm ? farm[k] : 0, roads ? 0.9 * roads[k] * fall : 0) + 0.12 * VG.rng.fbm(noise, x / lam, y / lam, 3);
+      field[k] = v;
       if (v > 0.5) bin[k] = 1;
       var h = T.heightAt(x, y);
       band[k] = h < T.wl ? -1 : Math.floor((h - T.wl) * T.relief / interval);
@@ -303,16 +304,14 @@
     var ci = Math.floor((C.x + W / 2) / cell) + 1, cj = Math.floor((C.y + W / 2) / cell) + 1;
     // What each step changed, for tracing the edge exactly (traceTerritory):
     // JOINED, or the band of a pocket taken in (+1) or carved out (−1 − band).
-    var mark = new Int16Array(N * N), base = new Float32Array(N * N);
-    for (k = 0; k < N * N; k++) base[k] = bin[k];
+    var mark = new Int16Array(N * N);
     joinAlongRoads(bin, N, lanes, core, cj * N + ci, Math.max(1, Math.round(25 / cell)), mark);
     snapToContours(bin, band, N, Math.round(150 / cell), true, core, mark);
     snapToContours(bin, band, N, Math.round(80 / cell), false, core, mark);
     var out = new Float32Array(N * N);
     for (k = 0; k < N * N; k++) out[k] = bin[k];
     out = gridPass(gridPass(out, N, 1, false, true), N, 1, false, false);
-    base = gridPass(gridPass(base, N, 1, false, true), N, 1, false, false);
-    return (cache._tgrid = { inside: out, base: base, mark: mark, N: N, cell: cell });
+    return (cache._tgrid = { inside: out, base: field, mark: mark, N: N, cell: cell });
   }
 
   /**
@@ -322,13 +321,16 @@
    * Each node is inside or out: a pocket's node only if it's in the
    * pocket's own band, the rest from the smooth use field. For marching
    * squares, a node across the edge from a different band gets its height
-   * relative to the contour between them; elsewhere the use field's
-   * distance from its threshold sets where the edge falls.
+   * relative to the contour between them, so the edge rides that contour,
+   * where it's a pocket's edge, or where contours are under `steep` metres
+   * apart (there it steps along them). Elsewhere the use field's distance
+   * from its threshold sets where the edge falls, so it stays smooth.
    */
   function traceTerritory(S, R, g) {
     var T = S._.terrain, W = S.bounds.size, H = R.heightGrid(), N = H.N, hc = H.cell, h = H.h;
     var step = R.contours.interval / T.relief, top = R.bandTop();
     var gN = g.N, gc = g.cell, inside = new Uint8Array(N * N), band = new Int16Array(N * N), base = new Float32Array(N * N);
+    var snapped = new Uint8Array(N * N), steep = 22;
     var i, j, k;
     for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
       k = j * N + i;
@@ -341,6 +343,7 @@
       var hv = h[k];
       band[k] = hv < T.wl ? -1 : Math.min(top, Math.floor((hv - T.wl) / step + 1e-9));
       var m = g.mark[Math.round(fy) * gN + Math.round(fx)] || 0, own = base[k] > 0.5;
+      if (m && m !== JOINED) snapped[k] = 1;
       if (m === JOINED) own = true;
       else if (m > 0) own = own || band[k] === m - 1;
       else if (m < 0) own = own && band[k] !== -1 - m;
@@ -354,8 +357,12 @@
     for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
       k = j * N + i;
       var mag = -1, own = inside[k];
+      // Metres between contours here.
+      var gx = (h[k + 1] - h[k - 1]) / (2 * hc), gy = (h[k + N] - h[k - N]) / (2 * hc);
+      var close = R.contours.interval / Math.max(1e-6, Math.hypot(gx, gy) * T.relief) < steep;
       [k - 1, k + 1, k - N, k + N].some(function (n) {
         if (inside[n] === own || band[n] === band[k]) return false;
+        if (!close && !snapped[k] && !snapped[n]) return false;
         mag = Math.abs(h[k] - level(band[k], band[n]));
         return true;
       });
@@ -945,11 +952,11 @@
 
   /**
    * The style's `halftoneFade` as a mask for this frame (a canvas the size
-   * of the map's): its area filled solid, then dots on a hexagonal grid
-   * around it whose size falls with distance, from overlapping (whole) at
-   * the area's edge to nothing at `reach` (a share of the map's size), and
-   * to nothing before the map tile's edge either. A
-   * layer masked by it is broken up more and more the further out it is.
+   * of the map's): solid, with holes punched on a hexagonal grid around the
+   * area that grow with distance, from nothing at the area's edge to
+   * overlapping (everything cut away) at `reach` (a share of the map's
+   * size), and before the map tile's edge. A
+   * layer masked by it is eaten away more and more the further out it is.
    * The grid is `spacing` metres, doubled as needed to stay at least `minPx`
    * apart on screen, and anchored in world space. Built once per frame.
    */
@@ -962,10 +969,10 @@
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, m.width, m.height);
     if (!F) return m;
-    c.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc));
     c.fillStyle = '#000';
-    var A = this.area(F.area);
-    if (A) { c.beginPath(); A.rings.forEach(function (r) { polyPath(c, r); }); c.fill(); }
+    c.fillRect(0, 0, m.width, m.height);
+    c.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc));
+    c.globalCompositeOperation = 'destination-out';
     var D = this.areaDistance(F.area), s = F.spacing;
     while (s * sc < (F.minPx || 6)) s *= 2;
     var h = s * Math.sqrt(3) / 2, full = s * (F.size || 0.62);
@@ -973,14 +980,13 @@
     for (var j = Math.floor(vb[1] / h) - 1; j <= Math.ceil(vb[3] / h) + 1; j++) {
       var y = j * h, off = j % 2 ? s / 2 : 0;
       for (var i = Math.floor((vb[0] - off) / s) - 1; i <= Math.ceil((vb[2] - off) / s) + 1; i++) {
-        var x = i * s + off, d = D.at(x, y);
-        if (d <= 0) continue;
-        var r = full * halftoneCover(F, W, d, x, y);
+        var x = i * s + off, r = full * (1 - halftoneCover(F, W, D.at(x, y), x, y));
         if (r * sc < 0.35) continue;
         c.moveTo(x + r, y); c.arc(x, y, r, 0, Math.PI * 2);
       }
     }
     c.fill();
+    c.globalCompositeOperation = 'source-over';
     return m;
   };
 

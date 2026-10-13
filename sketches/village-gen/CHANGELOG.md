@@ -21,7 +21,8 @@ All notable changes to this sketch are logged here, per
     farmsteads are joined to the town along their road. Its edge snaps to
     contour lines running close to it, taking in or carving out the
     pocket between, but never carving through fields or buildings. Where
-    it snaps, its edge *is* that contour line. A patchy halftone of
+    it snaps, its edge *is* that contour line; where contours are packed
+    close it steps along them; elsewhere it's smooth. A patchy halftone of
     shrinking dots comes off the edge here and there, shaded like the
     ground it stands on.
   - Woods are flat and opaque. One mostly inside the territory is shaded
@@ -36,9 +37,9 @@ All notable changes to this sketch are logged here, per
   - Outside the territory, roads get a grey edge that the halftone fade
     breaks up with distance, so no road visibly ends.
   - Topography sits over the ground and under the fields. Contour lines
-    run across most of the map. Outside the territory they're broken up by
-    a halftone fade (dots shrinking with distance), nearly whole at the
-    edge and just bits by the map's edge. They're a little stronger
+    run across most of the map. Outside the territory they're eaten away
+    by a halftone fade, holes that grow with distance, so they're nearly
+    whole at the edge and just bits by the map's edge. They're a little stronger
     closer in.
   - Lone and edge trees are solid crowns (no outline) close to the woods'
     green that fade in from zoom 0.8. They're drawn whole wherever the tree
@@ -65,7 +66,7 @@ All notable changes to this sketch are logged here, per
   - A `halftone` draw function: shrinking dots coming off an area's edge,
     in patches.
   - A faded layer keeps its `focus` clip and the roads' exit rule.
-  - `fade: 'halftone'` with a style's `halftoneFade` (dots shrinking with
+  - `fade: 'halftone'` with a style's `halftoneFade` (holes growing with
     distance from an area). Area parts carry `fadeShare`, how much of each
     lies on its visible side.
   - Terrain is traced once, on one grid, for water, bands, the generic

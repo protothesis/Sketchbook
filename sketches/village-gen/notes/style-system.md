@@ -621,3 +621,19 @@ Revised after the fifth look (2026-10-12):
   fade; the focus (transparency) fade is still available.
 - The first frame of the test hamlet is about 1.9 s: territory 0.7 s,
   wood shares and the distance field 0.5 s, the rest rings and areas.
+
+Revised after the sixth look (2026-10-12):
+
+- **The halftone fade is reversed.** The mask is now solid, with holes
+  punched (`destination-out`) of radius `size × spacing × (1 − cover)`.
+  They're nothing at the area's edge and overlapping (all cut) by `reach`
+  and before the tile's edge.
+- **Where the territory's edge rides contours.** `traceTerritory` only
+  uses the contour magnitude for a node pair across the edge in different
+  bands if one of them is in a snapped pocket or carve, or if contours
+  there are under 22 m apart (`steep`). Elsewhere it uses the smooth use
+  field. That field is now the continuous value before thresholding
+  (`g.base`), not a blurred binary, which caused rounded stair steps
+  when traced on the fine grid. So: smooth edges in the open, exact on
+  pockets, and stepped along the contours on steep ground. Road-join
+  corridors are still a little blocky (they come from coarse cells).
