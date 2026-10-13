@@ -206,31 +206,35 @@
       });
     },
     /**
-     * The settlement's territory: a much larger, organic area than the
-     * farmed extent, reaching most of the way to the style's frame circle
-     * (`r` of the map, 0.47 if it has none). It's the farmed extent grown
-     * by 40 m, joined to a disc about three quarters of the frame's size
-     * (on the frame's centre, which the town always sits inside), with a
-     * seeded noisy edge that pulls in over higher ground. A stand-in for a
-     * generator area.
+     * The settlement's territory: what the settlement uses, a good deal
+     * wider than the farmed extent but shaped by it. Fields, buildings and
+     * squares are grown by 60 m and smoothed; roads add arms 70 m wide that
+     * taper off past the farmland (to nothing at about 1.7 × its reach). A seeded
+     * noise roughens the edge. A stand-in for a generator area.
      */
-    territory: function (S, R) {
-      var W = S.bounds.size, T = S._.terrain, cell = Math.max(6, W / 256), o = { cell: cell, dilate: 40, blur: 40 };
-      var v = rasterGrid(S, o, function (c) {
+    territory: function (S) {
+      var W = S.bounds.size, cell = Math.max(6, W / 256), N = Math.ceil(W / cell) + 2, C = S.center;
+      var farm = rasterGrid(S, { cell: cell, dilate: 60, blur: 70 }, function (c) {
         S.fields.forEach(function (f) { polyPath(c, f.polygon); });
         S.buildings.forEach(function (b) { polyPath(c, b.polygon); });
         S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
       });
-      var N = Math.ceil(W / cell) + 2, F = R && R.style.frame, Rf = (F ? F.r : 0.47) * W, Rt = 0.76 * Rf;
-      var C = F && F.centre === 'settlement' ? S.center : { x: 0, y: 0 };
-      var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'territory')), lam = Rt * 0.5;
-      var h0 = T.heightAt(S.center.x, S.center.y), span = Math.max(1e-3, T.relief * 0.4);
+      var Nd = S.network.nodes;
+      var roads = rasterGrid(S, { cell: cell, stroke: 70, blur: 35 }, function (c) {
+        S.network.ways.forEach(function (w) {
+          w.nodes.forEach(function (id, k) { if (k) c.lineTo(Nd[id].x, Nd[id].y); else c.moveTo(Nd[id].x, Nd[id].y); });
+        });
+      });
+      if (!farm && !roads) return null;
+      // How far the farmland reaches from the centre (90th percentile).
+      var d = S.fields.map(function (f) { return Math.hypot(f.x - C.x, f.y - C.y); }).sort(function (a, b) { return a - b; });
+      var reach = Math.max(S.radius || 100, d.length ? d[Math.floor(d.length * 0.9)] : 0), taper = reach * 0.7 + 150;
+      var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'territory')), lam = Math.max(90, reach * 0.3);
       var out = new Float32Array(N * N);
       for (var j = 1; j < N - 1; j++) for (var i = 1; i < N - 1; i++) {
-        var x = (i - 0.5) * cell - W / 2, y = (j - 0.5) * cell - W / 2;
-        var radial = 1 - 0.5 * Math.hypot(x - C.x, y - C.y) / Rt;
-        var hill = G.clamp((T.heightAt(x, y) - h0) * T.relief / span, 0, 1);
-        out[j * N + i] = Math.max(v ? v[j * N + i] : 0, radial + 0.13 * VG.rng.fbm(noise, x / lam, y / lam, 3) - 0.18 * hill);
+        var x = (i - 0.5) * cell - W / 2, y = (j - 0.5) * cell - W / 2, k = j * N + i;
+        var fall = G.clamp(1 - (Math.hypot(x - C.x, y - C.y) - reach) / taper, 0, 1);
+        out[k] = Math.max(farm ? farm[k] : 0, roads ? 0.9 * roads[k] * fall : 0) + 0.12 * VG.rng.fbm(noise, x / lam, y / lam, 3);
       }
       return traceArea(out, N, { cell: cell, holes: false, minArea: 20000, smooth: 2 }, W);
     },
@@ -269,7 +273,7 @@
     c.setTransform(1 / cell, 0, 0, 1 / cell, n / 2, n / 2);
     c.beginPath();
     add(c);
-    c.fill();
+    if (o.stroke) { c.lineWidth = o.stroke; c.lineJoin = 'round'; c.lineCap = 'round'; c.stroke(); } else c.fill();
     var px = c.getImageData(0, 0, n, n).data, N = n + 2, v = new Float32Array(N * N), any = false;
     for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) {
       var a = px[(j * n + i) * 4 + 3];
@@ -298,6 +302,31 @@
     var a = 0;
     for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
     return a / 2;
+  }
+
+  function ringsBounds(rings) {
+    var b = [Infinity, Infinity, -Infinity, -Infinity];
+    rings.forEach(function (r) { var rb = G.polyBounds(r); b = [Math.min(b[0], rb[0]), Math.min(b[1], rb[1]), Math.max(b[2], rb[2]), Math.max(b[3], rb[3])]; });
+    return b;
+  }
+
+  /**
+   * An area's rings grouped into separate parts (each wood, say): every
+   * outer ring with the holes directly inside it, as { id, rings, bounds }.
+   */
+  function areaParts(rings) {
+    var depth = rings.map(function (r) {
+      return rings.filter(function (q) { return q !== r && G.pointInPoly(r[0][0], r[0][1], q); }).length;
+    });
+    var parts = [];
+    rings.forEach(function (r, i) { if (depth[i] % 2 === 0) parts.push({ id: parts.length, rings: [r], outer: r, depth: depth[i] }); });
+    rings.forEach(function (r, i) {
+      if (depth[i] % 2 === 0) return;
+      var home = parts.filter(function (p) { return p.depth === depth[i] - 1 && G.pointInPoly(r[0][0], r[0][1], p.outer); })[0];
+      if (home) home.rings.push(r);
+    });
+    parts.forEach(function (p) { p.bounds = ringsBounds(p.rings); delete p.outer; delete p.depth; });
+    return parts;
   }
 
   /** Inside an area's rings (evenodd, so holes count). */
@@ -578,7 +607,7 @@
     this.bakes = {};
     this._areas = {};
     this._exitFrom = null;
-    this._terrain = null; this._grid = null; this._bandTop = null;
+    this._terrain = null; this._grid = null; this._bandTop = null; this._focusMask = undefined; this._focusGrid = null;
     this.selected = null;
     this.hover = null;
   };
@@ -641,10 +670,11 @@
   };
 
   /**
-   * A layer with `fade: { inner, outer }` (shares of the map's size) is
-   * drawn offscreen, then faded out radially from the map's origin between
-   * those radii, so it dissolves before the terrain tile's square edge.
-   * Focus and frame don't apply to it.
+   * A layer with `fade` is drawn offscreen, then masked and composited.
+   * `{ inner, outer }` (shares of the map's size) fades it out radially from
+   * the map's origin. `'focus'` fades it out with distance from the focus
+   * area instead, softly and unevenly (see focusMask). Focus and frame don't
+   * apply to a faded layer.
    */
   Renderer.prototype.drawFaded = function (fn, P, env, view, L) {
     var cv = this.canvas, off = this._fadeCanvas || (this._fadeCanvas = makeCanvas(1, 1)), dpr = view.dpr, sc = view.scale;
@@ -659,13 +689,42 @@
     fn(c, P, env, L);
     c.globalCompositeOperation = 'destination-in';
     c.setTransform.apply(c, world);
-    var g = c.createRadialGradient(0, 0, F.inner * W, 0, 0, F.outer * W);
-    g.addColorStop(0, 'rgba(0, 0, 0, 1)'); g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    c.fillStyle = g;
-    c.fillRect(vb[0] - 10, vb[1] - 10, vb[2] - vb[0] + 20, vb[3] - vb[1] + 20);
+    if (F === 'focus') {
+      var M = this.focusMask();
+      if (M) { c.imageSmoothingEnabled = true; c.drawImage(M, -W / 2, -W / 2, W, W); }
+    } else {
+      var g = c.createRadialGradient(0, 0, F.inner * W, 0, 0, F.outer * W);
+      g.addColorStop(0, 'rgba(0, 0, 0, 1)'); g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      c.fillStyle = g;
+      c.fillRect(vb[0] - 10, vb[1] - 10, vb[2] - vb[0] + 20, vb[3] - vb[1] + 20);
+    }
     c.globalCompositeOperation = 'source-over';
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.drawImage(off, 0, 0);
+  };
+
+  /**
+   * A soft, uneven mask (a small canvas over the map tile) that's opaque in
+   * the focus area and fades out over about a fifth of the map's size
+   * around it, roughened by seeded noise. Cached per settlement and style.
+   */
+  Renderer.prototype.focusMask = function () {
+    if (this._focusMask !== undefined) return this._focusMask;
+    var S = this.S, A = this.style.focus && this.area(this.style.focus.area);
+    if (!A) return (this._focusMask = null);
+    var W = S.bounds.size, n = 192, cell = W / n, reach = Math.max(250, W * 0.2);
+    var v = rasterGrid(S, { cell: cell, blur: reach / 2 }, function (c) { A.rings.forEach(function (r) { polyPath(c, r); }); });
+    var cv = makeCanvas(n, n), c = cv.getContext('2d'), img = c.createImageData(n, n), d = img.data, N = n + 2;
+    var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'focus-mask')), lam = reach * 0.6;
+    for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) {
+      var x = (i + 0.5) * cell - W / 2, y = (j + 0.5) * cell - W / 2, o = (j * n + i) * 4;
+      var a = v ? v[(j + 1) * N + i + 1] : 0;
+      // A blurred edge is 0.5, falling to 0 a full `reach` out. Noise moves the falloff.
+      a = G.smoothstep(0, 0.45, a + 0.1 * VG.rng.fbm(noise, x / lam, y / lam, 3));
+      d[o + 3] = Math.round(255 * a);
+    }
+    c.putImageData(img, 0, 0);
+    return (this._focusMask = cv);
   };
 
   /**
@@ -701,9 +760,33 @@
     if (kind in c) return c[kind];
     var rings = S.areas && S.areas[kind] ? areaRings(S.areas[kind]) : STOPGAP_AREAS[kind] ? STOPGAP_AREAS[kind](S, this) : null;
     if (!rings || !rings.length) return (c[kind] = null);
-    var b = [Infinity, Infinity, -Infinity, -Infinity];
-    rings.forEach(function (r) { var rb = G.polyBounds(r); b = [Math.min(b[0], rb[0]), Math.min(b[1], rb[1]), Math.max(b[2], rb[2]), Math.max(b[3], rb[3])]; });
-    return (c[kind] = { rings: rings, bounds: b });
+    return (c[kind] = { rings: rings, bounds: ringsBounds(rings), parts: areaParts(rings) });
+  };
+
+  /**
+   * How much of an area part lies inside the style's focus area (0–1),
+   * sampled on a grid and cached on the part. 1 if there's no focus.
+   */
+  Renderer.prototype.focusShare = function (part) {
+    if (part.focusShare != null) return part.focusShare;
+    var F = this.style.focus && this.area(this.style.focus.area);
+    if (!F) return (part.focusShare = this.style.focus ? 0 : 1);
+    // The focus area rasterised once, for quick inside tests.
+    var W = this.S.bounds.size, g = this._focusGrid, gn = 512;
+    if (!g) {
+      var cv = makeCanvas(gn, gn), c = cv.getContext('2d');
+      c.setTransform(gn / W, 0, 0, gn / W, gn / 2, gn / 2);
+      c.beginPath(); F.rings.forEach(function (r) { polyPath(c, r); }); c.fill('evenodd');
+      g = this._focusGrid = c.getImageData(0, 0, gn, gn).data;
+    }
+    var b = part.bounds, step = Math.max(4, Math.sqrt((b[2] - b[0]) * (b[3] - b[1]) / 1600)), n = 0, k = 0;
+    for (var y = b[1] + step / 2; y < b[3]; y += step) for (var x = b[0] + step / 2; x < b[2]; x += step) {
+      if (!inArea(part, x, y)) continue;
+      n++;
+      var gi = Math.floor((x / W + 0.5) * gn), gj = Math.floor((y / W + 0.5) * gn);
+      if (gi >= 0 && gj >= 0 && gi < gn && gj < gn && g[(gj * gn + gi) * 4 + 3] > 127) k++;
+    }
+    return (part.focusShare = n ? k / n : 0);
   };
 
   /**
@@ -1296,10 +1379,16 @@
     way: function (env) {
       return visibleWays(env).map(function (w) { return { key: w.kind, item: w, way: w }; });
     },
+    // One item per part of an area (each wood, say), carrying `focusShare`,
+    // how much of it lies inside the focus area, for filters. '*' isn't
+    // enumerable yet.
     area: function (env, key) {
-      // An area exists as a whole or not at all; '*' isn't enumerable yet.
       var A = key && key !== '*' ? env.r.area(key) : null;
-      return A && inView(env.vb, A.bounds, 0) ? [{ key: key, item: A, rings: A.rings }] : [];
+      if (!A) return [];
+      return A.parts.filter(function (p) { return inView(env.vb, p.bounds, 0); }).map(function (p) {
+        env.r.focusShare(p);
+        return { key: key, item: p, rings: p.rings };
+      });
     },
     // Standing water (sea and lakes) as one item, traced from the terrain.
     water: function (env) { return [{ key: 'body', item: null, rings: env.r.terrainRings('water') }]; },
@@ -1317,8 +1406,9 @@
 
   /**
    * The items a layer draws: its `match` ('field.*', 'area.boundary',
-   * 'shore'…) and optional `filter` ({ type: ['inn', 'manor'], landing: true }:
-   * every property must equal the value, or be one of a list).
+   * 'shore'…) and optional `filter` ({ type: ['inn', 'manor'], landing: true,
+   * focusShare: { min: 0.4 } }: every property must equal the value, be one
+   * of a list, or fall in [min, max)).
    */
   function features(env, L) {
     var m = String(L.match || ''), i = m.indexOf('.'), coll = i < 0 ? m : m.slice(0, i), key = i < 0 ? null : m.slice(i + 1);
@@ -1329,7 +1419,8 @@
       if (key && key !== '*' && it.key !== key) return false;
       for (var k in F || {}) {
         var v = it.item && it.item[k];
-        if (Array.isArray(F[k]) ? F[k].indexOf(v) < 0 : v !== F[k]) return false;
+        var f = F[k];
+        if (Array.isArray(f) ? f.indexOf(v) < 0 : f && typeof f === 'object' ? !(v >= (f.min != null ? f.min : -Infinity) && v < (f.max != null ? f.max : Infinity)) : v !== f) return false;
       }
       return true;
     });
