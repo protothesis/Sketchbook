@@ -450,3 +450,33 @@ Step 6, first cut (`ui/styles/board.js` and the Look switcher):
   30–55 ms per frame, against natural's baked layers. The first frame
   adds about 80 ms for the areas. Baking the generic fills is the obvious
   next step if it feels sluggish.
+
+Revised after the first look (2026-10-12):
+
+- **Frame:** board now frames only what needs a hard edge, mainly open
+  water, so a coastline ends on the arc. The bands, contours and the
+  territory ground aren't framed. The bands and contours use a layer
+  `fade: { inner, outer }`: drawn offscreen, then faded radially from the
+  origin (`destination-in`), so the land dissolves before the tile's
+  square edge. Focus and frame don't apply to a faded layer.
+- **Paper:** `style.paper` other than 'theme' is a colour reference used
+  for the whole canvas. Board uses its palette's paper, so the land and
+  the surround match, in dark mode too.
+- **Water** is a feature now: `water.*` gives one item whose rings are
+  traced from the terrain at the water line. The height grid is upsampled
+  2× (bilinear), traced with marching squares and given one Chaikin pass,
+  then cached as `renderer.terrainRings('water')`. `terrain.bands` uses
+  the same tracer per contour level (`terrainRings(k)`). Each level is
+  filled at `alpha / levels`, so it's vector and crisp, with no bake. The
+  first frame costs about 0.5 s for this plus the areas.
+- **`area.territory`** (stop-gap) is the focus area for board. It's the
+  farmed extent grown by 40 m, unioned with a disc 0.76 × the frame's
+  radius on the frame's centre. The disc has a seeded fbm edge and pulls
+  in over ground higher than the town. Step 5 should decide whether this
+  becomes a generator area (it probably should, alongside `boundary`).
+- **The exit rule for 'outside' layers:** their exit pass keeps the
+  outside-focus clip (only the frame is dropped). That way a grey
+  context casing doesn't paint over the inside part of a road.
+- Board drops settled ground and the woodland crown pattern: roads,
+  squares and buildings are white with no outline on grass, and woods
+  are flat, darker green.
