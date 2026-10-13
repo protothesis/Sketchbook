@@ -205,6 +205,35 @@
         S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
       });
     },
+    /**
+     * The settlement's territory: a much larger, organic area than the
+     * farmed extent, reaching most of the way to the style's frame circle
+     * (`r` of the map, 0.47 if it has none). It's the farmed extent grown
+     * by 40 m, joined to a disc about three quarters of the frame's size
+     * (on the frame's centre, which the town always sits inside), with a
+     * seeded noisy edge that pulls in over higher ground. A stand-in for a
+     * generator area.
+     */
+    territory: function (S, R) {
+      var W = S.bounds.size, T = S._.terrain, cell = Math.max(6, W / 256), o = { cell: cell, dilate: 40, blur: 40 };
+      var v = rasterGrid(S, o, function (c) {
+        S.fields.forEach(function (f) { polyPath(c, f.polygon); });
+        S.buildings.forEach(function (b) { polyPath(c, b.polygon); });
+        S.plazas.forEach(function (p) { polyPath(c, plazaRing(p)); });
+      });
+      var N = Math.ceil(W / cell) + 2, F = R && R.style.frame, Rf = (F ? F.r : 0.47) * W, Rt = 0.76 * Rf;
+      var C = F && F.centre === 'settlement' ? S.center : { x: 0, y: 0 };
+      var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'territory')), lam = Rt * 0.5;
+      var h0 = T.heightAt(S.center.x, S.center.y), span = Math.max(1e-3, T.relief * 0.4);
+      var out = new Float32Array(N * N);
+      for (var j = 1; j < N - 1; j++) for (var i = 1; i < N - 1; i++) {
+        var x = (i - 0.5) * cell - W / 2, y = (j - 0.5) * cell - W / 2;
+        var radial = 1 - 0.5 * Math.hypot(x - C.x, y - C.y) / Rt;
+        var hill = G.clamp((T.heightAt(x, y) - h0) * T.relief / span, 0, 1);
+        out[j * N + i] = Math.max(v ? v[j * N + i] : 0, radial + 0.13 * VG.rng.fbm(noise, x / lam, y / lam, 3) - 0.18 * hill);
+      }
+      return traceArea(out, N, { cell: cell, holes: false, minArea: 20000, smooth: 2 }, W);
+    },
     /** Settled ground: the built-up footprint, buildings and squares grown by 9 m. */
     settled: function (S) {
       return rasterArea(S, { cell: Math.max(3, S.bounds.size / 640), dilate: 9, blur: 7, holes: true, minArea: 1500 }, function (c) {
@@ -229,6 +258,12 @@
    * square metres are dropped. Null if nothing's covered.
    */
   function rasterArea(S, o, add) {
+    var v = rasterGrid(S, o, add);
+    return v && traceArea(v, Math.ceil(S.bounds.size / o.cell) + 2, o, S.bounds.size);
+  }
+
+  /** The raster step of rasterArea: an (n+2)² grid with an empty border, dilated and blurred; null if empty. */
+  function rasterGrid(S, o, add) {
     var W = S.bounds.size, cell = o.cell, n = Math.ceil(W / cell);
     var cv = makeCanvas(n, n), c = cv.getContext('2d');
     c.setTransform(1 / cell, 0, 0, 1 / cell, n / 2, n / 2);
@@ -244,14 +279,19 @@
     var r;
     if (o.dilate) { r = Math.max(1, Math.round(o.dilate / cell)); v = gridPass(gridPass(v, N, r, true, true), N, r, true, false); }
     if (o.blur) { r = Math.max(1, Math.round(o.blur / cell)); v = gridPass(gridPass(v, N, r, false, true), N, r, false, false); }
-    var rings = traceRings(v, N, o.level || 0.5, cell, W);
+    return v;
+  }
+
+  /** The tracing step of rasterArea. */
+  function traceArea(v, N, o, W) {
+    var rings = traceRings(v, N, o.level || 0.5, o.cell, W, o.off);
     if (o.minArea) rings = rings.filter(function (ring) { return Math.abs(ringArea(ring)) >= o.minArea; });
     if (o.holes === false) {
       rings = rings.filter(function (ring) {
         return !rings.some(function (q) { return q !== ring && G.pointInPoly(ring[0][0], ring[0][1], q); });
       });
     }
-    return rings.map(chaikin);
+    return rings.map(o.smooth === 2 ? function (r) { return chaikin(chaikin(r)); } : chaikin);
   }
 
   function ringArea(ring) {
@@ -284,10 +324,15 @@
     return out;
   }
 
-  /** Closed rings where grid value crosses `lvl` (grid has a 1-cell empty border), in world metres. */
-  function traceRings(v, N, lvl, cell, W) {
-    var pts = {}, next = {};
-    function P(i, j) { return [(i - 0.5) * cell - W / 2, (j - 0.5) * cell - W / 2]; }
+  /**
+   * Closed rings where grid value crosses `lvl` (the grid has a 1-cell
+   * border below it), in world metres. Grid point i sits at
+   * (i + off) · cell − W/2: off −0.5 for raster cell centres (the default),
+   * −1 for a padded copy of the terrain's own grid.
+   */
+  function traceRings(v, N, lvl, cell, W, off) {
+    var pts = {}, next = {}, o = off == null ? -0.5 : off;
+    function P(i, j) { return [(i + o) * cell - W / 2, (j + o) * cell - W / 2]; }
     for (var j = 0; j < N - 1; j++) for (var i = 0; i < N - 1; i++) {
       var a = v[j * N + i], b = v[j * N + i + 1], c = v[(j + 1) * N + i + 1], d = v[(j + 1) * N + i];
       var idx = (a > lvl ? 8 : 0) | (b > lvl ? 4 : 0) | (c > lvl ? 2 : 0) | (d > lvl ? 1 : 0);
@@ -378,37 +423,6 @@
           c = [c[0] * f + shore * glow[0], c[1] * f + shore * glow[1], c[2] * f + shore * glow[2]];
         }
         d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-    return cv;
-  }
-
-  /**
-   * Bake flat stepped bands: one tint per contour interval, from none at
-   * the water's edge to `alpha` of `fill` at the top, over `ground` (or
-   * transparent, so the paper shows through), and flat `water` below the
-   * water line, `shallow` within `shallowDepth` metres of it.
-   */
-  function bakeBands(S, P, interval, style) {
-    var T = S._.terrain, W = T.W, size = 1024, cv = makeCanvas(size, size), ctx = cv.getContext('2d');
-    var img = ctx.createImageData(size, size), d = img.data, px = W / size, maxH = 0;
-    for (var k = 0; k < T.heights.length; k++) if (T.heights[k] > maxH) maxH = T.heights[k];
-    var top = Math.max(1, Math.ceil((maxH - T.wl) * T.relief / interval));
-    var land = rgb(color(style, P.fill)) || [0, 0, 0], water = rgb(color(style, P.water)) || [0, 0, 0];
-    var ground = P.ground ? rgb(color(style, P.ground)) : null;
-    var shallow = P.shallow ? rgb(color(style, P.shallow)) : null, shelf = (P.shallowDepth || 0) / T.relief;
-    for (var j = 0; j < size; j++) {
-      var y = (j + 0.5) * px - W / 2;
-      for (var i = 0; i < size; i++) {
-        var x = (i + 0.5) * px - W / 2, h = T.heightAt(x, y), o = (j * size + i) * 4, c, a;
-        if (h < T.wl) { c = shallow && T.wl - h < shelf ? shallow : water; a = 255; }
-        else {
-          var k = P.alpha * Math.floor((h - T.wl) * T.relief / interval) / top;
-          if (ground) { c = [ground[0] + (land[0] - ground[0]) * k, ground[1] + (land[1] - ground[1]) * k, ground[2] + (land[2] - ground[2]) * k]; a = 255; }
-          else { c = land; a = Math.round(255 * k); }
-        }
-        d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = a;
       }
     }
     ctx.putImageData(img, 0, 0);
@@ -553,23 +567,26 @@
     this.biome = biome;
     this._paint = {};
     // Rasters are baked once per settlement (and per style).
-    var terrain = this.layerDrawnBy('terrain.hypso'), trees = this.layerDrawnBy('trees.baked'), bands = this.layerDrawnBy('terrain.bands');
+    var terrain = this.layerDrawnBy('terrain.hypso'), trees = this.layerDrawnBy('trees.baked');
     // A biome the style has no ramp for gets the first one it lists.
     var key = terrain && terrain.byKey && !terrain.byKey[biome] ? Object.keys(terrain.byKey)[0] : biome;
     this.terrainImg = terrain ? bakeHypso(S, this.paint(terrain, key)) : null;
     this.contours = buildContours(S);
-    this.bandsImg = bands ? bakeBands(S, this.paint(bands), this.contours.interval, this.style) : null;
+
     this.treeImg = trees ? bakeTrees(S, this.paint(trees)) : null;
     this.trees = treeGrid(S);
     this.bakes = {};
     this._areas = {};
     this._exitFrom = null;
+    this._terrain = null; this._grid = null; this._bandTop = null;
     this.selected = null;
     this.hover = null;
   };
 
   Renderer.prototype.draw = function (view, paper) {
     var S = this.S, ctx = this.ctx, cv = this.canvas, dpr = view.dpr, self = this;
+    // A style with its own paper colour ignores the theme's.
+    if (this.style.paper && this.style.paper !== 'theme') paper = color(this.style, this.style.paper, paper);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = paper;
     ctx.fillRect(0, 0, cv.width, cv.height);
@@ -591,6 +608,7 @@
       if (!fn || (L.toggle && !self.layers[L.toggle]) || !inZoom(L.zoom, sc)) return;
       var where = focus && L.focus && L.focus !== 'any' && !fn.unclipped ? L.focus : null;
       var framed = frame && L.frame !== false && !fn.screen && !fn.unclipped;
+      if (L.fade) return self.drawFaded(fn, zoomed(self.paint(L), sc), env, view, L);
       if (!where && !framed) {
         place(fn);
         return fn(ctx, zoomed(self.paint(L), sc), env, L);
@@ -608,14 +626,46 @@
       fn(ctx, zoomed(self.paint(L), sc), env, L);
       ctx.restore();
       env.lastFont = null; env.ls = null; // restore() put the font and spacing back
-      // A road's run on to its exit is drawn outside every clip.
+      // A road's run on to its exit is drawn outside every clip, except
+      // that an 'outside' layer still stays outside the focus area (the
+      // layer drawing the inside has already drawn it there).
       if (ways) {
         env.wayMode = 'exit';
+        if (where === 'outside') { ctx.save(); self.clipFocus(ctx, view, focus, where); }
         place(fn);
         fn(ctx, zoomed(self.paint(L), sc), env, L);
+        if (where === 'outside') { ctx.restore(); env.lastFont = null; env.ls = null; }
       }
       env.wayMode = null;
     });
+  };
+
+  /**
+   * A layer with `fade: { inner, outer }` (shares of the map's size) is
+   * drawn offscreen, then faded out radially from the map's origin between
+   * those radii, so it dissolves before the terrain tile's square edge.
+   * Focus and frame don't apply to it.
+   */
+  Renderer.prototype.drawFaded = function (fn, P, env, view, L) {
+    var cv = this.canvas, off = this._fadeCanvas || (this._fadeCanvas = makeCanvas(1, 1)), dpr = view.dpr, sc = view.scale;
+    if (off.width !== cv.width || off.height !== cv.height) { off.width = cv.width; off.height = cv.height; }
+    var c = off.getContext('2d'), F = L.fade, W = this.S.bounds.size, vb = env.vb;
+    var world = [dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc)];
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = 'source-over';
+    c.clearRect(0, 0, off.width, off.height);
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    if (fn.screen) c.setTransform(dpr, 0, 0, dpr, 0, 0); else c.setTransform.apply(c, world);
+    fn(c, P, env, L);
+    c.globalCompositeOperation = 'destination-in';
+    c.setTransform.apply(c, world);
+    var g = c.createRadialGradient(0, 0, F.inner * W, 0, 0, F.outer * W);
+    g.addColorStop(0, 'rgba(0, 0, 0, 1)'); g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    c.fillStyle = g;
+    c.fillRect(vb[0] - 10, vb[1] - 10, vb[2] - vb[0] + 20, vb[3] - vb[1] + 20);
+    c.globalCompositeOperation = 'source-over';
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.drawImage(off, 0, 0);
   };
 
   /**
@@ -649,7 +699,7 @@
     var kind = String(key).replace(/^area\./, ''), S = this.S, c = this._areas;
     if (!S) return null;
     if (kind in c) return c[kind];
-    var rings = S.areas && S.areas[kind] ? areaRings(S.areas[kind]) : STOPGAP_AREAS[kind] ? STOPGAP_AREAS[kind](S) : null;
+    var rings = S.areas && S.areas[kind] ? areaRings(S.areas[kind]) : STOPGAP_AREAS[kind] ? STOPGAP_AREAS[kind](S, this) : null;
     if (!rings || !rings.length) return (c[kind] = null);
     var b = [Infinity, Infinity, -Infinity, -Infinity];
     rings.forEach(function (r) { var rb = G.polyBounds(r); b = [Math.min(b[0], rb[0]), Math.min(b[1], rb[1]), Math.max(b[2], rb[2]), Math.max(b[3], rb[3])]; });
@@ -667,6 +717,33 @@
     while (i > 0 && !(A && inArea(A, N[w.nodes[i]].x, N[w.nodes[i]].y))) i--;
     c.set(w, i);
     return i;
+  };
+
+  /**
+   * The terrain's height field traced as vector rings, cached per
+   * settlement: `which` is 'water' (below the water line) or a band
+   * number k (above the k-th contour). The terrain grid is upsampled 2×
+   * (bilinear) and the rings rounded once, so edges stay crisp up close.
+   */
+  Renderer.prototype.terrainRings = function (which) {
+    var c = this._terrain || (this._terrain = {});
+    if (which in c) return c[which];
+    var S = this.S, T = S._.terrain, W = T.W, n = (T.res - 1) * 2 + 1, cell = W / (n - 1), N = n + 2;
+    var g = this._grid;
+    if (!g) {
+      g = this._grid = new Float32Array(N * N);
+      for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) g[(j + 1) * N + i + 1] = T.heightAt(i * cell - W / 2, j * cell - W / 2);
+    }
+    var lvl, v = g, rings;
+    if (which === 'water') {
+      // Inverted so water is "above"; the border stays dry.
+      v = new Float32Array(N * N);
+      for (var k = 0; k < N * N; k++) v[k] = -g[k];
+      for (var b = 0; b < N; b++) { v[b] = v[(N - 1) * N + b] = v[b * N] = v[b * N + N - 1] = -1e9; }
+      lvl = -T.wl;
+    } else lvl = T.wl + which * this.contours.interval / T.relief;
+    rings = traceRings(v, N, lvl, cell, W, -1).filter(function (r) { return r.length > 3; }).map(chaikin);
+    return (c[which] = rings);
   };
 
   /** The active style's patterns, built once per style and paper colour. */
@@ -771,10 +848,23 @@
     if (env.r.terrainImg) ctx.drawImage(env.r.terrainImg, -W / 2, -W / 2, W, W);
   };
 
+  // Flat stepped bands: each contour interval's ground is tinted by a
+  // further `alpha` / bands of `fill`, so the value steps up at each
+  // contour line. Vector, so crisp at any zoom; water isn't drawn here.
   DRAW['terrain.bands'] = function (ctx, P, env) {
-    var W = env.S.bounds.size;
-    ctx.imageSmoothingEnabled = true;
-    if (env.r.bandsImg) ctx.drawImage(env.r.bandsImg, -W / 2, -W / 2, W, W);
+    var r = env.r, T = env.S._.terrain, maxH = 0, H = T.heights;
+    if (!r._bandTop) {
+      for (var k = 0; k < H.length; k++) if (H[k] > maxH) maxH = H[k];
+      r._bandTop = Math.max(1, Math.floor((maxH - T.wl) * T.relief / r.contours.interval));
+    }
+    ctx.fillStyle = env.color(P.fill);
+    ctx.globalAlpha = P.alpha / r._bandTop;
+    for (var b = 1; b <= r._bandTop; b++) {
+      ctx.beginPath();
+      r.terrainRings(b).forEach(function (ring) { polyPath(ctx, ring); });
+      ctx.fill('evenodd');
+    }
+    ctx.globalAlpha = 1;
   };
 
   DRAW.contours = function (ctx, P, env, L) {
@@ -1112,6 +1202,13 @@
 
   DRAW.trees = function (ctx, P, env) {
     var g = env.r.trees, cell = g.cell, vb = env.vb, colors = P.colors;
+    if (P.alpha != null) {
+      // Fading in: drawn at `alpha`, then put back.
+      ctx.globalAlpha = G.clamp(P.alpha, 0, 1);
+      DRAW.trees(ctx, merge(P, { alpha: null }), env);
+      ctx.globalAlpha = 1;
+      return;
+    }
     if (!inZoom(P.shadow.zoom, env.sc)) {
       // Mid zoom: no shadows or outlines, so one path per crown colour.
       var lists = colors.map(function () { return []; });
@@ -1204,6 +1301,8 @@
       var A = key && key !== '*' ? env.r.area(key) : null;
       return A && inView(env.vb, A.bounds, 0) ? [{ key: key, item: A, rings: A.rings }] : [];
     },
+    // Standing water (sea and lakes) as one item, traced from the terrain.
+    water: function (env) { return [{ key: 'body', item: null, rings: env.r.terrainRings('water') }]; },
     contour: function (env) {
       var C = env.r.contours;
       return [{ key: 'minor', path: C.minor }, { key: 'major', path: C.major }];
