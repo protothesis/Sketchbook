@@ -1,8 +1,9 @@
 # Style system: draft spec
 
 **Started:** 2026-10-12. **Status:** agreed in a design session; migration
-steps 1–4 built on 2026-10-12, except step 4's frame circle (see *As built
-so far* at the end). The look
+steps 1–4 and a first cut of step 6 (`board` plus the Look switcher) built
+on 2026-10-12. Step 5 (generator areas) isn't built; renderer stop-gaps
+stand in. See *As built so far* at the end. The look
 it should produce first is in [`visual-direction.md`](visual-direction.md).
 
 ## Goal
@@ -317,7 +318,7 @@ Each step is shippable on its own:
 - Do style IDs get saved with locked places in the atlas, or is style
   always a view choice?
 
-## As built so far (steps 1–4)
+## As built so far (steps 1–4, 6)
 
 Where the code differs from the draft above, for whoever picks up step 4:
 
@@ -404,3 +405,48 @@ Step 4 (focus clip and patterns; the frame circle isn't built yet):
 - `natural` uses none of this and is pixel-identical (diff harness, 7
   towns × 16 zooms and states).
 
+Step 6, first cut (`ui/styles/board.js` and the Look switcher):
+
+- **Picking a style:** only the switcher exists so far. It's a select
+  under Layers, V cycles it, and it's kept in the URL as `st` (left out
+  for `natural`). Natural is still the default. Place overrides, profile
+  and planet defaults aren't built. A style with `dev: true` is left out
+  of the switcher.
+- **Frame:** `style.frame` (`shape: 'circle'`, `centre: 'origin' |
+  'settlement'`, `r`) clips every world-space layer unless it sets
+  `frame: false`. It's applied in the same `save()` as the focus clip.
+  Screen layers and `.unclipped` functions aren't framed. A road's run to
+  its exit is drawn outside it, like the focus clip. `board` lets the
+  shore run past it.
+- **`terrain.bands`** is baked once per settlement and style. Paint:
+  `{ ground, fill, alpha, water, shallow, shallowDepth }`. Band k of n
+  mixes `ground` toward `fill` by `alpha · k / n`. Without `ground`, the
+  land is left transparent. Water is flat.
+- **Stop-gap areas** now include `settled` (buildings and squares grown
+  by 9 m, holes kept, small bits dropped) and `forest` (where tree-crown
+  coverage, blurred 12 m, passes 0.42). They're built by `rasterArea()`,
+  which `boundary` uses too. `S.areas` still wins.
+- **Tints:** `'name~k'` mixes toward `palette.paper` when the palette has
+  one, else toward the map paper as before. That's how board keeps its
+  light paper inside the frame in dark mode, while the surround follows
+  the theme. That's a small departure from "dark mode: no change", in
+  board's favour.
+- **Highlight:** `states.highlight[layer.match]` (for example
+  `'building.*': { fill: '@category', stroke, width }`) is applied by the
+  generic `fill` to items of the highlighted category.
+- **Fonts:** `caps: true` and `tracking` (in ems, through
+  `ctx.letterSpacing` where supported, reset every frame) work in every
+  label function. `halo.width` 0 skips the halo. Board keeps a thin paper
+  halo for now, because labels over hatching need it.
+- **Board's departures from the draft:**
+  - Roads have a grey casing at every zoom: white on near-white paper
+    vanished.
+  - Main roads get an ink edge from 1.2.
+  - Floor plans reuse natural's `buildings` function from zoom 7, in
+    board colours.
+  - Forests outside the boundary are a dotted hairline.
+  - Lone trees show inside from zoom 1.6.
+- **Performance:** board isn't baked, so a 9,000-person city costs about
+  30–55 ms per frame, against natural's baked layers. The first frame
+  adds about 80 ms for the areas. Baking the generic fills is the obvious
+  next step if it feels sluggish.

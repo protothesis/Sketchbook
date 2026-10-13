@@ -7,6 +7,30 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-12: **Board look** (`ui/styles/board.js`), the first cut of the
+  presentation-board style (style system step 6). It has flat stepped
+  terrain bands and hairline contours, dark slate water and a hard frame
+  circle. Inside the settlement's boundary it has patterned land use
+  (row hatches turned along each field, stipple pasture, dotted orchards,
+  dashed fallow, crowns for woodland), settled ground with white
+  buildings, white streets with grey edges, and spaced capitals for
+  labels. Outside the boundary, fields and buildings are grey outlines.
+  Roads with a destination and the coastline run on past the frame.
+  Hovering the legend colours that category's buildings.
+- 2026-10-12: **Look** switcher (under Layers, or V) between Natural and
+  Board. It's kept in the URL as `st`. Natural stays the default.
+- 2026-10-12: Renderer support for the board look (natural is unchanged):
+  - The style `frame` circle, a hard clip that layers opt out of with
+    `frame: false`.
+  - The `terrain.bands` draw function.
+  - Stop-gap `area.settled` (built-up footprint) and `area.forest` (where
+    tree crowns cover most of the ground).
+  - The "what's here" highlight in the generic `fill`.
+  - Font `caps` and `tracking`, and labels without halos when a style's
+    halo has no width.
+  - Colour tints mix toward the style palette's own `paper` when it has
+    one, so board's colours don't change with the theme.
+
 - 2026-10-12: Style system, step 4 (renderer only; no style uses it yet,
   so no visual change):
   - **Focus clip.** A style's `focus: { area: 'area.boundary' }` plus a
