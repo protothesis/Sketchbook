@@ -217,7 +217,7 @@
      */
     territory: function (S, R) {
       var g = territoryGrid(S, R);
-      return g && traceArea(g.inside, g.N, { cell: g.cell, holes: false, minArea: 20000, smooth: 2 }, S.bounds.size);
+      return g && traceTerritory(S, R, g);
     },
     /**
      * The territory's reach: the territory grown by about 60 m with its own
@@ -301,13 +301,72 @@
       band[k] = h < T.wl ? -1 : Math.floor((h - T.wl) * T.relief / interval);
     }
     var ci = Math.floor((C.x + W / 2) / cell) + 1, cj = Math.floor((C.y + W / 2) / cell) + 1;
-    joinAlongRoads(bin, N, lanes, core, cj * N + ci, Math.max(1, Math.round(25 / cell)));
-    snapToContours(bin, band, N, Math.round(150 / cell), true, core);
-    snapToContours(bin, band, N, Math.round(80 / cell), false, core);
+    // What each step changed, for tracing the edge exactly (traceTerritory):
+    // JOINED, or the band of a pocket taken in (+1) or carved out (−1 − band).
+    var mark = new Int16Array(N * N), base = new Float32Array(N * N);
+    for (k = 0; k < N * N; k++) base[k] = bin[k];
+    joinAlongRoads(bin, N, lanes, core, cj * N + ci, Math.max(1, Math.round(25 / cell)), mark);
+    snapToContours(bin, band, N, Math.round(150 / cell), true, core, mark);
+    snapToContours(bin, band, N, Math.round(80 / cell), false, core, mark);
     var out = new Float32Array(N * N);
     for (k = 0; k < N * N; k++) out[k] = bin[k];
     out = gridPass(gridPass(out, N, 1, false, true), N, 1, false, false);
-    return (cache._tgrid = { inside: out, N: N, cell: cell });
+    base = gridPass(gridPass(base, N, 1, false, true), N, 1, false, false);
+    return (cache._tgrid = { inside: out, base: base, mark: mark, N: N, cell: cell });
+  }
+
+  /**
+   * The territory's rings, traced on the terrain's height grid so that
+   * wherever its edge runs between two contour bands it *is* that contour
+   * line, the same vertices the bands and contour lines are drawn with.
+   * Each node is inside or out: a pocket's node only if it's in the
+   * pocket's own band, the rest from the smooth use field. For marching
+   * squares, a node across the edge from a different band gets its height
+   * relative to the contour between them; elsewhere the use field's
+   * distance from its threshold sets where the edge falls.
+   */
+  function traceTerritory(S, R, g) {
+    var T = S._.terrain, W = S.bounds.size, H = R.heightGrid(), N = H.N, hc = H.cell, h = H.h;
+    var step = R.contours.interval / T.relief, top = R.bandTop();
+    var gN = g.N, gc = g.cell, inside = new Uint8Array(N * N), band = new Int16Array(N * N), base = new Float32Array(N * N);
+    var i, j, k;
+    for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
+      k = j * N + i;
+      var x = (i - 1) * hc - W / 2, y = (j - 1) * hc - W / 2;
+      // The coarse grid's cell, and the use field there (bilinear).
+      var fx = (x + W / 2) / gc + 0.5, fy = (y + W / 2) / gc + 0.5, ci = Math.floor(fx), cj = Math.floor(fy);
+      ci = G.clamp(ci, 0, gN - 2); cj = G.clamp(cj, 0, gN - 2);
+      var tx = G.clamp(fx - ci, 0, 1), ty = G.clamp(fy - cj, 0, 1), q = cj * gN + ci;
+      base[k] = (g.base[q] * (1 - tx) + g.base[q + 1] * tx) * (1 - ty) + (g.base[q + gN] * (1 - tx) + g.base[q + gN + 1] * tx) * ty;
+      var hv = h[k];
+      band[k] = hv < T.wl ? -1 : Math.min(top, Math.floor((hv - T.wl) / step + 1e-9));
+      var m = g.mark[Math.round(fy) * gN + Math.round(fx)] || 0, own = base[k] > 0.5;
+      if (m === JOINED) own = true;
+      else if (m > 0) own = own || band[k] === m - 1;
+      else if (m < 0) own = own && band[k] !== -1 - m;
+      inside[k] = own ? 1 : 0;
+    }
+    var f = new Float32Array(N * N).fill(-1);
+    function level(a, b) { // the contour between bands a and b, nearest a
+      if (a < 0 || b < 0) return T.wl;
+      return T.wl + (b > a ? a + 1 : a) * step;
+    }
+    for (j = 1; j < N - 1; j++) for (i = 1; i < N - 1; i++) {
+      k = j * N + i;
+      var mag = -1, own = inside[k];
+      [k - 1, k + 1, k - N, k + N].some(function (n) {
+        if (inside[n] === own || band[n] === band[k]) return false;
+        mag = Math.abs(h[k] - level(band[k], band[n]));
+        return true;
+      });
+      if (mag < 0) mag = Math.abs(base[k] - 0.5) * step * 2;
+      mag = Math.max(mag, 1e-7);
+      f[k] = own ? mag : -mag;
+    }
+    var rings = traceRings(f, N, 0, hc, W, -1);
+    rings = rings.filter(function (r) { return r.length > 3 && Math.abs(ringArea(r)) >= 20000; });
+    rings = rings.filter(function (r) { return !rings.some(function (q) { return q !== r && G.pointInPoly(r[0][0], r[0][1], q); }); });
+    return rings.map(chaikin);
   }
 
   /** The 4-neighbours of grid cell k that aren't on the border. */
@@ -358,7 +417,8 @@
    * search out from the town through road cells; each new piece it reaches
    * is joined by its path, widened by `r` cells.
    */
-  function joinAlongRoads(bin, N, lanes, core, start, r) {
+  var JOINED = 32000;
+  function joinAlongRoads(bin, N, lanes, core, start, r, mark) {
     if (!lanes) return;
     var L = labelRuns(N, function (k) { return bin[k]; }, function () { return true; });
     if (L.runs.length < 2) return;
@@ -380,7 +440,7 @@
       });
     }
     path = gridPass(gridPass(path, N, r, true, true), N, r, true, false);
-    for (var k = 0; k < N * N; k++) if (path[k] > 0) bin[k] = 1;
+    for (var k = 0; k < N * N; k++) if (path[k] > 0 && !bin[k]) { bin[k] = 1; mark[k] = JOINED; }
   }
 
   /**
@@ -388,7 +448,7 @@
    * `outward` takes in pockets within `D` cells outside it, else carves
    * pockets within `D` cells inside it (sparing `core`).
    */
-  function snapToContours(bin, band, N, D, outward, core) {
+  function snapToContours(bin, band, N, D, outward, core, mark) {
     if (D < 1) return;
     var near = chamfer(N, function (k) { return outward ? bin[k] : !bin[k]; });
     var zone = function (k) { return band[k] >= 0 && (outward ? !bin[k] : bin[k]) && near[k] > 0 && near[k] <= D; };
@@ -403,7 +463,10 @@
         });
       });
       if (!touch || far > Math.max(3, cells.length * 0.08)) return;
-      cells.forEach(function (c) { if (outward) bin[c] = 1; else if (!(core && core[c] > 0.5)) bin[c] = 0; });
+      cells.forEach(function (c) {
+        if (outward) { bin[c] = 1; mark[c] = band[c] + 1; }
+        else if (!(core && core[c] > 0.5)) { bin[c] = 0; mark[c] = -1 - band[c]; }
+      });
     });
   }
 
@@ -761,7 +824,7 @@
     this.bakes = {};
     this._areas = {};
     this._exitFrom = null;
-    this._terrain = null; this._grid = null; this._bandTop = null; this._focusMask = undefined; this._grids = null; this._treesOut = null; this._halftone = null;
+    this._terrain = null; this._grid = null; this._bandTop = null; this._contourPaths = null; this._dist = null; this._htFrame = null; this._focusMask = undefined; this._grids = null; this._treesOut = null; this._halftone = null;
     this.selected = null;
     this.hover = null;
   };
@@ -862,7 +925,11 @@
     }
     c.globalCompositeOperation = 'destination-in';
     c.setTransform.apply(c, world);
-    if (F === 'focus') {
+    if (F === 'halftone') {
+      var mk = this.halftoneMask(view, env);
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.drawImage(mk, 0, 0);
+    } else if (F === 'focus') {
       var M = this.focusMask();
       if (M) { c.imageSmoothingEnabled = true; c.drawImage(M, -W / 2, -W / 2, W, W); }
     } else {
@@ -874,6 +941,47 @@
     c.globalCompositeOperation = 'source-over';
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.drawImage(off, 0, 0);
+  };
+
+  /**
+   * The style's `halftoneFade` as a mask for this frame (a canvas the size
+   * of the map's): its area filled solid, then dots on a hexagonal grid
+   * around it whose size falls with distance, from overlapping (whole) at
+   * the area's edge to nothing at `reach` (a share of the map's size), and
+   * to nothing before the map tile's edge either. A
+   * layer masked by it is broken up more and more the further out it is.
+   * The grid is `spacing` metres, doubled as needed to stay at least `minPx`
+   * apart on screen, and anchored in world space. Built once per frame.
+   */
+  Renderer.prototype.halftoneMask = function (view, env) {
+    var cv = this.canvas, F = this.style.halftoneFade, m = this._htMask || (this._htMask = makeCanvas(1, 1));
+    if (m.width !== cv.width || m.height !== cv.height) { m.width = cv.width; m.height = cv.height; }
+    if (this._htFrame === env) return m;
+    this._htFrame = env;
+    var c = m.getContext('2d'), dpr = view.dpr, sc = view.scale, W = this.S.bounds.size, vb = env.vb;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, m.width, m.height);
+    if (!F) return m;
+    c.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (view.w / 2 - view.cx * sc), dpr * (view.h / 2 - view.cy * sc));
+    c.fillStyle = '#000';
+    var A = this.area(F.area);
+    if (A) { c.beginPath(); A.rings.forEach(function (r) { polyPath(c, r); }); c.fill(); }
+    var D = this.areaDistance(F.area), s = F.spacing;
+    while (s * sc < (F.minPx || 6)) s *= 2;
+    var h = s * Math.sqrt(3) / 2, full = s * (F.size || 0.62);
+    c.beginPath();
+    for (var j = Math.floor(vb[1] / h) - 1; j <= Math.ceil(vb[3] / h) + 1; j++) {
+      var y = j * h, off = j % 2 ? s / 2 : 0;
+      for (var i = Math.floor((vb[0] - off) / s) - 1; i <= Math.ceil((vb[2] - off) / s) + 1; i++) {
+        var x = i * s + off, d = D.at(x, y);
+        if (d <= 0) continue;
+        var r = full * halftoneCover(F, W, d, x, y);
+        if (r * sc < 0.35) continue;
+        c.moveTo(x + r, y); c.arc(x, y, r, 0, Math.PI * 2);
+      }
+    }
+    c.fill();
+    return m;
   };
 
   /**
@@ -1004,12 +1112,7 @@
   Renderer.prototype.terrainRings = function (which) {
     var c = this._terrain || (this._terrain = {});
     if (which in c) return c[which];
-    var S = this.S, T = S._.terrain, W = T.W, n = (T.res - 1) * 2 + 1, cell = W / (n - 1), N = n + 2;
-    var g = this._grid;
-    if (!g) {
-      g = this._grid = new Float32Array(N * N);
-      for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) g[(j + 1) * N + i + 1] = T.heightAt(i * cell - W / 2, j * cell - W / 2);
-    }
+    var T = this.S._.terrain, H = this.heightGrid(), W = T.W, cell = H.cell, N = H.N, g = H.h;
     var lvl, v = g, rings;
     if (which === 'water') {
       // Inverted so water is "above"; the border stays dry.
@@ -1020,6 +1123,27 @@
     } else lvl = T.wl + which * this.contours.interval / T.relief;
     rings = traceRings(v, N, lvl, cell, W, -1).filter(function (r) { return r.length > 3; }).map(chaikin);
     return (c[which] = rings);
+  };
+
+  /**
+   * The terrain's heights on its grid upsampled 2× (bilinear), padded by a
+   * cell of zeros: node i sits at (i − 1) · cell − W/2. Everything traced
+   * from the terrain (water, bands, contour lines, the territory's edge)
+   * uses this one grid, so their edges coincide exactly.
+   */
+  Renderer.prototype.heightGrid = function () {
+    if (this._grid) return this._grid;
+    var T = this.S._.terrain, W = T.W, n = (T.res - 1) * 2 + 1, cell = W / (n - 1), N = n + 2, h = new Float32Array(N * N);
+    for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) h[(j + 1) * N + i + 1] = T.heightAt(i * cell - W / 2, j * cell - W / 2);
+    return (this._grid = { h: h, N: N, n: n, cell: cell });
+  };
+
+  /** The number of contour bands above the water line. */
+  Renderer.prototype.bandTop = function () {
+    if (this._bandTop) return this._bandTop;
+    var T = this.S._.terrain, H = T.heights, maxH = 0;
+    for (var k = 0; k < H.length; k++) if (H[k] > maxH) maxH = H[k];
+    return (this._bandTop = Math.max(1, Math.floor((maxH - T.wl) * T.relief / this.contours.interval)));
   };
 
   /** The tree grid without the trees centred in area `out`, and only those in `inn` if given; cached. */
@@ -1138,14 +1262,10 @@
   // further `alpha` / bands of `fill`, so the value steps up at each
   // contour line. Vector, so crisp at any zoom; water isn't drawn here.
   DRAW['terrain.bands'] = function (ctx, P, env) {
-    var r = env.r, T = env.S._.terrain, maxH = 0, H = T.heights;
-    if (!r._bandTop) {
-      for (var k = 0; k < H.length; k++) if (H[k] > maxH) maxH = H[k];
-      r._bandTop = Math.max(1, Math.floor((maxH - T.wl) * T.relief / r.contours.interval));
-    }
+    var r = env.r, top = r.bandTop();
     ctx.fillStyle = env.color(P.fill);
-    ctx.globalAlpha = P.alpha / r._bandTop;
-    for (var b = 1; b <= r._bandTop; b++) {
+    ctx.globalAlpha = P.alpha / top;
+    for (var b = 1; b <= top; b++) {
       ctx.beginPath();
       r.terrainRings(b).forEach(function (ring) { polyPath(ctx, ring); });
       ctx.fill('evenodd');
@@ -1565,42 +1685,96 @@
   // A halftone fade off an area's edge: dots on a staggered grid (`spacing`
   // metres) just outside `area`, shrinking from `radius` to nothing over
   // `reach` metres, and only in patches (seeded noise between `patches`).
+  // `shade: { fill, alpha }` (as the bands' paint) tints each dot by the
+  // contour band it stands in, so dots match the shaded ground they belong to.
   DRAW.halftone = function (ctx, P, env, L) {
-    var dots = env.r.halftone(L.id, P), vb = env.vb, n = dots.length;
+    var dots = env.r.halftone(L.id, P), vb = env.vb, n = dots.length, top = env.r.bandTop();
     if (!n) return;
-    ctx.fillStyle = env.color(P.color);
-    ctx.beginPath();
-    for (var i = 0; i < n; i += 3) {
+    var ground = env.color(P.color), sh = P.shade, a = sh ? sh.alpha / top : 0, ink = sh ? env.color(sh.fill) : null;
+    var byBand = {};
+    for (var i = 0; i < n; i += 4) {
       var x = dots[i], y = dots[i + 1], r = dots[i + 2];
       if (x < vb[0] - r || x > vb[2] + r || y < vb[1] - r || y > vb[3] + r) continue;
-      ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2);
+      var b = sh ? Math.max(0, dots[i + 3]) : 0;
+      (byBand[b] = byBand[b] || []).push(i);
     }
-    ctx.fill();
+    Object.keys(byBand).forEach(function (b) {
+      // Each band level lays alpha/top of the shade over the one below.
+      ctx.fillStyle = sh ? mix(ground, ink, 1 - Math.pow(1 - a, +b)) : ground;
+      ctx.beginPath();
+      byBand[b].forEach(function (i) { ctx.moveTo(dots[i] + dots[i + 2], dots[i + 1]); ctx.arc(dots[i], dots[i + 1], dots[i + 2], 0, Math.PI * 2); });
+      ctx.fill();
+    });
   };
 
   /** The dots for a halftone layer (x, y, r triples), cached per settlement. */
   Renderer.prototype.halftone = function (id, P) {
     var c = this._halftone || (this._halftone = {});
     if (c[id]) return c[id];
-    var S = this.S, A = this.area(P.area), out = [];
+    var S = this.S, A = this.area(P.area), out = [], T = S._.terrain, step = this.contours.interval / T.relief;
     if (A) {
-      var W = S.bounds.size, gn = 512, cell = W / gn, N = gn + 2, grid = this.areaGrid(P.area);
-      var dist = chamfer(N, function (k) { var i = k % N, j = (k - i) / N; return grid.has((i - 0.5) * cell - W / 2, (j - 0.5) * cell - W / 2); });
+      var W = S.bounds.size, D = this.areaDistance(P.area);
       var noise = VG.rng.makeNoise2(VG.rng.createRng((S.seeds && S.seeds.land) || S.name, 'halftone:' + id)), lam = P.patchSize || 120;
       var b = A.bounds, s = P.spacing, h = s * Math.sqrt(3) / 2, row = 0;
       for (var y = b[1] - P.reach; y <= b[3] + P.reach; y += h, row++) {
         for (var x = b[0] - P.reach + (row % 2 ? s / 2 : 0); x <= b[2] + P.reach; x += s) {
-          var gi = Math.floor((x + W / 2) / cell) + 1, gj = Math.floor((y + W / 2) / cell) + 1;
-          if (gi < 1 || gj < 1 || gi > N - 2 || gj > N - 2) continue;
-          var d = dist[gj * N + gi] * cell;
+          var d = D.at(x, y);
           if (d <= 0 || d >= P.reach) continue;
           var w = G.smoothstep(P.patches[0], P.patches[1], VG.rng.fbm(noise, x / lam, y / lam, 2));
-          var r = P.radius * (1 - d / P.reach) * w;
-          if (r >= (P.minRadius || 0.4)) out.push(x, y, r);
+          var r = P.radius * (1 - d / P.reach) * w, hv = T.heightAt(x, y);
+          if (r >= (P.minRadius || 0.4)) out.push(x, y, r, hv < T.wl ? -1 : Math.floor((hv - T.wl) / step));
         }
       }
     }
     return (c[id] = new Float32Array(out));
+  };
+
+  /**
+   * Distance in metres from an area (0 inside), by chamfer on a 512² raster
+   * of it, cached per settlement: `.at(x, y)`; Infinity off the map.
+   */
+  Renderer.prototype.areaDistance = function (key) {
+    var c = this._dist || (this._dist = {});
+    if (c[key]) return c[key];
+    var W = this.S.bounds.size, gn = 512, cell = W / gn, N = gn + 2, grid = this.areaGrid(key);
+    var dist = chamfer(N, function (k) { var i = k % N, j = (k - i) / N; return grid.has((i - 0.5) * cell - W / 2, (j - 0.5) * cell - W / 2); });
+    return (c[key] = {
+      at: function (x, y) {
+        var gi = Math.floor((x + W / 2) / cell) + 1, gj = Math.floor((y + W / 2) / cell) + 1;
+        if (gi < 1 || gj < 1 || gi > N - 2 || gj > N - 2) return Infinity;
+        return dist[gj * N + gi] * cell;
+      }
+    });
+  };
+
+  /**
+   * A halftone fade's coverage at (x, y), d metres out from its area: 1
+   * inside, falling to 0 at its reach, and to 0 before the map tile's edge.
+   */
+  function halftoneCover(F, W, d, x, y) {
+    var reach = F.reach * W, edge = 1 - G.smoothstep(0.36 * W, 0.49 * W, Math.max(Math.abs(x), Math.abs(y)));
+    return d <= 0 ? edge : d >= reach ? 0 : Math.pow(1 - d / reach, F.gamma || 1) * edge;
+  }
+
+  /**
+   * How much of an area part lies on the visible side of a halftone fade
+   * (mean coverage over its samples), cached on the part. A part cut off
+   * by the map's edge isn't a closed mass, so it counts as 0.
+   */
+  Renderer.prototype.fadeShare = function (part) {
+    if (part.fadeShare != null) return part.fadeShare;
+    var F = this.style.halftoneFade;
+    if (!F) return (part.fadeShare = 1);
+    // (Trees, and so woods, stop a little inside the tile: about 0.47 W.)
+    var D = this.areaDistance(F.area), W = this.S.bounds.size, e = W * 0.46, b = part.bounds;
+    if (b[0] < -e || b[1] < -e || b[2] > e || b[3] > e) return (part.fadeShare = 0);
+    var step = Math.max(4, Math.sqrt((b[2] - b[0]) * (b[3] - b[1]) / 1600)), n = 0, t = 0;
+    for (var y = b[1] + step / 2; y < b[3]; y += step) for (var x = b[0] + step / 2; x < b[2]; x += step) {
+      if (!inArea(part, x, y)) continue;
+      n++;
+      t += halftoneCover(F, W, D.at(x, y), x, y);
+    }
+    return (part.fadeShare = n ? t / n : 0);
   };
 
   // --- Generic draw functions ------------------------------------------------------
@@ -1633,7 +1807,7 @@
       var A = key && key !== '*' ? env.r.area(key) : null;
       if (!A) return [];
       return A.parts.filter(function (p) { return inView(env.vb, p.bounds, 0); }).map(function (p) {
-        env.r.focusShare(p);
+        env.r.focusShare(p); env.r.fadeShare(p);
         return { key: key, item: p, rings: p.rings };
       });
     },
@@ -1649,9 +1823,33 @@
         return { key: p.sea ? 'sea' : 'lake', item: p, rings: p.rings };
       });
     },
+    // Contour lines traced from the same grid as the bands, water and the
+    // territory's edge (natural's own `contours` function uses the older
+    // trace). Every fifth level is major.
     contour: function (env) {
-      var C = env.r.contours;
-      return [{ key: 'minor', path: C.minor }, { key: 'major', path: C.major }];
+      var r = env.r;
+      if (!r._contourPaths) {
+        var minor = new Path2D(), major = new Path2D(), top = r.bandTop(), e = env.S.bounds.size / 2 - r.heightGrid().cell * 1.5;
+        var off = function (q) { return Math.abs(q[0]) > e || Math.abs(q[1]) > e; };
+        for (var b = 1; b <= top; b++) {
+          var p = b % 5 === 0 ? major : minor;
+          // Rings close along the map's edge; that part isn't a contour line.
+          r.terrainRings(b).forEach(function (ring) {
+            var n = ring.length, s0 = 0;
+            while (s0 < n && !off(ring[s0])) s0++;
+            if (s0 === n) return polyPath(p, ring);
+            var pen = false;
+            for (var k = 1; k <= n; k++) {
+              var q = ring[(s0 + k) % n];
+              if (off(q)) pen = false;
+              else if (pen) p.lineTo(q[0], q[1]);
+              else { p.moveTo(q[0], q[1]); pen = true; }
+            }
+          });
+        }
+        r._contourPaths = { minor: minor, major: major };
+      }
+      return [{ key: 'minor', path: r._contourPaths.minor }, { key: 'major', path: r._contourPaths.major }];
     },
     shore: function (env) { return [{ key: null, path: env.r.contours.shore }]; }
   };
