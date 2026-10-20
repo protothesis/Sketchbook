@@ -126,6 +126,8 @@ All notable changes to this sketch are logged here, per
   - Ghosts hidden behind blocks or walls show as a dithered violet
     silhouette.
 
+- 2026-10-20: Crouch is on Space (was C). Space no longer also acts like E.
+
 ### Fixed
 
 - 2026-10-20: Hash ghosts noticed you from places that looked dark. The

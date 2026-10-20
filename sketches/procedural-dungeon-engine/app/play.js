@@ -900,13 +900,14 @@ if (vDitherEW > 0.7 && south > 0.2) {
       return;
     }
     keys.add(k);
-    if (k === 'e' || k === ' ') {
+    if (k === 'e') {
       if (!e.repeat) act(doorNear(state.player) || blockNear(state.player));
       e.preventDefault();
+    } else if (k === ' ') {
+      if (!e.repeat) toggleCrouch();
+      e.preventDefault(); // don't also "click" a focused button or scroll
     } else if (k === 'm') {
       openBigMap();
-    } else if (k === 'c') {
-      if (!e.repeat) toggleCrouch();
     } else if (k === 'n') {
       requestNewMap();
     }
