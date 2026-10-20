@@ -1225,7 +1225,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     wanderSpeed: 0.45,
     chaseSpeed: 0.9,     // slower than walking (2.4) and even crouching (1.1)
     lightRange: 4.5,     // cells: how far the lantern "touches"
-    noticeTime: 1.2,     // s in your light before it stops and turns to you ("?")
+    noticeTime: 0.25,    // s in your light before it stops and turns to you ("?"): a moment
+    stun: 1.2,           // s a ghost reels after you bump into it, before it follows
     alertPause: 0.8,     // s of "?" before the ring starts filling
     ringTime: 3,         // s of continuous light to fill the ring
     ringDrain: 2.5,      // s for a full ring to drain out of the light
@@ -1279,7 +1280,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   // Like the figure: where a block or wall stands between the camera and a
   // ghost, the hidden part shows through as a dithered violet silhouette.
   const ghostSilMat = new THREE.MeshBasicMaterial({
-    color: 0xc58bff, transparent: true, opacity: 0.55, depthFunc: THREE.GreaterDepth, depthWrite: false,
+    color: 0xc58bff, transparent: true, opacity: 0.15, depthFunc: THREE.GreaterDepth, depthWrite: false,
   });
   ghostSilMat.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
@@ -1318,7 +1319,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     mesh.add(alert);
     scene.add(mesh);
     const ghost = Object.assign({
-      mode: 'wander', lit: 0, dark: 0, ring: 0, alertT: 0, idle: 0, target: null, pause: 0, next: null, pathT: 0,
+      mode: 'wander', lit: 0, dark: 0, ring: 0, alertT: 0, idle: 0, stun: 0, target: null, pause: 0, next: null, pathT: 0,
     }, g, {
       mesh, mat, bits, alert, alertCanvas, alertTex, drawnKey: '', litNow: false, edge: null,
       h: GHOST.height, phase: Math.random() * 10,
@@ -1545,6 +1546,11 @@ if (vDitherEW > 0.7 && south > 0.2) {
       const lit = lightReaches(lamp, { x: g.x, y: g.y, h: g.h });
       g.litNow = lit;
       if (!frozen) {
+        // Bump into one and it's onto you at once, though it reels for a beat first.
+        if (g.mode !== 'chase' && Math.hypot(p.x - g.x, p.y - g.y) < GHOST.contact && p.z < 0.6) {
+          g.mode = 'chase'; g.ring = 1; g.dark = 0; g.stun = GHOST.stun; g.next = null; g.pathT = 0; g.target = null;
+          showCaption('you collide with a hash ghost');
+        }
         if (g.mode === 'wander') {
           g.lit = lit ? g.lit + dt : Math.max(0, g.lit - dt);
           if (g.lit >= GHOST.noticeTime) {
@@ -1569,7 +1575,10 @@ if (vDitherEW > 0.7 && south > 0.2) {
             g.mode = 'wander'; g.lit = 0; g.pause = 1;
           }
         }
-        if (g.mode === 'chase') {
+        if (g.mode === 'chase' && g.stun > 0) {
+          g.stun = Math.max(0, g.stun - dt); // stunned: holds still, can't lose you yet
+          g.dark = 0;
+        } else if (g.mode === 'chase') {
           g.dark = lit ? 0 : g.dark + dt;
           const gs = state.exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))];
           const gap = gs === undefined || p.spaceId === undefined ? Infinity : roomGap(gs, p.spaceId, GHOST.loseRooms);
@@ -1592,7 +1601,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       // Look: bob, orbiting "bits", and a hotter, jittery glow when following.
       const chasing = g.mode === 'chase';
       g.phase += dt;
-      const jit = chasing ? 0.02 : 0;
+      const jit = g.stun > 0 ? 0.07 : chasing ? 0.02 : 0;
       g.mesh.position.set(
         (g.x + (Math.random() - 0.5) * jit) * S,
         (g.h + Math.sin(g.phase * 1.7) * 0.05) * S,
@@ -1610,7 +1619,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       }
       const watching = g.mode === 'alert';
       g.bits.forEach((b, i) => {
-        const a = g.phase * (chasing ? 4 : watching ? 0.6 : 1.6) + i * Math.PI / 2;
+        const a = g.phase * (g.stun > 0 ? 0.2 : chasing ? 4 : watching ? 0.6 : 1.6) + i * Math.PI / 2;
         b.position.set(Math.cos(a) * 0.24 * S, Math.sin(g.phase * 3 + i) * 0.08 * S, Math.sin(a) * 0.24 * S);
         b.rotation.set(a, a * 1.3, 0);
       });

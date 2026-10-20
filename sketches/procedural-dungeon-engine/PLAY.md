@@ -69,8 +69,8 @@ Determinism).
   light clears most low blocks; **crouched**, the lamp drops and a low block
   hides the ghost, matching the shadows you see. Noticing you takes two
   stages:
-  - After 1.2 s in your light (within 4.5 cells) it stops and turns to you,
-    with an amber **?** above it.
+  - A moment in your light (0.25 s, within 4.5 cells) and it stops and turns
+    to you, with an amber **?** above it.
   - Keep the light on it and, after a beat, a ring fills clockwise in violet
     around the **?** (3 s of light). Out of the light the ring rewinds
     counter-clockwise in a dim colour; once it's empty, the ghost goes back
@@ -81,10 +81,13 @@ Determinism).
     and it gives up when the ring empties (2 s) or once a room lies between
     you.
 
+  Bump into a ghost and it's onto you at once: it goes straight to **!!**,
+  but reels in place for 1.2 s before it follows.
+
   A ghost watching or following you from off-screen gets a marker on the
   screen edge (its icon, plus an arrow pointing toward it). A ghost hidden
   behind a block or wall shows through as a dithered violet silhouette, like
-  the figure does. The closer
+  the figure does, only fainter. The closer
   a ghost is, the more the screen wobbles; contact fills it with purple
   glitch and static. Both hold for a moment once you're clear, then wear
   off over a few seconds. The only way to be rid of one is to collapse the
@@ -145,7 +148,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Climb | push into a block for 0.35 s or press E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
-| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.45 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 1.2 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.9 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
+| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.45 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.9 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
 | Collapse price | 1 per cell + 2 per room across the whole branch, divided by 15 and rounded up to whole charges |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 

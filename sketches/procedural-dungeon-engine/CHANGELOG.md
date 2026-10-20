@@ -126,6 +126,10 @@ All notable changes to this sketch are logged here, per
   - Ghosts hidden behind blocks or walls show as a dithered violet
     silhouette.
 
+- 2026-10-20: Hash ghosts notice you after a moment of light (0.25 s, was
+  1.2 s). Bumping into one activates it at once, but it reels for 1.2 s
+  before following. Its see-through silhouette is much fainter (opacity
+  0.15, was 0.55).
 - 2026-10-20: Crouch is on Space (was C). Space no longer also acts like E.
 
 ### Fixed
