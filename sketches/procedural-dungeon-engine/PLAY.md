@@ -126,14 +126,23 @@ Determinism).
   collapse through it like any other. Drawn doors are never locked. The
   engine records the door (a `carve` event), so replay, export and the
   chart view all keep it.
-- **Checkpoints.** Locked doors appear past depth 3, more often the deeper you go. Unlocking
-  one with a key opens the **expedition record** (the seed chain from the
-  root to that door, `H(parent | exit | entropy) → seed` per step, and a
-  tally) and offers a choice:
-  - **Continue down:** the door opens like any other, and you can collapse
-    it later.
-  - **Leave the dungeon:** this ends the run, and the record comes back if
-    you reload.
+- **Locked doors.** Rare, and they appear past depth 3. A key opens one and
+  the walk simply goes on. The **first room past a locked door** is special:
+  it's worked out from seeds (the door it was opened through was generated
+  locked), so every client and every replay agrees. It has a faint gold
+  warmth on its floor, "beyond a lock" in its caption, and a gold outline
+  on the maps. Nothing more yet: it's a hook. The expedition-record /
+  leave-the-dungeon screen (`showRecord`) is still in the code, unused, for
+  whatever a lock leads to later.
+- **Map pins.** Markup for the chart: simple coloured circles. You start
+  with 3 silver pins, and more turn up as a semi-rare find (about 1 room in
+  13, seeded colour: gold, crimson, teal or violet). Two ways to use them:
+  - With a pin selected, F drops it on the tile ahead of you (or your own);
+    F on a pinned tile takes it back.
+  - On the big map (M), click a spot to pin it with the chosen colour (the
+    palette in the map's bar picks it), and click a pin to take it back.
+
+  Pins show on the minimap and big map, and persist with the run.
 
 There's no passive regen and no lose state yet. You can always keep walking
 forward; collapsing is the only thing entropy buys.
@@ -159,6 +168,8 @@ forward; collapsing is the only thing entropy buys.
 | Door chalk | a tilted white stick; a ✎ slot on the hotbar; a white "draw a door" prompt at a bare wall | the drawn door looks like any other |
 | Hotbar | bottom-centre slots: ⚱ jar (three fill pips), ✎ chalk, ◌ echoes, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
 | Jar | a small glass jar with a dark lid; violet wisps bob inside, one per ghost | a solid half-cell |
+| Map pin | a coloured circle with a dark rim and a highlight, on the minimap and big map; in the world, a coloured pinhead on a needle | the big map's bar has the pin palette (counts per colour) |
+| Beyond a lock | a faint gold warmth on the floor, "beyond a lock" in the caption, a gold outline on the maps | |
 | Sigil | a seeded star polygon (pentagram, hexagram, {7/3}, {8/3}) in a double ring with glyph marks, drawn additively | stage 0 a faint violet trace; 1 a dim glow; 2 brighter and flickering; 3 pulsing gold. A +1 max shows as a gold-edged ninth charge slot |
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
 | Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
@@ -189,6 +200,8 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Collapse price | a flat 1 charge per room in the branch |
 | Door chalk | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (chalk selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); capacity 3; F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall; a following ghost within 0.38 cells of a jar with room is caught |
+| Map pins | start with 3 silver; 1/12 of rooms at depth 1+ hold one (seeded on the loot stream, drawn after jars; colour from gold/crimson/teal/violet); F drops on the tile ahead or your own (F again takes it back); big-map click places / takes back |
+| Beyond a lock | `DP.pastLock(exp, space)`: the room's entry door was generated locked (`lockedBySeed`, ignoring that it's since been opened) |
 | Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 jars (one per quarter); stage = the fullest jar's fill; each full jar on it = entropy max +1 (up to +4), stacking across sigils |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 

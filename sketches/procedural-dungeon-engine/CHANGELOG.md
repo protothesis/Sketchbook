@@ -138,6 +138,15 @@ All notable changes to this sketch are logged here, per
   The collapse price is a flat 1 charge per room (was 1 per cell + 2 per
   room, in 15-point charges).
 
+- 2026-10-20: **Locked doors just open** (with a key). The checkpoint
+  overlay is gone, but `showRecord` is kept for later. The first room past a
+  locked door is marked "beyond a lock": a gold floor warmth, the caption,
+  and a gold outline on the maps. It's derived from seeds (`pastLock`).
+- 2026-10-20: **Map pins.** Coloured markers for the chart. You start with
+  3 silver, and more are found in about 1 room in 13 (seeded colours). F
+  drops one on the tile ahead (F again takes it back), or click the big map
+  to place one and click a pin to take it back, with a colour palette in
+  the map's bar. Pins persist.
 - 2026-10-20: Jar placement:
   - Placing never prompts; a failed use of any item shakes the hotbar.
   - F picks the nearest free quarter-tile in front of you, including on

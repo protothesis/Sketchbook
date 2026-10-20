@@ -148,6 +148,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
   const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
   geo.chalk = new THREE.CylinderGeometry(0.03 * S, 0.03 * S, 0.22 * S, 8);
+  geo.pinHead = new THREE.SphereGeometry(0.06 * S, 12, 10);
+  geo.pinNeedle = new THREE.CylinderGeometry(0.008 * S, 0.008 * S, 0.16 * S, 6);
   const chalkMat = new THREE.MeshLambertMaterial({ color: 0xf2efe6, emissive: 0x3a3a3a });
   geo.block = new THREE.BoxGeometry(1, 1, 1); // scaled per prop
   geo.post = new THREE.BoxGeometry(WALL_T * S, WALL_H * S, WALL_T * S); // inside-corner filler
@@ -185,10 +187,14 @@ if (vDitherEW > 0.7 && south > 0.2) {
   const matCache = {};
   function spaceMats(space) {
     if (matCache[space.id] && matCache[space.id].seed === space.seed) return matCache[space.id];
+    const sealed = DP.pastLock(state.exp, space);
     const h = space.meta.hue / 360;
     const m = {
       seed: space.seed,
-      floor: [0.15, 0.17, 0.19].map((l) => new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.22, l) })),
+      // Past a locked door the floor carries a faint gold warmth.
+      floor: [0.15, 0.17, 0.19].map((l) => new THREE.MeshLambertMaterial({
+        color: new THREE.Color().setHSL(h, 0.22, l), emissive: sealed ? 0x1c1404 : 0x000000,
+      })),
       wall: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.2, 0.32) })),
       // Door frames dissolve less, so a doorway in a south wall stays readable.
       frame: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.22, 0.36) }), FRAME_DITHER),
@@ -248,6 +254,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
       jars: [],      // jars carried: [{ id, fill }]
       placedJars: [], // jars set down: [{ id, sx, sy, fill }] (half-cell coordinates)
       jarSeq: 0,
+      pins: { silver: 3 }, // map pins carried, by colour
+      mapPins: [],         // placed: [{ x, y, color }] (cell centres)
     };
   }
 
@@ -407,6 +415,15 @@ if (vDitherEW > 0.7 && south > 0.2) {
       let mesh;
       if (item.kind === 'shard') {
         mesh = new THREE.Mesh(geo.shard, shardMat);
+      } else if (item.kind === 'pin') {
+        mesh = new THREE.Group();
+        const head = new THREE.Mesh(geo.pinHead, new THREE.MeshLambertMaterial({
+          color: PIN_COLORS[item.color] || 0xcccccc, emissive: 0x222222,
+        }));
+        head.position.y = 0.06 * S;
+        const needle = new THREE.Mesh(geo.pinNeedle, chalkMat);
+        needle.position.y = -0.04 * S;
+        mesh.add(head, needle);
       } else if (item.kind === 'jar') {
         mesh = makeJarMesh();
         mesh.scale.setScalar(0.85);
@@ -843,6 +860,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
     for (const j of run.jars) out.push({ key: 'jar:' + j.id, kind: 'jar', jar: j });
     if (run.chalk > 0) out.push({ key: 'chalk', kind: 'chalk', count: run.chalk });
     if (run.echoes > 0) out.push({ key: 'echo', kind: 'echo', count: run.echoes });
+    for (const color of Object.keys(run.pins)) {
+      if (run.pins[color] > 0) out.push({ key: 'pin:' + color, kind: 'pin', color, count: run.pins[color] });
+    }
     if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
     return out;
   }
@@ -857,8 +877,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
     refreshHotbar();
   }
 
-  const ICON = { jar: '⚱', chalk: '✎', echo: '◌', key: '⚷' };
-  const NAME = { jar: 'jar', chalk: 'door chalk', echo: 'echoes', key: 'keys' };
+  const ICON = { jar: '⚱', chalk: '✎', echo: '◌', key: '⚷', pin: '●' };
+  const NAME = { jar: 'jar', chalk: 'door chalk', echo: 'echoes', key: 'keys', pin: 'map pin' };
+  const PIN_COLORS = { silver: '#c9ced6', gold: '#e8c15a', crimson: '#e05a5a', teal: '#4fc3b8', violet: '#b28bff' };
   function shakeHotbar() {
     const bar = $('hotbar');
     if (!bar) return;
@@ -879,7 +900,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
       const b = el('button', 'slot' + (cur && slot.key === cur.key ? ' on' : '') + ' ' + slot.kind);
       b.type = 'button';
       b.title = NAME[slot.kind] + (slot.kind === 'jar' ? ` (${slot.jar.fill}/${RULES.jarCapacity})` : '');
-      b.append(el('span', 'n', String(i + 1)), el('span', 'ic', ICON[slot.kind]));
+      const ic = el('span', 'ic', ICON[slot.kind]);
+      if (slot.kind === 'pin') { ic.style.color = PIN_COLORS[slot.color]; b.title = `${slot.color} map pin`; }
+      b.append(el('span', 'n', String(i + 1)), ic);
       if (slot.kind === 'jar') {
         const pips = el('span', 'fill');
         for (let k = 0; k < RULES.jarCapacity; k++) pips.append(el('i', k < slot.jar.fill ? 'on' : ''));
@@ -1056,6 +1079,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       const w = wallNear(p);
       return w ? Object.assign(w, { slot }) : null;
     }
+    if (slot.kind === 'pin') return { action: 'pin', slot, cell: pinCell(p) };
     if (slot.kind === 'echo') {
       const j = jarAhead(p);
       return j && j.fill < RULES.jarCapacity ? { action: 'pour', slot, jar: j } : null;
@@ -1076,6 +1100,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     } else if (u.action === 'carve') {
       carveDoor(u);
       return;
+    } else if (u.action === 'pin') {
+      togglePinAt(u.cell.x + 0.5, u.cell.y + 0.5, u.slot.color);
     } else if (u.action === 'pour') {
       run.echoes--;
       u.jar.fill++;
@@ -1083,6 +1109,45 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }
     savePlayer();
     refreshHud();
+  }
+
+  // --- map pins: markup for the chart. F drops the selected pin on the tile
+  // ahead (or your own); on the big map, click a spot to pin it and click a
+  // pin to take it back.
+
+  function pinCell(p) {
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    const ahead = { x: Math.floor(p.x + fx * 0.75), y: Math.floor(p.y + fy * 0.75) };
+    const here = { x: Math.floor(p.x), y: Math.floor(p.y) };
+    const reg = state.exp.registry;
+    if ((ahead.x !== here.x || ahead.y !== here.y) && reg[DE.key(ahead.x, ahead.y)] !== undefined &&
+        Math.abs(ahead.x - here.x) + Math.abs(ahead.y - here.y) === 1 && passable(here.x, here.y, ahead.x, ahead.y)) return ahead;
+    return here;
+  }
+
+  /** Take back a pin near (x, y), or place one of `color` there. */
+  function togglePinAt(x, y, color, reach) {
+    const run = state.run;
+    const near = run.mapPins.findIndex((pn) => Math.hypot(pn.x - x, pn.y - y) < (reach || 0.5));
+    if (near >= 0) {
+      const [pn] = run.mapPins.splice(near, 1);
+      run.pins[pn.color] = (run.pins[pn.color] || 0) + 1;
+      showCaption(`you take back the ${pn.color} pin`);
+    } else {
+      if (!color || !(run.pins[color] > 0)) { shakeHotbar(); return; }
+      run.pins[color]--;
+      run.mapPins.push({ x: +x.toFixed(2), y: +y.toFixed(2), color });
+      showCaption(`a ${color} pin marks the map`);
+    }
+    savePlayer();
+    refreshHud();
+  }
+
+  /** The pin colour to place from the map: the selected pin, or any you carry. */
+  function mapPinColor() {
+    const slot = selectedSlot();
+    if (slot && slot.kind === 'pin') return slot.color;
+    return Object.keys(state.run.pins).find((c) => state.run.pins[c] > 0) || null;
   }
 
   /** A following ghost that drifts into a jar with room is caught in it. */
@@ -1240,9 +1305,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
         door.panel.material = doorMat;
         door.seam.material = seamMat;
       }
+      // The door just opens now. The record / leave-the-dungeon screen
+      // (showRecord) is kept for whatever a lock leads to later.
+      showCaption('the key turns');
+      openDoor(near.space.id, near.exit.id);
       savePlayer();
       refreshHud();
-      showRecord(near.space.id, near.exit.id, 'checkpoint');
     } else if (near.action === 'collapse') {
       if (!near.affordable) {
         showCaption(`too much lies beyond: ${chargeText(near.price.charges)}, you have ${run.charges}`);
@@ -1594,6 +1662,10 @@ if (vDitherEW > 0.7 && south > 0.2) {
         } else {
           showCaption(`a shard · ${run.shards}/${per}`);
         }
+      } else if (it.item.kind === 'pin') {
+        const color = it.item.color;
+        run.pins[color] = (run.pins[color] || 0) + 1;
+        showCaption(`a ${color} map pin · ${verbF} to drop it on the map, or place it from the map (M)`);
       } else if (it.item.kind === 'jar') {
         const id = 'j' + (++run.jarSeq);
         run.jars.push({ id, fill: 0 });
@@ -1619,7 +1691,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
       const sp = exp.spaces[sid];
       if (sp) {
         const kind = sp.deadEnd ? 'dead end' : sp.archetype;
-        showCaption(`${sp.id} · ${kind} · ${sp.meta.mood} · depth ${sp.depth}`);
+        const sealed = DP.pastLock(exp, sp) ? ' · beyond a lock' : '';
+        showCaption(`${sp.id} · ${kind}${sealed} · ${sp.meta.mood} · depth ${sp.depth}`);
       }
     }
 
@@ -2313,8 +2386,8 @@ void main() {
       if (near.action === 'carve') {
         cls = 'chalk';
         text = `a bare wall · ${verbF} to draw a door (${state.run.chalk} chalk)`;
-      } else if (near.action === 'place') {
-        text = ''; // placing a jar never prompts
+      } else if (near.action === 'place' || near.action === 'pin') {
+        text = ''; // placing a jar or a pin never prompts
       } else if (near.action === 'pour') {
         cls = 'jar';
         text = `a jar (${near.jar.fill}/${RULES.jarCapacity}) · ${verbF} to pour in an echo`;
@@ -2328,7 +2401,7 @@ void main() {
       } else if (near.action === 'locked') {
         cls = 'lock';
         text = run.keys > 0 ? `a locked door · ${verb} to unlock (1 key)` : 'a locked door · you need a key';
-      } else {
+      } else if (near.action === 'collapse') {
         const pr = near.price;
         const rooms = `${pr.rooms} room${pr.rooms === 1 ? '' : 's'}`;
         cls = near.affordable ? 'collapse' : 'blocked';
@@ -2423,6 +2496,27 @@ void main() {
       ctx.fillStyle = `hsla(${sp.meta.hue}, 18%, ${id === p.spaceId ? 46 : 30}%, 0.95)`;
       for (const k of sp.cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
     }
+    // Rooms past a locked door: a gold outline.
+    ctx.strokeStyle = 'rgba(232, 193, 90, 0.9)';
+    ctx.lineWidth = Math.max(1, px * 0.1);
+    for (const id in exp.spaces) {
+      const sp = exp.spaces[id];
+      if (!DP.pastLock(exp, sp)) continue;
+      const own = new Set(sp.cells);
+      ctx.beginPath();
+      for (const k of sp.cells) {
+        const c = DE.parseKey(k);
+        if (!visible(c)) continue;
+        for (const f of DE.FACINGS) {
+          const n = DE.step(c, f);
+          if (own.has(DE.key(n.x, n.y))) continue;
+          const [ax, ay, bx, by] = edgeEnds(c.x, c.y, f);
+          ctx.moveTo(ox + ax * px, oy + ay * px);
+          ctx.lineTo(ox + bx * px, oy + by * px);
+        }
+      }
+      ctx.stroke();
+    }
     // Live cells standing on a trace: a violet tick (the imprint).
     if (px >= 5) {
       ctx.strokeStyle = 'rgba(181, 156, 255, 0.7)';
@@ -2447,6 +2541,21 @@ void main() {
         ctx.fillRect(ox + Math.min(ax, bx) * px - t, oy + Math.min(ay, by) * px - t,
           Math.abs(bx - ax) * px + 2 * t, Math.abs(by - ay) * px + 2 * t);
       }
+    }
+    // Map pins.
+    for (const pin of state.run.mapPins) {
+      const r = Math.max(3.5, px * 0.3);
+      ctx.beginPath();
+      ctx.arc(ox + pin.x * px, oy + pin.y * px, r, 0, Math.PI * 2);
+      ctx.fillStyle = PIN_COLORS[pin.color] || '#ccc';
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.3);
+      ctx.strokeStyle = 'rgba(10, 8, 14, 0.85)';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(ox + pin.x * px - r * 0.3, oy + pin.y * px - r * 0.3, r * 0.28, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.fill();
     }
     // Hash ghosts watching you (amber) or following you (magenta).
     for (const g of state.ghosts) {
@@ -2482,8 +2591,30 @@ void main() {
   // wheel or pinch to zoom. Walking pauses while it's open.
   const bm = $('bigmap-canvas');
   const bmCtx = bm.getContext('2d');
+  /** The big map's pin palette: one swatch per colour carried; click to choose. */
+  function refreshPinPalette() {
+    const pal = $('pin-palette');
+    if (!pal) return;
+    pal.innerHTML = '';
+    const cur = mapPinColor();
+    for (const color of Object.keys(state.run.pins)) {
+      const n = state.run.pins[color];
+      if (!(n > 0)) continue;
+      const b = el('button', 'pin-sw' + (color === cur ? ' on' : ''));
+      b.type = 'button';
+      b.title = `${color} pins: click the map to place, click a pin to take it back`;
+      const dot = el('i');
+      dot.style.background = PIN_COLORS[color];
+      b.append(dot, el('span', null, String(n)));
+      b.addEventListener('click', () => { state.sel = 'pin:' + color; refreshHotbar(); refreshPinPalette(); });
+      pal.append(b);
+    }
+    if (!pal.children.length) pal.append(el('span', 'pin-none', 'no pins left · click a pin to take it back'));
+  }
+
   function openBigMap() {
     if (state.paused) return;
+    refreshPinPalette();
     keys.clear();
     state.bigmap = { cx: state.player.x, cy: state.player.y, px: 14 };
     $('bigmap').hidden = false;
@@ -2510,9 +2641,11 @@ void main() {
   }
   const bmPointers = new Map();
   let pinchDist = 0;
+  let bmTap = null; // a press that hasn't moved: a click on the map
   bm.addEventListener('pointerdown', (e) => {
     bm.setPointerCapture(e.pointerId);
     bmPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    bmTap = bmPointers.size === 1 ? { x: e.clientX, y: e.clientY } : null;
     if (bmPointers.size === 2) {
       const [a, b] = Array.from(bmPointers.values());
       pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
@@ -2523,6 +2656,7 @@ void main() {
     if (!prev || !state.bigmap) return;
     const cur = { x: e.clientX, y: e.clientY };
     bmPointers.set(e.pointerId, cur);
+    if (bmTap && Math.hypot(cur.x - bmTap.x, cur.y - bmTap.y) > 6) bmTap = null;
     if (bmPointers.size === 1) {
       state.bigmap.cx -= (cur.x - prev.x) / state.bigmap.px;
       state.bigmap.cy -= (cur.y - prev.y) / state.bigmap.px;
@@ -2533,7 +2667,22 @@ void main() {
       pinchDist = d;
     }
   });
-  const bmUp = (e) => { bmPointers.delete(e.pointerId); pinchDist = 0; };
+  const bmUp = (e) => {
+    if (bmTap && e.type === 'pointerup' && state.bigmap) {
+      const r = bm.getBoundingClientRect(), v = state.bigmap;
+      const x = v.cx + (e.clientX - r.left - r.width / 2) / v.px;
+      const y = v.cy + (e.clientY - r.top - r.height / 2) / v.px;
+      const onPin = state.run.mapPins.some((pn) => Math.hypot(pn.x - x, pn.y - y) < Math.max(0.5, 8 / v.px));
+      if (onPin) togglePinAt(x, y, null, Math.max(0.5, 8 / v.px));
+      else if (state.exp.registry[DE.key(Math.floor(x), Math.floor(y))] !== undefined) {
+        togglePinAt(Math.floor(x) + 0.5, Math.floor(y) + 0.5, mapPinColor());
+      }
+      refreshPinPalette();
+    }
+    bmTap = null;
+    bmPointers.delete(e.pointerId);
+    pinchDist = 0;
+  };
   bm.addEventListener('pointerup', bmUp);
   bm.addEventListener('pointercancel', bmUp);
   bm.addEventListener('wheel', (e) => {

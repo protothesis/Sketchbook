@@ -37,6 +37,9 @@
     jarChance: 1 / 15,
     jarMinDepth: 1,
     jarCapacity: 3,
+    pinChance: 1 / 12,        // map pins: a semi-rare find (you start with 3 silver)
+    pinMinDepth: 1,
+    pinColors: ['gold', 'crimson', 'teal', 'violet'],
     sigilChance: 0.052,       // ~1 room in 25 (small rooms and the root never get one)
     sigilMinDepth: 1,
     chargesPerRoom: 1,        // collapse price: a flat charge per room in the branch
@@ -81,6 +84,10 @@
     // Drawn after chalk, so neither the chalk nor anything above shifted.
     if (r.chance(RULES.jarChance) && space.depth >= RULES.jarMinDepth) {
       items.push({ id: 'jar', kind: 'jar', cell: spots[(n + 3) % spots.length] });
+    }
+    // Pins come after jars (same reason). Each has a seeded colour.
+    if (r.chance(RULES.pinChance) && space.depth >= RULES.pinMinDepth) {
+      items.push({ id: 'pin', kind: 'pin', color: r.pick(RULES.pinColors), cell: spots[(n + 4) % spots.length] });
     }
     return items;
   }
@@ -232,12 +239,29 @@
 
   /** Is this unresolved exit a locked door? Seeded per exit, never the entry. */
   function isLocked(space, exit) {
-    if (exit.connectionId || exit.index === 0 && space.parentId) return false;
+    return !exit.connectionId && lockedBySeed(space, exit);
+  }
+
+  /** Was this exit generated locked (whether or not it has been opened since)? */
+  function lockedBySeed(space, exit) {
+    if (exit.index === 0 && space.parentId) return false;
     if (exit.tags && exit.tags.includes('carved')) return false; // drawn doors are never locked
     if (space.depth < RULES.lockMinDepth) return false;
     const p = Math.min(RULES.lockChanceMax,
       RULES.lockChance + (space.depth - RULES.lockMinDepth) * RULES.lockChancePerDepth);
     return DE.deriveRng(space.seed, 'lock|' + exit.index).chance(p);
+  }
+
+  /**
+   * Is this the first room past a locked door? Worked out from seeds alone
+   * (the door it was opened through was generated locked), so any client
+   * can tell, and replays agree.
+   */
+  function pastLock(exp, space) {
+    const parent = space.parentId && exp.spaces[space.parentId];
+    if (!parent) return false;
+    const exit = parent.exits.find((e) => e.id === space.viaExitId);
+    return !!exit && lockedBySeed(parent, exit);
   }
 
   /** The space a door opened into, if it is that space's way in from here. */
@@ -291,5 +315,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, childThrough, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

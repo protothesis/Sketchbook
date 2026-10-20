@@ -404,3 +404,16 @@ kbd {
   60% { translate: -4px 0; }
   80% { translate: 2px 0; }
 }
+
+/* Big map: pins palette, and the "beyond a lock" legend swatch. */
+.sw-sealed { height: 8px; background: transparent; border: 2px solid #e8c15a; box-sizing: border-box; }
+.pin-palette { display: flex; gap: 6px; align-items: center; }
+.pin-sw {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 7px; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent; color: var(--text);
+  font: inherit; font-size: 11px; cursor: pointer;
+}
+.pin-sw.on { border-color: var(--accent); }
+.pin-sw i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.6); }
+.pin-none { font-size: 11px; color: var(--muted); }
