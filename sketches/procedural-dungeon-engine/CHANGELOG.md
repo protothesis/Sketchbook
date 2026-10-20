@@ -134,6 +134,14 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-20: The ghost screen effect (wobble and glitch) tanked the frame
+  rate at full screen on high-DPI displays: about 71 ms a frame versus 21
+  without it, measured at 1920×1080 on a 2× display. The scene was rendered
+  into a half-float, 4× MSAA target at full device resolution. It now uses
+  an 8-bit sRGB target with no MSAA, sized in CSS pixels (a quarter of the
+  pixels at 2×). It also steps its resolution down toward half if it still
+  slows frames, measured against the frame time without the effect.
+  Effect-on frames now match effect-off ones.
 - 2026-10-20: Hash ghosts noticed you from places that looked dark. The
   light test is now a 3D ray from the actual lamp (so crouching lowers it)
   that walls and blocks block, matching the cast shadows. Light range is now

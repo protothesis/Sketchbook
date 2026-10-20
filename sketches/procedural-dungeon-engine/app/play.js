@@ -1689,11 +1689,20 @@ if (vDitherEW > 0.7 && south > 0.2) {
     return gone.length;
   }
 
-  // Post-processing for the ghost effects: the scene renders into a
-  // half-float target, then a full-screen pass wobbles it and, on contact,
+  // Post-processing for the ghost effects: the scene renders into an
+  // offscreen target, then a full-screen pass wobbles it and, on contact,
   // tears it into purple static. Skipped entirely while both are at zero.
+  //
+  // Kept cheap on big, high-DPI screens: the target is 8-bit sRGB (no
+  // banding, half the bytes of half-float), has no MSAA (the wobble softens
+  // edges anyway), and is sized in CSS pixels times `fxScale`, not device
+  // pixels (a quarter of the pixels on a 2x display). If frames still run
+  // slow while the effect is on, fxScale steps down toward 0.5, and creeps
+  // back up when there's headroom. At full screen on a 2x display this took
+  // the effect from ~15 ms a frame to a few.
   const post = (() => {
-    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.UnsignedByteType, samples: 0 });
+    rt.texture.colorSpace = THREE.SRGBColorSpace;
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         tDiffuse: { value: rt.texture }, uTime: { value: 0 },
@@ -1738,11 +1747,32 @@ void main() {
     return { rt, mat, sc, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) };
   })();
 
-  function renderFrame() {
+  // `base` is the frame time without the effect, so only slowness the
+  // effect itself adds (not a slow machine or a big map) lowers its resolution.
+  const fxPerf = { scale: 1, avg: 1 / 60, base: 1 / 60, clock: 0 };
+  /** Called each frame with dt while the effect runs: adapt the target's resolution. */
+  function adaptEffect(dt) {
+    fxPerf.avg += (dt - fxPerf.avg) * 0.1;
+    fxPerf.clock += dt;
+    if (fxPerf.clock < 0.5) return;
+    fxPerf.clock = 0;
+    const slow = fxPerf.avg > Math.max(1 / 40, fxPerf.base * 1.35);
+    if (slow) fxPerf.scale = Math.max(0.5, fxPerf.scale * 0.85);
+    else if (fxPerf.avg < fxPerf.base * 1.08 + 0.001) fxPerf.scale = Math.min(1, fxPerf.scale * 1.05);
+  }
+
+  function renderFrame(dt) {
     const fx = state.fx;
-    if (fx.wobble < 0.003 && fx.glitch < 0.003) { renderer.render(scene, camera); return; }
+    if (fx.wobble < 0.003 && fx.glitch < 0.003) {
+      if (dt) { fxPerf.base += (dt - fxPerf.base) * 0.05; fxPerf.avg = fxPerf.base; }
+      renderer.render(scene, camera);
+      return;
+    }
+    if (dt) adaptEffect(dt);
+    const cssScale = Math.min(1, renderer.getPixelRatio()) * fxPerf.scale;
+    const w = Math.max(1, Math.round(canvas.clientWidth * cssScale)), h = Math.max(1, Math.round(canvas.clientHeight * cssScale));
+    if (post.rt.width !== w || post.rt.height !== h) post.rt.setSize(w, h);
     renderer.getDrawingBufferSize(tmpV2);
-    if (post.rt.width !== tmpV2.x || post.rt.height !== tmpV2.y) post.rt.setSize(tmpV2.x, tmpV2.y);
     const u = post.mat.uniforms;
     u.uTime.value = state.time; u.uWobble.value = fx.wobble; u.uGlitch.value = fx.glitch;
     u.uRes.value.copy(tmpV2);
@@ -2154,7 +2184,7 @@ void main() {
     update(dt);
     drawMinimap();
     drawBigMap();
-    renderFrame();
+    renderFrame(dt);
     saveClock += dt;
     if (saveClock > 1) { saveClock = 0; savePlayer(); }
     requestAnimationFrame(frame);
@@ -2163,5 +2193,5 @@ void main() {
   global.addEventListener('pagehide', savePlayer);
 
   // Handy from the console.
-  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern });
+  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern, renderFrame, fxPerf, post });
 })(window);
