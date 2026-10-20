@@ -55,9 +55,33 @@ All notable changes to this sketch are logged here, per
     one offers **Continue down** (it opens like any other door) or
     **Leave the dungeon** (this ends the run on the record, which persists).
   - The minimap now shows opened doors in green.
+- 2026-10-20 (second playtest pass):
+  - **Engine: traces.** `revert` now keeps the reverted space in
+    `exp.traces` (its seed, cells, depth, meta and so on). Replay rebuilds
+    traces from history, so older records gain them on import.
+    `imprintAt(exp, "x,y")` lists the trace layers under a cell. Traces never
+    block placement.
+  - Walk mode: imprinted tiles are **cracked**. Traces show greyed on the
+    minimap, the new big map and the chart view, and imprinted live cells
+    get a tick mark.
+  - **Big map:** M or tapping the minimap opens the chart nearly
+    full-screen, with pan, wheel and pinch zoom, and Center and Close
+    buttons.
+  - **Props:** seeded blocks (full-cell in chamber interiors, or subgrid
+    against a wall) that collide and cast shadows, plus flat floor detail.
+  - **Crouch** (C or the button): a crawl with a lowered lantern. Crouched
+    against a block you're "hidden".
+  - **Locks before keys:** a key-capable room only shows its key while
+    unopened locks outnumber keys. Lock chance now scales with depth
+    (4.5% at depth 3, up to 9%).
 
 ### Fixed
 
+- 2026-10-20: Walk mode drew some floor tiles plain white. The shade index
+  went negative at far-negative coordinates, which left those tiles with no
+  material.
+- 2026-10-20: `local/` (scratch files, like exported expeditions shared for
+  debugging) is now git-ignored.
 - 2026-10-20: The walk-mode dither now tests world position instead of view
   depth, so a south wall's whole face clears when you stand against it
   (before, a solid band stayed under the figure). The circle is also bigger

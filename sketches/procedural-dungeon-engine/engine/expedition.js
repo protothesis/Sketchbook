@@ -10,8 +10,11 @@
 //                cells: "x,y"[], exits: Exit[], depth, deadEnd, meta,
 //                nextExitIndex }
 //   Connection { id, a:{spaceId,exitId}, b:{spaceId,exitId}, loop }
+//   Trace      { id, seed, parentId, viaExitId, entropy, archetype, cells,
+//                depth, deadEnd, meta, revertedAt }   (a reverted space)
 //   Expedition { version:1, rootSeed, params, spaces, connections,
-//                registry: { "x,y": spaceId }, history: Event[], counters }
+//                registry: { "x,y": spaceId }, history: Event[], counters,
+//                traces: { spaceId: Trace } }
 //   Event      { type:'commit', parentId, viaExitId, entropy, loop? }
 //            | { type:'revert', spaceId }
 //            | { type:'caps', caps }
@@ -19,6 +22,11 @@
 // Determinism rule: same seed + same registry state => same candidate. Replay
 // re-applies `history` in order from the root, which reproduces every seed,
 // id and cell exactly.
+//
+// Traces: a reverted space is gone from the map, but never forgotten. Its
+// seed and cells stay in `traces` (a branch that existed but wasn't kept).
+// Traces never block placement; clients read them per cell via imprintAt()
+// to show cracks, corruption, ghosts. Replay rebuilds them from history.
 (function (global) {
   'use strict';
 
@@ -56,6 +64,7 @@
       registry: {},
       history: [],
       counters: { space: 0, connection: 0 },
+      traces: {},
     };
     // Space 0: a chamber at the origin, seeded straight from the root seed.
     const seed = hash(exp.rootSeed, 'root');
@@ -365,6 +374,13 @@
     for (const k of space.cells) delete exp.registry[k];
     delete exp.spaces[spaceId];
     exp.history.push({ type: 'revert', spaceId });
+    if (!exp.traces) exp.traces = {};
+    exp.traces[spaceId] = {
+      id: space.id, seed: space.seed, parentId: space.parentId, viaExitId: space.viaExitId,
+      entropy: space.entropy, archetype: space.archetype, cells: space.cells.slice(),
+      depth: space.depth, deadEnd: space.deadEnd, meta: space.meta, revertedAt: exp.history.length - 1,
+    };
+    if (exp._imprints) exp._imprints = null; // keeps it non-enumerable (not exported)
   }
 
   function setCaps(exp, caps) {
@@ -434,6 +450,20 @@
   // ---------------------------------------------------------------------------
   // Queries
 
+  /**
+   * Every trace lying under a cell, oldest first: [{ id, seed, depth, ... }].
+   * Cached per expedition; any revert clears the cache.
+   */
+  function imprintAt(exp, cellKey) {
+    if (!exp._imprints) {
+      const idx = {};
+      const traces = Object.values(exp.traces || {}).sort((a, b) => a.revertedAt - b.revertedAt);
+      for (const t of traces) for (const k of t.cells) (idx[k] = idx[k] || []).push(t);
+      Object.defineProperty(exp, '_imprints', { value: idx, writable: true, configurable: true, enumerable: false });
+    }
+    return exp._imprints[cellKey] || [];
+  }
+
   function pathToRoot(exp, spaceId) {
     const path = [];
     let s = exp.spaces[spaceId];
@@ -471,6 +501,6 @@
   Object.assign(DE, {
     deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
     replay, exportRecord, importRecord, rebuildRegistry,
-    pathToRoot, cycleCount, stats, parseKey,
+    pathToRoot, cycleCount, stats, parseKey, imprintAt,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

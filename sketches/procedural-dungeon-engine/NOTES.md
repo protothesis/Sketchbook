@@ -67,6 +67,13 @@ Each one is a default that can change.
   becomes unresolved again.
 - A re-opened exit **draws new entropy** next time it's opened. It doesn't
   remember the old result.
+- **Traces** (added 2026-10-20 for walk mode's "rerolls leave a mark"). The
+  reverted space is copied into `exp.traces[id]` (seed, cells, parent, exit,
+  entropy, depth, meta, and `revertedAt` = its history index). Traces are
+  derived state, like the registry: replay rebuilds them, and they never
+  block placement. `imprintAt(exp, key)` indexes them per cell (cached
+  outside the export and cleared on every revert). An application decides
+  what an imprint means; the engine only remembers.
 
 ## Caps
 

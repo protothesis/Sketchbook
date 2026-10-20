@@ -30,6 +30,9 @@
   const RADIUS = 0.22;
   const SPEED = 2.4;
   const RUN = 4.0;
+  const CROUCH_SPEED = 1.1; // a crawl
+  const CROUCH_SCALE = 0.55; // figure height when crouched (standing is ~0.64 cells tall)
+  const HIDE_RANGE = 0.2;   // cells between the figure and a block to count as hidden
   const PUSH_TIME = 0.35;   // seconds of walking into a door to open it
   const USE_RANGE = 0.6;    // E / tap reach to a door's midpoint
   const PICKUP_RANGE = 0.42;
@@ -132,6 +135,37 @@ if (south > 0.2) {
   const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM });
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
   const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
+  geo.block = new THREE.BoxGeometry(1, 1, 1); // scaled per prop
+  geo.decal = new THREE.PlaneGeometry(S * 0.94, S * 0.94);
+
+  // Cracks: tiles standing on the trace of a collapsed room. A few canvas
+  // variants of dark fissures with a faint violet core (the imprint shows
+  // even in the dark). More trace layers under a cell, more cracks.
+  function crackTexture(seed, strokes) {
+    const n = 128, cv = document.createElement('canvas');
+    cv.width = cv.height = n;
+    const g = cv.getContext('2d');
+    const r = DE.createRng(DE.hash('crack', seed));
+    for (let i = 0; i < strokes; i++) {
+      let x = r.range(0.15, 0.85) * n, y = r.range(0.15, 0.85) * n, a = r.range(0, Math.PI * 2);
+      const pts = [[x, y]];
+      for (let j = 0; j < 6; j++) {
+        a += r.range(-0.9, 0.9);
+        x += Math.cos(a) * n * 0.11; y += Math.sin(a) * n * 0.11;
+        pts.push([x, y]);
+      }
+      for (const [w, col] of [[4, 'rgba(8,5,12,0.85)'], [1.3, 'rgba(176,140,255,0.75)']]) {
+        g.lineWidth = w; g.strokeStyle = col; g.lineJoin = 'round';
+        g.beginPath(); pts.forEach(([px, py], j) => (j ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke();
+      }
+    }
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+  const crackMats = [0, 1, 2, 3].map((i) => [2, 4].map((strokes) => new THREE.MeshBasicMaterial({
+    map: crackTexture(i + ':' + strokes, strokes), transparent: true, depthWrite: false,
+  })));
 
   const matCache = {};
   function spaceMats(space) {
@@ -141,6 +175,8 @@ if (south > 0.2) {
       seed: space.seed,
       floor: [0.15, 0.17, 0.19].map((l) => new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.22, l) })),
       wall: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.2, 0.32) })),
+      block: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.16, 0.24) })),
+      detail: [0.12, 0.21].map((l) => new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.18, l) })),
     };
     matCache[space.id] = m;
     return m;
@@ -158,11 +194,16 @@ if (south > 0.2) {
     dying: [],           // collapsed space records still dissolving
     doors: new Map(),    // "spaceId/exitId" -> door
     items: new Map(),    // "spaceId:seed:itemId" -> { mesh, item, spaceId, tile }
+    blockAt: new Map(),  // "x,y" -> [{ x0, y0, x1, y1, h, spaceId }] for collision
     player: { x: 0.5, y: 0.5, angle: 0, spaceId: null, phase: 0 },
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
     time: 0,
     minimap: true,
+    bigmap: null,        // { cx, cy, px } while the enlarged map is open
+    crouch: false,
+    crouchAmt: 0,        // 0 standing .. 1 crouched, eased
+    hidden: false,
     paused: false,
   };
   const world = new THREE.Group();
@@ -174,6 +215,7 @@ if (south > 0.2) {
       shardsFound: 0, keysFound: 0, keysUsed: 0,
       collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
       walked: 0, collected: [], unlocked: [], extracted: null,
+      keyRooms: [],  // "spaceId:seed" of rooms whose key showed up (locks first, keys later)
     };
   }
 
@@ -225,13 +267,22 @@ if (south > 0.2) {
     for (const k of space.cells) {
       const c = DE.parseKey(k);
       const dist = Math.abs(c.x - entry.x) + Math.abs(c.y - entry.y);
-      const tile = new THREE.Mesh(geo.tile, mats.floor[(c.x * 7 + c.y * 13 + 999) % 3]);
+      const tile = new THREE.Mesh(geo.tile, mats.floor[(((c.x * 7 + c.y * 13) % 3) + 3) % 3]);
       tile.receiveShadow = true;
       tile.position.set((c.x + 0.5) * S, -0.05, (c.y + 0.5) * S);
       tile.userData.delay = dist * REVEAL_STEP;
       group.add(tile);
       rec.tiles.push(tile);
       tileAt[k] = tile;
+
+      const layers = DE.imprintAt(exp, k);
+      if (layers.length) {
+        const hsh = parseInt(DE.hash(k, layers[layers.length - 1].seed).slice(-6), 16);
+        const crack = new THREE.Mesh(geo.decal, crackMats[hsh % 4][layers.length > 1 ? 1 : 0]);
+        crack.rotation.set(-Math.PI / 2, 0, (hsh >> 3) % 4 * Math.PI / 2);
+        crack.position.y = 0.052;
+        tile.add(crack);
+      }
 
       for (const f of DE.FACINGS) {
         const n = DE.step(c, f);
@@ -261,9 +312,34 @@ if (south > 0.2) {
       }
     }
 
+    // Props ride on their cell's tile, so they assemble and dissolve with it.
+    const pr = DP.props(space);
+    rec.blocks = [];
+    const onTile = (b, h, mat, cast) => {
+      const t = tileAt[DE.key(Math.floor((b.x0 + b.x1) / 2), Math.floor((b.y0 + b.y1) / 2))];
+      const m = new THREE.Mesh(geo.block, mat);
+      m.scale.set((b.x1 - b.x0) * S, h * S, (b.y1 - b.y0) * S);
+      m.position.set(((b.x0 + b.x1) / 2) * S - t.position.x, h * S / 2 + 0.05, ((b.y0 + b.y1) / 2) * S - t.position.z);
+      if (cast) shadowed(m); else m.receiveShadow = true;
+      t.add(m);
+    };
+    for (const d of pr.details) onTile(d, d.h, mats.detail[d.shade < 0.5 ? 0 : 1], false);
+    for (const b of pr.blocks) {
+      onTile(b, b.h, mats.block, true);
+      const blk = Object.assign({ spaceId: space.id }, b);
+      rec.blocks.push(blk);
+      // Index under every cell it touches (full blocks: one; wall-huggers: one).
+      const k = DE.key(Math.floor((b.x0 + b.x1) / 2), Math.floor((b.y0 + b.y1) / 2));
+      const list = state.blockAt.get(k) || [];
+      list.push(blk);
+      state.blockAt.set(k, list);
+    }
+
+    const spaceKey = space.id + ':' + space.seed;
     for (const item of DP.loot(space)) {
       const key = itemKey(space, item);
       if (state.run.collected.includes(key)) continue;
+      if (item.kind === 'key' && !state.run.keyRooms.includes(spaceKey)) continue;
       let mesh;
       if (item.kind === 'shard') {
         mesh = new THREE.Mesh(geo.shard, shardMat);
@@ -313,6 +389,10 @@ if (south > 0.2) {
   }
 
   function forgetSpace(id) {
+    for (const [k, list] of state.blockAt) {
+      const keep = list.filter((b) => b.spaceId !== id);
+      if (keep.length) state.blockAt.set(k, keep); else state.blockAt.delete(k);
+    }
     state.spaces.delete(id);
     for (const [k, d] of state.doors) if (d.spaceId === id) state.doors.delete(k);
     for (const [k, it] of state.items) if (it.spaceId === id) state.items.delete(k);
@@ -439,7 +519,13 @@ if (south > 0.2) {
   function resolveCollisions(p) {
     const segs = [];
     const cx = Math.floor(p.x), cy = Math.floor(p.y);
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) edgeSegments(cx + dx, cy + dy, segs);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      edgeSegments(cx + dx, cy + dy, segs);
+      for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
+        segs.push({ ax: b.x0, ay: b.y0, bx: b.x1, by: b.y0 }, { ax: b.x1, ay: b.y0, bx: b.x1, by: b.y1 },
+          { ax: b.x1, ay: b.y1, bx: b.x0, by: b.y1 }, { ax: b.x0, ay: b.y1, bx: b.x0, by: b.y0 });
+      }
+    }
     const touched = [];
     for (let iter = 0; iter < 3; iter++) {
       for (const s of segs) {
@@ -519,8 +605,21 @@ if (south > 0.2) {
     }
   }
 
+  /**
+   * Locks first, keys later: a key-capable room only shows its key while
+   * there are more unopened locked doors around than keys (held + lying).
+   */
+  function keyNeeded() {
+    const exp = state.exp;
+    let locks = 0, lying = 0;
+    for (const id in exp.spaces) for (const ex of exp.spaces[id].exits) if (isLockedNow(exp.spaces[id], ex)) locks++;
+    for (const it of state.items.values()) if (it.item.kind === 'key') lying++;
+    return locks > state.run.keys + lying;
+  }
+
   function openDoor(spaceId, exitId) {
     const exp = state.exp;
+    const needKey = keyNeeded();
     let cand;
     try {
       cand = DE.expand(exp, spaceId, exitId);
@@ -540,7 +639,9 @@ if (south > 0.2) {
       buildSpace(exp.spaces[cand.targetId], false);
       showCaption('this door opens onto ' + cand.targetId + '. you have been here');
     } else {
-      buildSpace(cand.space, true);
+      const sp = cand.space;
+      if (needKey && DP.loot(sp).some((it) => it.kind === 'key')) state.run.keyRooms.push(sp.id + ':' + sp.seed);
+      buildSpace(sp, true);
     }
     save();
     refreshHud();
@@ -601,13 +702,18 @@ if (south > 0.2) {
       if (k === 'escape' && recordMode === 'checkpoint') hideRecord();
       return;
     }
+    if (state.bigmap) {
+      if (k === 'm' || k === 'escape') closeBigMap();
+      return;
+    }
     keys.add(k);
     if (k === 'e' || k === ' ') {
       if (!e.repeat) act(doorNear(state.player));
       e.preventDefault();
     } else if (k === 'm') {
-      state.minimap = !state.minimap;
-      $('minimap').classList.toggle('hidden', !state.minimap);
+      openBigMap();
+    } else if (k === 'c') {
+      if (!e.repeat) toggleCrouch();
     } else if (k === 'n') {
       requestNewMap();
     }
@@ -682,8 +788,14 @@ if (south > 0.2) {
   canvas.addEventListener('pointerup', endStick);
   canvas.addEventListener('pointercancel', endStick);
 
+  function toggleCrouch() {
+    state.crouch = !state.crouch;
+    $('crouch-btn').classList.toggle('on', state.crouch);
+  }
+  $('crouch-btn').addEventListener('click', (e) => { toggleCrouch(); e.currentTarget.blur(); });
+
   function readInput() {
-    if (state.paused) return { x: 0, y: 0, mag: 0 };
+    if (state.paused || state.bigmap) return { x: 0, y: 0, mag: 0 };
     let x = 0, y = 0;
     if (keys.has('w') || keys.has('arrowup')) y -= 1;
     if (keys.has('s') || keys.has('arrowdown')) y += 1;
@@ -714,7 +826,7 @@ if (south > 0.2) {
     let moving = false;
 
     if (inp.mag > 0) {
-      const sp = (inp.run ? RUN : SPEED) * inp.mag;
+      const sp = (state.crouch ? CROUCH_SPEED : inp.run ? RUN : SPEED) * inp.mag;
       p.x += inp.x * sp * dt;
       p.y += inp.y * sp * dt;
       const target = Math.atan2(inp.x, inp.y);
@@ -793,7 +905,30 @@ if (south > 0.2) {
     figure.position.set(p.x * S, 0, p.y * S);
     figure.rotation.y = p.angle;
     fill.position.set(p.x * S, 1.0 * S, (p.y + 0.6) * S);
-    bodyRig.position.y = moving ? Math.abs(Math.sin(p.phase)) * 0.05 * S : 0;
+    state.crouchAmt += ((state.crouch ? 1 : 0) - state.crouchAmt) * Math.min(1, dt * 10);
+    const ca = state.crouchAmt;
+    bodyRig.scale.y = 1 - (1 - CROUCH_SCALE) * ca;
+    bodyRig.position.y = moving ? Math.abs(Math.sin(p.phase)) * 0.05 * S * (1 - 0.7 * ca) : 0;
+    lantern.position.y = (0.75 - 0.4 * ca) * S;
+
+    // Hidden: crouched, right up against a block (every block is taller
+    // than a crouched figure). Nothing hunts you yet; this is the hook.
+    let hidden = false;
+    if (ca > 0.8) {
+      const cx = Math.floor(p.x), cy = Math.floor(p.y);
+      for (let dy = -1; dy <= 1 && !hidden; dy++) for (let dx = -1; dx <= 1 && !hidden; dx++) {
+        for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
+          const ex = Math.max(b.x0 - p.x, 0, p.x - b.x1), ey = Math.max(b.y0 - p.y, 0, p.y - b.y1);
+          if (Math.hypot(ex, ey) < RADIUS + HIDE_RANGE) { hidden = true; break; }
+        }
+      }
+    }
+    const stance = hidden ? 'hidden' : state.crouch ? 'crouched' : '';
+    if (stance !== stanceEl.textContent) {
+      state.hidden = hidden;
+      stanceEl.textContent = stance;
+      stanceEl.className = 'stance' + (hidden ? ' hidden' : '');
+    }
     lantern.intensity = LANTERN * (0.94 + 0.06 * Math.sin(state.time * 9.3) * Math.sin(state.time * 3.1));
 
     // Camera: fixed angle, smoothed follow.
@@ -880,6 +1015,8 @@ if (south > 0.2) {
     captionTimer = setTimeout(() => el.classList.remove('show'), 2600);
   }
 
+  const stanceEl = $('stance');
+
   function refreshHud() {
     const s = DE.stats(state.exp);
     const run = state.run;
@@ -894,49 +1031,149 @@ if (south > 0.2) {
     $('keys-num').textContent = run.keys;
   }
 
-  const mm = $('minimap');
-  const mmCtx = mm.getContext('2d');
-  function drawMinimap() {
-    if (!state.minimap) return;
+  /**
+   * Draw the chart (traces, rooms, doors, figure) into a 2D canvas, with
+   * grid cell (cx, cy) at the canvas center and `px` pixels per cell. Used
+   * by the minimap (centered on the figure) and the enlarged map.
+   */
+  function drawChart(cv, ctx, cx, cy, px) {
     const dpr = Math.min(global.devicePixelRatio || 1, 2);
-    const w = mm.clientWidth, h = mm.clientHeight;
-    if (mm.width !== Math.round(w * dpr)) { mm.width = Math.round(w * dpr); mm.height = Math.round(h * dpr); }
-    const ctx = mmCtx;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const px = w / 26; // pixels per cell
     const p = state.player;
-    const ox = w / 2 - p.x * px, oy = h / 2 - p.y * px;
     const exp = state.exp;
+    const ox = w / 2 - cx * px, oy = h / 2 - cy * px;
+    const visible = (c) => ox + (c.x + 1) * px > 0 && ox + c.x * px < w && oy + (c.y + 1) * px > 0 && oy + c.y * px < h;
+    const gap = px > 4 ? 1 : 0;
+    const cell = (c) => ctx.fillRect(ox + c.x * px + gap / 2, oy + c.y * px + gap / 2, px - gap, px - gap);
+    // Traces of collapsed rooms: greyed, under everything live.
+    ctx.fillStyle = 'rgba(150, 146, 160, 0.22)';
+    for (const id in exp.traces || {}) {
+      for (const k of exp.traces[id].cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
+    }
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
       ctx.fillStyle = `hsla(${sp.meta.hue}, 18%, ${id === p.spaceId ? 46 : 30}%, 0.95)`;
-      for (const k of sp.cells) {
-        const c = DE.parseKey(k);
-        ctx.fillRect(ox + c.x * px + 0.5, oy + c.y * px + 0.5, px - 1, px - 1);
-      }
+      for (const k of sp.cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
     }
+    // Live cells standing on a trace: a violet tick (the imprint).
+    if (px >= 5) {
+      ctx.strokeStyle = 'rgba(181, 156, 255, 0.7)';
+      ctx.lineWidth = Math.max(1, px * 0.08);
+      ctx.beginPath();
+      for (const id in exp.spaces) for (const k of exp.spaces[id].cells) {
+        if (!DE.imprintAt(exp, k).length) continue;
+        const c = DE.parseKey(k);
+        if (!visible(c)) continue;
+        ctx.moveTo(ox + (c.x + 0.3) * px, oy + (c.y + 0.7) * px);
+        ctx.lineTo(ox + (c.x + 0.7) * px, oy + (c.y + 0.3) * px);
+      }
+      ctx.stroke();
+    }
+    // Doors: unopened orange, locked blue, opened green.
+    const t = Math.max(1.5, px * 0.12);
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
       for (const ex of sp.exits) {
         ctx.fillStyle = ex.connectionId ? '#5fbf7a' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
         const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);
-        ctx.fillRect(ox + Math.min(ax, bx) * px - 1.5, oy + Math.min(ay, by) * px - 1.5,
-          Math.abs(bx - ax) * px + 3, Math.abs(by - ay) * px + 3);
+        ctx.fillRect(ox + Math.min(ax, bx) * px - t, oy + Math.min(ay, by) * px - t,
+          Math.abs(bx - ax) * px + 2 * t, Math.abs(by - ay) * px + 2 * t);
       }
     }
     ctx.save();
-    ctx.translate(w / 2, h / 2);
+    ctx.translate(ox + p.x * px, oy + p.y * px);
     ctx.rotate(-p.angle);
     ctx.fillStyle = '#f3ecdc';
+    const a = Math.max(px, 7);
     ctx.beginPath();
-    ctx.moveTo(0, px * 0.55);
-    ctx.lineTo(px * 0.32, -px * 0.3);
-    ctx.lineTo(-px * 0.32, -px * 0.3);
+    ctx.moveTo(0, a * 0.55);
+    ctx.lineTo(a * 0.32, -a * 0.3);
+    ctx.lineTo(-a * 0.32, -a * 0.3);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
   }
+
+  const mm = $('minimap');
+  const mmCtx = mm.getContext('2d');
+  function drawMinimap() {
+    if (state.bigmap) return;
+    drawChart(mm, mmCtx, state.player.x, state.player.y, mm.clientWidth / 26);
+  }
+  mm.addEventListener('click', () => openBigMap());
+
+  // The enlarged map: M (or tapping the minimap) opens it; drag to pan,
+  // wheel or pinch to zoom. Walking pauses while it's open.
+  const bm = $('bigmap-canvas');
+  const bmCtx = bm.getContext('2d');
+  function openBigMap() {
+    if (state.paused) return;
+    keys.clear();
+    state.bigmap = { cx: state.player.x, cy: state.player.y, px: 14 };
+    $('bigmap').hidden = false;
+    mm.classList.add('hidden');
+  }
+  function closeBigMap() {
+    state.bigmap = null;
+    $('bigmap').hidden = true;
+    mm.classList.remove('hidden');
+  }
+  function drawBigMap() {
+    if (!state.bigmap) return;
+    drawChart(bm, bmCtx, state.bigmap.cx, state.bigmap.cy, state.bigmap.px);
+  }
+  function zoomBigMap(f, sx, sy) {
+    const v = state.bigmap;
+    const npx = THREE.MathUtils.clamp(v.px * f, 2.5, 60);
+    // Keep the cell under (sx, sy) fixed while zooming.
+    const r = bm.getBoundingClientRect();
+    const dx = sx - r.left - r.width / 2, dy = sy - r.top - r.height / 2;
+    v.cx += dx / v.px - dx / npx;
+    v.cy += dy / v.px - dy / npx;
+    v.px = npx;
+  }
+  const bmPointers = new Map();
+  let pinchDist = 0;
+  bm.addEventListener('pointerdown', (e) => {
+    bm.setPointerCapture(e.pointerId);
+    bmPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (bmPointers.size === 2) {
+      const [a, b] = Array.from(bmPointers.values());
+      pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  });
+  bm.addEventListener('pointermove', (e) => {
+    const prev = bmPointers.get(e.pointerId);
+    if (!prev || !state.bigmap) return;
+    const cur = { x: e.clientX, y: e.clientY };
+    bmPointers.set(e.pointerId, cur);
+    if (bmPointers.size === 1) {
+      state.bigmap.cx -= (cur.x - prev.x) / state.bigmap.px;
+      state.bigmap.cy -= (cur.y - prev.y) / state.bigmap.px;
+    } else if (bmPointers.size === 2) {
+      const [a, b] = Array.from(bmPointers.values());
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinchDist > 0) zoomBigMap(d / pinchDist, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      pinchDist = d;
+    }
+  });
+  const bmUp = (e) => { bmPointers.delete(e.pointerId); pinchDist = 0; };
+  bm.addEventListener('pointerup', bmUp);
+  bm.addEventListener('pointercancel', bmUp);
+  bm.addEventListener('wheel', (e) => {
+    if (!state.bigmap) return;
+    e.preventDefault();
+    zoomBigMap(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
+  }, { passive: false });
+  $('bigmap-center').addEventListener('click', () => {
+    if (state.bigmap) { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; }
+  });
+  $('bigmap-close').addEventListener('click', closeBigMap);
 
   // ---------------------------------------------------------------------------
   // The expedition record: the seed chain from the root to a locked door.
@@ -1118,6 +1355,7 @@ if (south > 0.2) {
     state.time += dt;
     update(dt);
     drawMinimap();
+    drawBigMap();
     renderer.render(scene, camera);
     saveClock += dt;
     if (saveClock > 1) { saveClock = 0; savePlayer(); }

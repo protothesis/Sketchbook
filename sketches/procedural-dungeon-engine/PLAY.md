@@ -30,8 +30,14 @@ Determinism).
 
 - **Explore.** Push doors open. Each one is a fresh, unrerollable draw.
 - **Collect.** Most rooms hold a **shard**, and big chambers sometimes hold
-  two. Three shards fuse into one **charge** of entropy. Rarely, a room
-  holds a **key**.
+  two. Three shards fuse into one **charge** of entropy.
+- **Lock first, key later.** A key only turns up after you've seen a lock.
+  About 1 room in 4 is *able* to hold a key, but the key only appears in
+  it if, when you open that room, there are more unopened locked doors
+  around than keys (held or lying somewhere).
+- **Hide.** Rooms have blocks: solid, shadow-casting, some full-cell. Crouch
+  (C, or the button) to crawl; crouched against a block you're **hidden**.
+  Nothing hunts you yet, so for now it's only the shadow play and the hook.
 - **Collapse.** Stand at a door you opened and press E (or tap the prompt),
   and the door shuts. The whole branch beyond it (that room and every room
   opened from it, deepest first) dissolves. The price is **1 per cell plus
@@ -40,7 +46,14 @@ Determinism).
   collected toward your next charge are kept. Reopening the door draws fresh
   entropy: that's the reroll. If the price is more charges than you have,
   the door stays open: "too much lies beyond."
-- **Checkpoints.** Locked doors are rare and appear past depth 4. Unlocking
+- **Traces.** A collapsed room isn't deleted. The engine keeps its seed and
+  cells as a **trace** (a branch that existed but wasn't kept), shown
+  greyed on the minimap, the big map and the chart view. A new room that
+  overlaps a trace carries its **imprint**, per tile: for now the tile is
+  cracked, with a faint violet glow. `DungeonEngine.imprintAt(exp, "x,y")`
+  returns every trace layer under a cell, oldest first, so later effects
+  (corruption, echoes, hazards) can key off the seeds underneath.
+- **Checkpoints.** Locked doors appear past depth 3, more often the deeper you go. Unlocking
   one with a key opens the **expedition record** (the seed chain from the
   root to that door, `H(parent | exit | entropy) → seed` per step, and a
   tally) and offers a choice:
@@ -62,7 +75,12 @@ forward; collapsing is the only thing entropy buys.
 | Doorways | 0.6 cells wide, 1.0 tall, with a lintel above | |
 | Closed door | dark panel with a warm orange seam of light under it | the same orange as the chart view's open doorways |
 | Locked door | iron-grey panel with two bands and a cold blue seam | blue on the minimap; once unlocked it keeps its bands and gets an orange seam |
-| Minimap | unopened doors orange, locked doors blue, opened doors green | so overlapping rooms stay readable |
+| Minimap | unopened doors orange, locked doors blue, opened doors green; traces grey; imprinted cells get a violet tick | so overlapping rooms stay readable |
+| Big map | M or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close | walking pauses while it's open |
+| Cracks | canvas-drawn fissures with a violet core on imprinted tiles; more trace layers, more cracks | seeded per cell; glows faintly even in the dark |
+| Blocks | flat-shaded boxes a shade darker than the walls, either full-cell or subgrid against a wall; 0.42 cells (low) or 0.85 (tall) | cast shadows; dithered like walls when in front of the figure |
+| Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
+| Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
 | Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on wall pixels south of the figure (a world-position test): full inside a soft circle around it (27% of the screen), and a light 30% dither across any south wall within 2.5 cells | walls never move; the whole face clears, top to bottom |
@@ -81,15 +99,19 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Open a door | walk into it for 0.35 s, or press E / tap the prompt |
 | Entropy | whole charges: start with 2, hold up to 8; 3 shards make 1 charge |
 | Shard | in 75% of chambers, 40% of corridors, 50% of dead ends; chambers of 20+ cells can hold a second |
-| Key | 1 in 30 rooms at depth 3 or deeper |
-| Locked door | 2.5% of unresolved exits on rooms at depth 4 or deeper |
+| Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
+| Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
+| Crouch | C or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block |
+| Blocks | full-cell (interior chamber cells only, never side by side): 18%; wall-hugging: 16% of chamber cells, 10% of corridor cells (kept shallow so corridors stay passable); 60% are low |
 | Collapse price | 1 per cell + 2 per room across the whole branch, divided by 15 and rounded up to whole charges |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
 In a 2,000-room simulation that works out to about 0.7 shards per room (one
-charge every ~4 rooms) and 0.027 keys per room. Collapsing a single room
-costs 1.4 charges on average, and a 120-room map has under one locked door
-on its frontier at a time.
+charge every ~4 rooms), and collapsing a single room costs 1.4 charges on
+average. In random 80-room walks, the first locked door shows up after a
+median of 18 rooms (90th percentile: 47), with about 6 locked doors on the
+frontier by room 80. A flood-fill check over ~800 rooms found no prop
+layout that cuts off a door or traps a patch of floor.
 
 ## Determinism
 
@@ -98,6 +120,28 @@ Loot uses `deriveRng(space.seed, 'loot')`. A lock uses
 stream, so a replayed expedition holds identical shards, keys and locks. A
 collapsed-and-regenerated room has a new seed and so new loot. A collected
 item is remembered as `spaceId:seed:itemId`.
+
+Props use `deriveRng(space.seed, 'props')`, and every cell draws a fixed run
+of numbers whether or not it gets a prop. A constraint that changes later
+(a loop door added to the room) can only remove that cell's prop, never
+shift the others.
+
+Whether a key-capable room actually shows its key depends on the run (were
+there locks waiting?), so it's run state (`run.keyRooms`), not seed state.
+Traces are engine state, rebuilt by replay from the history's reverts.
+
+## Playtest notes, 2026-10-20 (second session)
+
+- **White tiles** were a bug. The floor shade index `(x*7 + y*13 + 999) % 3`
+  goes negative far into negative coordinates, and JavaScript's `%` keeps
+  the sign, so those tiles got no material and three.js drew its default
+  white. Fixed.
+- **Locked doors felt too rare, and a key came before any lock.** Locks now
+  scale with depth (see above), and keys only appear once a lock is waiting.
+- **The minimap should open up.** Added the big map.
+- **Less pull to reroll corridors.** Left as is for now. Traces and
+  imprints are a first step toward making rerolls matter.
+- **Traces, props, crouch:** built as described above.
 
 ## Playtest notes, 2026-10-20 (all five addressed)
 
