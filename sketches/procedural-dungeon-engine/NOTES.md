@@ -75,6 +75,19 @@ Each one is a default that can change.
   outside the export and cleared on every revert). An application decides
   what an imprint means; the engine only remembers.
 
+## Carving exits
+
+- `carve(exp, spaceId, cell, facing)` adds an unresolved exit to an
+  existing space's wall, tagged `carved`, and records a
+  `{ type: 'carve', spaceId, cell, facing }` event that replay re-applies.
+  `canCarve` requires the cell to be in the space, the edge to be a wall
+  (not open to the space's own floor), no exit already on that edge, and no
+  unopened exit on the far side facing back.
+- A carved exit then behaves like any generated one. Expanding it seeds a
+  new space from `H(seed | index | entropy)` with the next exit index, or
+  makes a loop if the far cell is already occupied. Walk mode uses it for
+  door chalk; the engine stays rule-free.
+
 ## Caps
 
 - `maxSpaces`, `maxArea` (cells) and `maxDepth`. Once one is reached, every

@@ -147,6 +147,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
   const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM });
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
   const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
+  geo.chalk = new THREE.CylinderGeometry(0.03 * S, 0.03 * S, 0.22 * S, 8);
+  const chalkMat = new THREE.MeshLambertMaterial({ color: 0xf2efe6, emissive: 0x3a3a3a });
   geo.block = new THREE.BoxGeometry(1, 1, 1); // scaled per prop
   geo.post = new THREE.BoxGeometry(WALL_T * S, WALL_H * S, WALL_T * S); // inside-corner filler
   geo.decal = new THREE.PlaneGeometry(S * 0.94, S * 0.94);
@@ -231,7 +233,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   function freshRun(rootSeed) {
     return {
       rootSeed, charges: RULES.chargesStart, shards: 0, keys: 0,
-      shardsFound: 0, keysFound: 0, keysUsed: 0,
+      shardsFound: 0, keysFound: 0, keysUsed: 0, chalk: 0, chalkFound: 0, chalkUsed: 0,
       collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
       walked: 0, collected: [], unlocked: [], extracted: null,
       keyRooms: [],  // "spaceId:seed" of rooms whose key showed up (locks first, keys later)
@@ -395,6 +397,11 @@ if (vDitherEW > 0.7 && south > 0.2) {
       let mesh;
       if (item.kind === 'shard') {
         mesh = new THREE.Mesh(geo.shard, shardMat);
+      } else if (item.kind === 'chalk') {
+        mesh = new THREE.Group();
+        const stick = new THREE.Mesh(geo.chalk, chalkMat);
+        stick.rotation.z = 0.6; // a tilted stick of chalk
+        mesh.add(stick);
       } else {
         mesh = new THREE.Group();
         const ring = new THREE.Mesh(geo.keyRing, keyMat);
@@ -766,9 +773,47 @@ if (vDitherEW > 0.7 && south > 0.2) {
     if (state.crouch) toggleCrouch(); // vaulting stands you up
   }
 
+  /** A plain wall right in front of the figure that door chalk could draw on. */
+  function wallNear(p) {
+    if (state.run.chalk <= 0 || p.z > 0.05) return null;
+    const exp = state.exp;
+    const cx = Math.floor(p.x), cy = Math.floor(p.y);
+    const sid = exp.registry[DE.key(cx, cy)];
+    if (sid === undefined) return null;
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    let best = null, bestD = RADIUS + 0.2;
+    for (const f of DE.FACINGS) {
+      const d = DE.DIRS[f];
+      if (d.x * fx + d.y * fy < 0.6) continue; // must be facing it
+      const dist = f === 'N' ? p.y - cy : f === 'S' ? cy + 1 - p.y : f === 'W' ? p.x - cx : cx + 1 - p.x;
+      if (dist >= bestD || !DE.canCarve(exp, sid, { x: cx, y: cy }, f)) continue;
+      bestD = dist;
+      best = { action: 'carve', spaceId: sid, cell: { x: cx, y: cy }, facing: f };
+    }
+    return best;
+  }
+
+  /** Draw a door with chalk: the engine carves a real, unopened exit. */
+  function carveDoor(near) {
+    const exp = state.exp, run = state.run;
+    DE.carve(exp, near.spaceId, near.cell, near.facing);
+    run.chalk--;
+    run.chalkUsed++;
+    rebuildExitIndex();
+    buildSpace(exp.spaces[near.spaceId], false);
+    showCaption('you draw a door on the wall');
+    save();
+    savePlayer();
+    refreshHud();
+  }
+
+  /** What E (or tapping the prompt) would do right now, in priority order. */
+  const actionNear = (p) => doorNear(p) || blockNear(p) || wallNear(p);
+
   function act(near) {
     if (!near || state.paused || state.climb) return;
     if (near.action === 'climb') { climb(near.block, near.dir); return; }
+    if (near.action === 'carve') { carveDoor(near); return; }
     const run = state.run;
     const doorKey = near.space.id + '/' + near.exit.id;
     if (near.action === 'open') {
@@ -901,7 +946,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }
     keys.add(k);
     if (k === 'e') {
-      if (!e.repeat) act(doorNear(state.player) || blockNear(state.player));
+      if (!e.repeat) act(actionNear(state.player));
       e.preventDefault();
     } else if (k === ' ') {
       if (!e.repeat) toggleCrouch();
@@ -917,7 +962,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   global.addEventListener('blur', () => keys.clear());
 
   const promptEl = $('prompt');
-  promptEl.addEventListener('click', (e) => { act(doorNear(state.player) || blockNear(state.player)); promptEl.blur(); e.preventDefault(); });
+  promptEl.addEventListener('click', (e) => { act(actionNear(state.player)); promptEl.blur(); e.preventDefault(); });
 
   // New map needs a second tap/press within a few seconds; window.confirm()
   // is unreliable (some embedded and in-app viewers block it silently).
@@ -1107,6 +1152,10 @@ if (vDitherEW > 0.7 && south > 0.2) {
         } else {
           showCaption(`a shard · ${run.shards}/${per}`);
         }
+      } else if (it.item.kind === 'chalk') {
+        run.chalk++;
+        run.chalkFound++;
+        showCaption('door chalk · draw a door on any wall (E)');
       } else {
         run.keys++;
         run.keysFound++;
@@ -1127,7 +1176,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       }
     }
 
-    updatePrompt(state.paused || state.climb ? null : doorNear(p) || blockNear(p));
+    updatePrompt(state.paused || state.climb ? null : actionNear(p));
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;
@@ -1754,7 +1803,7 @@ void main() {
 
   // `base` is the frame time without the effect, so only slowness the
   // effect itself adds (not a slow machine or a big map) lowers its resolution.
-  const GLITCH_HOLD = 0.5; // sustained contact glitch, as a share of the collision flash
+  const GLITCH_HOLD = 0.25; // sustained contact glitch, as a share of the collision flash
   const fxPerf = { scale: 1, avg: 1 / 60, base: 1 / 60, clock: 0 };
   /** Called each frame with dt while the effect runs: adapt the target's resolution. */
   function adaptEffect(dt) {
@@ -1800,7 +1849,10 @@ void main() {
     let text = '', cls = '';
     if (near) {
       const run = state.run;
-      if (near.action === 'climb') {
+      if (near.action === 'carve') {
+        cls = 'chalk';
+        text = `a bare wall · ${verb} to draw a door (${state.run.chalk} chalk)`;
+      } else if (near.action === 'climb') {
         text = state.push.key ? 'climbing…' : `a block · push, or ${verb} to climb`;
       } else if (near.action === 'open') {
         text = state.push.key ? 'opening…' : `a closed door · push, or ${verb}`;
@@ -1847,6 +1899,7 @@ void main() {
     for (let i = 0; i < RULES.shardsPerCharge; i++) shards.append(el('span', i < run.shards ? 'pip on' : 'pip'));
     charges.parentElement.title = `${run.charges} of ${RULES.chargesMax} charges · ${run.shards}/${RULES.shardsPerCharge} shards toward the next`;
     $('keys-num').textContent = run.keys;
+    $('chalk-num').textContent = run.chalk;
     $('echoes-num').textContent = run.echoes;
   }
 
@@ -2058,7 +2111,7 @@ void main() {
     const rows = [
       ['rooms standing', s.spaces], ['rooms ever opened', generated], ['loops', s.cycles],
       ['cells charted', s.cells], ['deepest', deepest], ['chain length', chain.length],
-      ['shards found', run.shardsFound], ['keys found', run.keysFound], ['checkpoints', run.keysUsed],
+      ['shards found', run.shardsFound], ['keys found', run.keysFound], ['checkpoints', run.keysUsed], ['doors drawn', run.chalkUsed],
       ['collapses', run.collapses], ['rooms collapsed', run.roomsCollapsed], ['charges spent', run.chargesSpent],
       ['charges left', `${run.charges} + ${run.shards}/${RULES.shardsPerCharge}`],
       ['time walked', `${mins}:${String(secs).padStart(2, '0')}`],

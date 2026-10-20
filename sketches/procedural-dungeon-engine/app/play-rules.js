@@ -29,7 +29,10 @@
     lockChance: 0.045,        // at lockMinDepth, rising per level of depth
     lockChancePerDepth: 0.0075,
     lockChanceMax: 0.09,
-    lockMinDepth: 3,          // depth of the space the locked door leads out of
+    lockMinDepth: 3,
+    // Door chalk: draw a door on any wall. About as rare as keys turn out.
+    chalkChance: 0.045,
+    chalkMinDepth: 2,          // depth of the space the locked door leads out of
     chargesPerRoom: 1,        // collapse price: a flat charge per room in the branch
     // Props: blocks on a half-cell subgrid, stacked in half-cell-ish units
     // (3 units = floor to ceiling), plus flat floor detail.
@@ -64,6 +67,10 @@
     for (let i = 0; i < n; i++) items.push({ id: 'shard' + i, kind: 'shard', cell: spots[i % spots.length] });
     if (space.depth >= RULES.keyMinDepth && r.chance(RULES.keyChance)) {
       items.push({ id: 'key', kind: 'key', cell: spots[n % spots.length] });
+    }
+    // Drawn last so adding it never shifted the rolls above.
+    if (r.chance(RULES.chalkChance) && space.depth >= RULES.chalkMinDepth) {
+      items.push({ id: 'chalk', kind: 'chalk', cell: spots[(n + 2) % spots.length] });
     }
     return items;
   }
@@ -186,6 +193,7 @@
   /** Is this unresolved exit a locked door? Seeded per exit, never the entry. */
   function isLocked(space, exit) {
     if (exit.connectionId || exit.index === 0 && space.parentId) return false;
+    if (exit.tags && exit.tags.includes('carved')) return false; // drawn doors are never locked
     if (space.depth < RULES.lockMinDepth) return false;
     const p = Math.min(RULES.lockChanceMax,
       RULES.lockChance + (space.depth - RULES.lockMinDepth) * RULES.lockChancePerDepth);

@@ -18,6 +18,7 @@
 //   Event      { type:'commit', parentId, viaExitId, entropy, loop? }
 //            | { type:'revert', spaceId }
 //            | { type:'caps', caps }
+//            | { type:'carve', spaceId, cell:{x,y}, facing }   (an exit cut into a wall)
 //
 // Determinism rule: same seed + same registry state => same candidate. Replay
 // re-applies `history` in order from the root, which reproduces every seed,
@@ -383,6 +384,43 @@
     if (exp._imprints) exp._imprints = null; // keeps it non-enumerable (not exported)
   }
 
+  /**
+   * Can a new exit be cut into this space's wall at (cell, facing)? The cell
+   * must belong to the space, the edge must be a wall (not open to its own
+   * floor), with no exit there already, and no unopened door on the far side
+   * facing back (open that one instead).
+   */
+  function canCarve(exp, spaceId, cell, facing) {
+    const sp = exp.spaces[spaceId];
+    if (!sp || exp.registry[key(cell.x, cell.y)] !== spaceId) return false;
+    const n = step(cell, facing);
+    const other = exp.registry[key(n.x, n.y)];
+    if (other === spaceId) return false;
+    if (sp.exits.some((e) => e.cell.x === cell.x && e.cell.y === cell.y && e.facing === facing)) return false;
+    if (other !== undefined && exp.spaces[other].exits.some((e) =>
+      e.cell.x === n.x && e.cell.y === n.y && e.facing === OPPOSITE[facing])) return false;
+    return true;
+  }
+
+  /**
+   * Cut a new, unresolved exit into a space's wall: a tool for applications
+   * (walk mode's door chalk). It behaves like any generated exit: expanding
+   * it generates a space (or a loop, if the far side is already a space).
+   * Recorded in history, so replay reproduces it.
+   */
+  function carve(exp, spaceId, cell, facing) {
+    if (!canCarve(exp, spaceId, cell, facing)) throw new Error('Cannot carve an exit at ' + spaceId + ' ' + key(cell.x, cell.y) + facing);
+    const sp = exp.spaces[spaceId];
+    const ex = {
+      id: 'e' + sp.nextExitIndex, index: sp.nextExitIndex,
+      cell: { x: cell.x, y: cell.y }, facing, kind: 'standard', connectionId: null, tags: ['carved'],
+    };
+    sp.nextExitIndex++;
+    sp.exits.push(ex);
+    exp.history.push({ type: 'carve', spaceId, cell: { x: cell.x, y: cell.y }, facing });
+    return ex;
+  }
+
   function setCaps(exp, caps) {
     exp.params.maxSpaces = caps.maxSpaces || null;
     exp.params.maxArea = caps.maxArea || null;
@@ -416,6 +454,8 @@
         commit(exp, cand);
       } else if (ev.type === 'revert') {
         revert(exp, ev.spaceId);
+      } else if (ev.type === 'carve') {
+        carve(exp, ev.spaceId, ev.cell, ev.facing);
       } else if (ev.type === 'caps') {
         setCaps(exp, ev.caps);
       }
@@ -500,7 +540,7 @@
 
   Object.assign(DE, {
     deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
-    replay, exportRecord, importRecord, rebuildRegistry,
+    canCarve, carve, replay, exportRecord, importRecord, rebuildRegistry,
     pathToRoot, cycleCount, stats, parseKey, imprintAt,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

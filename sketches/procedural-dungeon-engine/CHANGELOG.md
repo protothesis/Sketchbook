@@ -138,6 +138,15 @@ All notable changes to this sketch are logged here, per
   The collapse price is a flat 1 charge per room (was 1 per cell + 2 per
   room, in 15-point charges).
 
+- 2026-10-20: **Door chalk.** A rare item (about 1 room in 33, depth 2+). Press
+  E facing a bare wall to draw a real door there: it opens onto a fresh
+  room, or loops into the room behind the wall. It's never locked, and
+  you can collapse through it. Engine: a new `carve` / `canCarve` adds an
+  exit to an existing space and records a `carve` history event, so
+  replay, export and the chart view keep drawn doors.
+- 2026-10-20: The sustained contact glitch is at a quarter of the flash's
+  strength (was half).
+
 ### Fixed
 
 - 2026-10-20: The ghost screen effect (wobble and glitch) tanked the frame

@@ -93,6 +93,13 @@ Determinism).
   off over a few seconds. The only way to be rid of one is to collapse the
   room it's in: it unravels and leaves an **echo**, a resource that does
   nothing yet.
+- **Door chalk.** A rare find (about 1 room in 33, from depth 2). Face any
+  bare wall and press E (or tap the prompt) to draw a door there. It's a
+  real, unopened door: opening it generates a room from fresh entropy,
+  or loops into the room behind the wall if there already is one. You can
+  collapse through it like any other. Drawn doors are never locked. The
+  engine records the door (a `carve` event), so replay, export and the
+  chart view all keep it.
 - **Checkpoints.** Locked doors appear past depth 3, more often the deeper you go. Unlocking
   one with a key opens the **expedition record** (the seed chain from the
   root to that door, `H(parent | exit | entropy) → seed` per step, and a
@@ -123,7 +130,8 @@ forward; collapsing is the only thing entropy buys.
 | Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
 | Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
 | Hash ghost | translucent violet head with a trailing wisp and four orbiting "bits"; faintly self-lit so you can see one coming | watching you: an amber "?" with a ring (violet and filling while lit, dim and rewinding when not; drawn over walls), slow bits, and an amber dot on the maps. Following you: a purple "!!" whose ring is its cool-down, hotter magenta glow, flicker, jitter, faster bits, and a magenta dot. Off-screen: an edge marker with an arrow. Hidden behind something: a dithered violet silhouette |
-| Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a half-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
+| Door chalk | a tilted white stick; a ✎ count on the HUD; a white "draw a door" prompt at a bare wall | the drawn door looks like any other |
+| Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
 | Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. Door frames cap at 45%, door panels at 60% | side (north–south) walls never dither; doorways in south walls stay readable |
@@ -150,6 +158,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
 | Collapse price | a flat 1 charge per room in the branch |
+| Door chalk | 4.5% of rooms at depth 2+ (seeded, drawn last on the loot stream); E facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
 In a 2,000-room simulation that works out to about 0.7 shards per room (one
