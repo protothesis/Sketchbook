@@ -310,3 +310,21 @@ kbd {
   transform-origin: 0 6px;
 }
 .gedge.chase .arrow { border-left-color: #d678ff; }
+
+/* On-screen notice: frame errors and stale cached files. */
+.notice {
+  position: fixed;
+  z-index: 20;
+  left: 50%;
+  top: max(12px, env(safe-area-inset-top));
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(40, 14, 20, 0.92);
+  border: 1px solid rgba(255, 120, 120, 0.6);
+  color: #ffd9d9;
+  font-size: 12px;
+  cursor: pointer;
+}
+.notice[data-kind="stale"] { background: rgba(40, 32, 10, 0.92); border-color: rgba(255, 195, 90, 0.6); color: #ffe7b8; }

@@ -149,6 +149,18 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-20: Walk mode froze for a remote playtester the moment they
+  picked up chalk. Their browser had cached copies of different versions:
+  an older play.html with no chalk counter, next to a newer play.js. The
+  HUD update threw, and the error stopped the game loop, while the HTML
+  buttons kept working. Fixes:
+  - `tools/serve.py`, a static server that sends `Cache-Control: no-cache`,
+    so every machine revalidates every file and runs the same code.
+  - The frame loop schedules its next frame before running, so an error
+    can't stop it; the first error shows as an on-screen notice.
+  - HUD writes skip missing elements.
+  - A boot check shows a "files are out of date, hard-refresh" notice if
+    the page and scripts don't match.
 - 2026-10-20: Drawing a door with chalk could trap the figure. The room
   rebuilt with the new door, the block layout reshuffled around it, and a
   block could land on the figure (62 of 381 possible spots changed the

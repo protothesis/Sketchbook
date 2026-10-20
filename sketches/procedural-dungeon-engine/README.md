@@ -37,6 +37,13 @@ open, and the space behind it assembles as the door swings. Spend
 door, which ends the walk on the expedition record. The design and the
 tunables are in [`PLAY.md`](PLAY.md).
 
+**Playtesting over the network:** serve the repo with
+`python tools/serve.py` (from the repo root; port 8791 by default) and open
+`http://<your IP>:8791/sketches/procedural-dungeon-engine/play.html`. It
+sends no-cache headers, so every machine always gets the current files.
+Plain `python -m http.server` lets browsers keep stale scripts. If a page
+still looks wrong, hard-refresh it (Ctrl+Shift+R, Cmd+Shift+R on a Mac).
+
 Headless engine check: `node stress-test.js [expansions] [runs]`.
 
 ## Structure

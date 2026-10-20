@@ -1898,23 +1898,45 @@ void main() {
     captionTimer = setTimeout(() => el.classList.remove('show'), 2600);
   }
 
-  const stanceEl = $('stance');
+  // HUD writes tolerate a missing element: a stale cached play.html paired
+  // with a newer play.js once froze the game when a new counter was missing.
+  const stanceEl = $('stance') || document.createElement('span');
+  const setText = (id, v) => { const e = $(id); if (e) e.textContent = v; };
 
   function refreshHud() {
     const s = DE.stats(state.exp);
     const run = state.run;
-    $('stats').textContent = `seed ${state.exp.rootSeed} · ${s.spaces} rooms · ${s.openExits} closed doors`;
+    setText('stats', `seed ${state.exp.rootSeed} · ${s.spaces} rooms · ${s.openExits} closed doors`);
     const charges = $('charges');
-    charges.innerHTML = '';
-    for (let i = 0; i < RULES.chargesMax; i++) charges.append(el('span', i < run.charges ? 'charge on' : 'charge'));
+    if (charges) {
+      charges.innerHTML = '';
+      for (let i = 0; i < RULES.chargesMax; i++) charges.append(el('span', i < run.charges ? 'charge on' : 'charge'));
+      charges.parentElement.title = `${run.charges} of ${RULES.chargesMax} charges · ${run.shards}/${RULES.shardsPerCharge} shards toward the next`;
+    }
     const shards = $('shard-pips');
-    shards.innerHTML = '';
-    for (let i = 0; i < RULES.shardsPerCharge; i++) shards.append(el('span', i < run.shards ? 'pip on' : 'pip'));
-    charges.parentElement.title = `${run.charges} of ${RULES.chargesMax} charges · ${run.shards}/${RULES.shardsPerCharge} shards toward the next`;
-    $('keys-num').textContent = run.keys;
-    $('chalk-num').textContent = run.chalk;
-    $('echoes-num').textContent = run.echoes;
+    if (shards) {
+      shards.innerHTML = '';
+      for (let i = 0; i < RULES.shardsPerCharge; i++) shards.append(el('span', i < run.shards ? 'pip on' : 'pip'));
+    }
+    setText('keys-num', run.keys);
+    setText('chalk-num', run.chalk);
+    setText('echoes-num', run.echoes);
   }
+
+  /** A small notice on screen (dismissable), for errors and stale files. */
+  function notice(text, kind) {
+    let n = $('notice');
+    if (!n) {
+      n = document.createElement('div');
+      n.id = 'notice';
+      n.className = 'notice';
+      n.addEventListener('click', () => n.remove());
+      document.body.append(n);
+    }
+    n.dataset.kind = kind || 'info';
+    n.textContent = text + '  (tap to dismiss)';
+  }
+  const REFRESH_HINT = 'Hard-refresh to load the latest files: Ctrl+Shift+R (Cmd+Shift+R on a Mac).';
 
   /**
    * Draw the chart (traces, rooms, doors, figure) into a 2D canvas, with
@@ -2249,19 +2271,42 @@ void main() {
 
   let last = performance.now();
   let saveClock = 0;
+  // The loop schedules its next frame first, so one bad frame can't stop the
+  // game (that's what froze it: an error mid-update killed the loop while
+  // the HTML buttons kept working). The first error shows on screen.
+  let errorShown = false;
   function frame(now) {
+    requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    state.time += dt;
-    update(dt);
-    drawMinimap();
-    drawBigMap();
-    renderFrame(dt);
-    saveClock += dt;
-    if (saveClock > 1) { saveClock = 0; savePlayer(); }
-    requestAnimationFrame(frame);
+    try {
+      state.time += dt;
+      update(dt);
+      drawMinimap();
+      drawBigMap();
+      renderFrame(dt);
+      saveClock += dt;
+      if (saveClock > 1) { saveClock = 0; savePlayer(); }
+    } catch (e) {
+      console.error(e);
+      if (!errorShown) {
+        errorShown = true;
+        notice(`Something went wrong: ${e && e.message ? e.message : e}. ${REFRESH_HINT}`, 'error');
+      }
+    }
   }
   requestAnimationFrame(frame);
+
+  // Stale-file check: play.html, the scripts and the CSS are cached
+  // separately, so a browser can end up with a mix of versions. If pieces
+  // this play.js expects are missing, say so instead of failing oddly later.
+  const expectIds = ['view', 'stats', 'charges', 'shard-pips', 'keys-num', 'chalk-num', 'echoes-num', 'stance',
+    'prompt', 'caption', 'minimap', 'bigmap', 'bigmap-canvas', 'ghost-edges', 'crouch-btn', 'done'];
+  const expectFns = [DE.carve, DE.imprintAt, DP.props, DP.ghostSpawn, DP.loot];
+  const missing = expectIds.filter((id) => !$(id));
+  if (missing.length || expectFns.some((f) => typeof f !== 'function')) {
+    notice(`This page's files are out of date (cached copies of different versions). ${REFRESH_HINT}`, 'stale');
+  }
   global.addEventListener('pagehide', savePlayer);
 
   // Handy from the console.
