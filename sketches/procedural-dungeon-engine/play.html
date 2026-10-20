@@ -17,9 +17,6 @@
       <span class="meter-label">entropy</span>
       <span id="charges" class="charges"></span>
       <span id="shard-pips" class="pips" title="Shards toward the next charge"></span>
-      <span class="keys" title="Keys open locked doors">&#9911; <span id="keys-num">0</span></span>
-      <span class="chalk" title="Door chalk: draw a door on any bare wall (E)">&#9998; <span id="chalk-num">0</span></span>
-      <span class="echoes" title="Echoes: hash ghosts unravelled by collapsing the rooms they haunt">&#9676; <span id="echoes-num">0</span></span>
       <span id="stance" class="stance"></span>
     </div>
     <div class="hud-buttons">
@@ -42,12 +39,15 @@
   <div id="ghost-edges" class="ghost-edges" aria-hidden="true"></div>
 
   <button id="crouch-btn" class="crouch-btn" type="button" title="Crouch (Space)">crouch</button>
+  <button id="use-btn" class="use-btn" type="button" title="Use the selected item (F)">use</button>
+
+  <div id="hotbar" class="hotbar" hidden aria-label="Inventory"></div>
 
   <button id="prompt" class="prompt" type="button" hidden></button>
   <p id="caption" class="caption"></p>
 
   <div class="hud bottom-left help">
-    <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> crouch · <kbd>E</kbd> open / unlock / collapse ·
+    <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> crouch · <kbd>E</kbd> interact · <kbd>F</kbd> use item · <kbd>1</kbd>–<kbd>9</kbd> select ·
     <kbd>M</kbd> map · <kbd>N</kbd> new
   </div>
 

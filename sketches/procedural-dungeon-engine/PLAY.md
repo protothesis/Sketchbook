@@ -93,8 +93,28 @@ Determinism).
   off over a few seconds. The only way to be rid of one is to collapse the
   room it's in: it unravels and leaves an **echo**, a resource that does
   nothing yet.
-- **Door chalk.** A rare find (about 1 room in 33, from depth 2). Face any
-  bare wall and press E (or tap the prompt) to draw a door there. It's a
+- **The hotbar.** Carried things sit in slots at the bottom of the screen:
+  each jar (with its fill), chalk, echoes, keys. Pick a slot with 1–9, the
+  mouse wheel, or a tap. **E** interacts with the world (doors, climbing,
+  lifting a placed jar). **F** (or "use" on touch) uses the selected item.
+- **Jars.** Found in about 1 room in 15 (depth 1+). F sets one down on the
+  half-cell in front of you: a small solid thing you can't climb, and ghosts
+  float over it. E lifts it again, with whatever's inside. A jar holds up
+  to 3 hash ghosts, which you can add two ways:
+  - Select echoes and F at a jar to pour one in.
+  - Lead a following ghost into a placed jar and it's caught.
+
+  Collapsing a room with a jar in it shatters the jar, and its ghosts
+  become echoes.
+- **Sigil tiles.** A glowing hex on the floor of about 1 room in 25 (depth
+  1+, not the smallest rooms; never under blocks). Stand a jar on it and the
+  sigil wakes, **one stage per ghost in the jar**. At stage 3 (a full jar)
+  it blazes gold and your **entropy max goes up by 1** for as long as it
+  stays that way. Lifting the jar, or anything that drops it below stage
+  3, takes the +1 away. Sigils stack. If the max drops while you're above
+  it, you keep the extra charges until spent but can't gain more.
+- **Door chalk.** A rare find (about 1 room in 33, from depth 2). Select it,
+  face any bare wall, and press F (or tap the prompt) to draw a door there. It's a
   real, unopened door: opening it generates a room from fresh entropy,
   or loops into the room behind the wall if there already is one. You can
   collapse through it like any other. Drawn doors are never locked. The
@@ -130,7 +150,10 @@ forward; collapsing is the only thing entropy buys.
 | Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
 | Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
 | Hash ghost | translucent violet head with a trailing wisp and four orbiting "bits"; faintly self-lit so you can see one coming | watching you: an amber "?" with a ring (violet and filling while lit, dim and rewinding when not; drawn over walls), slow bits, and an amber dot on the maps. Following you: a purple "!!" whose ring is its cool-down, hotter magenta glow, flicker, jitter, faster bits, and a magenta dot. Off-screen: an edge marker with an arrow. Hidden behind something: a dithered violet silhouette |
-| Door chalk | a tilted white stick; a ✎ count on the HUD; a white "draw a door" prompt at a bare wall | the drawn door looks like any other |
+| Door chalk | a tilted white stick; a ✎ slot on the hotbar; a white "draw a door" prompt at a bare wall | the drawn door looks like any other |
+| Hotbar | bottom-centre slots: ⚱ jar (three fill pips), ✎ chalk, ◌ echoes, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
+| Jar | a small glass jar with a dark lid; violet wisps bob inside, one per ghost | a solid half-cell |
+| Sigil | a seeded star polygon (pentagram, hexagram, {7/3}, {8/3}) in a double ring with glyph marks, drawn additively | stage 0 a faint violet trace; 1 a dim glow; 2 brighter and flickering; 3 pulsing gold. A +1 max shows as a gold-edged ninth charge slot |
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
 | Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
@@ -158,7 +181,9 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
 | Collapse price | a flat 1 charge per room in the branch |
-| Door chalk | 4.5% of rooms at depth 2+ (seeded, drawn last on the loot stream); E facing a bare wall within 0.4 cells, standing on the floor; never locked |
+| Door chalk | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (chalk selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
+| Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); capacity 3; placed 0.47 cells ahead on a free half-cell (not on a door's cell, not into a wall); 0.38 cells tall; a following ghost within 0.38 cells of a jar with room is caught |
+| Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); stage = ghosts in a jar standing on its tile; stage 3 = entropy max +1, stacking |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
 In a 2,000-room simulation that works out to about 0.7 shards per room (one

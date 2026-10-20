@@ -29,10 +29,16 @@
     lockChance: 0.045,        // at lockMinDepth, rising per level of depth
     lockChancePerDepth: 0.0075,
     lockChanceMax: 0.09,
-    lockMinDepth: 3,
+    lockMinDepth: 3,          // depth of the space the locked door leads out of
     // Door chalk: draw a door on any wall. About as rare as keys turn out.
     chalkChance: 0.045,
-    chalkMinDepth: 2,          // depth of the space the locked door leads out of
+    chalkMinDepth: 2,
+    // Jars hold up to 3 hash ghosts; sigil tiles power up with a filled jar.
+    jarChance: 1 / 15,
+    jarMinDepth: 1,
+    jarCapacity: 3,
+    sigilChance: 0.052,       // ~1 room in 25 (small rooms and the root never get one)
+    sigilMinDepth: 1,
     chargesPerRoom: 1,        // collapse price: a flat charge per room in the branch
     // Props: blocks on a half-cell subgrid, stacked in half-cell-ish units
     // (3 units = floor to ceiling), plus flat floor detail.
@@ -50,7 +56,7 @@
     ghostChanceMax: 0.4,
   };
 
-  /** Items lying in a space: [{ id, kind: 'shard'|'key', cell }]. */
+  /** Items lying in a space: [{ id, kind: 'shard'|'key'|'chalk'|'jar', cell }]. */
   function loot(space) {
     if (!space.parentId) return [];
     const r = DE.deriveRng(space.seed, 'loot');
@@ -72,7 +78,26 @@
     if (r.chance(RULES.chalkChance) && space.depth >= RULES.chalkMinDepth) {
       items.push({ id: 'chalk', kind: 'chalk', cell: spots[(n + 2) % spots.length] });
     }
+    // Drawn after chalk, so neither the chalk nor anything above shifted.
+    if (r.chance(RULES.jarChance) && space.depth >= RULES.jarMinDepth) {
+      items.push({ id: 'jar', kind: 'jar', cell: spots[(n + 3) % spots.length] });
+    }
     return items;
+  }
+
+  /**
+   * A sigil tile in this space, if it has one: { cell, seed }. Seeded on its
+   * own stream; never on a door cell or an item's cell.
+   */
+  function sigil(space) {
+    if (!space.parentId || space.depth < RULES.sigilMinDepth || space.cells.length < 4) return null;
+    const r = DE.deriveRng(space.seed, 'sigil');
+    if (!r.chance(RULES.sigilChance)) return null;
+    const doors = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const items = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
+    const free = space.cells.slice().sort().filter((k) => !doors.has(k) && !items.has(k));
+    if (!free.length) return null;
+    return { cell: DE.parseKey(free[Math.floor(r.next() * free.length)]), seed: DE.hash(space.seed, 'sigil') };
   }
 
   /**
@@ -101,6 +126,8 @@
     const doorCells = new Set(space.exits.filter((e) => !later(e)).map((e) => DE.key(e.cell.x, e.cell.y)));
     const laterCells = space.exits.filter(later).map((e) => e.cell);
     const lootCells = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
+    const sg = sigil(space); // keep a sigil tile clear of blocks
+    if (sg) lootCells.add(DE.key(sg.cell.x, sg.cell.y));
     const chamber = space.archetype === 'chamber' && !space.deadEnd;
     const subs = new Set(), reserved = new Set(), blocked = new Set();
     const sk = (x, y) => x + ',' + y;
@@ -264,5 +291,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, props, ghostSpawn, isLocked, childThrough, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, childThrough, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

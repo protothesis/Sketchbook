@@ -138,6 +138,19 @@ All notable changes to this sketch are logged here, per
   The collapse price is a flat 1 charge per room (was 1 per cell + 2 per
   room, in 15-point charges).
 
+- 2026-10-20: **Hotbar, jars and sigils.**
+  - **Hotbar.** A slot bar for carried things. 1–9, the wheel or a tap
+    selects; E interacts with the world, and F (or "use" on touch) uses the
+    selected item. Chalk now draws doors with F, so E no longer does it by
+    accident.
+  - **Jars.** About 1 room in 15. Set them down with F and lift them with
+    E, contents and all. They hold up to 3 hash ghosts: pour in echoes, or
+    lead a following ghost into a placed jar to catch it. A collapse
+    shatters a jar in the branch, and its ghosts become echoes.
+  - **Sigil tiles.** About 1 room in 25. A jar on a sigil powers it one
+    stage per ghost inside; at 3, entropy max +1 while it holds. Sigils
+    stack.
+  - Placed jars persist with the run.
 - 2026-10-20: **Door chalk.** A rare item (about 1 room in 33, depth 2+). Press
   E facing a bare wall to draw a real door there: it opens onto a fresh
   room, or loops into the room behind the wall. It's never locked, and

@@ -216,6 +216,11 @@ if (vDitherEW > 0.7 && south > 0.2) {
     player: { x: 0.5, y: 0.5, z: 0, vz: 0, angle: 0, spaceId: null, phase: 0 },
     climb: null,         // { fx, fy, fz, tx, ty, tz, t } while stepping up
     ghosts: [],          // live hash ghosts (see "Hash ghosts")
+    jars: [],            // jars standing in the world (see "Inventory")
+    sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
+    buff: 0,             // powered sigils: +1 entropy max each
+    buffReady: false,    // false until the first sigil pass (no caption on load)
+    sel: null,           // the selected hotbar slot's key
     fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9 }, // screen effects, 0..1
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
@@ -240,6 +245,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
       echoes: 0,     // hash ghosts unravelled by collapsing their rooms (no use yet)
       ghostSeen: [], // "spaceId:seed:ghost" for rooms whose ghost roll has happened
       ghosts: [],    // saved positions: [{ id, x, y, mode }]
+      jars: [],      // jars carried: [{ id, fill }]
+      placedJars: [], // jars set down: [{ id, sx, sy, fill }] (half-cell coordinates)
+      jarSeq: 0,
     };
   }
 
@@ -349,6 +357,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
       }
     }
 
+    addSigil(space, tileAt);
+
     // Props ride on their cell's tile, so they assemble and dissolve with it.
     const pr = DP.props(space);
     rec.blocks = [];
@@ -397,6 +407,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
       let mesh;
       if (item.kind === 'shard') {
         mesh = new THREE.Mesh(geo.shard, shardMat);
+      } else if (item.kind === 'jar') {
+        mesh = makeJarMesh();
+        mesh.scale.setScalar(0.85);
       } else if (item.kind === 'chalk') {
         mesh = new THREE.Group();
         const stick = new THREE.Mesh(geo.chalk, chalkMat);
@@ -448,6 +461,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   }
 
   function forgetSpace(id) {
+    state.sigils.delete(id);
     for (const [k, list] of state.blockAt) {
       const keep = list.filter((b) => b.spaceId !== id);
       if (keep.length) state.blockAt.set(k, keep); else state.blockAt.delete(k);
@@ -475,6 +489,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
 
   function buildWorld() {
     clearGhosts();
+    clearJars();
     for (const id of Array.from(state.spaces.keys())) disposeSpace(id);
     for (const rec of state.dying) world.remove(rec.group);
     state.dying = [];
@@ -727,7 +742,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     lanternMesh.position.z = (wx * sn + wy * c) * S;
   }
 
-  const canClimb = (b) => b.top - state.player.z > 0.05 &&
+  const canClimb = (b) => !b.jar && b.top - state.player.z > 0.05 &&
     b.top - state.player.z <= RULES.climbMaxUnits * UNIT + 0.01 && b.top <= RULES.climbMaxTop * UNIT + 0.01;
 
   /** A climbable block right in front of the figure, if no door is closer. */
@@ -807,13 +822,358 @@ if (vDitherEW > 0.7 && south > 0.2) {
     refreshHud();
   }
 
-  /** What E (or tapping the prompt) would do right now, in priority order. */
-  const actionNear = (p) => doorNear(p) || blockNear(p) || wallNear(p);
+  // ---------------------------------------------------------------------------
+  // Inventory: the hotbar, jars and sigils
+  //
+  // E interacts with the world (doors, climbing, lifting a placed jar). F
+  // uses the item selected on the hotbar: set a jar down on the half-cell in
+  // front of you, draw a door with chalk, or pour an echo into a jar you're
+  // facing. 1-9 or the mouse wheel select. A jar holds up to 3 hash ghosts:
+  // pour echoes in, or lead a following ghost into it and it's caught. A jar
+  // standing on a sigil tile powers it: one stage per ghost inside; at
+  // stage 3, entropy max +1 for as long as it stays that way.
+
+  const JAR_H = 0.38; // cells
+
+  function maxCharges() { return RULES.chargesMax + state.buff; }
+
+  /** The hotbar's slots, built from the run's inventory. */
+  function slots() {
+    const run = state.run, out = [];
+    for (const j of run.jars) out.push({ key: 'jar:' + j.id, kind: 'jar', jar: j });
+    if (run.chalk > 0) out.push({ key: 'chalk', kind: 'chalk', count: run.chalk });
+    if (run.echoes > 0) out.push({ key: 'echo', kind: 'echo', count: run.echoes });
+    if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
+    return out;
+  }
+  function selectedSlot() {
+    const s = slots();
+    return s.find((x) => x.key === state.sel) || s[0] || null;
+  }
+  function select(i) {
+    const s = slots();
+    if (!s.length) return;
+    state.sel = s[((i % s.length) + s.length) % s.length].key;
+    refreshHotbar();
+  }
+
+  const ICON = { jar: '⚱', chalk: '✎', echo: '◌', key: '⚷' };
+  const NAME = { jar: 'jar', chalk: 'door chalk', echo: 'echoes', key: 'keys' };
+  function refreshHotbar() {
+    const bar = $('hotbar');
+    if (!bar) return;
+    const s = slots();
+    const cur = selectedSlot();
+    if (cur) state.sel = cur.key;
+    bar.innerHTML = '';
+    bar.hidden = !s.length;
+    s.forEach((slot, i) => {
+      const b = el('button', 'slot' + (cur && slot.key === cur.key ? ' on' : '') + ' ' + slot.kind);
+      b.type = 'button';
+      b.title = NAME[slot.kind] + (slot.kind === 'jar' ? ` (${slot.jar.fill}/${RULES.jarCapacity})` : '');
+      b.append(el('span', 'n', String(i + 1)), el('span', 'ic', ICON[slot.kind]));
+      if (slot.kind === 'jar') {
+        const pips = el('span', 'fill');
+        for (let k = 0; k < RULES.jarCapacity; k++) pips.append(el('i', k < slot.jar.fill ? 'on' : ''));
+        b.append(pips);
+      } else b.append(el('span', 'ct', String(slot.count)));
+      b.addEventListener('click', (e) => { state.sel = slot.key; refreshHotbar(); b.blur(); e.preventDefault(); });
+      bar.append(b);
+    });
+  }
+
+  // --- jars in the world
+
+  const jarGeo = {
+    body: new THREE.CylinderGeometry(0.16 * S, 0.19 * S, 0.29 * S, 18),
+    neck: new THREE.CylinderGeometry(0.1 * S, 0.13 * S, 0.06 * S, 14),
+    lid: new THREE.CylinderGeometry(0.115 * S, 0.115 * S, 0.035 * S, 14),
+    wisp: new THREE.SphereGeometry(0.05 * S, 10, 8),
+  };
+  const jarGlassMat = new THREE.MeshLambertMaterial({ color: 0xa9c3d6, emissive: 0x0e1418, transparent: true, opacity: 0.5, depthWrite: false });
+  const jarLidMat = new THREE.MeshLambertMaterial({ color: 0x3a2f28 });
+  const jarWispMat = new THREE.MeshBasicMaterial({ color: 0xd2a8ff, transparent: true, opacity: 0.9 });
+
+  function makeJarMesh() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(jarGeo.body, jarGlassMat);
+    body.position.y = 0.145 * S;
+    body.castShadow = true;
+    const neck = new THREE.Mesh(jarGeo.neck, jarGlassMat);
+    neck.position.y = 0.32 * S;
+    const lid = new THREE.Mesh(jarGeo.lid, jarLidMat);
+    lid.position.y = 0.365 * S;
+    lid.castShadow = true;
+    g.add(body, neck, lid);
+    g.userData.wisps = [0, 1, 2].map((i) => {
+      const w = new THREE.Mesh(jarGeo.wisp, jarWispMat);
+      w.visible = false;
+      g.add(w);
+      return w;
+    });
+    return g;
+  }
+
+  function addJarToWorld(j) {
+    const x0 = j.sx / 2, y0 = j.sy / 2;
+    const block = { x0, y0, x1: x0 + 0.5, y1: y0 + 0.5, top: JAR_H, units: 1, jar: true, spaceId: 'jar:' + j.id };
+    const k = DE.key(Math.floor(x0), Math.floor(y0));
+    const list = state.blockAt.get(k) || [];
+    list.push(block);
+    state.blockAt.set(k, list);
+    const mesh = makeJarMesh();
+    mesh.position.set((x0 + 0.25) * S, 0, (y0 + 0.25) * S);
+    scene.add(mesh);
+    const rec = { id: j.id, sx: j.sx, sy: j.sy, fill: j.fill || 0, block, mesh };
+    state.jars.push(rec);
+    return rec;
+  }
+
+  function removeJarFromWorld(rec) {
+    scene.remove(rec.mesh);
+    const k = DE.key(Math.floor(rec.block.x0), Math.floor(rec.block.y0));
+    const keep = (state.blockAt.get(k) || []).filter((b) => b !== rec.block);
+    if (keep.length) state.blockAt.set(k, keep); else state.blockAt.delete(k);
+    state.jars = state.jars.filter((o) => o !== rec);
+  }
+
+  function clearJars() { for (const r of state.jars.slice()) removeJarFromWorld(r); }
+
+  /** The half-cell a jar would go on: just in front of you, if it's free. */
+  function jarSpot(p) {
+    if (p.z > 0.05) return null;
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    const sx = Math.floor((p.x + fx * (RADIUS + 0.27)) * 2), sy = Math.floor((p.y + fy * (RADIUS + 0.27)) * 2);
+    const cx = Math.floor(sx / 2), cy = Math.floor(sy / 2), k = DE.key(cx, cy);
+    const exp = state.exp;
+    const sid = exp.registry[k];
+    if (sid === undefined) return null;
+    const pcx = Math.floor(p.x), pcy = Math.floor(p.y);
+    if ((cx !== pcx || cy !== pcy) && !(Math.abs(cx - pcx) + Math.abs(cy - pcy) === 1 && passable(pcx, pcy, cx, cy))) return null;
+    if (exp.spaces[sid].exits.some((e) => e.cell.x === cx && e.cell.y === cy)) return null; // keep doorways clear
+    const x0 = sx / 2, y0 = sy / 2, x1 = x0 + 0.5, y1 = y0 + 0.5;
+    for (const b of state.blockAt.get(k) || []) if (b.x0 < x1 && b.x1 > x0 && b.y0 < y1 && b.y1 > y0) return null;
+    const ex = Math.max(x0 - p.x, 0, p.x - x1), ey = Math.max(y0 - p.y, 0, p.y - y1);
+    if (Math.hypot(ex, ey) < RADIUS + 0.02) return null; // not on top of you
+    return { sx, sy };
+  }
+
+  /** A placed jar right in front of you. */
+  function jarAhead(p) {
+    if (p.z > 0.05) return null;
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    let best = null, bestD = RADIUS + 0.32;
+    for (const j of state.jars) {
+      const b = j.block;
+      const qx = THREE.MathUtils.clamp(p.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(p.y, b.y0, b.y1);
+      const d = Math.hypot(qx - p.x, qy - p.y);
+      if (d >= bestD) continue;
+      const cx = (b.x0 + b.x1) / 2 - p.x, cy = (b.y0 + b.y1) / 2 - p.y;
+      if ((cx * fx + cy * fy) / (Math.hypot(cx, cy) || 1) < 0.2) continue;
+      bestD = d;
+      best = j;
+    }
+    return best;
+  }
+
+  /** E at a placed jar: lift it (with whatever's inside) into the hotbar. */
+  function jarNear(p) {
+    const j = jarAhead(p);
+    return j ? { action: 'pickjar', jar: j } : null;
+  }
+
+  function pickUpJar(rec) {
+    removeJarFromWorld(rec);
+    state.run.jars.push({ id: rec.id, fill: rec.fill });
+    state.sel = 'jar:' + rec.id;
+    showCaption(rec.fill ? `you lift the jar · ${rec.fill} hash ghost${rec.fill === 1 ? '' : 's'} inside` : 'you lift the jar');
+    savePlayer();
+    refreshHud();
+  }
+
+  /** What F would do right now with the selected item, or null. */
+  function useNear(p) {
+    const slot = selectedSlot();
+    if (!slot || state.paused || state.climb) return null;
+    if (slot.kind === 'jar') {
+      const spot = jarSpot(p);
+      return spot ? { action: 'place', slot, spot } : null;
+    }
+    if (slot.kind === 'chalk') {
+      const w = wallNear(p);
+      return w ? Object.assign(w, { slot }) : null;
+    }
+    if (slot.kind === 'echo') {
+      const j = jarAhead(p);
+      return j && j.fill < RULES.jarCapacity ? { action: 'pour', slot, jar: j } : null;
+    }
+    return null;
+  }
+
+  function useSelected() {
+    const p = state.player, run = state.run;
+    const u = useNear(p);
+    const slot = selectedSlot();
+    if (!u) {
+      if (!slot) showCaption('nothing to use');
+      else if (slot.kind === 'jar') showCaption('no room to set the jar down here');
+      else if (slot.kind === 'chalk') showCaption('face a bare wall to draw a door');
+      else if (slot.kind === 'echo') showCaption('face a jar with room in it to pour an echo in');
+      else showCaption('keys open locked doors (E)');
+      return;
+    }
+    if (u.action === 'place') {
+      const j = u.slot.jar;
+      run.jars = run.jars.filter((o) => o !== j);
+      addJarToWorld({ id: j.id, sx: u.spot.sx, sy: u.spot.sy, fill: j.fill });
+      showCaption(j.fill ? `you set the jar down · ${j.fill}/${RULES.jarCapacity}` : 'you set the jar down');
+    } else if (u.action === 'carve') {
+      carveDoor(u);
+      return;
+    } else if (u.action === 'pour') {
+      run.echoes--;
+      u.jar.fill++;
+      showCaption(`an echo settles into the jar · ${u.jar.fill}/${RULES.jarCapacity}`);
+    }
+    savePlayer();
+    refreshHud();
+  }
+
+  /** A following ghost that drifts into a jar with room is caught in it. */
+  function jarCatches(g) {
+    for (const j of state.jars) {
+      if (j.fill >= RULES.jarCapacity) continue;
+      if (Math.hypot(g.x - (j.block.x0 + 0.25), g.y - (j.block.y0 + 0.25)) < 0.38) return j;
+    }
+    return null;
+  }
+
+  /** Jars in rooms about to collapse shatter; their ghosts become echoes. */
+  function shatterJarsIn(ids) {
+    const reg = state.exp.registry;
+    let ghosts = 0, n = 0;
+    for (const j of state.jars.slice()) {
+      if (!ids.has(reg[DE.key(Math.floor(j.block.x0), Math.floor(j.block.y0))])) continue;
+      ghosts += j.fill;
+      n++;
+      removeJarFromWorld(j);
+    }
+    state.run.echoes += ghosts;
+    return { n, ghosts };
+  }
+
+  function updateJars() {
+    for (const j of state.jars) {
+      j.mesh.userData.wisps.forEach((w, i) => {
+        w.visible = i < j.fill;
+        const a = state.time * 1.3 + i * 2.1;
+        w.position.set(Math.cos(a) * 0.06 * S, (0.09 + i * 0.075 + Math.sin(a * 1.7) * 0.02) * S, Math.sin(a) * 0.06 * S);
+      });
+    }
+  }
+
+  // --- sigil tiles
+
+  function sigilTexture(seed) {
+    const n = 256, cv = document.createElement('canvas');
+    cv.width = cv.height = n;
+    const g = cv.getContext('2d');
+    const r = DE.createRng(seed);
+    const c = n / 2;
+    g.strokeStyle = '#fff';
+    g.fillStyle = '#fff';
+    g.lineCap = 'round';
+    g.lineWidth = n * 0.022;
+    g.beginPath(); g.arc(c, c, n * 0.44, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = n * 0.012;
+    g.beginPath(); g.arc(c, c, n * 0.37, 0, Math.PI * 2); g.stroke();
+    // A star polygon {k/step}; for six points, a hexagram (two triangles).
+    const k = r.int(5, 8), rot = r.next() * Math.PI * 2;
+    const pt = (a) => [c + Math.cos(a) * n * 0.37, c + Math.sin(a) * n * 0.37];
+    const poly = (count, step, off) => {
+      g.beginPath();
+      for (let i = 0; i <= count; i++) {
+        const [x, y] = pt(rot + off + (i * step % count) / count * Math.PI * 2);
+        if (i) g.lineTo(x, y); else g.moveTo(x, y);
+      }
+      g.stroke();
+    };
+    g.lineWidth = n * 0.016;
+    if (k === 6) { poly(3, 1, 0); poly(3, 1, Math.PI / 3); }
+    else poly(k, k === 5 ? 2 : 3, 0);
+    // Glyph marks between the rings, and an eye in the middle.
+    const marks = r.int(7, 12);
+    g.lineWidth = n * 0.01;
+    for (let i = 0; i < marks; i++) {
+      const a = i / marks * Math.PI * 2 + rot;
+      const x = c + Math.cos(a) * n * 0.405, y = c + Math.sin(a) * n * 0.405;
+      g.beginPath();
+      const t = r.int(0, 2);
+      if (t === 0) { g.arc(x, y, n * 0.012, 0, Math.PI * 2); g.fill(); }
+      else if (t === 1) { g.moveTo(x - n * 0.015, y); g.lineTo(x + n * 0.015, y); g.moveTo(x, y - n * 0.015); g.lineTo(x, y + n * 0.015); g.stroke(); }
+      else { g.moveTo(x - n * 0.012, y + n * 0.012); g.lineTo(x, y - n * 0.014); g.lineTo(x + n * 0.012, y + n * 0.012); g.stroke(); }
+    }
+    g.lineWidth = n * 0.014;
+    g.beginPath(); g.arc(c, c, n * 0.07, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.arc(c, c, n * 0.025, 0, Math.PI * 2); g.fill();
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  /** Add a space's sigil (if any) to its tile. Called from buildSpace. */
+  function addSigil(space, tileAt) {
+    const sg = DP.sigil(space);
+    if (!sg) return;
+    const tile = tileAt[DE.key(sg.cell.x, sg.cell.y)];
+    if (!tile) return;
+    const mat = new THREE.MeshBasicMaterial({
+      map: sigilTexture(sg.seed), color: 0xb59cff, transparent: true, opacity: 0.22,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const mesh = new THREE.Mesh(geo.decal, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = 0.056;
+    tile.add(mesh);
+    state.sigils.set(space.id, { cell: sg.cell, mat, stage: -1, phase: Math.random() * 10 });
+  }
+
+  /** Stage = ghosts in a jar standing on the sigil (0-3); stage 3 grants +1 entropy max. */
+  function updateSigils() {
+    let powered = 0;
+    for (const sg of state.sigils.values()) {
+      let stage = 0;
+      for (const j of state.jars) {
+        if (Math.floor(j.sx / 2) === sg.cell.x && Math.floor(j.sy / 2) === sg.cell.y) stage = Math.max(stage, Math.min(3, j.fill));
+      }
+      if (sg.stage !== -1 && stage > sg.stage && stage < 3) showCaption(`the sigil stirs · stage ${stage} of 3`);
+      sg.stage = stage;
+      if (stage === 3) powered++;
+      const t = state.time + sg.phase;
+      const flicker = stage === 0 ? 1 : stage === 1 ? 0.9 + 0.1 * Math.sin(t * 9)
+        : stage === 2 ? 0.75 + 0.25 * Math.abs(Math.sin(t * 13) * Math.sin(t * 5.3)) : 0.85 + 0.15 * Math.sin(t * 3);
+      sg.mat.opacity = [0.22, 0.45, 0.7, 1][stage] * flicker;
+      sg.mat.color.setHex(stage === 3 ? 0xffd28a : stage === 2 ? 0xd2a8ff : 0xb59cff);
+    }
+    if (powered !== state.buff) {
+      const up = powered > state.buff;
+      state.buff = powered;
+      if (state.buffReady) {
+        showCaption(up ? `the sigil blazes · entropy max ${maxCharges()}` : `a sigil gutters out · entropy max ${maxCharges()}`);
+      }
+      refreshHud();
+    }
+    state.buffReady = true;
+  }
+
+  /** What E would do right now, in priority order (F uses the hotbar item: useNear). */
+  const actionNear = (p) => doorNear(p) || jarNear(p) || blockNear(p);
 
   function act(near) {
     if (!near || state.paused || state.climb) return;
     if (near.action === 'climb') { climb(near.block, near.dir); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
+    if (near.action === 'pickjar') { pickUpJar(near.jar); return; }
     const run = state.run;
     const doorKey = near.space.id + '/' + near.exit.id;
     if (near.action === 'open') {
@@ -907,6 +1267,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     if (!loopsIntoParent) touched.delete(near.space.id);
 
     const unravelled = banishGhostsIn(ids);
+    const shattered = shatterJarsIn(ids);
     DP.collapse(exp, near.child.id);
     run.charges -= near.price.charges;
     run.chargesSpent += near.price.charges;
@@ -921,7 +1282,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     if (door) door.dir = -1;
 
     showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}` +
-      (unravelled ? ` · ${unravelled === 1 ? 'a hash ghost unravels' : unravelled + ' hash ghosts unravel'} (+${unravelled} echo${unravelled === 1 ? '' : 'es'})` : ''));
+      (unravelled ? ` · ${unravelled === 1 ? 'a hash ghost unravels' : unravelled + ' hash ghosts unravel'} (+${unravelled} echo${unravelled === 1 ? '' : 'es'})` : '') +
+      (shattered.n ? ` · ${shattered.n === 1 ? 'a jar shatters' : shattered.n + ' jars shatter'}${shattered.ghosts ? ` (+${shattered.ghosts} echo${shattered.ghosts === 1 ? '' : 'es'})` : ''}` : ''));
     save();
     savePlayer();
     refreshHud();
@@ -948,6 +1310,10 @@ if (vDitherEW > 0.7 && south > 0.2) {
     if (k === 'e') {
       if (!e.repeat) act(actionNear(state.player));
       e.preventDefault();
+    } else if (k === 'f') {
+      if (!e.repeat) useSelected();
+    } else if (k >= '1' && k <= '9' && k.length === 1) {
+      select(+k - 1);
     } else if (k === ' ') {
       if (!e.repeat) toggleCrouch();
       e.preventDefault(); // don't also "click" a focused button or scroll
@@ -962,7 +1328,17 @@ if (vDitherEW > 0.7 && south > 0.2) {
   global.addEventListener('blur', () => keys.clear());
 
   const promptEl = $('prompt');
-  promptEl.addEventListener('click', (e) => { act(actionNear(state.player)); promptEl.blur(); e.preventDefault(); });
+  promptEl.addEventListener('click', (e) => {
+    const near = actionNear(state.player);
+    if (near) act(near); else useSelected();
+    promptEl.blur();
+    e.preventDefault();
+  });
+  canvas.addEventListener('wheel', (e) => {
+    if (state.bigmap || state.paused) return;
+    const s = slots(), i = s.findIndex((x) => x.key === state.sel);
+    select(i + (e.deltaY > 0 ? 1 : -1));
+  }, { passive: true });
 
   // New map needs a second tap/press within a few seconds; window.confirm()
   // is unreliable (some embedded and in-app viewers block it silently).
@@ -1032,6 +1408,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     $('crouch-btn').classList.toggle('on', state.crouch);
   }
   $('crouch-btn').addEventListener('click', (e) => { toggleCrouch(); e.currentTarget.blur(); });
+  const useBtn = $('use-btn');
+  if (useBtn) useBtn.addEventListener('click', (e) => { useSelected(); e.currentTarget.blur(); });
 
   function readInput() {
     if (state.paused || state.bigmap) return { x: 0, y: 0, mag: 0 };
@@ -1155,7 +1533,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       if (it.item.kind === 'shard') {
         run.shardsFound++;
         const per = RULES.shardsPerCharge;
-        if (run.charges >= RULES.chargesMax) {
+        if (run.charges >= maxCharges()) {
           run.shards = Math.min(per - 1, run.shards + 1);
           showCaption('a shard · your entropy is full');
         } else if (++run.shards >= per) {
@@ -1165,6 +1543,11 @@ if (vDitherEW > 0.7 && south > 0.2) {
         } else {
           showCaption(`a shard · ${run.shards}/${per}`);
         }
+      } else if (it.item.kind === 'jar') {
+        const id = 'j' + (++run.jarSeq);
+        run.jars.push({ id, fill: 0 });
+        state.sel = 'jar:' + id;
+        showCaption(`an empty jar · ${verbF} to set it down; hash ghosts can be caught in it`);
       } else if (it.item.kind === 'chalk') {
         run.chalk++;
         run.chalkFound++;
@@ -1189,7 +1572,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       }
     }
 
-    updatePrompt(state.paused || state.climb ? null : actionNear(p));
+    updatePrompt(state.paused || state.climb ? null : actionNear(p) || useNear(p));
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;
@@ -1239,6 +1622,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     dither.uDitherPlayer.value.set(p.x * S, p.y * S);
 
     updateGhosts(dt);
+    updateJars();
+    updateSigils();
 
     // Doors swinging open (dir 1) or shut (dir -1).
     for (const d of state.doors.values()) {
@@ -1607,6 +1992,17 @@ if (vDitherEW > 0.7 && south > 0.2) {
     for (const g of state.ghosts.slice()) {
       const lit = lightReaches(lamp, { x: g.x, y: g.y, h: g.h });
       g.litNow = lit;
+      if (!frozen && g.mode === 'chase' && g.stun <= 0) {
+        const jar = jarCatches(g);
+        if (jar) {
+          jar.fill++;
+          removeGhost(g);
+          showCaption(`the jar drinks in the hash ghost · ${jar.fill}/${RULES.jarCapacity}`);
+          savePlayer();
+          refreshHud();
+          continue;
+        }
+      }
       if (!frozen) {
         // Bump into one and it's onto you at once, though it reels for a beat first.
         if (g.mode !== 'chase' && Math.hypot(p.x - g.x, p.y - g.y) < GHOST.contact && p.z < 0.6) {
@@ -1855,6 +2251,7 @@ void main() {
 
   const touchUi = global.matchMedia && global.matchMedia('(hover: none)').matches;
   const verb = touchUi ? 'tap' : 'E';
+  const verbF = touchUi ? 'tap' : 'F';
   const chargeText = (n) => `${n} charge${n === 1 ? '' : 's'}`;
 
   let lastPrompt = '';
@@ -1864,7 +2261,16 @@ void main() {
       const run = state.run;
       if (near.action === 'carve') {
         cls = 'chalk';
-        text = `a bare wall · ${verb} to draw a door (${state.run.chalk} chalk)`;
+        text = `a bare wall · ${verbF} to draw a door (${state.run.chalk} chalk)`;
+      } else if (near.action === 'place') {
+        cls = 'jar';
+        text = `${verbF} to set the jar down`;
+      } else if (near.action === 'pour') {
+        cls = 'jar';
+        text = `a jar (${near.jar.fill}/${RULES.jarCapacity}) · ${verbF} to pour in an echo`;
+      } else if (near.action === 'pickjar') {
+        cls = 'jar';
+        text = `a jar (${near.jar.fill}/${RULES.jarCapacity}) · ${verb} to lift it`;
       } else if (near.action === 'climb') {
         text = state.push.key ? 'climbing…' : `a block · push, or ${verb} to climb`;
       } else if (near.action === 'open') {
@@ -1910,17 +2316,17 @@ void main() {
     const charges = $('charges');
     if (charges) {
       charges.innerHTML = '';
-      for (let i = 0; i < RULES.chargesMax; i++) charges.append(el('span', i < run.charges ? 'charge on' : 'charge'));
-      charges.parentElement.title = `${run.charges} of ${RULES.chargesMax} charges · ${run.shards}/${RULES.shardsPerCharge} shards toward the next`;
+      for (let i = 0; i < maxCharges(); i++) {
+        charges.append(el('span', (i < run.charges ? 'charge on' : 'charge') + (i >= RULES.chargesMax ? ' buff' : '')));
+      }
+      charges.parentElement.title = `${run.charges} of ${maxCharges()} charges · ${run.shards}/${RULES.shardsPerCharge} shards toward the next`;
     }
     const shards = $('shard-pips');
     if (shards) {
       shards.innerHTML = '';
       for (let i = 0; i < RULES.shardsPerCharge; i++) shards.append(el('span', i < run.shards ? 'pip on' : 'pip'));
     }
-    setText('keys-num', run.keys);
-    setText('chalk-num', run.chalk);
-    setText('echoes-num', run.echoes);
+    refreshHotbar();
   }
 
   /** A small notice on screen (dismissable), for errors and stale files. */
@@ -2202,6 +2608,7 @@ void main() {
   }
   function savePlayer() {
     const p = state.player;
+    state.run.placedJars = state.jars.map((j) => ({ id: j.id, sx: j.sx, sy: j.sy, fill: j.fill }));
     state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
     try {
       localStorage.setItem(PLAYER_KEY, JSON.stringify({
@@ -2227,7 +2634,13 @@ void main() {
     const same = savedPlayer && savedPlayer.rootSeed === exp.rootSeed;
     state.run = same && savedPlayer.run ? Object.assign(freshRun(exp.rootSeed), savedPlayer.run) : freshRun(exp.rootSeed);
     const savedGhosts = state.run.ghosts || [];
+    const savedJars = state.run.placedJars || [];
+    state.buffReady = false;
     buildWorld();
+    for (const j of savedJars) {
+      if (exp.registry[DE.key(Math.floor(j.sx / 2), Math.floor(j.sy / 2))] !== undefined) addJarToWorld(j);
+      else state.run.echoes += j.fill; // its room is gone: the jar broke
+    }
     for (const g of savedGhosts) {
       if (exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))] !== undefined) addGhost({ id: g.id, x: g.x, y: g.y, mode: g.mode });
     }
@@ -2300,7 +2713,7 @@ void main() {
   // Stale-file check: play.html, the scripts and the CSS are cached
   // separately, so a browser can end up with a mix of versions. If pieces
   // this play.js expects are missing, say so instead of failing oddly later.
-  const expectIds = ['view', 'stats', 'charges', 'shard-pips', 'keys-num', 'chalk-num', 'echoes-num', 'stance',
+  const expectIds = ['view', 'stats', 'charges', 'shard-pips', 'hotbar', 'use-btn', 'stance',
     'prompt', 'caption', 'minimap', 'bigmap', 'bigmap-canvas', 'ghost-edges', 'crouch-btn', 'done'];
   const expectFns = [DE.carve, DE.imprintAt, DP.props, DP.ghostSpawn, DP.loot];
   const missing = expectIds.filter((id) => !$(id));
@@ -2310,5 +2723,5 @@ void main() {
   global.addEventListener('pagehide', savePlayer);
 
   // Handy from the console.
-  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern, renderFrame, fxPerf, post });
+  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern, renderFrame, fxPerf, post, addJarToWorld });
 })(window);

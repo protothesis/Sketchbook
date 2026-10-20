@@ -328,3 +328,70 @@ kbd {
   cursor: pointer;
 }
 .notice[data-kind="stale"] { background: rgba(40, 32, 10, 0.92); border-color: rgba(255, 195, 90, 0.6); color: #ffe7b8; }
+
+/* Hotbar: carried items. Click or 1-9 to select; F (or "use") to use. */
+.hotbar {
+  position: fixed;
+  z-index: 3;
+  left: 50%;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.hotbar[hidden] { display: none; }
+.slot {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.slot.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: rgba(232, 147, 95, 0.12); }
+.slot .n { position: absolute; left: 4px; top: 2px; font-size: 9px; color: var(--muted); }
+.slot .ic { font-size: 20px; line-height: 46px; }
+.slot .ct { position: absolute; right: 4px; bottom: 2px; font-size: 10px; color: var(--muted); }
+.slot .fill { position: absolute; left: 0; right: 0; bottom: 4px; display: flex; justify-content: center; gap: 3px; }
+.slot .fill i { width: 5px; height: 5px; border-radius: 50%; border: 1px solid rgba(210, 168, 255, 0.6); }
+.slot .fill i.on { background: #d2a8ff; }
+.slot.jar .ic { color: #a9c3d6; }
+.slot.chalk .ic { color: #f2efe6; }
+.slot.echo .ic { color: #d678ff; }
+.slot.key .ic { color: var(--key); }
+.prompt.jar { color: #c7dbe8; border-color: rgba(169, 195, 214, 0.6); }
+.charge.buff { border-color: #ffd28a; }
+.charge.buff.on { background: #ffd28a; border-color: #ffd28a; }
+
+.use-btn {
+  position: fixed;
+  z-index: 3;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + 74px);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .use-btn { display: none; }
+}
+@media (max-width: 560px) {
+  .hotbar { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 4px); left: 12px; transform: none; }
+}
+@media (hover: hover) and (min-width: 561px) {
+  .hotbar { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 40px); }
+}
