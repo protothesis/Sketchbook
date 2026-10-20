@@ -100,6 +100,12 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-20: Wall corners where a wall turns an inside corner (hall bends,
+  L-shaped turns) showed a wall-thick notch. The two wall pieces only
+  touched at a point, so a corner post now fills the gap.
+- 2026-10-20: Vaulting no longer pulls you toward the block's middle. You
+  keep your position along the face you're climbing and move in just far
+  enough to stand on the edge.
 - 2026-10-20: The lantern light could end up inside a wall (it sat at the
   held lamp, offset forward) and light rooms beyond it. It now sits over the
   body's center, and its height is capped below the wall tops when you

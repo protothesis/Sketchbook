@@ -148,6 +148,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
   const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
   geo.block = new THREE.BoxGeometry(1, 1, 1); // scaled per prop
+  geo.post = new THREE.BoxGeometry(WALL_T * S, WALL_H * S, WALL_T * S); // inside-corner filler
   geo.decal = new THREE.PlaneGeometry(S * 0.94, S * 0.94);
 
   // Cracks: tiles standing on the trace of a collapsed room. A few canvas
@@ -321,6 +322,19 @@ if (vDitherEW > 0.7 && south > 0.2) {
           const w = shadowed(new THREE.Mesh(geo.wall, mats.wall));
           w.position.y = WALL_H * S / 2;
           eg.add(w);
+        }
+        // Inside corners: walls are inset into their own cell and stop at the
+        // cell's edge, so where a wall turns around an inside corner the two
+        // pieces only touch at a point and leave a wall-thick notch. East-west
+        // walls fill it with a post at that end (only they, so it's filled once).
+        if (f === 'N' || f === 'S') {
+          for (const [a, sign] of [['W', -1], ['E', 1]]) {
+            const along = DE.step(c, a), diag = DE.step(along, f);
+            if (exp.registry[DE.key(along.x, along.y)] !== space.id || exp.registry[DE.key(diag.x, diag.y)] !== space.id) continue;
+            const post = shadowed(new THREE.Mesh(geo.post, mats.wall));
+            post.position.set(sign * (0.5 + WALL_T / 2) * S, WALL_H * S / 2, 0);
+            eg.add(post);
+          }
         }
         eg.userData = { delay: dist * REVEAL_STEP + 0.12 };
         group.add(eg);
@@ -714,12 +728,25 @@ if (vDitherEW > 0.7 && south > 0.2) {
     return best;
   }
 
-  /** Step up onto a block: land a little way in, centered on narrow blocks. */
+  /**
+   * Step up onto a block, moving as little as possible: cross the face
+   * you're at just far enough to stand on the near edge, and keep your
+   * position along that face (nudged in only if you were past a corner).
+   */
   function climb(b, dir) {
     const p = state.player;
-    const m = (lo, hi) => Math.min(0.24, (hi - lo) / 2);
-    const tx = THREE.MathUtils.clamp(p.x + dir.x * (RADIUS + 0.3), b.x0 + m(b.x0, b.x1), b.x1 - m(b.x0, b.x1));
-    const ty = THREE.MathUtils.clamp(p.y + dir.y * (RADIUS + 0.3), b.y0 + m(b.y0, b.y1), b.y1 - m(b.y0, b.y1));
+    const IN = 0.12, SIDE = 0.06; // how far onto the block; corner margin
+    const inX = Math.min(IN, (b.x1 - b.x0) / 2), inY = Math.min(IN, (b.y1 - b.y0) / 2);
+    const gx = Math.max(b.x0 - p.x, 0, p.x - b.x1), gy = Math.max(b.y0 - p.y, 0, p.y - b.y1);
+    const acrossX = gx > gy || (gx === gy && Math.abs(dir.x) >= Math.abs(dir.y));
+    let tx, ty;
+    if (acrossX) {
+      tx = p.x < b.x0 ? b.x0 + inX : b.x1 - inX;
+      ty = THREE.MathUtils.clamp(p.y, b.y0 + Math.min(SIDE, inY), b.y1 - Math.min(SIDE, inY));
+    } else {
+      ty = p.y < b.y0 ? b.y0 + inY : b.y1 - inY;
+      tx = THREE.MathUtils.clamp(p.x, b.x0 + Math.min(SIDE, inX), b.x1 - Math.min(SIDE, inX));
+    }
     state.climb = { fx: p.x, fy: p.y, fz: p.z, tx, ty, tz: b.top, t: 0 };
     state.push.key = null;
     if (state.crouch) toggleCrouch(); // vaulting stands you up
