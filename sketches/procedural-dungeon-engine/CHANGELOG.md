@@ -75,8 +75,27 @@ All notable changes to this sketch are logged here, per
     unopened locks outnumber keys. Lock chance now scales with depth
     (4.5% at depth 3, up to 9%).
 
+- 2026-10-20 (polish pass):
+  - Props moved to a true **2×2 subgrid**: singles, doubles, 2×2s and
+    partition rows. They're flush, with no gaps between neighbours, and
+    stack 1–3 units high (3 is a column). They can sit against walls, but
+    never on a door's or item's cell. Each placement is kept only if all
+    floor stays reachable.
+  - **Climb:** push into a block or press E to step up (up to 2 units).
+    You walk across tops of equal height and drop when you step off an edge.
+  - Blocks no longer dither. The figure shows through anything in front of
+    it as a dithered orange **silhouette**.
+  - The dither now only touches east–west walls. Door frames (45%) and door
+    panels (60%) are capped so doorways stay readable.
+
 ### Fixed
 
+- 2026-10-20: The lantern light could end up inside a wall (it sat at the
+  held lamp, offset forward) and light rooms beyond it. It now sits over the
+  body's center, and its height is capped below the wall tops when you
+  stand on a block.
+- 2026-10-20: Shadows looked detached from walls and floor. The shadow bias
+  is much smaller now, with a little normal bias.
 - 2026-10-20: Walk mode drew some floor tiles plain white. The shade index
   went negative at far-negative coordinates, which left those tiles with no
   material.

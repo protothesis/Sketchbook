@@ -33,12 +33,12 @@
     lockMinDepth: 3,          // depth of the space the locked door leads out of
     collapsePerCell: 1,
     collapsePerSpace: 2,
-    // Props (cells): solid blocks to hide behind, and flat floor detail.
-    fullBlockChance: 0.18,    // interior chamber cells only
-    smallBlockChance: 0.16,   // chamber cells against a wall
-    smallBlockChanceCorridor: 0.1,
-    blockLow: 0.42,           // hides a crouched figure (~0.35 tall), not a standing one
-    blockTall: 0.85,
+    // Props: blocks on a half-cell subgrid, stacked in half-cell-ish units
+    // (3 units = floor to ceiling), plus flat floor detail.
+    propAttempts: 0.32,       // placement attempts per chamber cell
+    propAttemptsCorridor: 0.12,
+    blockUnit: 1.3 / 3,       // one stacked unit (cells); a 1-unit block hides a crouched figure
+    climbMaxUnits: 2,         // columns (3 units) can't be climbed
     detailChance: 0.35,
   };
 
@@ -64,71 +64,98 @@
   }
 
   /**
-   * Props in a space, in absolute grid units:
-   *   blocks:  [{ x0, y0, x1, y1, h }]   solid, cast shadows, collide
+   * Props in a space, on a 2x2 subgrid per cell (half-cell units), in
+   * absolute grid units:
+   *   blocks:  [{ x0, y0, x1, y1, units }]   solid; `units` stacked half-cell
+   *            cubes tall (3 = floor to ceiling, a column). Collide, cast
+   *            shadows, and (below a column) can be climbed.
    *   details: [{ x0, y0, x1, y1, h, shade }]   flat floor dressing only
    *
-   * Every cell draws the same fixed run of random numbers whether or not
-   * anything gets placed. A constraint that changes later (a loop door
-   * appears) can only remove that cell's prop, never shift the others.
-   * Full-cell blocks only go on interior cells (all four neighbors in the
-   * space), never two side by side, so they can't wall off a doorway or a
-   * pocket of floor. Everything else is subgrid and hugs a wall.
+   * Shapes: single (1 sub), double (2x1), big (2x2), and in chambers short
+   * rows of singles (partitions, sometimes with a gap). Anything may sit
+   * against a wall, but nothing goes on a cell with a door or an item.
+   * Each placement is kept only if every free sub-cell stays reachable
+   * (4-neighbour flood fill), so a 0.5-cell gap is always a real passage.
+   * Draws per attempt are fixed, so rerolling a room never shifts another.
    */
   function props(space) {
     const r = DE.deriveRng(space.seed, 'props');
-    const own = new Set(space.cells);
     const doorCells = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
     const lootCells = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
     const chamber = space.archetype === 'chamber' && !space.deadEnd;
-    const blocks = [], details = [], full = new Set();
-    const cells = space.cells.slice().sort();
-    for (const k of cells) {
+    const subs = new Set(), reserved = new Set(), blocked = new Set();
+    const sk = (x, y) => x + ',' + y;
+    for (const k of space.cells) {
       const c = DE.parseKey(k);
-      // Fixed draws per cell.
-      const roll = r.next(), roll2 = r.next(), side = r.int(0, 3), along = r.next();
-      const w = r.range(0.18, 0.34), d = r.range(0.18, 0.5), tall = r.next() < 0.4;
-      const nDetail = r.next() < RULES.detailChance ? r.int(1, 3) : 0;
-      const dets = [];
-      for (let i = 0; i < 3; i++) dets.push([r.next(), r.next(), r.range(0.08, 0.3), r.range(0.06, 0.22), r.next()]);
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
+        const s = sk(c.x * 2 + i, c.y * 2 + j);
+        subs.add(s);
+        if (doorCells.has(k) || lootCells.has(k)) reserved.add(s);
+      }
+    }
+    const subList = Array.from(subs).sort();
+    const start = subList.find((s) => reserved.has(s)) || subList[0];
 
-      for (let i = 0; i < nDetail; i++) {
-        const [u, v, dw, dd, sh] = dets[i];
+    const allReachable = () => {
+      const seen = new Set([start]);
+      const q = [start];
+      while (q.length) {
+        const [x, y] = q.pop().split(',').map(Number);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = sk(x + dx, y + dy);
+          if (subs.has(n) && !blocked.has(n) && !seen.has(n)) { seen.add(n); q.push(n); }
+        }
+      }
+      return seen.size === subs.size - blocked.size;
+    };
+
+    const blocks = [];
+    const attempts = Math.max(1, Math.round(space.cells.length * (chamber ? RULES.propAttempts : RULES.propAttemptsCorridor)));
+    for (let a = 0; a < attempts; a++) {
+      // Fixed draws per attempt.
+      const kindRoll = r.next(), hRoll = r.next(), pick = r.next(), dirRoll = r.next(), lenRoll = r.next(), gapRoll = r.next();
+      const [ax, ay] = subList[Math.floor(pick * subList.length)].split(',').map(Number);
+      const horiz = dirRoll < 0.5;
+      const kind = !chamber ? 'single'
+        : kindRoll < 0.38 ? 'single' : kindRoll < 0.58 ? 'double' : kindRoll < 0.78 ? 'big' : 'row';
+      let units = hRoll < 0.55 ? 1 : hRoll < 0.85 ? 2 : 3;
+      let shape;
+      if (kind === 'single') shape = [[0, 0]];
+      else if (kind === 'double') shape = horiz ? [[0, 0], [1, 0]] : [[0, 0], [0, 1]];
+      else if (kind === 'big') shape = [[0, 0], [1, 0], [0, 1], [1, 1]];
+      else {
+        units = hRoll < 0.6 ? 1 : 2;
+        const len = 3 + Math.floor(lenRoll * 4);
+        const gap = gapRoll < 0.4 ? 1 + Math.floor((gapRoll / 0.4) * (len - 2)) : -1;
+        shape = [];
+        for (let i = 0; i < len; i++) if (i !== gap) shape.push(horiz ? [i, 0] : [0, i]);
+      }
+      const cells = shape.map(([dx, dy]) => sk(ax + dx, ay + dy));
+      if (cells.some((s) => !subs.has(s) || blocked.has(s) || reserved.has(s))) continue;
+      cells.forEach((s) => blocked.add(s));
+      if (!allReachable()) { cells.forEach((s) => blocked.delete(s)); continue; }
+      const rect = (list) => {
+        const xs = list.map((s) => +s.split(',')[0]), ys = list.map((s) => +s.split(',')[1]);
+        return { x0: Math.min(...xs) / 2, y0: Math.min(...ys) / 2, x1: (Math.max(...xs) + 1) / 2, y1: (Math.max(...ys) + 1) / 2, units };
+      };
+      // Rows stay modular (one cube per sub) so they read as built pieces.
+      if (kind === 'row') cells.forEach((s) => blocks.push(rect([s])));
+      else blocks.push(rect(cells));
+    }
+
+    // Floor detail on its own stream, skipping blocked sub-cells.
+    const d = DE.deriveRng(space.seed, 'detail');
+    const details = [];
+    for (const k of space.cells.slice().sort()) {
+      const c = DE.parseKey(k);
+      const n = d.next() < RULES.detailChance ? d.int(1, 3) : 0;
+      for (let i = 0; i < 3; i++) {
+        const u = d.next(), v = d.next(), dw = d.range(0.08, 0.3), dd = d.range(0.06, 0.22), sh = d.next();
+        if (i >= n) continue;
         const x0 = c.x + 0.06 + u * (0.88 - dw), y0 = c.y + 0.06 + v * (0.88 - dd);
+        if (blocked.has(sk(Math.floor((x0 + dw / 2) * 2), Math.floor((y0 + dd / 2) * 2)))) continue;
         details.push({ x0, y0, x1: x0 + dw, y1: y0 + dd, h: 0.012 + sh * 0.02, shade: sh });
       }
-      if (doorCells.has(k) || lootCells.has(k)) continue;
-
-      const nb = DE.FACINGS.map((f) => { const n = DE.step(c, f); return own.has(DE.key(n.x, n.y)); });
-      const interior = nb.every(Boolean);
-      const besideFull = DE.FACINGS.some((f) => { const n = DE.step(c, f); return full.has(DE.key(n.x, n.y)); });
-      const h = tall ? RULES.blockTall : RULES.blockLow;
-      if (chamber && interior && !besideFull && roll < RULES.fullBlockChance) {
-        full.add(k);
-        const inset = 0.08;
-        blocks.push({ x0: c.x + inset, y0: c.y + inset, x1: c.x + 1 - inset, y1: c.y + 1 - inset, h });
-        continue;
-      }
-      const chance = chamber ? RULES.smallBlockChance : RULES.smallBlockChanceCorridor;
-      if (roll2 >= chance) continue;
-      // Hug one of this cell's outer walls (a side with no neighbor in the space).
-      const walls = DE.FACINGS.filter((f, i) => !nb[i]);
-      if (!walls.length) continue;
-      const f = walls[side % walls.length];
-      const t = 0.08; // wall inset
-      const a = 0.1 + along * (0.8 - w);
-      let b;
-      if (f === 'N') b = { x0: c.x + a, y0: c.y + t, x1: c.x + a + w, y1: c.y + t + d };
-      else if (f === 'S') b = { x0: c.x + a, y0: c.y + 1 - t - d, x1: c.x + a + w, y1: c.y + 1 - t };
-      else if (f === 'W') b = { x0: c.x + t, y0: c.y + a, x1: c.x + t + d, y1: c.y + a + w };
-      else b = { x0: c.x + 1 - t - d, y0: c.y + a, x1: c.x + 1 - t, y1: c.y + a + w };
-      // Corridors stay passable: keep their props shallow.
-      if (!chamber) {
-        if (f === 'N' || f === 'S') { if (f === 'N') b.y1 = b.y0 + Math.min(d, 0.24); else b.y0 = b.y1 - Math.min(d, 0.24); }
-        else if (f === 'W') b.x1 = b.x0 + Math.min(d, 0.24); else b.x0 = b.x1 - Math.min(d, 0.24);
-      }
-      b.h = h;
-      blocks.push(b);
     }
     return { blocks, details };
   }

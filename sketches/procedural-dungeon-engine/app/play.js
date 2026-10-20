@@ -27,12 +27,15 @@
   const DOOR_W = 0.6;
   const DOOR_H = 1.0;
   const JAMB = (1 - DOOR_W) / 2;
-  const RADIUS = 0.22;
+  const RADIUS = 0.2;
   const SPEED = 2.4;
   const RUN = 4.0;
   const CROUCH_SPEED = 1.1; // a crawl
   const CROUCH_SCALE = 0.55; // figure height when crouched (standing is ~0.64 cells tall)
-  const HIDE_RANGE = 0.2;   // cells between the figure and a block to count as hidden
+  const HIDE_RANGE = 0.2;
+  const UNIT = RULES.blockUnit; // one stacked block unit, in cells
+  const CLIMB_TIME = 0.32;      // seconds to step up onto a block
+  const GRAVITY = 9;            // cells/s^2 when stepping off an edge   // cells between the figure and a block to count as hidden
   const PUSH_TIME = 0.35;   // seconds of walking into a door to open it
   const USE_RANGE = 0.6;    // E / tap reach to a door's midpoint
   const PICKUP_RANGE = 0.42;
@@ -80,11 +83,17 @@
     uDitherPlayer: { value: new THREE.Vector2(1e4, 1e4) }, // world x, z
   };
   const DITHER_VERT_HEAD = `
-varying vec3 vDitherWorld;`;
+varying vec3 vDitherWorld;
+varying float vDitherEW;`;
+  // vDitherEW: 1 for meshes running east-west (their local x along world x).
+  // Only those can stand between the camera (south) and the figure.
   const DITHER_VERT_BODY = `
-vDitherWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`;
+vDitherWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
+vDitherEW = abs(normalize(modelMatrix[0].xyz).x);`;
   const DITHER_HEAD = `
 varying vec3 vDitherWorld;
+varying float vDitherEW;
+uniform float uDitherMax;
 uniform vec2 uDitherCenter;
 uniform float uDitherRadius;
 uniform vec2 uDitherPlayer;
@@ -95,15 +104,17 @@ float ditherBayer(vec2 p) {
 }`;
   const DITHER_BODY = `
 float south = vDitherWorld.z - uDitherPlayer.y;
-if (south > 0.2) {
+if (vDitherEW > 0.7 && south > 0.2) {
   float dd = distance(gl_FragCoord.xy, uDitherCenter) / uDitherRadius;
-  float circle = 0.92 * (1.0 - smoothstep(0.35, 1.0, dd));
-  float approach = 0.3 * (1.0 - smoothstep(0.4, ${(DITHER_APPROACH * S).toFixed(1)}, south));
+  float circle = uDitherMax * (1.0 - smoothstep(0.35, 1.0, dd));
+  float approach = min(uDitherMax, 0.3) * (1.0 - smoothstep(0.4, ${(DITHER_APPROACH * S).toFixed(1)}, south));
   if (ditherBayer(gl_FragCoord.xy) < max(circle, approach)) discard;
 }`;
-  function withDither(mat) {
+  /** `max` caps how much of the surface may dissolve (frames and doors stay readable). */
+  function withDither(mat, max = 0.92) {
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, dither);
+      shader.uniforms.uDitherMax = { value: max };
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\n' + DITHER_VERT_HEAD)
         .replace('#include <project_vertex>', '#include <project_vertex>\n' + DITHER_VERT_BODY);
@@ -127,10 +138,11 @@ if (south > 0.2) {
     keyRing: new THREE.TorusGeometry(0.06 * S, 0.018 * S, 6, 16),
     keyShaft: new THREE.BoxGeometry(0.17 * S, 0.035 * S, 0.035 * S),
   };
-  const doorMat = withDither(new THREE.MeshLambertMaterial({ color: 0x2b211b, emissive: 0x1a0904 }));
-  const doorOpenMat = withDither(new THREE.MeshLambertMaterial({ color: 0x2b211b }));
-  const lockMat = withDither(new THREE.MeshLambertMaterial({ color: 0x323941, emissive: 0x08111a }));
-  const bandMat = withDither(new THREE.MeshLambertMaterial({ color: 0x5d6670, emissive: 0x0c1218 }));
+  const DOOR_DITHER = 0.6, FRAME_DITHER = 0.45;
+  const doorMat = withDither(new THREE.MeshLambertMaterial({ color: 0x2b211b, emissive: 0x1a0904 }), DOOR_DITHER);
+  const doorOpenMat = withDither(new THREE.MeshLambertMaterial({ color: 0x2b211b }), DOOR_DITHER);
+  const lockMat = withDither(new THREE.MeshLambertMaterial({ color: 0x323941, emissive: 0x08111a }), DOOR_DITHER);
+  const bandMat = withDither(new THREE.MeshLambertMaterial({ color: 0x5d6670, emissive: 0x0c1218 }), DOOR_DITHER);
   const seamMat = new THREE.MeshBasicMaterial({ color: SEAM });
   const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM });
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
@@ -175,7 +187,10 @@ if (south > 0.2) {
       seed: space.seed,
       floor: [0.15, 0.17, 0.19].map((l) => new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.22, l) })),
       wall: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.2, 0.32) })),
-      block: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.16, 0.24) })),
+      // Door frames dissolve less, so a doorway in a south wall stays readable.
+      frame: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.22, 0.36) }), FRAME_DITHER),
+      // Blocks never dissolve; the figure shows through them instead.
+      block: new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.16, 0.24) }),
       detail: [0.12, 0.21].map((l) => new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.18, l) })),
     };
     matCache[space.id] = m;
@@ -195,7 +210,8 @@ if (south > 0.2) {
     doors: new Map(),    // "spaceId/exitId" -> door
     items: new Map(),    // "spaceId:seed:itemId" -> { mesh, item, spaceId, tile }
     blockAt: new Map(),  // "x,y" -> [{ x0, y0, x1, y1, h, spaceId }] for collision
-    player: { x: 0.5, y: 0.5, angle: 0, spaceId: null, phase: 0 },
+    player: { x: 0.5, y: 0.5, z: 0, vz: 0, angle: 0, spaceId: null, phase: 0 },
+    climb: null,         // { fx, fy, fz, tx, ty, tz, t } while stepping up
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
     time: 0,
@@ -293,11 +309,11 @@ if (south > 0.2) {
         eg.rotation.y = fr.rot;
         const hit = state.exitAt.get(ekey(c.x, c.y, f));
         if (hit) {
-          const jl = shadowed(new THREE.Mesh(geo.jamb, mats.wall));
+          const jl = shadowed(new THREE.Mesh(geo.jamb, mats.frame));
           jl.position.set(-(0.5 - JAMB / 2) * S, WALL_H * S / 2, 0);
           const jr = shadowed(jl.clone());
           jr.position.x = -jl.position.x;
-          const li = shadowed(new THREE.Mesh(geo.lintel, mats.wall));
+          const li = shadowed(new THREE.Mesh(geo.lintel, mats.frame));
           li.position.set(0, (DOOR_H + (WALL_H - DOOR_H) / 2) * S, 0);
           eg.add(jl, jr, li);
           if (ownsDoorPanel(space.id, hit.exit)) addDoor(eg, space, hit.exit, fr.beyond);
@@ -325,14 +341,25 @@ if (south > 0.2) {
     };
     for (const d of pr.details) onTile(d, d.h, mats.detail[d.shade < 0.5 ? 0 : 1], false);
     for (const b of pr.blocks) {
-      onTile(b, b.h, mats.block, true);
-      const blk = Object.assign({ spaceId: space.id }, b);
+      // Stacked units with a hairline seam, so columns read as built up.
+      const t = tileAt[DE.key(Math.floor((b.x0 + b.x1) / 2), Math.floor((b.y0 + b.y1) / 2))];
+      for (let u = 0; u < b.units; u++) {
+        const m = shadowed(new THREE.Mesh(geo.block, mats.block));
+        m.scale.set((b.x1 - b.x0) * S, UNIT * S - 0.012, (b.y1 - b.y0) * S);
+        m.position.set(((b.x0 + b.x1) / 2) * S - t.position.x, (u + 0.5) * UNIT * S + 0.05, ((b.y0 + b.y1) / 2) * S - t.position.z);
+        t.add(m);
+      }
+      const blk = Object.assign({ spaceId: space.id, top: b.units * UNIT }, b);
       rec.blocks.push(blk);
-      // Index under every cell it touches (full blocks: one; wall-huggers: one).
-      const k = DE.key(Math.floor((b.x0 + b.x1) / 2), Math.floor((b.y0 + b.y1) / 2));
-      const list = state.blockAt.get(k) || [];
-      list.push(blk);
-      state.blockAt.set(k, list);
+      // Index under every cell it overlaps (a 2x2 or double can straddle cells).
+      for (let cy = Math.floor(b.y0); cy < Math.ceil(b.y1); cy++) {
+        for (let cx = Math.floor(b.x0); cx < Math.ceil(b.x1); cx++) {
+          const k = DE.key(cx, cy);
+          const list = state.blockAt.get(k) || [];
+          if (!list.includes(blk)) list.push(blk);
+          state.blockAt.set(k, list);
+        }
+      }
     }
 
     const spaceKey = space.id + ':' + space.seed;
@@ -463,14 +490,37 @@ if (south > 0.2) {
   blob.position.y = 0.01;
   const bodyRig = new THREE.Group();
   bodyRig.add(body, head, lanternMesh);
+  // When something stands between the camera and the figure (a block, or
+  // the solid part of a dithered wall), the hidden part of the figure shows
+  // through as a dithered, lantern-orange silhouette. GreaterDepth: these
+  // only draw where something nearer already covers the figure.
+  const ghostMat = new THREE.MeshBasicMaterial({
+    color: 0xffa25c, transparent: true, opacity: 0.6, depthFunc: THREE.GreaterDepth, depthWrite: false,
+  });
+  ghostMat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
+      '#include <clipping_planes_fragment>\nif (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5) discard;');
+  };
+  ghostMat.customProgramCacheKey = () => 'ghost';
+  for (const m of [body, head]) {
+    const g = new THREE.Mesh(m.geometry, ghostMat);
+    g.position.copy(m.position);
+    g.renderOrder = 10;
+    bodyRig.add(g);
+  }
   figure.add(bodyRig, blob);
   const lantern = new THREE.PointLight(0xffb36b, LANTERN, LANTERN_RANGE, 1.7);
-  lantern.position.set(0.14 * S, 0.75 * S, 0.12 * S);
+  // The light sits over the body's center, not at the held lamp: the lamp
+  // is offset forward and could end up inside a wall, leaking light outside.
+  lantern.position.set(0, 0.75 * S, 0);
   lantern.castShadow = true;
   lantern.shadow.mapSize.set(512, 512);
   lantern.shadow.camera.near = 0.1;
   lantern.shadow.camera.far = LANTERN_RANGE;
-  lantern.shadow.bias = -0.004;
+  // Small bias + a little normal bias: shadows meet the things that cast
+  // them (a big bias made blocks look like they floated off walls/floor).
+  lantern.shadow.bias = -0.0008;
+  lantern.shadow.normalBias = 0.02;
   figure.add(lantern);
   // A faint cool fill, south of the figure and without shadows, so the
   // camera-facing sides of nearby walls read. Short range, so it can't
@@ -519,11 +569,17 @@ if (south > 0.2) {
   function resolveCollisions(p) {
     const segs = [];
     const cx = Math.floor(p.x), cy = Math.floor(p.y);
+    const seen = new Set();
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       edgeSegments(cx + dx, cy + dy, segs);
       for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
-        segs.push({ ax: b.x0, ay: b.y0, bx: b.x1, by: b.y0 }, { ax: b.x1, ay: b.y0, bx: b.x1, by: b.y1 },
-          { ax: b.x1, ay: b.y1, bx: b.x0, by: b.y1 }, { ax: b.x0, ay: b.y1, bx: b.x0, by: b.y0 });
+        if (seen.has(b) || b.top <= p.z + 0.05) continue; // at or below your feet: walkable
+        seen.add(b);
+        // facing = the side's outward direction, for push-to-climb.
+        segs.push({ ax: b.x0, ay: b.y0, bx: b.x1, by: b.y0, block: b, facing: 'N' },
+          { ax: b.x1, ay: b.y0, bx: b.x1, by: b.y1, block: b, facing: 'E' },
+          { ax: b.x1, ay: b.y1, bx: b.x0, by: b.y1, block: b, facing: 'S' },
+          { ax: b.x0, ay: b.y1, bx: b.x0, by: b.y0, block: b, facing: 'W' });
       }
     }
     const touched = [];
@@ -538,7 +594,7 @@ if (south > 0.2) {
         if (d < RADIUS && d > 1e-6) {
           p.x += (ddx / d) * (RADIUS - d);
           p.y += (ddy / d) * (RADIUS - d);
-          if (s.door && iter === 0) touched.push(s);
+          if ((s.door || s.block) && iter === 0) touched.push(s);
         }
       }
     }
@@ -563,6 +619,7 @@ if (south > 0.2) {
       const d = Math.hypot(p.x - (ax + bx) / 2, p.y - (ay + by) / 2);
       if (d >= bestD) continue;
       let action = null, child = null;
+      if (p.z > 0.05) continue; // no doors from on top of a block
       if (!ex.connectionId) action = isLockedNow(sp, ex) ? 'locked' : 'open';
       else if ((child = DP.childThrough(exp, sp.id, ex))) action = 'collapse';
       if (!action) continue;
@@ -576,8 +633,40 @@ if (south > 0.2) {
     return best;
   }
 
+  const canClimb = (b) => b.units < 3 && b.top - state.player.z > 0.05 && b.top - state.player.z <= RULES.climbMaxUnits * UNIT + 0.01;
+
+  /** A climbable block right in front of the figure, if no door is closer. */
+  function blockNear(p) {
+    const cx = Math.floor(p.x), cy = Math.floor(p.y);
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle); // facing
+    let best = null, bestD = RADIUS + 0.14;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
+        if (!canClimb(b)) continue;
+        const qx = THREE.MathUtils.clamp(p.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(p.y, b.y0, b.y1);
+        const d = Math.hypot(qx - p.x, qy - p.y);
+        if (d >= bestD || d < 1e-6) continue;
+        if (((qx - p.x) * fx + (qy - p.y) * fy) / d < 0.3) continue; // must be roughly ahead
+        bestD = d;
+        best = { action: 'climb', block: b, dir: { x: (qx - p.x) / d, y: (qy - p.y) / d } };
+      }
+    }
+    return best;
+  }
+
+  /** Step up onto a block: land a little way in, centered on narrow blocks. */
+  function climb(b, dir) {
+    const p = state.player;
+    const m = (lo, hi) => Math.min(0.24, (hi - lo) / 2);
+    const tx = THREE.MathUtils.clamp(p.x + dir.x * (RADIUS + 0.3), b.x0 + m(b.x0, b.x1), b.x1 - m(b.x0, b.x1));
+    const ty = THREE.MathUtils.clamp(p.y + dir.y * (RADIUS + 0.3), b.y0 + m(b.y0, b.y1), b.y1 - m(b.y0, b.y1));
+    state.climb = { fx: p.x, fy: p.y, fz: p.z, tx, ty, tz: b.top, t: 0 };
+    state.push.key = null;
+  }
+
   function act(near) {
-    if (!near || state.paused) return;
+    if (!near || state.paused || state.climb) return;
+    if (near.action === 'climb') { climb(near.block, near.dir); return; }
     const run = state.run;
     const doorKey = near.space.id + '/' + near.exit.id;
     if (near.action === 'open') {
@@ -708,7 +797,7 @@ if (south > 0.2) {
     }
     keys.add(k);
     if (k === 'e' || k === ' ') {
-      if (!e.repeat) act(doorNear(state.player));
+      if (!e.repeat) act(doorNear(state.player) || blockNear(state.player));
       e.preventDefault();
     } else if (k === 'm') {
       openBigMap();
@@ -723,7 +812,7 @@ if (south > 0.2) {
   global.addEventListener('blur', () => keys.clear());
 
   const promptEl = $('prompt');
-  promptEl.addEventListener('click', (e) => { act(doorNear(state.player)); promptEl.blur(); e.preventDefault(); });
+  promptEl.addEventListener('click', (e) => { act(doorNear(state.player) || blockNear(state.player)); promptEl.blur(); e.preventDefault(); });
 
   // New map needs a second tap/press within a few seconds; window.confirm()
   // is unreliable (some embedded and in-app viewers block it silently).
@@ -821,9 +910,21 @@ if (south > 0.2) {
     const p = state.player;
     const exp = state.exp;
     const run = state.run;
-    const inp = readInput();
+    let inp = readInput();
     const prev = { x: p.x, y: p.y };
     let moving = false;
+
+    // Stepping up onto a block: a short eased hop; input waits.
+    if (state.climb) {
+      const c = state.climb;
+      c.t = Math.min(1, c.t + dt / CLIMB_TIME);
+      const e = easeOut(c.t);
+      p.x = c.fx + (c.tx - c.fx) * e;
+      p.y = c.fy + (c.ty - c.fy) * e;
+      p.z = c.fz + (c.tz - c.fz) * Math.min(1, e * 1.4) + Math.sin(Math.PI * c.t) * 0.08;
+      if (c.t >= 1) { p.z = c.tz; p.vz = 0; state.climb = null; }
+      inp = { x: 0, y: 0, mag: 0 };
+    }
 
     if (inp.mag > 0) {
       const sp = (state.crouch ? CROUCH_SPEED : inp.run ? RUN : SPEED) * inp.mag;
@@ -836,26 +937,46 @@ if (south > 0.2) {
       moving = true;
     }
     if (!state.paused) run.walked += dt;
-    const touched = resolveCollisions(p);
+    const touched = state.climb ? [] : resolveCollisions(p);
     if (exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))] === undefined) { p.x = prev.x; p.y = prev.y; }
 
-    // Pushing into a closed (unlocked) door for a beat opens it.
-    let pushing = null;
+    // Standing height: the tallest block top under the figure's center.
+    // Step off an edge and you drop to whatever is below.
+    if (!state.climb) {
+      let support = 0;
+      for (const b of state.blockAt.get(DE.key(Math.floor(p.x), Math.floor(p.y))) || []) {
+        if (b.top <= p.z + 0.05 && p.x > b.x0 && p.x < b.x1 && p.y > b.y0 && p.y < b.y1) support = Math.max(support, b.top);
+      }
+      if (p.z > support) {
+        p.vz = (p.vz || 0) - GRAVITY * dt;
+        p.z = Math.max(support, p.z + p.vz * dt);
+        if (p.z === support) p.vz = 0;
+      } else { p.z = support; p.vz = 0; }
+    }
+
+    // Pushing into a closed (unlocked) door, or a climbable block, for a
+    // beat opens it / steps up onto it. A wall is a block's way of saying no.
+    let pushing = null, pushingBlock = null, pk = null;
     if (inp.mag > 0) {
       for (const s of touched) {
         const d = DE.DIRS[s.facing];
-        if (d.x * inp.x + d.y * inp.y > 0.5 && !isLockedNow(exp.spaces[s.door.spaceId], s.door.exit)) {
-          pushing = s.door;
-          break;
+        // Doors face out of their room; block sides face out of the block.
+        const into = s.block ? -(d.x * inp.x + d.y * inp.y) : d.x * inp.x + d.y * inp.y;
+        if (into <= 0.5) continue;
+        if (s.door && p.z <= 0.05 && !isLockedNow(exp.spaces[s.door.spaceId], s.door.exit)) {
+          pushing = s.door; pk = s.door.spaceId + '/' + s.door.exit.id; break;
+        }
+        if (s.block && canClimb(s.block)) {
+          pushingBlock = s.block; pk = 'block:' + s.block.x0 + ',' + s.block.y0; break;
         }
       }
     }
-    const pk = pushing ? pushing.spaceId + '/' + pushing.exit.id : null;
     if (pk && pk === state.push.key) state.push.t += dt;
     else { state.push.key = pk; state.push.t = 0; }
-    if (pushing && state.push.t >= PUSH_TIME) {
+    if (pk && state.push.t >= PUSH_TIME) {
       state.push.key = null;
-      openDoor(pushing.spaceId, pushing.exit.id);
+      if (pushing) openDoor(pushing.spaceId, pushing.exit.id);
+      else climb(pushingBlock, { x: inp.x, y: inp.y });
     }
 
     // Pick things up.
@@ -898,18 +1019,19 @@ if (south > 0.2) {
       }
     }
 
-    updatePrompt(state.paused ? null : doorNear(p));
+    updatePrompt(state.paused || state.climb ? null : doorNear(p) || blockNear(p));
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;
-    figure.position.set(p.x * S, 0, p.y * S);
+    figure.position.set(p.x * S, p.z * S, p.y * S);
     figure.rotation.y = p.angle;
     fill.position.set(p.x * S, 1.0 * S, (p.y + 0.6) * S);
     state.crouchAmt += ((state.crouch ? 1 : 0) - state.crouchAmt) * Math.min(1, dt * 10);
     const ca = state.crouchAmt;
     bodyRig.scale.y = 1 - (1 - CROUCH_SCALE) * ca;
     bodyRig.position.y = moving ? Math.abs(Math.sin(p.phase)) * 0.05 * S * (1 - 0.7 * ca) : 0;
-    lantern.position.y = (0.75 - 0.4 * ca) * S;
+    // Never let the lantern rise above the walls (it would light other rooms).
+    lantern.position.y = Math.max(0.2, Math.min(0.75 - 0.4 * ca, WALL_H - 0.15 - p.z)) * S;
 
     // Hidden: crouched, right up against a block (every block is taller
     // than a crouched figure). Nothing hunts you yet; this is the hook.
@@ -918,6 +1040,7 @@ if (south > 0.2) {
       const cx = Math.floor(p.x), cy = Math.floor(p.y);
       for (let dy = -1; dy <= 1 && !hidden; dy++) for (let dx = -1; dx <= 1 && !hidden; dx++) {
         for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
+          if (b.top - p.z < 0.38) continue; // must rise above a crouched figure
           const ex = Math.max(b.x0 - p.x, 0, p.x - b.x1), ey = Math.max(b.y0 - p.y, 0, p.y - b.y1);
           if (Math.hypot(ex, ey) < RADIUS + HIDE_RANGE) { hidden = true; break; }
         }
@@ -932,7 +1055,7 @@ if (south > 0.2) {
     lantern.intensity = LANTERN * (0.94 + 0.06 * Math.sin(state.time * 9.3) * Math.sin(state.time * 3.1));
 
     // Camera: fixed angle, smoothed follow.
-    tmpV.set(p.x * S, 0.6, p.y * S);
+    tmpV.set(p.x * S, 0.6 + p.z * S * 0.6, p.y * S);
     camTarget.lerp(tmpV, 1 - Math.exp(-dt * 7));
     camera.position.copy(camTarget).add(CAM_OFFSET);
     camera.lookAt(camTarget);
@@ -940,7 +1063,7 @@ if (south > 0.2) {
 
     // Dither: centered on the figure on screen, for pixels nearer the camera.
     renderer.getDrawingBufferSize(tmpV2);
-    tmpV.set(p.x * S, 0.35 * S, p.y * S).project(camera);
+    tmpV.set(p.x * S, (0.35 + p.z) * S, p.y * S).project(camera);
     dither.uDitherCenter.value.set((tmpV.x + 1) / 2 * tmpV2.x, (tmpV.y + 1) / 2 * tmpV2.y);
     dither.uDitherRadius.value = DITHER_RADIUS * Math.min(tmpV2.x, tmpV2.y);
     dither.uDitherPlayer.value.set(p.x * S, p.y * S);
@@ -984,7 +1107,9 @@ if (south > 0.2) {
     let text = '', cls = '';
     if (near) {
       const run = state.run;
-      if (near.action === 'open') {
+      if (near.action === 'climb') {
+        text = state.push.key ? 'climbing…' : `a block · push, or ${verb} to climb`;
+      } else if (near.action === 'open') {
         text = state.push.key ? 'opening…' : `a closed door · push, or ${verb}`;
       } else if (near.action === 'locked') {
         cls = 'lock';
@@ -1315,7 +1440,8 @@ if (south > 0.2) {
     if (same && exp.registry[DE.key(Math.floor(savedPlayer.x), Math.floor(savedPlayer.y))] !== undefined) {
       sp = savedPlayer;
     }
-    Object.assign(state.player, { x: sp.x, y: sp.y, angle: sp.angle || 0, spaceId: null });
+    Object.assign(state.player, { x: sp.x, y: sp.y, z: 0, vz: 0, angle: sp.angle || 0, spaceId: null });
+    state.climb = null;
     camTarget.set(sp.x * S, 0.6, sp.y * S);
     save();
     savePlayer();

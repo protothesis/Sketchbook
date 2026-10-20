@@ -35,9 +35,14 @@ Determinism).
   About 1 room in 4 is *able* to hold a key, but the key only appears in
   it if, when you open that room, there are more unopened locked doors
   around than keys (held or lying somewhere).
-- **Hide.** Rooms have blocks: solid, shadow-casting, some full-cell. Crouch
-  (C, or the button) to crawl; crouched against a block you're **hidden**.
-  Nothing hunts you yet, so for now it's only the shadow play and the hook.
+- **Hide and climb.** Rooms have blocks on a half-cell subgrid: singles,
+  doubles, full 2×2s, and partition rows. They stack 1–3 units high, and 3
+  units reach the ceiling as a column. Crouch (C, or the button) to crawl;
+  crouched against a block that rises above you, you're **hidden**. Push into
+  a block, or press E facing it, to **climb** on top (up to 2 units, so not
+  columns). You can walk across tops of equal height, and you drop down when
+  you step off an edge. Nothing hunts you yet, so for now hiding is only the
+  shadow play and the hook.
 - **Collapse.** Stand at a door you opened and press E (or tap the prompt),
   and the door shuts. The whole branch beyond it (that room and every room
   opened from it, deepest first) dissolves. The price is **1 per cell plus
@@ -78,13 +83,14 @@ forward; collapsing is the only thing entropy buys.
 | Minimap | unopened doors orange, locked doors blue, opened doors green; traces grey; imprinted cells get a violet tick | so overlapping rooms stay readable |
 | Big map | M or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close | walking pauses while it's open |
 | Cracks | canvas-drawn fissures with a violet core on imprinted tiles; more trace layers, more cracks | seeded per cell; glows faintly even in the dark |
-| Blocks | flat-shaded boxes a shade darker than the walls, either full-cell or subgrid against a wall; 0.42 cells (low) or 0.85 (tall) | cast shadows; dithered like walls when in front of the figure |
+| Blocks | flat-shaded boxes a shade darker than the walls, filling half-cell subgrid squares flush (no gaps between neighbours), stacked in units of 0.43 cells with a hairline seam | cast shadows; never dither. The figure shows through them instead |
+| Silhouette | the parts of the figure hidden behind anything draw as a dithered lantern-orange silhouette | GreaterDepth pass, so it only appears where something is in front |
 | Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
 | Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
 | Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
-| Occlusion | screen-door dither on wall pixels south of the figure (a world-position test): full inside a soft circle around it (27% of the screen), and a light 30% dither across any south wall within 2.5 cells | walls never move; the whole face clears, top to bottom |
-| Light | the lantern is a shadow-casting point light; ambient is almost zero | plus a faint, short-range cool fill so nearby wall faces read |
+| Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. Door frames cap at 45%, door panels at 60% | side (north–south) walls never dither; doorways in south walls stay readable |
+| Light | the lantern is a shadow-casting point light over the body's center; ambient is almost zero | plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02), so shadows meet what casts them |
 | Pickups | violet octahedron (shard), small gold key | bob and turn; lit by the lantern, so they hide in the dark too |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
 | Captions | a short typewriter-style log line when you enter a space | e.g. "s7 · chamber · damp · depth 3" (the Navidson Record feel) |
@@ -101,8 +107,10 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Shard | in 75% of chambers, 40% of corridors, 50% of dead ends; chambers of 20+ cells can hold a second |
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
-| Crouch | C or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block |
-| Blocks | full-cell (interior chamber cells only, never side by side): 18%; wall-hugging: 16% of chamber cells, 10% of corridor cells (kept shallow so corridors stay passable); 60% are low |
+| Crouch | C or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
+| Climb | push into a block for 0.35 s or press E facing it; up to 2 units above your feet; a 0.32 s hop; gravity 9 cells/s² when stepping off |
+| Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 38%, double 20%, 2×2 20%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
+| Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Collapse price | 1 per cell + 2 per room across the whole branch, divided by 15 and rounded up to whole charges |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
@@ -110,8 +118,9 @@ In a 2,000-room simulation that works out to about 0.7 shards per room (one
 charge every ~4 rooms), and collapsing a single room costs 1.4 charges on
 average. In random 80-room walks, the first locked door shows up after a
 median of 18 rooms (90th percentile: 47), with about 6 locked doors on the
-frontier by room 80. A flood-fill check over ~800 rooms found no prop
-layout that cuts off a door or traps a patch of floor.
+frontier by room 80. About 2.6 blocks land per room. A fine-grained
+flood fill with the player's real radius, over ~360 rooms, found every free
+half-cell reachable from the entry.
 
 ## Determinism
 
@@ -121,10 +130,12 @@ stream, so a replayed expedition holds identical shards, keys and locks. A
 collapsed-and-regenerated room has a new seed and so new loot. A collected
 item is remembered as `spaceId:seed:itemId`.
 
-Props use `deriveRng(space.seed, 'props')`, and every cell draws a fixed run
-of numbers whether or not it gets a prop. A constraint that changes later
-(a loop door added to the room) can only remove that cell's prop, never
-shift the others.
+Props use `deriveRng(space.seed, 'props')` (floor detail uses `'detail'`),
+and each placement attempt draws a fixed run of numbers whether or not it
+lands. The reachability check makes acceptance depend on earlier
+placements, though. So a loop door added to a room later can change that
+room's layout a little when it rebuilds. That's rare, and it's acceptable
+for now.
 
 Whether a key-capable room actually shows its key depends on the run (were
 there locks waiting?), so it's run state (`run.keyRooms`), not seed state.
