@@ -149,6 +149,13 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-20: Drawing a door with chalk could trap the figure. The room
+  rebuilt with the new door, the block layout reshuffled around it, and a
+  block could land on the figure (62 of 381 possible spots changed the
+  layout). Layouts now use only a room's original doors. Later doors (drawn
+  or loop) only clear blocks on their own cell, which also fixes the rare
+  reshuffle when a loop door appeared. Plus a safety net: a figure inside a
+  block steps out of its nearest side.
 - 2026-10-20: The ghost screen effect (wobble and glitch) tanked the frame
   rate at full screen on high-DPI displays: about 71 ms a frame versus 21
   without it, measured at 1920×1080 on a 2× display. The scene was rendered

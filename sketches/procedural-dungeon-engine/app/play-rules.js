@@ -89,10 +89,17 @@
    * Each placement is kept only if every free sub-cell stays reachable
    * (4-neighbour flood fill), so a 0.5-cell gap is always a real passage.
    * Draws per attempt are fixed, so rerolling a room never shifts another.
+   *
+   * The layout only ever sees the room's original doors. Doors added later
+   * (drawn with chalk, or made by a loop) can't reshuffle it: they just
+   * clear any block on their own cell. Removing a block can never trap
+   * anyone, while a reshuffle could drop a block onto the figure.
    */
   function props(space) {
     const r = DE.deriveRng(space.seed, 'props');
-    const doorCells = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const later = (e) => e.loopMade || (e.tags && e.tags.includes('carved'));
+    const doorCells = new Set(space.exits.filter((e) => !later(e)).map((e) => DE.key(e.cell.x, e.cell.y)));
+    const laterCells = space.exits.filter(later).map((e) => e.cell);
     const lootCells = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
     const chamber = space.archetype === 'chamber' && !space.deadEnd;
     const subs = new Set(), reserved = new Set(), blocked = new Set();
@@ -153,6 +160,12 @@
       // Rows stay modular (one cube per sub) so they read as built pieces.
       if (kind === 'row') cells.forEach((s) => blocks.push(rect([s])));
       else blocks.push(rect(cells));
+    }
+
+    // Clear blocks off cells that gained a door after the room was made.
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const b = blocks[i];
+      if (laterCells.some((c) => b.x0 < c.x + 1 && b.x1 > c.x && b.y0 < c.y + 1 && b.y1 > c.y)) blocks.splice(i, 1);
     }
 
     // Floor detail on its own stream, skipping blocked sub-cells.

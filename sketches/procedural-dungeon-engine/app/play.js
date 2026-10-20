@@ -1093,6 +1093,19 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const touched = state.climb ? [] : resolveCollisions(p);
     if (exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))] === undefined) { p.x = prev.x; p.y = prev.y; }
 
+    // Safety net: if the figure's center ever ends up inside a block that
+    // rises above its feet (say a room rebuilt around it), step out of the
+    // nearest side.
+    if (!state.climb) {
+      for (const b of state.blockAt.get(DE.key(Math.floor(p.x), Math.floor(p.y))) || []) {
+        if (b.top <= p.z + 0.05 || p.x <= b.x0 || p.x >= b.x1 || p.y <= b.y0 || p.y >= b.y1) continue;
+        const outs = [[p.x - b.x0, -1, 0], [b.x1 - p.x, 1, 0], [p.y - b.y0, 0, -1], [b.y1 - p.y, 0, 1]].sort((a, c) => a[0] - c[0]);
+        const [d, ox, oy] = outs[0];
+        p.x += ox * (d + RADIUS + 0.01);
+        p.y += oy * (d + RADIUS + 0.01);
+      }
+    }
+
     // Standing height: the tallest block top under the figure's center.
     // Step off an edge and you drop to whatever is below.
     if (!state.climb) {

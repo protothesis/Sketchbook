@@ -178,10 +178,10 @@ item is remembered as `spaceId:seed:itemId`.
 
 Props use `deriveRng(space.seed, 'props')` (floor detail uses `'detail'`),
 and each placement attempt draws a fixed run of numbers whether or not it
-lands. The reachability check makes acceptance depend on earlier
-placements, though. So a loop door added to a room later can change that
-room's layout a little when it rebuilds. That's rare, and it's acceptable
-for now.
+lands. The layout only sees a room's original doors. A door added later (a
+loop, or one drawn with chalk) just clears any block on its own cell, so it
+can never reshuffle the room or drop a block onto the figure. As a
+safety net, a figure found inside a block steps out of its nearest side.
 
 Whether a key-capable room actually shows its key depends on the run (were
 there locks waiting?), so it's run state (`run.keyRooms`), not seed state.
