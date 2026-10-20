@@ -64,10 +64,14 @@ Determinism).
   on cracked floor is much likelier to (up to ~2 in 5, scaling with how much
   of it is cracked). A ghost drifts around its room and sometimes the next
   one. It passes open doorways but not walls or closed doors, and floats
-  over blocks. Hold it in your lantern light (within 5 cells, nothing in the
-  way) for 2 s and it turns its attention to you and follows at 1.5 cells/s.
-  You walk at 2.4 and run at 4, so you can always get away. It gives up
-  after 3 s out of your light, or once 3+ rooms lie between you. The closer
+  over blocks. Noticing you takes two stages. After 1.2 s in your lantern
+  light (within 5 cells, nothing in the way) it stops and turns to you, with
+  an amber **!** above it. Keep the light on it and, after a beat, a ring
+  fills around the **!** (3 s of continuous light). Out of the light the
+  ring drains, and once it's empty the ghost goes back to wandering. A full
+  ring and it follows, at 0.9 cells/s: slower than walking (2.4) or even
+  crawling (1.1). It gives up after 2 s out of your light, or once a room
+  lies between you. The closer
   a ghost is, the more the screen wobbles; contact fills it with purple
   glitch and static. Both hold for a moment once you're clear, then wear
   off over a few seconds. The only way to be rid of one is to collapse the
@@ -102,7 +106,7 @@ forward; collapsing is the only thing entropy buys.
 | Silhouette | the parts of the figure hidden behind anything draw as a dithered lantern-orange silhouette | GreaterDepth pass, so it only appears where something is in front |
 | Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
 | Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
-| Hash ghost | translucent violet head with a trailing wisp and four orbiting "bits"; faintly self-lit so you can see one coming | when following you: hotter magenta glow, flicker, jitter, faster bits, and a magenta dot on the maps |
+| Hash ghost | translucent violet head with a trailing wisp and four orbiting "bits"; faintly self-lit so you can see one coming | watching you: an amber "!" with a filling violet ring (drawn over walls), slow bits, and an amber dot on the maps. Following you: hotter magenta glow, flicker, jitter, faster bits, and a magenta dot |
 | Ghost effects | full-screen pass (only while active): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells); glitch with contact. Each holds 1.2–1.5 s, then decays |
 | Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
@@ -128,7 +132,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Climb | push into a block for 0.35 s or press E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
-| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.5 cells/s; notice after 2 s lit (light range 5 cells, line of sight through open doors only); chase 1.5 cells/s; give up after 3 s unlit or 3+ rooms apart; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
+| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.45 cells/s. "!" after 1.2 s lit (light range 5 cells, line of sight through open doors only), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.9 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
 | Collapse price | 1 per cell + 2 per room across the whole branch, divided by 15 and rounded up to whole charges |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 

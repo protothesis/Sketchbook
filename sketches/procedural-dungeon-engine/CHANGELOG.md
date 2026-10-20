@@ -107,6 +107,15 @@ All notable changes to this sketch are logged here, per
   unravels any ghost in it, for an **echo** (tracked on the HUD, no use
   yet). Positions persist with the run.
 
+- 2026-10-20: Hash ghosts are slower to notice and easier to shake:
+  - Noticing now takes two stages: after 1.2 s in your light a ghost stops
+    and shows a "!", and after a beat a ring fills while your light stays
+    on it (3 s). The ring drains when you look away, and the ghost goes
+    back to wandering once it's empty.
+  - Followers move at 0.9 cells/s (was 1.5).
+  - A follower gives up after 2 s unlit (was 3) or with a room between you
+    (was 3 rooms).
+
 ### Fixed
 
 - 2026-10-20: Wall corners where a wall turns an inside corner (hall bends,

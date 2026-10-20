@@ -1209,23 +1209,49 @@ if (vDitherEW > 0.7 && south > 0.2) {
   //
   // Floating things that drift through a room and sometimes the next one.
   // They pass open doorways but not walls or closed doors, and float over
-  // blocks. Hold one in your lantern light for a couple of seconds and it
-  // turns toward you and follows, slower than you walk. It gives up once it
-  // has been out of your light for a few seconds, or once there are several
-  // rooms between you. Nearness wobbles the screen; contact glitches it.
+  // blocks. Noticing you takes two stages: a while in your lantern light and
+  // one stops and turns to you ("!"); keep the light on it and a ring fills
+  // around the "!"; a full ring and it follows, slowly. Light off and the
+  // ring drains. A follower gives up after a couple of seconds out of your
+  // light, or once a room lies between you. Nearness wobbles the screen;
+  // contact glitches it.
   // The only way to be rid of one is to collapse the rooms it's in, which
   // unravels it and leaves you an echo (a resource with no use yet).
 
   const GHOST = {
     contact: 0.34,       // cells, figure to ghost
-    wanderSpeed: 0.5,
-    chaseSpeed: 1.5,     // walk is 2.4 and run 4.0: you can always get away
+    wanderSpeed: 0.45,
+    chaseSpeed: 0.9,     // slower than walking (2.4) and even crouching (1.1)
     lightRange: 5,       // cells: how far the lantern "touches"
-    noticeTime: 2,       // s in your light before it turns toward you
-    loseDark: 3,         // s out of your light before it gives up
-    loseRooms: 3,        // ...or this many rooms between you
+    noticeTime: 1.2,     // s in your light before it stops and turns to you ("!")
+    alertPause: 0.8,     // s of "!" before the ring starts filling
+    ringTime: 3,         // s of continuous light to fill the ring
+    ringDrain: 2.5,      // s for a full ring to drain out of the light
+    alertGiveUp: 1.2,    // s unlit with an empty ring before it goes back to wandering
+    loseDark: 2,         // s out of your light before a follower gives up
+    loseRooms: 2,        // ...or once the rooms between you reach this (one room in between)
     height: 0.55,
   };
+
+  // The "!" and its ring, drawn into a small canvas per ghost and shown as
+  // a camera-facing sprite above it (over walls, so you can always read it).
+  function drawAlert(g) {
+    const c = g.alertCanvas, x = c.getContext('2d'), n = c.width;
+    x.clearRect(0, 0, n, n);
+    const r = n * 0.36, cx = n / 2, cy = n / 2;
+    x.lineWidth = n * 0.09;
+    x.strokeStyle = 'rgba(20, 12, 30, 0.65)';
+    x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.stroke();
+    if (g.ring > 0) {
+      x.strokeStyle = g.ring >= 1 ? '#ff5fd2' : '#d678ff';
+      x.beginPath(); x.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, g.ring)); x.stroke();
+    }
+    x.fillStyle = '#ffc35a';
+    x.font = `bold ${Math.round(n * 0.5)}px system-ui, sans-serif`;
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('!', cx, cy + n * 0.02);
+    g.alertTex.needsUpdate = true;
+  }
   const ghostGeo = {
     head: new THREE.SphereGeometry(0.16 * S, 18, 12),
     tail: new THREE.ConeGeometry(0.16 * S, 0.44 * S, 18, 1, true),
@@ -1245,9 +1271,19 @@ if (vDitherEW > 0.7 && south > 0.2) {
     mesh.add(head, tail);
     const bits = [];
     for (let i = 0; i < 4; i++) { const b = new THREE.Mesh(ghostGeo.bit, ghostBitMat); mesh.add(b); bits.push(b); }
+    const alertCanvas = document.createElement('canvas');
+    alertCanvas.width = alertCanvas.height = 96;
+    const alertTex = new THREE.CanvasTexture(alertCanvas);
+    alertTex.colorSpace = THREE.SRGBColorSpace;
+    const alert = new THREE.Sprite(new THREE.SpriteMaterial({ map: alertTex, transparent: true, depthTest: false }));
+    alert.scale.setScalar(0.42 * S);
+    alert.position.y = 0.5 * S;
+    alert.renderOrder = 20;
+    alert.visible = false;
+    mesh.add(alert);
     scene.add(mesh);
-    const ghost = Object.assign({ mode: 'wander', lit: 0, dark: 0, target: null, pause: 0, next: null, pathT: 0 }, g,
-      { mesh, mat, bits, phase: Math.random() * 10 });
+    const ghost = Object.assign({ mode: 'wander', lit: 0, dark: 0, ring: 0, alertT: 0, idle: 0, target: null, pause: 0, next: null, pathT: 0 }, g,
+      { mesh, mat, bits, alert, alertCanvas, alertTex, drawnRing: -1, phase: Math.random() * 10 });
     state.ghosts.push(ghost);
     return ghost;
   }
@@ -1255,6 +1291,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
   function removeGhost(g) {
     scene.remove(g.mesh);
     g.mat.dispose();
+    g.alertTex.dispose();
+    g.alert.material.dispose();
     state.ghosts = state.ghosts.filter((o) => o !== g);
   }
 
@@ -1399,16 +1437,33 @@ if (vDitherEW > 0.7 && south > 0.2) {
         if (g.mode === 'wander') {
           g.lit = lit ? g.lit + dt : Math.max(0, g.lit - dt);
           if (g.lit >= GHOST.noticeTime) {
+            // Stage one: it stops and turns to you.
+            g.mode = 'alert'; g.ring = 0; g.alertT = 0; g.idle = 0; g.target = null;
+          } else wander(g, dt);
+        }
+        if (g.mode === 'alert') {
+          // Stage two: keep it in your light and the ring fills.
+          g.alertT += dt;
+          if (lit) {
+            g.idle = 0;
+            if (g.alertT > GHOST.alertPause) g.ring += dt / GHOST.ringTime;
+          } else {
+            g.ring = Math.max(0, g.ring - dt / GHOST.ringDrain);
+            if (g.ring === 0) g.idle += dt;
+          }
+          if (g.ring >= 1) {
             g.mode = 'chase'; g.dark = 0; g.next = null; g.pathT = 0;
             showCaption('a hash ghost turns its attention to you');
-          } else wander(g, dt);
+          } else if (g.idle >= GHOST.alertGiveUp && g.alertT > GHOST.alertPause) {
+            g.mode = 'wander'; g.lit = 0; g.pause = 1;
+          }
         }
         if (g.mode === 'chase') {
           g.dark = lit ? 0 : g.dark + dt;
           const gs = state.exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))];
           const gap = gs === undefined || p.spaceId === undefined ? Infinity : roomGap(gs, p.spaceId, GHOST.loseRooms);
           if (g.dark >= GHOST.loseDark || gap >= GHOST.loseRooms) {
-            g.mode = 'wander'; g.lit = 0; g.target = null; g.pause = 1.5;
+            g.mode = 'wander'; g.lit = 0; g.ring = 0; g.target = null; g.pause = 1.5;
             showCaption('the hash ghost loses your thread');
           } else if (followPath(g, p.x, p.y, GHOST.chaseSpeed, dt) === true && g.next === undefined) {
             // Unreachable from here (closed door between you): drift and wait.
@@ -1430,8 +1485,17 @@ if (vDitherEW > 0.7 && south > 0.2) {
         (g.y + (Math.random() - 0.5) * jit) * S);
       g.mat.emissive.setHex(chasing ? 0x6a1f7a : 0x24185a);
       g.mat.opacity = chasing ? 0.62 + Math.sin(g.phase * 23) * 0.08 : 0.5;
+      // The "!" and ring while it's deciding about you.
+      g.alert.visible = g.mode === 'alert';
+      if (g.alert.visible) {
+        const q = Math.round(g.ring * 60) / 60;
+        if (q !== g.drawnRing) { g.ring = Math.min(1, g.ring); drawAlert(g); g.drawnRing = q; }
+        const pop = Math.min(1, g.alertT / 0.15);
+        g.alert.scale.setScalar(0.42 * S * (0.6 + 0.4 * pop));
+      }
+      const watching = g.mode === 'alert';
       g.bits.forEach((b, i) => {
-        const a = g.phase * (chasing ? 4 : 1.6) + i * Math.PI / 2;
+        const a = g.phase * (chasing ? 4 : watching ? 0.6 : 1.6) + i * Math.PI / 2;
         b.position.set(Math.cos(a) * 0.24 * S, Math.sin(g.phase * 3 + i) * 0.08 * S, Math.sin(a) * 0.24 * S);
         b.rotation.set(a, a * 1.3, 0);
       });
@@ -1635,10 +1699,10 @@ void main() {
           Math.abs(bx - ax) * px + 2 * t, Math.abs(by - ay) * px + 2 * t);
       }
     }
-    // Hash ghosts that are following you.
+    // Hash ghosts watching you (amber) or following you (magenta).
     for (const g of state.ghosts) {
-      if (g.mode !== 'chase') continue;
-      ctx.fillStyle = 'rgba(214, 120, 255, 0.95)';
+      if (g.mode === 'wander') continue;
+      ctx.fillStyle = g.mode === 'chase' ? 'rgba(214, 120, 255, 0.95)' : 'rgba(255, 195, 90, 0.95)';
       ctx.beginPath();
       ctx.arc(ox + g.x * px, oy + g.y * px, Math.max(2.5, px * 0.28), 0, Math.PI * 2);
       ctx.fill();
