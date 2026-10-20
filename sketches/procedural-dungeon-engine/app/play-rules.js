@@ -14,10 +14,9 @@
 
   // Tunables. PLAY.md has the reasoning ("moderate" pacing).
   const RULES = {
-    // Entropy comes in whole charges; 3 shards make one. A collapse spends
-    // whole charges (rounded up), so a partial need still burns a charge.
+    // Entropy comes in whole charges; 3 shards make one. A collapse costs
+    // one charge per room in the branch.
     shardsPerCharge: 3,
-    chargeEntropy: 15,        // collapse cost one charge covers
     chargesStart: 2,
     chargesMax: 8,
     shardChance: { chamber: 0.75, corridor: 0.4, stub: 0.5 },
@@ -31,8 +30,7 @@
     lockChancePerDepth: 0.0075,
     lockChanceMax: 0.09,
     lockMinDepth: 3,          // depth of the space the locked door leads out of
-    collapsePerCell: 1,
-    collapsePerSpace: 2,
+    chargesPerRoom: 1,        // collapse price: a flat charge per room in the branch
     // Props: blocks on a half-cell subgrid, stacked in half-cell-ish units
     // (3 units = floor to ceiling), plus flat floor detail.
     propAttempts: 0.32,       // placement attempts per chamber cell
@@ -219,8 +217,9 @@
 
   function collapseCost(spaces) {
     const cells = spaces.reduce((n, s) => n + s.cells.length, 0);
-    const cost = cells * RULES.collapsePerCell + spaces.length * RULES.collapsePerSpace;
-    return { rooms: spaces.length, cells, cost, charges: Math.ceil(cost / RULES.chargeEntropy) };
+    // Flat: one charge per room in the branch, whatever its size.
+    const charges = spaces.length * RULES.chargesPerRoom;
+    return { rooms: spaces.length, cells, cost: charges, charges };
   }
 
   /** Revert a whole branch, deepest first. History records each revert. */

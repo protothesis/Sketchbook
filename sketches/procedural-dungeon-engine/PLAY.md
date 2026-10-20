@@ -47,10 +47,9 @@ Determinism).
   shadow play and the hook.
 - **Collapse.** Stand at a door you opened and press E (or tap the prompt),
   and the door shuts. The whole branch beyond it (that room and every room
-  opened from it, deepest first) dissolves. The price is **1 per cell plus
-  2 per room, paid in whole charges** (15 each, rounded up), so a cost that
-  needs only part of a charge still burns the whole charge. Shards
-  collected toward your next charge are kept. Reopening the door draws fresh
+  opened from it, deepest first) dissolves. The price is a flat **1 charge
+  per room** in the branch, whatever its size. Shards collected toward your
+  next charge are kept. Reopening the door draws fresh
   entropy: that's the reroll. If the price is more charges than you have,
   the door stays open: "too much lies beyond."
 - **Traces.** A collapsed room isn't deleted. The engine keeps its seed and
@@ -76,7 +75,8 @@ Determinism).
     counter-clockwise in a dim colour; once it's empty, the ghost goes back
     to wandering.
   - A full ring turns the **?** into a purple **!!** and it follows, at
-    0.9 cells/s (slower than walking at 2.4 or crawling at 1.1). Its ring
+    0.5 cells/s: slow but relentless, far slower than walking (2.4) or
+    crawling (1.1), so you can always walk away. Its ring
     becomes the cool-down: it rewinds while the ghost is out of your light,
     and it gives up when the ring empties (2 s) or once a room lies between
     you.
@@ -123,7 +123,7 @@ forward; collapsing is the only thing entropy buys.
 | Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
 | Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
 | Hash ghost | translucent violet head with a trailing wisp and four orbiting "bits"; faintly self-lit so you can see one coming | watching you: an amber "?" with a ring (violet and filling while lit, dim and rewinding when not; drawn over walls), slow bits, and an amber dot on the maps. Following you: a purple "!!" whose ring is its cool-down, hotter magenta glow, flicker, jitter, faster bits, and a magenta dot. Off-screen: an edge marker with an arrow. Hidden behind something: a dithered violet silhouette |
-| Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells); glitch with contact. Each holds 1.2–1.5 s, then decays |
+| Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a half-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
 | Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. Door frames cap at 45%, door panels at 60% | side (north–south) walls never dither; doorways in south walls stay readable |
@@ -148,13 +148,12 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Climb | push into a block for 0.35 s or press E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
-| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.45 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.9 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
-| Collapse price | 1 per cell + 2 per room across the whole branch, divided by 15 and rounded up to whole charges |
+| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
+| Collapse price | a flat 1 charge per room in the branch |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
 In a 2,000-room simulation that works out to about 0.7 shards per room (one
-charge every ~4 rooms), and collapsing a single room costs 1.4 charges on
-average. In random 80-room walks, the first locked door shows up after a
+charge every ~4 rooms), and collapsing a room costs 1 charge. In random 80-room walks, the first locked door shows up after a
 median of 18 rooms (90th percentile: 47), with about 6 locked doors on the
 frontier by room 80. About 2.6 blocks land per room. A fine-grained
 flood fill with the player's real radius, over ~360 rooms, found every free

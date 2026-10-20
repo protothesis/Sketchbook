@@ -132,6 +132,12 @@ All notable changes to this sketch are logged here, per
   0.15, was 0.55).
 - 2026-10-20: Crouch is on Space (was C). Space no longer also acts like E.
 
+- 2026-10-20: Contact glitch is now a brief full-strength flash (0.35 s)
+  that settles to half strength while in contact. Hash ghosts follow at
+  0.5 cells/s (was 0.9) and wander at 0.35, so you can always walk away.
+  The collapse price is a flat 1 charge per room (was 1 per cell + 2 per
+  room, in 15-point charges).
+
 ### Fixed
 
 - 2026-10-20: The ghost screen effect (wobble and glitch) tanked the frame

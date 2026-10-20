@@ -214,7 +214,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     player: { x: 0.5, y: 0.5, z: 0, vz: 0, angle: 0, spaceId: null, phase: 0 },
     climb: null,         // { fx, fy, fz, tx, ty, tz, t } while stepping up
     ghosts: [],          // live hash ghosts (see "Hash ghosts")
-    fx: { wobble: 0, glitch: 0, heldNear: -9, heldTouch: -9 }, // screen effects, 0..1
+    fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9 }, // screen effects, 0..1
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
     time: 0,
@@ -1222,8 +1222,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
 
   const GHOST = {
     contact: 0.34,       // cells, figure to ghost
-    wanderSpeed: 0.45,
-    chaseSpeed: 0.9,     // slower than walking (2.4) and even crouching (1.1)
+    wanderSpeed: 0.35,
+    chaseSpeed: 0.5,     // slow but relentless: far slower than walking (2.4) or crawling (1.1)
     lightRange: 4.5,     // cells: how far the lantern "touches"
     noticeTime: 0.25,    // s in your light before it stops and turns to you ("?"): a moment
     stun: 1.2,           // s a ghost reels after you bump into it, before it follows
@@ -1632,6 +1632,11 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const want = THREE.MathUtils.clamp(1 - (nearest - 0.4) / 3.6, 0, 1);
     if (want >= fx.wobble - 0.001) { fx.wobble += (want - fx.wobble) * Math.min(1, dt * 2.5); fx.heldNear = state.time; }
     else if (state.time - fx.heldNear > 1.2) fx.wobble = Math.max(want, fx.wobble - dt * 0.22);
+    // Contact: a full-strength flash the moment you collide, settling into a
+    // steadier glitch at half strength while you stay in contact.
+    if (touching && !fx.touching) { fx.flash = 1; fx.glitch = 1; }
+    fx.touching = touching;
+    fx.flash = Math.max(0, fx.flash - dt / 0.35);
     if (touching) { fx.glitch = Math.min(1, fx.glitch + dt * 1.6); fx.heldTouch = state.time; }
     else if (state.time - fx.heldTouch > 1.5) fx.glitch = Math.max(0, fx.glitch - dt * 0.3);
   }
@@ -1749,6 +1754,7 @@ void main() {
 
   // `base` is the frame time without the effect, so only slowness the
   // effect itself adds (not a slow machine or a big map) lowers its resolution.
+  const GLITCH_HOLD = 0.5; // sustained contact glitch, as a share of the collision flash
   const fxPerf = { scale: 1, avg: 1 / 60, base: 1 / 60, clock: 0 };
   /** Called each frame with dt while the effect runs: adapt the target's resolution. */
   function adaptEffect(dt) {
@@ -1763,7 +1769,7 @@ void main() {
 
   function renderFrame(dt) {
     const fx = state.fx;
-    if (fx.wobble < 0.003 && fx.glitch < 0.003) {
+    if (fx.wobble < 0.003 && fx.glitch < 0.003 && fx.flash < 0.003) {
       if (dt) { fxPerf.base += (dt - fxPerf.base) * 0.05; fxPerf.avg = fxPerf.base; }
       renderer.render(scene, camera);
       return;
@@ -1774,7 +1780,7 @@ void main() {
     if (post.rt.width !== w || post.rt.height !== h) post.rt.setSize(w, h);
     renderer.getDrawingBufferSize(tmpV2);
     const u = post.mat.uniforms;
-    u.uTime.value = state.time; u.uWobble.value = fx.wobble; u.uGlitch.value = fx.glitch;
+    u.uTime.value = state.time; u.uWobble.value = fx.wobble; u.uGlitch.value = Math.max(fx.glitch * GLITCH_HOLD, fx.flash);
     u.uRes.value.copy(tmpV2);
     renderer.setRenderTarget(post.rt);
     renderer.render(scene, camera);
@@ -2137,7 +2143,7 @@ void main() {
     for (const g of savedGhosts) {
       if (exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))] !== undefined) addGhost({ id: g.id, x: g.x, y: g.y, mode: g.mode });
     }
-    state.fx.wobble = state.fx.glitch = 0;
+    state.fx.wobble = state.fx.glitch = state.fx.flash = 0;
     let sp = spawnPoint(exp);
     if (same && exp.registry[DE.key(Math.floor(savedPlayer.x), Math.floor(savedPlayer.y))] !== undefined) {
       sp = savedPlayer;
