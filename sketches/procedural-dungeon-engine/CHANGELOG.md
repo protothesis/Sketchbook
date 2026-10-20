@@ -27,3 +27,11 @@ All notable changes to this sketch are logged here, per
   the door swings open. It also has lantern lighting with black fog, a
   cutaway for walls south of the figure, per-space captions, and a minimap.
   It shares the map view's autosave. Design parameters are in `PLAY.md`.
+
+### Fixed
+
+- 2026-10-19: You can now move between views either way and start a new map
+  from walk mode. Walk mode has **Chart view** and **New map** buttons (press
+  New map twice to confirm, instead of `window.confirm()`, which some
+  embedded viewers block). The chart view has a **Walk 3D** button on the
+  map, and its header link is now readable on the dark theme.

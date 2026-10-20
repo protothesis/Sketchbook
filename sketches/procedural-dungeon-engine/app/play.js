@@ -365,14 +365,38 @@
       state.minimap = !state.minimap;
       $('minimap').classList.toggle('hidden', !state.minimap);
     } else if (k === 'n') {
-      if (global.confirm('Start a new expedition? This replaces the current one in both views.')) {
-        setExpedition(DE.createExpedition(DE.randomRootSeed()), null);
-      }
+      requestNewMap();
     }
     if (k.startsWith('arrow')) e.preventDefault();
   });
   global.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
   global.addEventListener('blur', () => keys.clear());
+
+  // New map needs a second tap/press within a few seconds; window.confirm()
+  // is unreliable (some embedded and in-app viewers block it silently).
+  const newBtn = $('new-btn');
+  let newArmedUntil = 0;
+  function requestNewMap() {
+    if (performance.now() < newArmedUntil) {
+      newArmedUntil = 0;
+      newBtn.classList.remove('armed');
+      newBtn.textContent = 'New map';
+      setExpedition(DE.createExpedition(DE.randomRootSeed()), null);
+      showCaption('a new expedition. seed ' + state.exp.rootSeed);
+      return;
+    }
+    newArmedUntil = performance.now() + 3000;
+    newBtn.classList.add('armed');
+    newBtn.textContent = 'Replace this map?';
+    showCaption('press again to replace this expedition in both views');
+    setTimeout(() => {
+      if (performance.now() >= newArmedUntil) {
+        newBtn.classList.remove('armed');
+        newBtn.textContent = 'New map';
+      }
+    }, 3100);
+  }
+  newBtn.addEventListener('click', (e) => { requestNewMap(); newBtn.blur(); e.preventDefault(); });
 
   const stickEl = $('stick');
   const knob = stickEl.querySelector('.knob');

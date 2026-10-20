@@ -51,7 +51,7 @@ adding any of those.
 | Dead ends | caps and failed placement still give one-cell alcoves, as in the engine |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s |
 | Touch | drag anywhere to use a virtual stick; pushing into a door opens it |
-| Other keys | M toggles the minimap; N starts a new expedition (after a confirm) |
+| Other keys | M toggles the minimap; N or the **New map** button starts a new expedition (press twice to confirm) |
 | Persistence | uses the map view's expedition autosave; the figure's position is saved separately |
 
 ## Out of scope for this pass

@@ -157,6 +157,14 @@ kbd {
   gap: 4px;
 }
 .map-buttons button { min-width: 36px; background: var(--surface); }
+.map-buttons .walk-link {
+  text-decoration: none;
+  text-align: center;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.accent-link { color: var(--accent); font-weight: 600; }
 
 .candidate-bar {
   position: absolute;
