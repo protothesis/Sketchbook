@@ -198,6 +198,7 @@ kbd {
 .pip { width: 5px; height: 5px; transform: rotate(45deg); border: 1px solid rgba(181, 156, 255, 0.5); }
 .pip.on { background: var(--entropy); }
 .meter .keys { margin-left: 6px; color: var(--key); }
+.meter .echoes { margin-left: 6px; color: #d678ff; }
 
 .done {
   position: fixed;

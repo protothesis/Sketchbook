@@ -213,6 +213,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     blockAt: new Map(),  // "x,y" -> [{ x0, y0, x1, y1, h, spaceId }] for collision
     player: { x: 0.5, y: 0.5, z: 0, vz: 0, angle: 0, spaceId: null, phase: 0 },
     climb: null,         // { fx, fy, fz, tx, ty, tz, t } while stepping up
+    ghosts: [],          // live hash ghosts (see "Hash ghosts")
+    fx: { wobble: 0, glitch: 0, heldNear: -9, heldTouch: -9 }, // screen effects, 0..1
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
     time: 0,
@@ -233,6 +235,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
       collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
       walked: 0, collected: [], unlocked: [], extracted: null,
       keyRooms: [],  // "spaceId:seed" of rooms whose key showed up (locks first, keys later)
+      echoes: 0,     // hash ghosts unravelled by collapsing their rooms (no use yet)
+      ghostSeen: [], // "spaceId:seed:ghost" for rooms whose ghost roll has happened
+      ghosts: [],    // saved positions: [{ id, x, y, mode }]
     };
   }
 
@@ -374,6 +379,14 @@ if (vDitherEW > 0.7 && south > 0.2) {
       }
     }
 
+    // A hash ghost may start here (rolled once per room, ever).
+    const gid = space.id + ':' + space.seed + ':ghost';
+    if (!state.run.ghostSeen.includes(gid)) {
+      state.run.ghostSeen.push(gid);
+      const gc = DP.ghostSpawn(space, exp);
+      if (gc) addGhost({ id: gid, x: gc.x + 0.5, y: gc.y + 0.5 });
+    }
+
     const spaceKey = space.id + ':' + space.seed;
     for (const item of DP.loot(space)) {
       const key = itemKey(space, item);
@@ -454,6 +467,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   }
 
   function buildWorld() {
+    clearGhosts();
     for (const id of Array.from(state.spaces.keys())) disposeSpace(id);
     for (const rec of state.dying) world.remove(rec.group);
     state.dying = [];
@@ -847,6 +861,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }));
     if (!loopsIntoParent) touched.delete(near.space.id);
 
+    const unravelled = banishGhostsIn(ids);
     DP.collapse(exp, near.child.id);
     run.charges -= near.price.charges;
     run.chargesSpent += near.price.charges;
@@ -860,7 +875,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const door = state.doors.get(near.space.id + '/' + near.exit.id);
     if (door) door.dir = -1;
 
-    showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}`);
+    showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}` +
+      (unravelled ? ` · ${unravelled === 1 ? 'a hash ghost unravels' : unravelled + ' hash ghosts unravel'} (+${unravelled} echo${unravelled === 1 ? '' : 'es'})` : ''));
     save();
     savePlayer();
     refreshHud();
@@ -1159,6 +1175,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     dither.uDitherRadius.value = DITHER_RADIUS * Math.min(tmpV2.x, tmpV2.y);
     dither.uDitherPlayer.value.set(p.x * S, p.y * S);
 
+    updateGhosts(dt);
+
     // Doors swinging open (dir 1) or shut (dir -1).
     for (const d of state.doors.values()) {
       if (!d.dir) continue;
@@ -1184,6 +1202,321 @@ if (vDitherEW > 0.7 && south > 0.2) {
       it.mesh.rotation.y = state.time * 1.6;
       it.mesh.position.y = (0.45 + 0.05 * Math.sin(state.time * 2.4 + it.item.cell.x)) * S;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hash ghosts
+  //
+  // Floating things that drift through a room and sometimes the next one.
+  // They pass open doorways but not walls or closed doors, and float over
+  // blocks. Hold one in your lantern light for a couple of seconds and it
+  // turns toward you and follows, slower than you walk. It gives up once it
+  // has been out of your light for a few seconds, or once there are several
+  // rooms between you. Nearness wobbles the screen; contact glitches it.
+  // The only way to be rid of one is to collapse the rooms it's in, which
+  // unravels it and leaves you an echo (a resource with no use yet).
+
+  const GHOST = {
+    contact: 0.34,       // cells, figure to ghost
+    wanderSpeed: 0.5,
+    chaseSpeed: 1.5,     // walk is 2.4 and run 4.0: you can always get away
+    lightRange: 5,       // cells: how far the lantern "touches"
+    noticeTime: 2,       // s in your light before it turns toward you
+    loseDark: 3,         // s out of your light before it gives up
+    loseRooms: 3,        // ...or this many rooms between you
+    height: 0.55,
+  };
+  const ghostGeo = {
+    head: new THREE.SphereGeometry(0.16 * S, 18, 12),
+    tail: new THREE.ConeGeometry(0.16 * S, 0.44 * S, 18, 1, true),
+    bit: new THREE.BoxGeometry(0.035 * S, 0.035 * S, 0.035 * S),
+  };
+  const ghostBitMat = new THREE.MeshBasicMaterial({ color: 0xb59cff, transparent: true, opacity: 0.85 });
+
+  function addGhost(g) {
+    const mesh = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({
+      color: 0xd9d2ff, emissive: 0x24185a, transparent: true, opacity: 0.5, depthWrite: false,
+    });
+    const head = new THREE.Mesh(ghostGeo.head, mat);
+    const tail = new THREE.Mesh(ghostGeo.tail, mat);
+    tail.rotation.x = Math.PI;           // point down: a trailing wisp
+    tail.position.y = -0.21 * S;
+    mesh.add(head, tail);
+    const bits = [];
+    for (let i = 0; i < 4; i++) { const b = new THREE.Mesh(ghostGeo.bit, ghostBitMat); mesh.add(b); bits.push(b); }
+    scene.add(mesh);
+    const ghost = Object.assign({ mode: 'wander', lit: 0, dark: 0, target: null, pause: 0, next: null, pathT: 0 }, g,
+      { mesh, mat, bits, phase: Math.random() * 10 });
+    state.ghosts.push(ghost);
+    return ghost;
+  }
+
+  function removeGhost(g) {
+    scene.remove(g.mesh);
+    g.mat.dispose();
+    state.ghosts = state.ghosts.filter((o) => o !== g);
+  }
+
+  function clearGhosts() { for (const g of state.ghosts.slice()) removeGhost(g); }
+
+  const FACE = { '1,0': 'E', '-1,0': 'W', '0,1': 'S', '0,-1': 'N' };
+  /** Can something float from cell a to the adjacent cell b? */
+  function passable(ax, ay, bx, by) {
+    const reg = state.exp.registry;
+    const sa = reg[DE.key(ax, ay)], sb = reg[DE.key(bx, by)];
+    if (sa === undefined || sb === undefined) return false;
+    if (sa === sb) return true;
+    const hit = state.exitAt.get(ekey(ax, ay, FACE[(bx - ax) + ',' + (by - ay)]));
+    return !!(hit && hit.exit.connectionId);
+  }
+
+  /** Does the lantern's light reach (tx, ty): in range, and no wall between? */
+  function lightReaches(fx, fy, tx, ty) {
+    const d = Math.hypot(tx - fx, ty - fy);
+    if (d > GHOST.lightRange) return false;
+    const n = Math.max(1, Math.ceil(d / 0.1));
+    let cx = Math.floor(fx), cy = Math.floor(fy);
+    for (let i = 1; i <= n; i++) {
+      const nx = Math.floor(fx + (tx - fx) * i / n), ny = Math.floor(fy + (ty - fy) * i / n);
+      if (nx === cx && ny === cy) continue;
+      if (nx !== cx && ny !== cy) {
+        if (!((passable(cx, cy, nx, cy) && passable(nx, cy, nx, ny)) ||
+              (passable(cx, cy, cx, ny) && passable(cx, ny, nx, ny)))) return false;
+      } else if (!passable(cx, cy, nx, ny)) return false;
+      cx = nx; cy = ny;
+    }
+    return true;
+  }
+
+  /** The next cell on a shortest floating path from one cell to another. */
+  function nextCellToward(fx, fy, tx, ty, limit) {
+    const start = DE.key(fx, fy), goal = DE.key(tx, ty);
+    if (start === goal) return null;
+    const prev = new Map([[start, null]]);
+    const q = [[fx, fy]];
+    for (let h = 0; h < q.length && prev.size < limit; h++) {
+      const [x, y] = q[h];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, k = DE.key(nx, ny);
+        if (prev.has(k) || !passable(x, y, nx, ny)) continue;
+        prev.set(k, DE.key(x, y));
+        if (k === goal) {
+          let c = k;
+          while (prev.get(c) !== start) c = prev.get(c);
+          return DE.parseKey(c);
+        }
+        q.push([nx, ny]);
+      }
+    }
+    return undefined;
+  }
+
+  /** Rooms between two spaces through open doors (Infinity past `max`). */
+  function roomGap(a, b, max) {
+    if (a === b) return 0;
+    const exp = state.exp;
+    let frontier = [a];
+    const seen = new Set([a]);
+    for (let d = 1; d <= max; d++) {
+      const nxt = [];
+      for (const id of frontier) {
+        for (const ex of exp.spaces[id].exits) {
+          if (!ex.connectionId) continue;
+          const c = exp.connections[ex.connectionId];
+          const o = c.a.spaceId === id ? c.b.spaceId : c.a.spaceId;
+          if (o === b) return d;
+          if (!seen.has(o)) { seen.add(o); nxt.push(o); }
+        }
+      }
+      frontier = nxt;
+    }
+    return Infinity;
+  }
+
+  /** Drift toward a point, staying in cells it can float between. True on arrival. */
+  function driftToward(g, tx, ty, speed, dt) {
+    const dx = tx - g.x, dy = ty - g.y, d = Math.hypot(dx, dy);
+    if (d < 0.02) return true;
+    const step = Math.min(d, speed * dt);
+    const nx = g.x + dx / d * step, ny = g.y + dy / d * step;
+    const ox = Math.floor(g.x), oy = Math.floor(g.y);
+    const ok = (x, y) => {
+      const cx = Math.floor(x), cy = Math.floor(y);
+      return (cx === ox && cy === oy) || (Math.abs(cx - ox) + Math.abs(cy - oy) === 1 && passable(ox, oy, cx, cy));
+    };
+    if (ok(nx, ny)) { g.x = nx; g.y = ny; } else if (ok(nx, g.y)) g.x = nx; else if (ok(g.x, ny)) g.y = ny;
+    return d <= step + 0.02;
+  }
+
+  /** Steer through doorways: head for the next cell's center, or the goal once in its cell. */
+  function followPath(g, gx, gy, speed, dt) {
+    g.pathT -= dt;
+    const cx = Math.floor(g.x), cy = Math.floor(g.y);
+    if (g.pathT <= 0 || (g.next && g.next.x === cx && g.next.y === cy)) {
+      g.next = nextCellToward(cx, cy, Math.floor(gx), Math.floor(gy), 500);
+      g.pathT = 0.3;
+    }
+    if (g.next === undefined) return true; // no way through: give up on this goal
+    if (g.next === null) return driftToward(g, gx, gy, speed, dt);
+    driftToward(g, g.next.x + 0.5, g.next.y + 0.5, speed, dt);
+    return false;
+  }
+
+  function wander(g, dt) {
+    if (g.pause > 0) { g.pause -= dt; return; }
+    if (!g.target) {
+      const exp = state.exp;
+      const here = exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))];
+      if (here === undefined) return;
+      let sp = exp.spaces[here];
+      // Mostly its own room; sometimes the room next door.
+      if (Math.random() < 0.25) {
+        const doors = sp.exits.filter((ex) => ex.connectionId);
+        if (doors.length) {
+          const c = exp.connections[doors[Math.floor(Math.random() * doors.length)].connectionId];
+          sp = exp.spaces[c.a.spaceId === here ? c.b.spaceId : c.a.spaceId] || sp;
+        }
+      }
+      const cell = DE.parseKey(sp.cells[Math.floor(Math.random() * sp.cells.length)]);
+      g.target = { x: cell.x + 0.2 + Math.random() * 0.6, y: cell.y + 0.2 + Math.random() * 0.6 };
+      g.next = null; g.pathT = 0;
+    }
+    if (followPath(g, g.target.x, g.target.y, GHOST.wanderSpeed, dt)) {
+      g.target = null;
+      g.pause = 1 + Math.random() * 2.5;
+    }
+  }
+
+  function updateGhosts(dt) {
+    const p = state.player;
+    const frozen = state.paused || !!state.bigmap;
+    const lx = lantern.position.x / S, ly = lantern.position.z / S;
+    let nearest = Infinity, touching = false;
+    for (const g of state.ghosts.slice()) {
+      if (!frozen) {
+        const lit = lightReaches(lx, ly, g.x, g.y);
+        if (g.mode === 'wander') {
+          g.lit = lit ? g.lit + dt : Math.max(0, g.lit - dt);
+          if (g.lit >= GHOST.noticeTime) {
+            g.mode = 'chase'; g.dark = 0; g.next = null; g.pathT = 0;
+            showCaption('a hash ghost turns its attention to you');
+          } else wander(g, dt);
+        }
+        if (g.mode === 'chase') {
+          g.dark = lit ? 0 : g.dark + dt;
+          const gs = state.exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))];
+          const gap = gs === undefined || p.spaceId === undefined ? Infinity : roomGap(gs, p.spaceId, GHOST.loseRooms);
+          if (g.dark >= GHOST.loseDark || gap >= GHOST.loseRooms) {
+            g.mode = 'wander'; g.lit = 0; g.target = null; g.pause = 1.5;
+            showCaption('the hash ghost loses your thread');
+          } else if (followPath(g, p.x, p.y, GHOST.chaseSpeed, dt) === true && g.next === undefined) {
+            // Unreachable from here (closed door between you): drift and wait.
+            g.mode = 'wander'; g.target = null;
+          }
+        }
+      }
+      const d = Math.hypot(p.x - g.x, p.y - g.y);
+      nearest = Math.min(nearest, d);
+      if (d < GHOST.contact && p.z < 0.6) touching = true;
+
+      // Look: bob, orbiting "bits", and a hotter, jittery glow when following.
+      const chasing = g.mode === 'chase';
+      g.phase += dt;
+      const jit = chasing ? 0.02 : 0;
+      g.mesh.position.set(
+        (g.x + (Math.random() - 0.5) * jit) * S,
+        (GHOST.height + Math.sin(g.phase * 1.7) * 0.05) * S,
+        (g.y + (Math.random() - 0.5) * jit) * S);
+      g.mat.emissive.setHex(chasing ? 0x6a1f7a : 0x24185a);
+      g.mat.opacity = chasing ? 0.62 + Math.sin(g.phase * 23) * 0.08 : 0.5;
+      g.bits.forEach((b, i) => {
+        const a = g.phase * (chasing ? 4 : 1.6) + i * Math.PI / 2;
+        b.position.set(Math.cos(a) * 0.24 * S, Math.sin(g.phase * 3 + i) * 0.08 * S, Math.sin(a) * 0.24 * S);
+        b.rotation.set(a, a * 1.3, 0);
+      });
+    }
+
+    // Screen effects: wobble grows with nearness, glitch with contact. Both
+    // hold for a moment once you're clear, then wear off.
+    const fx = state.fx;
+    const want = THREE.MathUtils.clamp(1 - (nearest - 0.4) / 3.6, 0, 1);
+    if (want >= fx.wobble - 0.001) { fx.wobble += (want - fx.wobble) * Math.min(1, dt * 2.5); fx.heldNear = state.time; }
+    else if (state.time - fx.heldNear > 1.2) fx.wobble = Math.max(want, fx.wobble - dt * 0.22);
+    if (touching) { fx.glitch = Math.min(1, fx.glitch + dt * 1.6); fx.heldTouch = state.time; }
+    else if (state.time - fx.heldTouch > 1.5) fx.glitch = Math.max(0, fx.glitch - dt * 0.3);
+  }
+
+  /** Ghosts inside rooms about to collapse unravel; each leaves an echo. */
+  function banishGhostsIn(ids) {
+    const reg = state.exp.registry;
+    const gone = state.ghosts.filter((g) => ids.has(reg[DE.key(Math.floor(g.x), Math.floor(g.y))]));
+    gone.forEach(removeGhost);
+    state.run.echoes += gone.length;
+    return gone.length;
+  }
+
+  // Post-processing for the ghost effects: the scene renders into a
+  // half-float target, then a full-screen pass wobbles it and, on contact,
+  // tears it into purple static. Skipped entirely while both are at zero.
+  const post = (() => {
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: rt.texture }, uTime: { value: 0 },
+        uWobble: { value: 0 }, uGlitch: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) },
+      },
+      vertexShader: 'varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `
+uniform sampler2D tDiffuse;
+uniform float uTime, uWobble, uGlitch;
+uniform vec2 uRes;
+varying vec2 vUv;
+float rand(vec2 c) { return fract(sin(dot(c, vec2(12.9898, 78.233))) * 43758.5453); }
+void main() {
+  vec2 uv = vUv;
+  float w = uWobble, g = uGlitch;
+  // Wobble: slow, overlapping waves, a bit stronger toward the edges.
+  float edge = 0.6 + 0.8 * length(vUv - 0.5);
+  uv.x += (sin(uv.y * 11.0 + uTime * 2.1) * 0.011 + sin(uv.y * 29.0 - uTime * 3.7) * 0.004) * w * edge;
+  uv.y += (cos(uv.x * 9.0 + uTime * 1.6) * 0.009 + sin(uv.x * 23.0 + uTime * 2.9) * 0.003) * w * edge;
+  // Glitch: torn horizontal slices that jump a few times a second.
+  float band = floor(vUv.y * 46.0);
+  float tick = floor(uTime * 14.0);
+  if (rand(vec2(band, tick)) < g * 0.38) uv.x += (rand(vec2(band, tick + 7.0)) - 0.5) * 0.16 * g;
+  float split = 0.003 * w + 0.014 * g;
+  vec4 col;
+  col.r = texture2D(tDiffuse, uv + vec2(split, 0.0)).r;
+  col.g = texture2D(tDiffuse, uv).g;
+  col.b = texture2D(tDiffuse, uv - vec2(split, 0.0)).b;
+  col.a = 1.0;
+  // Purple static and scanlines.
+  float n = rand(floor(vUv * uRes / 2.0) + tick * 3.1);
+  col.rgb = mix(col.rgb, vec3(n) * vec3(0.55, 0.3, 0.9), g * 0.5);
+  col.rgb += vec3(0.12, 0.02, 0.22) * g;
+  col.rgb *= 1.0 - g * 0.3 * step(0.5, fract(vUv.y * uRes.y / 3.0));
+  gl_FragColor = col;
+  #include <colorspace_fragment>
+}`,
+      depthTest: false, depthWrite: false,
+    });
+    const sc = new THREE.Scene();
+    sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
+    return { rt, mat, sc, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) };
+  })();
+
+  function renderFrame() {
+    const fx = state.fx;
+    if (fx.wobble < 0.003 && fx.glitch < 0.003) { renderer.render(scene, camera); return; }
+    renderer.getDrawingBufferSize(tmpV2);
+    if (post.rt.width !== tmpV2.x || post.rt.height !== tmpV2.y) post.rt.setSize(tmpV2.x, tmpV2.y);
+    const u = post.mat.uniforms;
+    u.uTime.value = state.time; u.uWobble.value = fx.wobble; u.uGlitch.value = fx.glitch;
+    u.uRes.value.copy(tmpV2);
+    renderer.setRenderTarget(post.rt);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    renderer.render(post.sc, post.cam);
   }
 
   // ---------------------------------------------------------------------------
@@ -1245,6 +1578,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     for (let i = 0; i < RULES.shardsPerCharge; i++) shards.append(el('span', i < run.shards ? 'pip on' : 'pip'));
     charges.parentElement.title = `${run.charges} of ${RULES.chargesMax} charges · ${run.shards}/${RULES.shardsPerCharge} shards toward the next`;
     $('keys-num').textContent = run.keys;
+    $('echoes-num').textContent = run.echoes;
   }
 
   /**
@@ -1300,6 +1634,14 @@ if (vDitherEW > 0.7 && south > 0.2) {
         ctx.fillRect(ox + Math.min(ax, bx) * px - t, oy + Math.min(ay, by) * px - t,
           Math.abs(bx - ax) * px + 2 * t, Math.abs(by - ay) * px + 2 * t);
       }
+    }
+    // Hash ghosts that are following you.
+    for (const g of state.ghosts) {
+      if (g.mode !== 'chase') continue;
+      ctx.fillStyle = 'rgba(214, 120, 255, 0.95)';
+      ctx.beginPath();
+      ctx.arc(ox + g.x * px, oy + g.y * px, Math.max(2.5, px * 0.28), 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.save();
     ctx.translate(ox + p.x * px, oy + p.y * px);
@@ -1503,6 +1845,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   }
   function savePlayer() {
     const p = state.player;
+    state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
     try {
       localStorage.setItem(PLAYER_KEY, JSON.stringify({
         rootSeed: state.exp.rootSeed, x: p.x, y: p.y, angle: p.angle, run: state.run,
@@ -1526,7 +1869,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
     state.exp = exp;
     const same = savedPlayer && savedPlayer.rootSeed === exp.rootSeed;
     state.run = same && savedPlayer.run ? Object.assign(freshRun(exp.rootSeed), savedPlayer.run) : freshRun(exp.rootSeed);
+    const savedGhosts = state.run.ghosts || [];
     buildWorld();
+    for (const g of savedGhosts) {
+      if (exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))] !== undefined) addGhost({ id: g.id, x: g.x, y: g.y, mode: g.mode });
+    }
+    state.fx.wobble = state.fx.glitch = 0;
     let sp = spawnPoint(exp);
     if (same && exp.registry[DE.key(Math.floor(savedPlayer.x), Math.floor(savedPlayer.y))] !== undefined) {
       sp = savedPlayer;
@@ -1573,7 +1921,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     update(dt);
     drawMinimap();
     drawBigMap();
-    renderer.render(scene, camera);
+    renderFrame();
     saveClock += dt;
     if (saveClock > 1) { saveClock = 0; savePlayer(); }
     requestAnimationFrame(frame);
@@ -1582,5 +1930,5 @@ if (vDitherEW > 0.7 && south > 0.2) {
   global.addEventListener('pagehide', savePlayer);
 
   // Handy from the console.
-  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord });
+  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches });
 })(window);

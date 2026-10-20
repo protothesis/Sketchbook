@@ -98,6 +98,15 @@ All notable changes to this sketch are logged here, per
     the feel) and now has its own collision. A ray from the body stops it
     short of walls, closed doors and taller blocks.
 
+- 2026-10-20: **Hash ghosts.** About 1 room in 14 starts with one, and rooms
+  on cracked floor are much likelier. Ghosts drift through open doorways
+  and notice you after 2 s in your lantern light. They then follow at
+  1.5 cells/s until they've been 3 s out of your light or are 3+ rooms
+  away. Nearness wobbles the screen and contact floods it with purple
+  glitch and static; both wear off after you get clear. Collapsing a room
+  unravels any ghost in it, for an **echo** (tracked on the HUD, no use
+  yet). Positions persist with the run.
+
 ### Fixed
 
 - 2026-10-20: Wall corners where a wall turns an inside corner (hall bends,

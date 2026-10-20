@@ -60,6 +60,19 @@ Determinism).
   cracked, with a faint violet glow. `DungeonEngine.imprintAt(exp, "x,y")`
   returns every trace layer under a cell, oldest first, so later effects
   (corruption, echoes, hazards) can key off the seeds underneath.
+- **Hash ghosts.** About 1 room in 14 starts with one, and a room standing
+  on cracked floor is much likelier to (up to ~2 in 5, scaling with how much
+  of it is cracked). A ghost drifts around its room and sometimes the next
+  one. It passes open doorways but not walls or closed doors, and floats
+  over blocks. Hold it in your lantern light (within 5 cells, nothing in the
+  way) for 2 s and it turns its attention to you and follows at 1.5 cells/s.
+  You walk at 2.4 and run at 4, so you can always get away. It gives up
+  after 3 s out of your light, or once 3+ rooms lie between you. The closer
+  a ghost is, the more the screen wobbles; contact fills it with purple
+  glitch and static. Both hold for a moment once you're clear, then wear
+  off over a few seconds. The only way to be rid of one is to collapse the
+  room it's in: it unravels and leaves an **echo**, a resource that does
+  nothing yet.
 - **Checkpoints.** Locked doors appear past depth 3, more often the deeper you go. Unlocking
   one with a key opens the **expedition record** (the seed chain from the
   root to that door, `H(parent | exit | entropy) → seed` per step, and a
@@ -89,6 +102,8 @@ forward; collapsing is the only thing entropy buys.
 | Silhouette | the parts of the figure hidden behind anything draw as a dithered lantern-orange silhouette | GreaterDepth pass, so it only appears where something is in front |
 | Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
 | Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
+| Hash ghost | translucent violet head with a trailing wisp and four orbiting "bits"; faintly self-lit so you can see one coming | when following you: hotter magenta glow, flicker, jitter, faster bits, and a magenta dot on the maps |
+| Ghost effects | full-screen pass (only while active): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells); glitch with contact. Each holds 1.2–1.5 s, then decays |
 | Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. Door frames cap at 45%, door panels at 60% | side (north–south) walls never dither; doorways in south walls stay readable |
@@ -113,6 +128,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Climb | push into a block for 0.35 s or press E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
+| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.5 cells/s; notice after 2 s lit (light range 5 cells, line of sight through open doors only); chase 1.5 cells/s; give up after 3 s unlit or 3+ rooms apart; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
 | Collapse price | 1 per cell + 2 per room across the whole branch, divided by 15 and rounded up to whole charges |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
@@ -142,6 +158,11 @@ for now.
 Whether a key-capable room actually shows its key depends on the run (were
 there locks waiting?), so it's run state (`run.keyRooms`), not seed state.
 Traces are engine state, rebuilt by replay from the history's reverts.
+
+Whether a room starts with a hash ghost is seeded (`'ghost'` stream, plus
+the room's imprint, which is fixed once the room exists). Where ghosts drift
+afterwards is run state: their positions are saved with the run, and each
+room's roll happens once (`run.ghostSeen`).
 
 ## Playtest notes, 2026-10-20 (second session)
 

@@ -41,6 +41,12 @@
     climbMaxUnits: 1,         // a single step up at a time
     climbMaxTop: 1,           // units: never stand higher than one block (head room)
     detailChance: 0.35,
+    // Hash ghosts: about 1 room in 14; rooms on cracked (imprinted) floor
+    // get a boost that grows with how much of the room is cracked.
+    ghostChance: 1 / 14,
+    ghostImprintBase: 0.1,
+    ghostImprintBoost: 0.3,
+    ghostChanceMax: 0.4,
   };
 
   /** Items lying in a space: [{ id, kind: 'shard'|'key', cell }]. */
@@ -161,6 +167,24 @@
     return { blocks, details };
   }
 
+  /**
+   * Does a hash ghost start in this space? Returns its cell, or null.
+   * Seeded per space; a room's imprint is fixed once it exists (traces only
+   * ever form where no live room stands), so this is stable for a space.
+   */
+  function ghostSpawn(space, exp) {
+    if (!space.parentId) return null;
+    const r = DE.deriveRng(space.seed, 'ghost');
+    const roll = r.next(), pick = r.next();
+    let cracked = 0;
+    for (const k of space.cells) if (DE.imprintAt(exp, k).length) cracked++;
+    const p = Math.min(RULES.ghostChanceMax, RULES.ghostChance +
+      (cracked ? RULES.ghostImprintBase + RULES.ghostImprintBoost * cracked / space.cells.length : 0));
+    if (roll >= p) return null;
+    const cells = space.cells.slice().sort();
+    return DE.parseKey(cells[Math.floor(pick * cells.length)]);
+  }
+
   /** Is this unresolved exit a locked door? Seeded per exit, never the entry. */
   function isLocked(space, exit) {
     if (exit.connectionId || exit.index === 0 && space.parentId) return false;
@@ -220,5 +244,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, props, isLocked, childThrough, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, props, ghostSpawn, isLocked, childThrough, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);
