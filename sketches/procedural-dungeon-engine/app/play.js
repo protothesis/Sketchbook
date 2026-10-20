@@ -2,13 +2,19 @@
 //
 // Every unresolved exit is a closed door. Pushing one open calls expand +
 // commit straight away, and the new space assembles itself outward from the
-// threshold. Logic runs in grid units (1 = one cell, y = grid y); rendering
-// scales by S into three.js world space, with grid y mapped to world z.
-// Shares the map view's autosave, so both pages are the same expedition.
+// threshold. Standing at a door you opened, you can spend entropy to close
+// it and collapse everything beyond (engine reverts); reopening it rerolls.
+// Game rules (loot, locks, costs) live in play-rules.js.
+//
+// Logic runs in grid units (1 = one cell, y = grid y); rendering scales by S
+// into three.js world space, with grid y mapped to world z. Shares the map
+// view's autosave, so both pages are the same expedition.
 (function (global) {
   'use strict';
 
   const DE = global.DungeonEngine;
+  const DP = global.DungeonPlay;
+  const RULES = DP.RULES;
   const THREE = global.THREE;
   const $ = (id) => document.getElementById(id);
   const STORAGE_KEY = 'dungeon-engine:expedition';
@@ -25,16 +31,20 @@
   const SPEED = 2.4;
   const RUN = 4.0;
   const PUSH_TIME = 0.35;   // seconds of walking into a door to open it
-  const USE_RANGE = 0.6;    // E / Space reach to a door's midpoint
+  const USE_RANGE = 0.6;    // E / tap reach to a door's midpoint
+  const PICKUP_RANGE = 0.42;
   const DOOR_SWING = 0.6;   // seconds
   const SWING_ANGLE = THREE.MathUtils.degToRad(92);
   const REVEAL_STEP = 0.07; // seconds of delay per cell from the door
   const REVEAL_DUR = 0.45;
-  const CUT_RANGE_X = 3.5, CUT_RANGE_Y = 3;
+  const DISSOLVE_DUR = 0.7;
+  const DITHER_RADIUS = 0.17; // fraction of the shorter screen side
   const CAM_OFFSET = new THREE.Vector3(0, 10.5, 7.5);
   const SEAM = 0xc4502a;    // the map view's open-doorway orange
+  const LOCK_SEAM = 0x6fa8d8;
   const BG = 0x07060a;
   const LANTERN = 16;       // point-light intensity (three.js physical units)
+  const LANTERN_RANGE = 13 * S;
 
   const OPP = DE.OPPOSITE;
   const ekey = (x, y, f) => x + ',' + y + ',' + f;
@@ -45,11 +55,48 @@
   const canvas = $('view');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(BG);
   scene.fog = new THREE.Fog(BG, 13, 28);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
-  scene.add(new THREE.AmbientLight(0x8a90b8, 0.35));
+  // Barely any ambient: what the lantern can't reach stays dark.
+  scene.add(new THREE.AmbientLight(0x8a90b8, 0.06));
+
+  // Screen-door dither: wall pixels in front of the figure, inside a soft
+  // circle around it on screen, are discarded in a 4x4 Bayer pattern. The
+  // shadow pass uses its own material, so dithered walls still block light.
+  const dither = {
+    uDitherCenter: { value: new THREE.Vector2(-1e4, -1e4) },
+    uDitherRadius: { value: 1 },
+    uDitherDepth: { value: 0 },
+  };
+  const DITHER_HEAD = `
+uniform vec2 uDitherCenter;
+uniform float uDitherRadius;
+uniform float uDitherDepth;
+float ditherBayer(vec2 p) {
+  int i = int(mod(p.x, 4.0)) + int(mod(p.y, 4.0)) * 4;
+  float m[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
+  return (m[i] + 0.5) / 16.0;
+}`;
+  const DITHER_BODY = `
+if (vViewPosition.z < uDitherDepth) {
+  float dd = distance(gl_FragCoord.xy, uDitherCenter) / uDitherRadius;
+  float da = 0.88 * (1.0 - smoothstep(0.5, 1.0, dd));
+  if (ditherBayer(gl_FragCoord.xy) < da) discard;
+}`;
+  function withDither(mat) {
+    mat.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, dither);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\n' + DITHER_HEAD)
+        .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n' + DITHER_BODY);
+    };
+    mat.customProgramCacheKey = () => 'dither';
+    return mat;
+  }
 
   const geo = {
     tile: new THREE.BoxGeometry(S * 0.96, 0.1, S * 0.96),
@@ -57,11 +104,20 @@
     jamb: new THREE.BoxGeometry(JAMB * S, WALL_H * S, WALL_T * S),
     lintel: new THREE.BoxGeometry(DOOR_W * S, (WALL_H - DOOR_H) * S, WALL_T * S),
     door: new THREE.BoxGeometry(DOOR_W * S * 0.97, DOOR_H * S * 0.97, 0.05 * S),
+    band: new THREE.BoxGeometry(DOOR_W * S * 0.99, 0.05 * S, 0.07 * S),
     seam: new THREE.BoxGeometry(DOOR_W * S * 0.9, 0.04, 0.2 * S),
+    shard: new THREE.OctahedronGeometry(0.11 * S),
+    keyRing: new THREE.TorusGeometry(0.06 * S, 0.018 * S, 6, 16),
+    keyShaft: new THREE.BoxGeometry(0.17 * S, 0.035 * S, 0.035 * S),
   };
-  const doorMat = new THREE.MeshLambertMaterial({ color: 0x2b211b, emissive: 0x1a0904 });
-  const doorOpenMat = new THREE.MeshLambertMaterial({ color: 0x2b211b });
+  const doorMat = withDither(new THREE.MeshLambertMaterial({ color: 0x2b211b, emissive: 0x1a0904 }));
+  const doorOpenMat = withDither(new THREE.MeshLambertMaterial({ color: 0x2b211b }));
+  const lockMat = withDither(new THREE.MeshLambertMaterial({ color: 0x323941, emissive: 0x08111a }));
+  const bandMat = withDither(new THREE.MeshLambertMaterial({ color: 0x5d6670, emissive: 0x0c1218 }));
   const seamMat = new THREE.MeshBasicMaterial({ color: SEAM });
+  const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM });
+  const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
+  const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
 
   const matCache = {};
   function spaceMats(space) {
@@ -70,11 +126,13 @@
     const m = {
       seed: space.seed,
       floor: [0.15, 0.17, 0.19].map((l) => new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.22, l) })),
-      wall: new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.2, 0.32) }),
+      wall: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.2, 0.32) })),
     };
     matCache[space.id] = m;
     return m;
   }
+
+  function shadowed(mesh) { mesh.castShadow = true; mesh.receiveShadow = true; return mesh; }
 
   // ---------------------------------------------------------------------------
   // State
@@ -83,14 +141,27 @@
     exp: null,
     exitAt: new Map(),   // "x,y,f" -> { spaceId, exit }
     spaces: new Map(),   // spaceId -> { group, edges[], tiles[], revealStart|null }
+    dying: [],           // collapsed space records still dissolving
     doors: new Map(),    // "spaceId/exitId" -> door
+    items: new Map(),    // "spaceId:seed:itemId" -> { mesh, item, spaceId, tile }
     player: { x: 0.5, y: 0.5, angle: 0, spaceId: null, phase: 0 },
+    run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
     time: 0,
     minimap: true,
+    paused: false,
   };
   const world = new THREE.Group();
   scene.add(world);
+
+  function freshRun(rootSeed) {
+    return {
+      rootSeed, entropy: RULES.entropyStart, keys: 0,
+      shardsFound: 0, keysFound: 0, keysUsed: 0,
+      collapses: 0, roomsCollapsed: 0, entropySpent: 0,
+      walked: 0, collected: [], unlocked: [],
+    };
+  }
 
   function rebuildExitIndex() {
     state.exitAt.clear();
@@ -121,22 +192,27 @@
     }
   }
 
+  const itemKey = (space, item) => space.id + ':' + space.seed + ':' + item.id;
+
   function buildSpace(space, reveal) {
     disposeSpace(space.id);
     const exp = state.exp;
     const mats = spaceMats(space);
     const group = new THREE.Group();
-    const rec = { group, edges: [], tiles: [], revealStart: reveal ? state.time : null };
+    const rec = { id: space.id, group, edges: [], tiles: [], revealStart: reveal ? state.time : null };
     const entry = space.exits[0] && space.parentId ? space.exits[0].cell : DE.parseKey(space.cells[0]);
+    const tileAt = {};
 
     for (const k of space.cells) {
       const c = DE.parseKey(k);
       const dist = Math.abs(c.x - entry.x) + Math.abs(c.y - entry.y);
       const tile = new THREE.Mesh(geo.tile, mats.floor[(c.x * 7 + c.y * 13 + 999) % 3]);
+      tile.receiveShadow = true;
       tile.position.set((c.x + 0.5) * S, -0.05, (c.y + 0.5) * S);
       tile.userData.delay = dist * REVEAL_STEP;
       group.add(tile);
       rec.tiles.push(tile);
+      tileAt[k] = tile;
 
       for (const f of DE.FACINGS) {
         const n = DE.step(c, f);
@@ -147,57 +223,101 @@
         eg.rotation.y = fr.rot;
         const hit = state.exitAt.get(ekey(c.x, c.y, f));
         if (hit) {
-          const jl = new THREE.Mesh(geo.jamb, mats.wall);
+          const jl = shadowed(new THREE.Mesh(geo.jamb, mats.wall));
           jl.position.set(-(0.5 - JAMB / 2) * S, WALL_H * S / 2, 0);
-          const jr = jl.clone();
+          const jr = shadowed(jl.clone());
           jr.position.x = -jl.position.x;
-          const li = new THREE.Mesh(geo.lintel, mats.wall);
+          const li = shadowed(new THREE.Mesh(geo.lintel, mats.wall));
           li.position.set(0, (DOOR_H + (WALL_H - DOOR_H) / 2) * S, 0);
           eg.add(jl, jr, li);
-          if (ownsDoorPanel(space.id, hit.exit)) addDoor(eg, space.id, hit.exit, fr.beyond);
+          if (ownsDoorPanel(space.id, hit.exit)) addDoor(eg, space, hit.exit, fr.beyond);
         } else {
-          const w = new THREE.Mesh(geo.wall, mats.wall);
+          const w = shadowed(new THREE.Mesh(geo.wall, mats.wall));
           w.position.y = WALL_H * S / 2;
           eg.add(w);
         }
-        eg.userData = { gx: fr.gx, gy: fr.gy, ns: f === 'N' || f === 'S', cut: 1, delay: dist * REVEAL_STEP + 0.12 };
+        eg.userData = { delay: dist * REVEAL_STEP + 0.12 };
         group.add(eg);
         rec.edges.push(eg);
       }
     }
+
+    for (const item of DP.loot(space)) {
+      const key = itemKey(space, item);
+      if (state.run.collected.includes(key)) continue;
+      let mesh;
+      if (item.kind === 'shard') {
+        mesh = new THREE.Mesh(geo.shard, shardMat);
+      } else {
+        mesh = new THREE.Group();
+        const ring = new THREE.Mesh(geo.keyRing, keyMat);
+        ring.position.x = -0.1 * S;
+        const shaft = new THREE.Mesh(geo.keyShaft, keyMat);
+        shaft.position.x = 0.04 * S;
+        mesh.add(ring, shaft);
+      }
+      mesh.position.set((item.cell.x + 0.5) * S, 0.45 * S, (item.cell.y + 0.5) * S);
+      group.add(mesh);
+      state.items.set(key, { mesh, item, spaceId: space.id, tile: tileAt[DE.key(item.cell.x, item.cell.y)] });
+    }
+
     world.add(group);
     state.spaces.set(space.id, rec);
     applyReveal(rec);
   }
 
-  function addDoor(edgeGroup, spaceId, ex, beyond) {
+  function addDoor(edgeGroup, space, ex, beyond) {
+    const locked = !ex.connectionId && DP.isLocked(space, ex);
     const pivot = new THREE.Group();
     pivot.position.set(-DOOR_W / 2 * S, 0, 0);
-    const panel = new THREE.Mesh(geo.door, ex.connectionId ? doorOpenMat : doorMat);
+    const panel = shadowed(new THREE.Mesh(geo.door, ex.connectionId ? doorOpenMat : locked ? lockMat : doorMat));
     panel.position.set(DOOR_W / 2 * S, DOOR_H * S / 2, 0);
     pivot.add(panel);
-    const seam = new THREE.Mesh(geo.seam, seamMat);
+    if (locked) {
+      for (const y of [0.25, 0.75]) {
+        const band = new THREE.Mesh(geo.band, bandMat);
+        band.position.set(DOOR_W / 2 * S, DOOR_H * S * y, 0);
+        pivot.add(band);
+      }
+    }
+    const seam = new THREE.Mesh(geo.seam, locked ? lockSeamMat : seamMat);
     seam.position.set(0, 0.02, 0);
     seam.visible = !ex.connectionId;
     edgeGroup.add(pivot, seam);
     const door = {
-      key: spaceId + '/' + ex.id, spaceId, exitId: ex.id, pivot, panel, seam,
-      openAngle: -beyond * SWING_ANGLE, t: ex.connectionId ? 1 : 0, opening: false,
+      key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, locked,
+      openAngle: -beyond * SWING_ANGLE, t: ex.connectionId ? 1 : 0, dir: 0,
     };
     pivot.rotation.y = door.openAngle * door.t;
     state.doors.set(door.key, door);
+  }
+
+  function forgetSpace(id) {
+    state.spaces.delete(id);
+    for (const [k, d] of state.doors) if (d.spaceId === id) state.doors.delete(k);
+    for (const [k, it] of state.items) if (it.spaceId === id) state.items.delete(k);
   }
 
   function disposeSpace(id) {
     const rec = state.spaces.get(id);
     if (!rec) return;
     world.remove(rec.group);
-    state.spaces.delete(id);
-    for (const [k, d] of state.doors) if (d.spaceId === id) state.doors.delete(k);
+    forgetSpace(id);
+  }
+
+  /** Keep a collapsed space's meshes just long enough to sink away. */
+  function dissolveSpace(id, order) {
+    const rec = state.spaces.get(id);
+    if (!rec) return;
+    forgetSpace(id);
+    rec.dieStart = state.time + order * 0.08;
+    state.dying.push(rec);
   }
 
   function buildWorld() {
     for (const id of Array.from(state.spaces.keys())) disposeSpace(id);
+    for (const rec of state.dying) world.remove(rec.group);
+    state.dying = [];
     rebuildExitIndex();
     for (const id in state.exp.spaces) buildSpace(state.exp.spaces[id], false);
   }
@@ -211,10 +331,16 @@
       const r = Math.max(0.001, revealAmount(rec, t.userData.delay));
       t.scale.set(r, 1, r);
     }
-    for (const e of rec.edges) {
-      e.scale.y = Math.max(0.001, revealAmount(rec, e.userData.delay) * e.userData.cut);
-    }
+    for (const e of rec.edges) e.scale.y = Math.max(0.001, revealAmount(rec, e.userData.delay));
     if (rec.revealStart !== null && state.time - rec.revealStart > 3) rec.revealStart = null;
+  }
+
+  function applyDissolve(rec) {
+    const k = 1 - easeOut(THREE.MathUtils.clamp((state.time - rec.dieStart) / DISSOLVE_DUR, 0, 1));
+    const s = Math.max(0.001, k);
+    for (const e of rec.edges) e.scale.y = s;
+    for (const t of rec.tiles) t.scale.set(s, 1, s);
+    return k <= 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -230,17 +356,27 @@
     new THREE.SphereGeometry(0.04 * S, 10, 8),
     new THREE.MeshBasicMaterial({ color: 0xffc27a }));
   lanternMesh.position.set(0.14 * S, 0.3 * S, 0.12 * S);
-  const shadow = new THREE.Mesh(
+  const blob = new THREE.Mesh(
     new THREE.CircleGeometry(0.2 * S, 20),
     new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
-  shadow.rotation.x = -Math.PI / 2;
-  shadow.position.y = 0.01;
+  blob.rotation.x = -Math.PI / 2;
+  blob.position.y = 0.01;
   const bodyRig = new THREE.Group();
   bodyRig.add(body, head, lanternMesh);
-  figure.add(bodyRig, shadow);
-  const lantern = new THREE.PointLight(0xffb36b, LANTERN, 13 * S, 1.7);
+  figure.add(bodyRig, blob);
+  const lantern = new THREE.PointLight(0xffb36b, LANTERN, LANTERN_RANGE, 1.7);
   lantern.position.set(0.14 * S, 0.75 * S, 0.12 * S);
+  lantern.castShadow = true;
+  lantern.shadow.mapSize.set(512, 512);
+  lantern.shadow.camera.near = 0.1;
+  lantern.shadow.camera.far = LANTERN_RANGE;
+  lantern.shadow.bias = -0.004;
   figure.add(lantern);
+  // A faint cool fill, south of the figure and without shadows, so the
+  // camera-facing sides of nearby walls read. Short range, so it can't
+  // light anything around a corner.
+  const fill = new THREE.PointLight(0x8f9cc8, 3, 3.2 * S, 1.5);
+  scene.add(fill);
   scene.add(figure);
 
   // ---------------------------------------------------------------------------
@@ -304,20 +440,58 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Doors
+  // Doors: open, unlock, or close + collapse
 
-  function closedDoorNear(p) {
-    const cx = Math.floor(p.x), cy = Math.floor(p.y);
-    let best = null, bestD = USE_RANGE;
-    const sp = state.exp.spaces[state.exp.registry[DE.key(cx, cy)]];
+  /**
+   * The door in the player's own room within reach, and what can be done
+   * with it: 'open' | 'locked' | 'collapse'. Loop doors and the way back
+   * into a room have no action.
+   */
+  function doorNear(p) {
+    const exp = state.exp;
+    const sp = exp.spaces[exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))]];
     if (!sp) return null;
+    let best = null, bestD = USE_RANGE;
     for (const ex of sp.exits) {
-      if (ex.connectionId) continue;
       const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);
       const d = Math.hypot(p.x - (ax + bx) / 2, p.y - (ay + by) / 2);
-      if (d < bestD) { bestD = d; best = { spaceId: sp.id, exit: ex }; }
+      if (d >= bestD) continue;
+      let action = null, child = null;
+      if (!ex.connectionId) action = DP.isLocked(sp, ex) ? 'locked' : 'open';
+      else if ((child = DP.childThrough(exp, sp.id, ex))) action = 'collapse';
+      if (!action) continue;
+      bestD = d;
+      best = { space: sp, exit: ex, action, child };
+    }
+    if (best && best.action === 'collapse') {
+      best.price = DP.collapseCost(DP.branch(exp, best.child.id));
+      best.affordable = best.price.cost <= state.run.entropy;
     }
     return best;
+  }
+
+  function act(near) {
+    if (!near || state.paused) return;
+    const run = state.run;
+    const doorKey = near.space.id + '/' + near.exit.id;
+    if (near.action === 'open') {
+      openDoor(near.space.id, near.exit.id);
+    } else if (near.action === 'locked') {
+      if (run.unlocked.includes(doorKey)) { showComplete(near); return; }
+      if (run.keys <= 0) { showCaption('locked. you need a key'); return; }
+      run.keys--;
+      run.keysUsed++;
+      run.unlocked.push(doorKey);
+      savePlayer();
+      refreshHud();
+      showComplete(near);
+    } else if (near.action === 'collapse') {
+      if (!near.affordable) {
+        showCaption(`too much lies beyond: ${near.price.cost} entropy, you have ${run.entropy}`);
+        return;
+      }
+      collapseThrough(near);
+    }
   }
 
   function openDoor(spaceId, exitId) {
@@ -333,7 +507,7 @@
     rebuildExitIndex();
     const door = state.doors.get(spaceId + '/' + exitId);
     if (door) {
-      door.opening = true;
+      door.dir = 1;
       door.seam.visible = false;
       door.panel.material = doorOpenMat;
     }
@@ -344,7 +518,49 @@
       buildSpace(cand.space, true);
     }
     save();
-    refreshStats();
+    refreshHud();
+  }
+
+  /** Close an opened door and erase every space beyond it, for entropy. */
+  function collapseThrough(near) {
+    const exp = state.exp;
+    const run = state.run;
+    const spaces = DP.branch(exp, near.child.id);
+    const ids = new Set(spaces.map((s) => s.id));
+    // Spaces outside the branch that connect into it (loops) must rebuild:
+    // their doorways become walls or unopened doors again.
+    const touched = new Set();
+    for (const s of spaces) {
+      for (const ex of s.exits) {
+        if (!ex.connectionId) continue;
+        const c = exp.connections[ex.connectionId];
+        for (const end of [c.a, c.b]) if (!ids.has(end.spaceId)) touched.add(end.spaceId);
+      }
+    }
+    const loopsIntoParent = spaces.some((s) => s.exits.some((ex) => {
+      if (!ex.connectionId || (s.id === near.child.id && ex.index === 0)) return false;
+      const c = exp.connections[ex.connectionId];
+      return c.a.spaceId === near.space.id || c.b.spaceId === near.space.id;
+    }));
+    if (!loopsIntoParent) touched.delete(near.space.id);
+
+    DP.collapse(exp, near.child.id);
+    run.entropy -= near.price.cost;
+    run.entropySpent += near.price.cost;
+    run.collapses++;
+    run.roomsCollapsed += spaces.length;
+    rebuildExitIndex();
+
+    const maxDepth = spaces[0].depth;
+    spaces.forEach((s) => dissolveSpace(s.id, maxDepth - s.depth));
+    for (const id of touched) if (exp.spaces[id]) buildSpace(exp.spaces[id], false);
+    const door = state.doors.get(near.space.id + '/' + near.exit.id);
+    if (door) door.dir = -1;
+
+    showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${near.price.cost} entropy`);
+    save();
+    savePlayer();
+    refreshHud();
   }
 
   // ---------------------------------------------------------------------------
@@ -356,10 +572,13 @@
   global.addEventListener('keydown', (e) => {
     if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
     const k = e.key.toLowerCase();
+    if (state.paused) {
+      if (k === 'escape') hideComplete();
+      return;
+    }
     keys.add(k);
     if (k === 'e' || k === ' ') {
-      const d = closedDoorNear(state.player);
-      if (d) openDoor(d.spaceId, d.exit.id);
+      if (!e.repeat) act(doorNear(state.player));
       e.preventDefault();
     } else if (k === 'm') {
       state.minimap = !state.minimap;
@@ -372,6 +591,9 @@
   global.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
   global.addEventListener('blur', () => keys.clear());
 
+  const promptEl = $('prompt');
+  promptEl.addEventListener('click', (e) => { act(doorNear(state.player)); promptEl.blur(); e.preventDefault(); });
+
   // New map needs a second tap/press within a few seconds; window.confirm()
   // is unreliable (some embedded and in-app viewers block it silently).
   const newBtn = $('new-btn');
@@ -381,8 +603,7 @@
       newArmedUntil = 0;
       newBtn.classList.remove('armed');
       newBtn.textContent = 'New map';
-      setExpedition(DE.createExpedition(DE.randomRootSeed()), null);
-      showCaption('a new expedition. seed ' + state.exp.rootSeed);
+      newExpedition();
       return;
     }
     newArmedUntil = performance.now() + 3000;
@@ -398,11 +619,17 @@
   }
   newBtn.addEventListener('click', (e) => { requestNewMap(); newBtn.blur(); e.preventDefault(); });
 
+  function newExpedition() {
+    hideComplete();
+    setExpedition(DE.createExpedition(DE.randomRootSeed()), null);
+    showCaption('a new expedition. seed ' + state.exp.rootSeed);
+  }
+
   const stickEl = $('stick');
   const knob = stickEl.querySelector('.knob');
   const STICK_R = 50;
   canvas.addEventListener('pointerdown', (e) => {
-    if (stick.active) return;
+    if (stick.active || state.paused) return;
     stick.active = true;
     stick.id = e.pointerId;
     stick.ox = e.clientX; stick.oy = e.clientY;
@@ -431,6 +658,7 @@
   canvas.addEventListener('pointercancel', endStick);
 
   function readInput() {
+    if (state.paused) return { x: 0, y: 0, mag: 0 };
     let x = 0, y = 0;
     if (keys.has('w') || keys.has('arrowup')) y -= 1;
     if (keys.has('s') || keys.has('arrowdown')) y += 1;
@@ -448,9 +676,14 @@
   // ---------------------------------------------------------------------------
   // Per-frame update
 
+  const camTarget = new THREE.Vector3();
+  const tmpV = new THREE.Vector3();
+  const tmpV2 = new THREE.Vector2();
+
   function update(dt) {
     const p = state.player;
     const exp = state.exp;
+    const run = state.run;
     const inp = readInput();
     const prev = { x: p.x, y: p.y };
     let moving = false;
@@ -465,15 +698,19 @@
       p.angle += da * Math.min(1, dt * 14);
       moving = true;
     }
+    if (!state.paused) run.walked += dt;
     const touched = resolveCollisions(p);
     if (exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))] === undefined) { p.x = prev.x; p.y = prev.y; }
 
-    // Pushing into a closed door for a beat opens it.
+    // Pushing into a closed (unlocked) door for a beat opens it.
     let pushing = null;
     if (inp.mag > 0) {
       for (const s of touched) {
         const d = DE.DIRS[s.facing];
-        if (d.x * inp.x + d.y * inp.y > 0.5) { pushing = s.door; break; }
+        if (d.x * inp.x + d.y * inp.y > 0.5 && !DP.isLocked(exp.spaces[s.door.spaceId], s.door.exit)) {
+          pushing = s.door;
+          break;
+        }
       }
     }
     const pk = pushing ? pushing.spaceId + '/' + pushing.exit.id : null;
@@ -482,6 +719,27 @@
     if (pushing && state.push.t >= PUSH_TIME) {
       state.push.key = null;
       openDoor(pushing.spaceId, pushing.exit.id);
+    }
+
+    // Pick things up.
+    for (const [k, it] of state.items) {
+      const dx = p.x - (it.item.cell.x + 0.5), dy = p.y - (it.item.cell.y + 0.5);
+      if (dx * dx + dy * dy > PICKUP_RANGE * PICKUP_RANGE) continue;
+      run.collected.push(k);
+      it.mesh.parent.remove(it.mesh);
+      state.items.delete(k);
+      if (it.item.kind === 'shard') {
+        const before = run.entropy;
+        run.entropy = Math.min(RULES.entropyMax, run.entropy + RULES.shardEntropy);
+        run.shardsFound++;
+        showCaption(run.entropy > before ? `a shard · +${run.entropy - before} entropy` : 'a shard · your entropy is full');
+      } else {
+        run.keys++;
+        run.keysFound++;
+        showCaption('a key. somewhere, a door is locked');
+      }
+      savePlayer();
+      refreshHud();
     }
 
     // Entering a new space shows its log line.
@@ -495,48 +753,92 @@
       }
     }
 
-    const near = closedDoorNear(p);
-    const prompt = $('prompt');
-    prompt.hidden = !near;
-    if (near) prompt.textContent = state.push.key ? 'opening…' : 'a closed door. push, or press E';
+    updatePrompt(state.paused ? null : doorNear(p));
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;
     figure.position.set(p.x * S, 0, p.y * S);
     figure.rotation.y = p.angle;
+    fill.position.set(p.x * S, 1.0 * S, (p.y + 0.6) * S);
     bodyRig.position.y = moving ? Math.abs(Math.sin(p.phase)) * 0.05 * S : 0;
     lantern.intensity = LANTERN * (0.94 + 0.06 * Math.sin(state.time * 9.3) * Math.sin(state.time * 3.1));
 
     // Camera: fixed angle, smoothed follow.
-    const target = new THREE.Vector3(p.x * S, 0.6, p.y * S);
-    camTarget.lerp(target, 1 - Math.exp(-dt * 7));
+    tmpV.set(p.x * S, 0.6, p.y * S);
+    camTarget.lerp(tmpV, 1 - Math.exp(-dt * 7));
     camera.position.copy(camTarget).add(CAM_OFFSET);
     camera.lookAt(camTarget);
+    camera.updateMatrixWorld();
 
-    // Doors swinging
+    // Dither: centered on the figure on screen, for pixels nearer the camera.
+    renderer.getDrawingBufferSize(tmpV2);
+    tmpV.set(p.x * S, 0.35 * S, p.y * S).project(camera);
+    dither.uDitherCenter.value.set((tmpV.x + 1) / 2 * tmpV2.x, (tmpV.y + 1) / 2 * tmpV2.y);
+    dither.uDitherRadius.value = DITHER_RADIUS * Math.min(tmpV2.x, tmpV2.y);
+    tmpV.set(p.x * S, 0.35 * S, p.y * S).applyMatrix4(camera.matrixWorldInverse);
+    dither.uDitherDepth.value = -tmpV.z - 0.35 * S;
+
+    // Doors swinging open (dir 1) or shut (dir -1).
     for (const d of state.doors.values()) {
-      if (!d.opening) continue;
-      d.t = Math.min(1, d.t + dt / DOOR_SWING);
+      if (!d.dir) continue;
+      d.t = THREE.MathUtils.clamp(d.t + d.dir * dt / DOOR_SWING, 0, 1);
       d.pivot.rotation.y = d.openAngle * easeOut(d.t);
-      if (d.t >= 1) d.opening = false;
+      if (d.dir < 0 && d.t <= 0) {
+        d.seam.visible = true;
+        d.panel.material = doorMat;
+      }
+      if (d.t <= 0 || d.t >= 1) d.dir = 0;
     }
 
-    // Cutaway for walls just south of the player, then reveal.
-    for (const rec of state.spaces.values()) {
-      for (const e of rec.edges) {
-        const u = e.userData;
-        const south = u.ns ? u.gy > p.y + 0.05 : u.gy > p.y + 0.6;
-        const cut = south && u.gy - p.y < CUT_RANGE_Y && Math.abs(u.gx - p.x) < CUT_RANGE_X;
-        u.cut += ((cut ? 0.12 : 1) - u.cut) * Math.min(1, dt * 10);
-      }
-      applyReveal(rec);
+    // Spaces assembling or dissolving; items turning in the dark.
+    for (const rec of state.spaces.values()) if (rec.revealStart !== null) applyReveal(rec);
+    state.dying = state.dying.filter((rec) => {
+      if (!applyDissolve(rec)) return true;
+      world.remove(rec.group);
+      return false;
+    });
+    for (const it of state.items.values()) {
+      const r = it.tile ? it.tile.scale.x : 1;
+      it.mesh.scale.setScalar(Math.max(0.001, r));
+      it.mesh.rotation.y = state.time * 1.6;
+      it.mesh.position.y = (0.45 + 0.05 * Math.sin(state.time * 2.4 + it.item.cell.x)) * S;
     }
   }
 
-  const camTarget = new THREE.Vector3();
-
   // ---------------------------------------------------------------------------
   // HUD
+
+  const touchUi = global.matchMedia && global.matchMedia('(hover: none)').matches;
+  const verb = touchUi ? 'tap' : 'E';
+
+  let lastPrompt = '';
+  function updatePrompt(near) {
+    let text = '', cls = '';
+    if (near) {
+      const run = state.run;
+      const key = near.space.id + '/' + near.exit.id;
+      if (near.action === 'open') {
+        text = state.push.key ? 'opening…' : `a closed door · push, or ${verb}`;
+      } else if (near.action === 'locked') {
+        cls = 'lock';
+        text = run.unlocked.includes(key) ? `the unlocked door · ${verb}`
+          : run.keys > 0 ? `a locked door · ${verb} to unlock (1 key)` : 'a locked door · you need a key';
+      } else {
+        const pr = near.price;
+        const rooms = `${pr.rooms} room${pr.rooms === 1 ? '' : 's'}`;
+        cls = near.affordable ? 'collapse' : 'blocked';
+        text = near.affordable
+          ? `close & collapse ${rooms} · ${pr.cost} entropy · ${verb}`
+          : `too much lies beyond · ${rooms}, ${pr.cost} entropy`;
+      }
+    }
+    const sig = text + '|' + cls;
+    if (sig === lastPrompt) return;
+    lastPrompt = sig;
+    promptEl.hidden = !text;
+    promptEl.textContent = text;
+    promptEl.className = 'prompt ' + cls;
+  }
 
   let captionTimer = null;
   function showCaption(text) {
@@ -547,9 +849,13 @@
     captionTimer = setTimeout(() => el.classList.remove('show'), 2600);
   }
 
-  function refreshStats() {
+  function refreshHud() {
     const s = DE.stats(state.exp);
-    $('stats').textContent = `seed ${state.exp.rootSeed} · ${s.spaces} spaces · ${s.openExits} closed doors · ${s.cycles} loops`;
+    const run = state.run;
+    $('stats').textContent = `seed ${state.exp.rootSeed} · ${s.spaces} rooms · ${s.openExits} closed doors`;
+    $('entropy-fill').style.width = (100 * run.entropy / RULES.entropyMax) + '%';
+    $('entropy-num').textContent = run.entropy;
+    $('keys-num').textContent = run.keys;
   }
 
   const mm = $('minimap');
@@ -574,10 +880,11 @@
         ctx.fillRect(ox + c.x * px + 0.5, oy + c.y * px + 0.5, px - 1, px - 1);
       }
     }
-    ctx.fillStyle = '#c4502a';
     for (const id in exp.spaces) {
-      for (const ex of exp.spaces[id].exits) {
+      const sp = exp.spaces[id];
+      for (const ex of sp.exits) {
         if (ex.connectionId) continue;
+        ctx.fillStyle = DP.isLocked(sp, ex) ? '#6fa8d8' : '#c4502a';
         const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);
         ctx.fillRect(ox + Math.min(ax, bx) * px - 1.5, oy + Math.min(ay, by) * px - 1.5,
           Math.abs(bx - ax) * px + 3, Math.abs(by - ay) * px + 3);
@@ -597,6 +904,82 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Level complete: the seed chain from the root to the unlocked door.
+
+  const short = (h) => (h ? h.slice(0, 8) : '');
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function showComplete(near) {
+    const exp = state.exp;
+    const run = state.run;
+    const s = DE.stats(exp);
+    const chain = DP.seedChain(exp, near.space.id);
+    const generated = exp.history.filter((ev) => ev.type === 'commit' && !ev.loop).length + 1;
+    let deepest = 0;
+    for (const id in exp.spaces) deepest = Math.max(deepest, exp.spaces[id].depth);
+
+    $('done-seed').textContent = exp.rootSeed;
+    const list = $('done-chain');
+    list.innerHTML = '';
+    for (const step of chain) {
+      const li = el('li');
+      li.append(el('span', 'sid', step.id));
+      const formula = step.parentSeed
+        ? `H(${short(step.parentSeed)} | ${step.exitIndex} | ${short(step.entropy)})`
+        : `H(${exp.rootSeed} | root)`;
+      li.append(el('span', 'hash', `${formula} → ${short(step.seed)}`));
+      li.append(el('span', 'what', `${step.archetype} · ${step.mood}`));
+      list.append(li);
+    }
+    const last = el('li', 'door');
+    last.append(el('span', 'sid', '⟶'), el('span', 'hash', `locked door ${near.space.id}/${near.exit.id}, unlocked`));
+    list.append(last);
+
+    const mins = Math.floor(run.walked / 60), secs = Math.floor(run.walked % 60);
+    const rows = [
+      ['rooms standing', s.spaces], ['rooms ever opened', generated], ['loops', s.cycles],
+      ['cells charted', s.cells], ['deepest', deepest], ['chain length', chain.length],
+      ['shards found', run.shardsFound], ['keys found', run.keysFound], ['keys used', run.keysUsed],
+      ['collapses', run.collapses], ['rooms collapsed', run.roomsCollapsed], ['entropy spent', run.entropySpent],
+      ['entropy left', run.entropy], ['time walked', `${mins}:${String(secs).padStart(2, '0')}`],
+    ];
+    const dl = $('done-stats');
+    dl.innerHTML = '';
+    for (const [k, v] of rows) {
+      const cell = el('div');
+      cell.append(el('dt', null, k), el('dd', null, String(v)));
+      dl.append(cell);
+    }
+
+    state.paused = true;
+    keys.clear();
+    $('done').hidden = false;
+  }
+
+  function hideComplete() {
+    state.paused = false;
+    $('done').hidden = true;
+  }
+
+  $('done-new').addEventListener('click', newExpedition);
+  $('done-close').addEventListener('click', hideComplete);
+  $('done-export').addEventListener('click', () => {
+    const blob = new Blob([DE.exportRecord(state.exp)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `expedition-${state.exp.rootSeed}.json`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  // ---------------------------------------------------------------------------
   // Persistence (shared with the map view)
 
   function save() {
@@ -605,7 +988,9 @@
   function savePlayer() {
     const p = state.player;
     try {
-      localStorage.setItem(PLAYER_KEY, JSON.stringify({ rootSeed: state.exp.rootSeed, x: p.x, y: p.y, angle: p.angle }));
+      localStorage.setItem(PLAYER_KEY, JSON.stringify({
+        rootSeed: state.exp.rootSeed, x: p.x, y: p.y, angle: p.angle, run: state.run,
+      }));
     } catch (e) { /* storage unavailable */ }
   }
 
@@ -623,17 +1008,18 @@
 
   function setExpedition(exp, savedPlayer) {
     state.exp = exp;
+    const same = savedPlayer && savedPlayer.rootSeed === exp.rootSeed;
+    state.run = same && savedPlayer.run ? Object.assign(freshRun(exp.rootSeed), savedPlayer.run) : freshRun(exp.rootSeed);
     buildWorld();
     let sp = spawnPoint(exp);
-    if (savedPlayer && savedPlayer.rootSeed === exp.rootSeed &&
-        exp.registry[DE.key(Math.floor(savedPlayer.x), Math.floor(savedPlayer.y))] !== undefined) {
+    if (same && exp.registry[DE.key(Math.floor(savedPlayer.x), Math.floor(savedPlayer.y))] !== undefined) {
       sp = savedPlayer;
     }
     Object.assign(state.player, { x: sp.x, y: sp.y, angle: sp.angle || 0, spaceId: null });
     camTarget.set(sp.x * S, 0.6, sp.y * S);
     save();
     savePlayer();
-    refreshStats();
+    refreshHud();
   }
 
   // ---------------------------------------------------------------------------
@@ -674,5 +1060,6 @@
   requestAnimationFrame(frame);
   global.addEventListener('pagehide', savePlayer);
 
-  global.DungeonPlay = { state, scene, camera, renderer, openDoor }; // handy from the console
+  // Handy from the console.
+  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showComplete });
 })(window);

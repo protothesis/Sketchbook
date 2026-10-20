@@ -28,6 +28,25 @@ All notable changes to this sketch are logged here, per
   cutaway for walls south of the figure, per-space captions, and a minimap.
   It shares the map view's autosave. Design parameters are in `PLAY.md`.
 
+- 2026-10-19: Walk mode gameplay, first pass (see `PLAY.md`). There's an
+  **entropy** meter (start 30, max 100). You can close a door you opened to
+  collapse its whole branch for 1 entropy per cell plus 2 per room;
+  reopening it rerolls, and a branch you can't afford stays. **Shards**
+  (+10 entropy) and rare **keys** are seeded per room. Locked doors appear
+  past depth 4, and unlocking one ends the walk on an **expedition record**
+  screen (the seed chain to the door plus a tally). The rules live in
+  `app/play-rules.js`; the engine is unchanged.
+- 2026-10-19: Walk mode visuals. The lantern casts point-light shadows and
+  ambient light is near zero, so you can't see around corners until your
+  light reaches. Rooms dissolve in reverse when collapsed.
+
+### Changed
+
+- 2026-10-19: Walk mode no longer sinks walls near the figure. Walls in
+  front of it get a screen-door dither inside a soft circle around it
+  instead. The door prompt is now a button, so on touch you tap it to
+  open, unlock or collapse.
+
 ### Fixed
 
 - 2026-10-19: You can now move between views either way and start a new map

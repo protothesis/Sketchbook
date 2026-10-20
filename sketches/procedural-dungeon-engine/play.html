@@ -13,6 +13,12 @@
   <div class="hud top-left">
     <h1>Dungeon Walk</h1>
     <p id="stats"></p>
+    <div class="meter" title="Entropy: spent to collapse rooms you've opened. Shards refill it.">
+      <span class="meter-label">entropy</span>
+      <div class="bar"><div id="entropy-fill" class="fill"></div></div>
+      <span id="entropy-num" class="num"></span>
+      <span class="keys" title="Keys open locked doors">&#9911; <span id="keys-num">0</span></span>
+    </div>
     <div class="hud-buttons">
       <a class="btn" href="index.html">Chart view</a>
       <button class="btn" id="new-btn" type="button">New map</button>
@@ -21,20 +27,39 @@
 
   <canvas id="minimap" class="hud minimap" width="180" height="180" aria-label="Minimap"></canvas>
 
-  <p id="prompt" class="prompt" hidden></p>
+  <button id="prompt" class="prompt" type="button" hidden></button>
   <p id="caption" class="caption"></p>
 
   <div class="hud bottom-left help">
-    <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · walk into a door or <kbd>E</kbd> to open ·
+    <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>E</kbd> open / unlock / collapse ·
     <kbd>M</kbd> map · <kbd>N</kbd> new
   </div>
 
   <div id="stick" class="stick" hidden><div class="knob"></div></div>
 
+  <div id="done" class="done" hidden>
+    <div class="done-card">
+      <p class="done-kicker">expedition record</p>
+      <h2>The locked door gives.</h2>
+      <p class="done-seed">root seed <code id="done-seed"></code></p>
+      <h3>The chain to this door</h3>
+      <ol id="done-chain" class="chain"></ol>
+      <h3>Tally</h3>
+      <dl id="done-stats" class="tally"></dl>
+      <div class="done-buttons">
+        <button class="btn primary" id="done-new" type="button">New expedition</button>
+        <button class="btn" id="done-export" type="button">Export record</button>
+        <a class="btn" href="index.html">Chart view</a>
+        <button class="btn" id="done-close" type="button">Keep walking</button>
+      </div>
+    </div>
+  </div>
+
   <script src="vendor/three/three.min.js"></script>
   <script src="engine/rng.js"></script>
   <script src="engine/shapes.js"></script>
   <script src="engine/expedition.js"></script>
+  <script src="app/play-rules.js"></script>
   <script src="app/play.js"></script>
 </body>
 </html>

@@ -31,8 +31,11 @@ cell-for-cell. The current expedition autosaves in your browser.
 
 **Walk mode:** open `play.html` to walk the same expedition in 3D with
 WASD (or drag on touch). Every closed door is unresolved until you push it
-open, and the space behind it assembles as the door swings. The design
-parameters are in [`PLAY.md`](PLAY.md).
+open, and the space behind it assembles as the door swings. Spend
+**entropy** to close a door you opened and collapse everything beyond it
+(reopening rerolls). Shards refill entropy, and a rare key opens a locked
+door, which ends the walk on the expedition record. The design and the
+tunables are in [`PLAY.md`](PLAY.md).
 
 Headless engine check: `node stress-test.js [expansions] [runs]`.
 
@@ -48,7 +51,8 @@ app/             clients of the engine
   renderer.js      Canvas 2D top-down map, hit-testing, pan/zoom
   app.js           controls, inspector, pointer input, autosave
   styles.css
-  play.js          walk mode: three.js world, collision, doors, minimap
+  play-rules.js    walk mode's game rules: seeded loot + locks, collapse cost
+  play.js          walk mode: three.js world, shadows, collision, doors, HUD
   play.css
 vendor/three/    three.js r160 classic build (walk mode only)
 stress-test.js   headless milestone checks (Node)
