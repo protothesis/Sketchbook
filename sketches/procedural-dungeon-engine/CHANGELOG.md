@@ -116,8 +116,24 @@ All notable changes to this sketch are logged here, per
   - A follower gives up after 2 s unlit (was 3) or with a room between you
     (was 3 rooms).
 
+- 2026-10-20: Hash ghost readability:
+  - The notice icon is "?" (was "!"); a follower shows a purple "!!".
+  - The ring fills clockwise in violet while lit and rewinds
+    counter-clockwise in a dim colour when not. For a follower it's the
+    cool-down until it gives up.
+  - Off-screen ghosts that are watching or following you get an edge
+    marker with an arrow.
+  - Ghosts hidden behind blocks or walls show as a dithered violet
+    silhouette.
+
 ### Fixed
 
+- 2026-10-20: Hash ghosts noticed you from places that looked dark. The
+  light test is now a 3D ray from the actual lamp (so crouching lowers it)
+  that walls and blocks block, matching the cast shadows. Light range is now
+  4.5 cells.
+- 2026-10-20: Hash ghosts drifted through blocks. They now path around
+  blocks taller than one unit and float over one-unit blocks.
 - 2026-10-20: Wall corners where a wall turns an inside corner (hall bends,
   L-shaped turns) showed a wall-thick notch. The two wall pieces only
   touched at a point, so a corner post now fills the gap.

@@ -1208,11 +1208,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
   // Hash ghosts
   //
   // Floating things that drift through a room and sometimes the next one.
-  // They pass open doorways but not walls or closed doors, and float over
-  // blocks. Noticing you takes two stages: a while in your lantern light and
-  // one stops and turns to you ("!"); keep the light on it and a ring fills
-  // around the "!"; a full ring and it follows, slowly. Light off and the
-  // ring drains. A follower gives up after a couple of seconds out of your
+  // They pass open doorways but not walls, closed doors, or
+  // tall blocks (it floats over low ones). Noticing you takes two stages: a
+  // while in your lantern light and one stops and turns to you ("?"); keep
+  // the light on it and a ring fills around the "?"; a full ring and it
+  // follows ("!!"), slowly. Light off and the ring drains. "In your light"
+  // is a 3D ray from the lamp, so walls and blocks (crouch behind one) hide it. A follower gives up after a couple of seconds out of your
   // light, or once a room lies between you. Nearness wobbles the screen;
   // contact glitches it.
   // The only way to be rid of one is to collapse the rooms it's in, which
@@ -1222,34 +1223,50 @@ if (vDitherEW > 0.7 && south > 0.2) {
     contact: 0.34,       // cells, figure to ghost
     wanderSpeed: 0.45,
     chaseSpeed: 0.9,     // slower than walking (2.4) and even crouching (1.1)
-    lightRange: 5,       // cells: how far the lantern "touches"
-    noticeTime: 1.2,     // s in your light before it stops and turns to you ("!")
-    alertPause: 0.8,     // s of "!" before the ring starts filling
+    lightRange: 4.5,     // cells: how far the lantern "touches"
+    noticeTime: 1.2,     // s in your light before it stops and turns to you ("?")
+    alertPause: 0.8,     // s of "?" before the ring starts filling
     ringTime: 3,         // s of continuous light to fill the ring
     ringDrain: 2.5,      // s for a full ring to drain out of the light
     alertGiveUp: 1.2,    // s unlit with an empty ring before it goes back to wandering
     loseDark: 2,         // s out of your light before a follower gives up
     loseRooms: 2,        // ...or once the rooms between you reach this (one room in between)
-    height: 0.55,
+    height: 0.55,        // cells: hover height of the head's center
+    hoverClear: 0.45,    // over a low block, stay this far above its top
+    tall: 1.5 * UNIT,    // blocks taller than this are obstacles; lower ones it floats over
+    radius: 0.14,        // kept this far from tall blocks
   };
 
-  // The "!" and its ring, drawn into a small canvas per ghost and shown as
-  // a camera-facing sprite above it (over walls, so you can always read it).
-  function drawAlert(g) {
+  // The status icon: "?" while it's deciding about you, a purple "!!" once
+  // it follows. The ring fills clockwise in violet while your light is on
+  // it, and rewinds counter-clockwise in a dim colour while it isn't: for
+  // "?" it's how close it is to following, for "!!" how long until it gives
+  // up. Drawn into a small canvas per ghost, shown as a sprite above it
+  // (over walls) and copied into the off-screen edge marker.
+  function drawStatus(g) {
     const c = g.alertCanvas, x = c.getContext('2d'), n = c.width;
     x.clearRect(0, 0, n, n);
     const r = n * 0.36, cx = n / 2, cy = n / 2;
+    const chasing = g.mode === 'chase';
+    const v = chasing ? 1 - g.dark / GHOST.loseDark : Math.min(1, g.ring);
     x.lineWidth = n * 0.09;
-    x.strokeStyle = 'rgba(20, 12, 30, 0.65)';
+    x.strokeStyle = 'rgba(20, 12, 30, 0.7)';
     x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.stroke();
-    if (g.ring > 0) {
-      x.strokeStyle = g.ring >= 1 ? '#ff5fd2' : '#d678ff';
-      x.beginPath(); x.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, g.ring)); x.stroke();
+    if (v > 0.001) {
+      x.beginPath();
+      if (g.litNow) {
+        x.strokeStyle = chasing ? '#ff5fd2' : '#c58bff';
+        x.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * v);
+      } else {
+        x.strokeStyle = '#8a95b8';
+        x.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 - Math.PI * 2 * v, true);
+      }
+      x.stroke();
     }
-    x.fillStyle = '#ffc35a';
-    x.font = `bold ${Math.round(n * 0.5)}px system-ui, sans-serif`;
+    x.fillStyle = chasing ? '#d678ff' : '#ffc35a';
+    x.font = `bold ${Math.round(n * (chasing ? 0.42 : 0.5))}px system-ui, sans-serif`;
     x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText('!', cx, cy + n * 0.02);
+    x.fillText(chasing ? '!!' : '?', cx, cy + n * 0.03);
     g.alertTex.needsUpdate = true;
   }
   const ghostGeo = {
@@ -1258,6 +1275,16 @@ if (vDitherEW > 0.7 && south > 0.2) {
     bit: new THREE.BoxGeometry(0.035 * S, 0.035 * S, 0.035 * S),
   };
   const ghostBitMat = new THREE.MeshBasicMaterial({ color: 0xb59cff, transparent: true, opacity: 0.85 });
+  // Like the figure: where a block or wall stands between the camera and a
+  // ghost, the hidden part shows through as a dithered violet silhouette.
+  const ghostSilMat = new THREE.MeshBasicMaterial({
+    color: 0xc58bff, transparent: true, opacity: 0.55, depthFunc: THREE.GreaterDepth, depthWrite: false,
+  });
+  ghostSilMat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
+      '#include <clipping_planes_fragment>\nif (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5) discard;');
+  };
+  ghostSilMat.customProgramCacheKey = () => 'ghost';
 
   function addGhost(g) {
     const mesh = new THREE.Group();
@@ -1269,6 +1296,13 @@ if (vDitherEW > 0.7 && south > 0.2) {
     tail.rotation.x = Math.PI;           // point down: a trailing wisp
     tail.position.y = -0.21 * S;
     mesh.add(head, tail);
+    for (const m of [head, tail]) {
+      const sil = new THREE.Mesh(m.geometry, ghostSilMat);
+      sil.position.copy(m.position);
+      sil.rotation.copy(m.rotation);
+      sil.renderOrder = 11;
+      mesh.add(sil);
+    }
     const bits = [];
     for (let i = 0; i < 4; i++) { const b = new THREE.Mesh(ghostGeo.bit, ghostBitMat); mesh.add(b); bits.push(b); }
     const alertCanvas = document.createElement('canvas');
@@ -1282,8 +1316,13 @@ if (vDitherEW > 0.7 && south > 0.2) {
     alert.visible = false;
     mesh.add(alert);
     scene.add(mesh);
-    const ghost = Object.assign({ mode: 'wander', lit: 0, dark: 0, ring: 0, alertT: 0, idle: 0, target: null, pause: 0, next: null, pathT: 0 }, g,
-      { mesh, mat, bits, alert, alertCanvas, alertTex, drawnRing: -1, phase: Math.random() * 10 });
+    const ghost = Object.assign({
+      mode: 'wander', lit: 0, dark: 0, ring: 0, alertT: 0, idle: 0, target: null, pause: 0, next: null, pathT: 0,
+    }, g, {
+      mesh, mat, bits, alert, alertCanvas, alertTex, drawnKey: '', litNow: false, edge: null,
+      h: GHOST.height, phase: Math.random() * 10,
+    });
+    if (ghost.mode === 'alert' && !ghost.alertT) ghost.alertT = GHOST.alertPause;
     state.ghosts.push(ghost);
     return ghost;
   }
@@ -1293,6 +1332,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     g.mat.dispose();
     g.alertTex.dispose();
     g.alert.material.dispose();
+    if (g.edge) g.edge.remove();
     state.ghosts = state.ghosts.filter((o) => o !== g);
   }
 
@@ -1309,40 +1349,96 @@ if (vDitherEW > 0.7 && south > 0.2) {
     return !!(hit && hit.exit.connectionId);
   }
 
-  /** Does the lantern's light reach (tx, ty): in range, and no wall between? */
-  function lightReaches(fx, fy, tx, ty) {
-    const d = Math.hypot(tx - fx, ty - fy);
+  const blocksAt = (cx, cy) => state.blockAt.get(DE.key(cx, cy)) || [];
+
+  /** Is this half-cell taken by a block too tall to float over? */
+  function subBlocked(sx, sy) {
+    const x = (sx + 0.5) / 2, y = (sy + 0.5) / 2;
+    for (const b of blocksAt(Math.floor(x), Math.floor(y))) {
+      if (b.top > GHOST.tall && x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1) return true;
+    }
+    return false;
+  }
+
+  /** Top of the highest low block under a point (what a ghost floats over). */
+  function lowBlockTop(x, y) {
+    let top = 0;
+    for (const b of blocksAt(Math.floor(x), Math.floor(y))) {
+      if (b.top <= GHOST.tall && x > b.x0 - 0.1 && x < b.x1 + 0.1 && y > b.y0 - 0.1 && y < b.y1 + 0.1) top = Math.max(top, b.top);
+    }
+    return top;
+  }
+
+  /** Does a ray (from f to t, both {x, y, h} in cells) pass through block b? */
+  function rayHitsBlock(f, t, b) {
+    let t0 = 0, t1 = 1;
+    const axes = [[f.x, t.x - f.x, b.x0, b.x1], [f.y, t.y - f.y, b.y0, b.y1], [f.h, t.h - f.h, 0, b.top]];
+    for (const [o, d, lo, hi] of axes) {
+      if (Math.abs(d) < 1e-9) { if (o <= lo || o >= hi) return false; continue; }
+      let a = (lo - o) / d, c = (hi - o) / d;
+      if (a > c) { const s2 = a; a = c; c = s2; }
+      t0 = Math.max(t0, a); t1 = Math.min(t1, c);
+      if (t0 >= t1) return false;
+    }
+    return t1 > 0.01 && t0 < 0.99;
+  }
+
+  /**
+   * Does the lantern's light reach a point? A 3D ray from the lamp (its real
+   * position and height, so crouching lowers it) to the target: in range,
+   * not through a wall or closed door, and not through any block. This is
+   * the same light that casts the shadows you see, so in shadow = unseen.
+   */
+  function lightReaches(f, t) {
+    const d = Math.hypot(t.x - f.x, t.y - f.y);
     if (d > GHOST.lightRange) return false;
-    const n = Math.max(1, Math.ceil(d / 0.1));
-    let cx = Math.floor(fx), cy = Math.floor(fy);
+    const n = Math.max(1, Math.ceil(d / 0.08));
+    let cx = Math.floor(f.x), cy = Math.floor(f.y);
+    const cells = [[cx, cy]];
     for (let i = 1; i <= n; i++) {
-      const nx = Math.floor(fx + (tx - fx) * i / n), ny = Math.floor(fy + (ty - fy) * i / n);
+      const nx = Math.floor(f.x + (t.x - f.x) * i / n), ny = Math.floor(f.y + (t.y - f.y) * i / n);
       if (nx === cx && ny === cy) continue;
       if (nx !== cx && ny !== cy) {
         if (!((passable(cx, cy, nx, cy) && passable(nx, cy, nx, ny)) ||
               (passable(cx, cy, cx, ny) && passable(cx, ny, nx, ny)))) return false;
+        cells.push([nx, cy], [cx, ny]);
       } else if (!passable(cx, cy, nx, ny)) return false;
+      cells.push([nx, ny]);
       cx = nx; cy = ny;
+    }
+    const seen = new Set();
+    for (const [x, y] of cells) {
+      for (const b of blocksAt(x, y)) {
+        if (seen.has(b)) continue;
+        seen.add(b);
+        if (rayHitsBlock(f, t, b)) return false;
+      }
     }
     return true;
   }
 
-  /** The next cell on a shortest floating path from one cell to another. */
-  function nextCellToward(fx, fy, tx, ty, limit) {
-    const start = DE.key(fx, fy), goal = DE.key(tx, ty);
+  /** Next half-cell on a shortest floating path (around tall blocks, through open doors). */
+  function nextSubToward(fsx, fsy, tsx, tsy, limit) {
+    const start = fsx + ',' + fsy, goal = tsx + ',' + tsy;
     if (start === goal) return null;
     const prev = new Map([[start, null]]);
-    const q = [[fx, fy]];
+    const q = [[fsx, fsy]];
     for (let h = 0; h < q.length && prev.size < limit; h++) {
       const [x, y] = q[h];
+      const cx = Math.floor(x / 2), cy = Math.floor(y / 2);
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy, k = DE.key(nx, ny);
-        if (prev.has(k) || !passable(x, y, nx, ny)) continue;
-        prev.set(k, DE.key(x, y));
+        const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
+        if (prev.has(k)) continue;
+        const ncx = Math.floor(nx / 2), ncy = Math.floor(ny / 2);
+        if ((ncx !== cx || ncy !== cy) && !passable(cx, cy, ncx, ncy)) continue;
+        if (ncx === cx && ncy === cy && state.exp.registry[DE.key(cx, cy)] === undefined) continue;
+        if (subBlocked(nx, ny) && k !== goal) continue;
+        prev.set(k, x + ',' + y);
         if (k === goal) {
           let c = k;
           while (prev.get(c) !== start) c = prev.get(c);
-          return DE.parseKey(c);
+          const [sx, sy] = c.split(',').map(Number);
+          return { x: sx, y: sy };
         }
         q.push([nx, ny]);
       }
@@ -1372,7 +1468,10 @@ if (vDitherEW > 0.7 && south > 0.2) {
     return Infinity;
   }
 
-  /** Drift toward a point, staying in cells it can float between. True on arrival. */
+  /**
+   * Drift toward a point: only into cells it can float between and never
+   * into a tall block (and kept a little clear of their sides). True on arrival.
+   */
   function driftToward(g, tx, ty, speed, dt) {
     const dx = tx - g.x, dy = ty - g.y, d = Math.hypot(dx, dy);
     if (d < 0.02) return true;
@@ -1381,23 +1480,33 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const ox = Math.floor(g.x), oy = Math.floor(g.y);
     const ok = (x, y) => {
       const cx = Math.floor(x), cy = Math.floor(y);
-      return (cx === ox && cy === oy) || (Math.abs(cx - ox) + Math.abs(cy - oy) === 1 && passable(ox, oy, cx, cy));
+      const cellOk = (cx === ox && cy === oy) || (Math.abs(cx - ox) + Math.abs(cy - oy) === 1 && passable(ox, oy, cx, cy));
+      return cellOk && !subBlocked(Math.floor(x * 2), Math.floor(y * 2));
     };
     if (ok(nx, ny)) { g.x = nx; g.y = ny; } else if (ok(nx, g.y)) g.x = nx; else if (ok(g.x, ny)) g.y = ny;
+    // Keep the body off the sides of tall blocks.
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+      for (const b of blocksAt(Math.floor(g.x) + i, Math.floor(g.y) + j)) {
+        if (b.top <= GHOST.tall) continue;
+        const qx = THREE.MathUtils.clamp(g.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(g.y, b.y0, b.y1);
+        const ex = g.x - qx, ey = g.y - qy, e = Math.hypot(ex, ey);
+        if (e > 1e-6 && e < GHOST.radius) { g.x += ex / e * (GHOST.radius - e); g.y += ey / e * (GHOST.radius - e); }
+      }
+    }
     return d <= step + 0.02;
   }
 
-  /** Steer through doorways: head for the next cell's center, or the goal once in its cell. */
+  /** Steer half-cell by half-cell (around blocks, through doors), then straight to the goal. */
   function followPath(g, gx, gy, speed, dt) {
     g.pathT -= dt;
-    const cx = Math.floor(g.x), cy = Math.floor(g.y);
-    if (g.pathT <= 0 || (g.next && g.next.x === cx && g.next.y === cy)) {
-      g.next = nextCellToward(cx, cy, Math.floor(gx), Math.floor(gy), 500);
+    const sx = Math.floor(g.x * 2), sy = Math.floor(g.y * 2);
+    if (g.pathT <= 0 || (g.next && g.next.x === sx && g.next.y === sy)) {
+      g.next = nextSubToward(sx, sy, Math.floor(gx * 2), Math.floor(gy * 2), 2400);
       g.pathT = 0.3;
     }
     if (g.next === undefined) return true; // no way through: give up on this goal
     if (g.next === null) return driftToward(g, gx, gy, speed, dt);
-    driftToward(g, g.next.x + 0.5, g.next.y + 0.5, speed, dt);
+    driftToward(g, (g.next.x + 0.5) / 2, (g.next.y + 0.5) / 2, speed, dt);
     return false;
   }
 
@@ -1429,15 +1538,16 @@ if (vDitherEW > 0.7 && south > 0.2) {
   function updateGhosts(dt) {
     const p = state.player;
     const frozen = state.paused || !!state.bigmap;
-    const lx = lantern.position.x / S, ly = lantern.position.z / S;
+    const lamp = { x: lantern.position.x / S, y: lantern.position.z / S, h: lantern.position.y / S };
     let nearest = Infinity, touching = false;
     for (const g of state.ghosts.slice()) {
+      const lit = lightReaches(lamp, { x: g.x, y: g.y, h: g.h });
+      g.litNow = lit;
       if (!frozen) {
-        const lit = lightReaches(lx, ly, g.x, g.y);
         if (g.mode === 'wander') {
           g.lit = lit ? g.lit + dt : Math.max(0, g.lit - dt);
           if (g.lit >= GHOST.noticeTime) {
-            // Stage one: it stops and turns to you.
+            // Stage one: it stops and turns to you ("?").
             g.mode = 'alert'; g.ring = 0; g.alertT = 0; g.idle = 0; g.target = null;
           } else wander(g, dt);
         }
@@ -1470,6 +1580,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
             g.mode = 'wander'; g.target = null;
           }
         }
+        // Rise over low blocks, settle back down after.
+        const want = Math.max(GHOST.height, lowBlockTop(g.x, g.y) + GHOST.hoverClear);
+        g.h += (want - g.h) * Math.min(1, dt * 4);
       }
       const d = Math.hypot(p.x - g.x, p.y - g.y);
       nearest = Math.min(nearest, d);
@@ -1481,16 +1594,17 @@ if (vDitherEW > 0.7 && south > 0.2) {
       const jit = chasing ? 0.02 : 0;
       g.mesh.position.set(
         (g.x + (Math.random() - 0.5) * jit) * S,
-        (GHOST.height + Math.sin(g.phase * 1.7) * 0.05) * S,
+        (g.h + Math.sin(g.phase * 1.7) * 0.05) * S,
         (g.y + (Math.random() - 0.5) * jit) * S);
       g.mat.emissive.setHex(chasing ? 0x6a1f7a : 0x24185a);
       g.mat.opacity = chasing ? 0.62 + Math.sin(g.phase * 23) * 0.08 : 0.5;
-      // The "!" and ring while it's deciding about you.
-      g.alert.visible = g.mode === 'alert';
+      // Status icon while it's deciding about you or following you.
+      g.alert.visible = g.mode !== 'wander';
       if (g.alert.visible) {
-        const q = Math.round(g.ring * 60) / 60;
-        if (q !== g.drawnRing) { g.ring = Math.min(1, g.ring); drawAlert(g); g.drawnRing = q; }
-        const pop = Math.min(1, g.alertT / 0.15);
+        const v = chasing ? 1 - g.dark / GHOST.loseDark : g.ring;
+        const key = g.mode + (g.litNow ? 1 : 0) + Math.round(v * 60);
+        if (key !== g.drawnKey) { drawStatus(g); g.drawnKey = key; }
+        const pop = chasing ? 1 : Math.min(1, g.alertT / 0.15);
         g.alert.scale.setScalar(0.42 * S * (0.6 + 0.4 * pop));
       }
       const watching = g.mode === 'alert';
@@ -1500,6 +1614,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
         b.rotation.set(a, a * 1.3, 0);
       });
     }
+    updateEdgeMarkers();
 
     // Screen effects: wobble grows with nearness, glitch with contact. Both
     // hold for a moment once you're clear, then wear off.
@@ -1509,6 +1624,50 @@ if (vDitherEW > 0.7 && south > 0.2) {
     else if (state.time - fx.heldNear > 1.2) fx.wobble = Math.max(want, fx.wobble - dt * 0.22);
     if (touching) { fx.glitch = Math.min(1, fx.glitch + dt * 1.6); fx.heldTouch = state.time; }
     else if (state.time - fx.heldTouch > 1.5) fx.glitch = Math.max(0, fx.glitch - dt * 0.3);
+  }
+
+  /**
+   * Off-screen ghosts that are watching or following you get a marker on
+   * the screen edge: their status icon, with an arrow pointing toward them.
+   */
+  const edgeLayer = $('ghost-edges');
+  const edgeV = new THREE.Vector3();
+  function updateEdgeMarkers() {
+    const w = global.innerWidth, h = global.innerHeight, m = 34;
+    for (const g of state.ghosts) {
+      let show = false, px = 0, py = 0, ang = 0;
+      if (g.mode !== 'wander' && !state.bigmap && !state.paused) {
+        edgeV.copy(g.mesh.position);
+        edgeV.y += 0.5 * S;
+        edgeV.project(camera);
+        const behind = edgeV.z > 1;
+        let sx = (edgeV.x + 1) / 2 * w, sy = (1 - edgeV.y) / 2 * h;
+        if (behind) { sx = w - sx; sy = h - sy; }
+        if (behind || sx < 8 || sx > w - 8 || sy < 8 || sy > h - 8) {
+          show = true;
+          const dx = sx - w / 2, dy = sy - h / 2;
+          const k = Math.min((w / 2 - m) / Math.max(Math.abs(dx), 1e-6), (h / 2 - m) / Math.max(Math.abs(dy), 1e-6));
+          px = w / 2 + dx * k; py = h / 2 + dy * k;
+          ang = Math.atan2(dy, dx);
+        }
+      }
+      if (show && !g.edge) {
+        g.edge = document.createElement('div');
+        g.edge.className = 'gedge';
+        g.edge.innerHTML = '<canvas width="96" height="96"></canvas><i class="arrow"></i>';
+        edgeLayer.append(g.edge);
+      }
+      if (!g.edge) continue;
+      g.edge.hidden = !show;
+      if (!show) continue;
+      g.edge.style.left = px + 'px';
+      g.edge.style.top = py + 'px';
+      g.edge.classList.toggle('chase', g.mode === 'chase');
+      g.edge.querySelector('.arrow').style.transform = `rotate(${ang}rad) translateX(26px)`;
+      const cx = g.edge.firstChild.getContext('2d');
+      cx.clearRect(0, 0, 96, 96);
+      cx.drawImage(g.alertCanvas, 0, 0);
+    }
   }
 
   /** Ghosts inside rooms about to collapse unravel; each leaves an echo. */
@@ -1994,5 +2153,5 @@ void main() {
   global.addEventListener('pagehide', savePlayer);
 
   // Handy from the console.
-  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches });
+  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern });
 })(window);
