@@ -34,7 +34,7 @@
   const CROUCH_SCALE = 0.55; // figure height when crouched (standing is ~0.64 cells tall)
   const HIDE_RANGE = 0.2;
   const UNIT = RULES.blockUnit; // one stacked block unit, in cells
-  const CLIMB_TIME = 0.32;      // seconds to step up onto a block
+  const CLIMB_TIME = 0.42;      // seconds to step up onto a block
   const GRAVITY = 9;            // cells/s^2 when stepping off an edge   // cells between the figure and a block to count as hidden
   const PUSH_TIME = 0.35;   // seconds of walking into a door to open it
   const USE_RANGE = 0.6;    // E / tap reach to a door's midpoint
@@ -341,14 +341,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
     };
     for (const d of pr.details) onTile(d, d.h, mats.detail[d.shade < 0.5 ? 0 : 1], false);
     for (const b of pr.blocks) {
-      // Stacked units with a hairline seam, so columns read as built up.
+      // One seamless box per block, however many units tall.
       const t = tileAt[DE.key(Math.floor((b.x0 + b.x1) / 2), Math.floor((b.y0 + b.y1) / 2))];
-      for (let u = 0; u < b.units; u++) {
-        const m = shadowed(new THREE.Mesh(geo.block, mats.block));
-        m.scale.set((b.x1 - b.x0) * S, UNIT * S - 0.012, (b.y1 - b.y0) * S);
-        m.position.set(((b.x0 + b.x1) / 2) * S - t.position.x, (u + 0.5) * UNIT * S + 0.05, ((b.y0 + b.y1) / 2) * S - t.position.z);
-        t.add(m);
-      }
+      const m = shadowed(new THREE.Mesh(geo.block, mats.block));
+      m.scale.set((b.x1 - b.x0) * S, b.units * UNIT * S, (b.y1 - b.y0) * S);
+      m.position.set(((b.x0 + b.x1) / 2) * S - t.position.x, b.units * UNIT * S / 2 + 0.05, ((b.y0 + b.y1) / 2) * S - t.position.z);
+      t.add(m);
       const blk = Object.assign({ spaceId: space.id, top: b.units * UNIT }, b);
       rec.blocks.push(blk);
       // Index under every cell it overlaps (a 2x2 or double can straddle cells).
@@ -450,6 +448,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   }
 
   const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
   const revealAmount = (rec, delay) =>
     rec.revealStart === null ? 1 : easeOut(THREE.MathUtils.clamp((state.time - rec.revealStart - delay) / REVEAL_DUR, 0, 1));
 
@@ -509,10 +508,10 @@ if (vDitherEW > 0.7 && south > 0.2) {
     bodyRig.add(g);
   }
   figure.add(bodyRig, blob);
+  // The light rides with the held lamp (ahead and to the right, which gives
+  // the light its direction). Each frame the lamp is kept out of walls; see
+  // placeLamp(). It lives in the scene, positioned in world space.
   const lantern = new THREE.PointLight(0xffb36b, LANTERN, LANTERN_RANGE, 1.7);
-  // The light sits over the body's center, not at the held lamp: the lamp
-  // is offset forward and could end up inside a wall, leaking light outside.
-  lantern.position.set(0, 0.75 * S, 0);
   lantern.castShadow = true;
   lantern.shadow.mapSize.set(512, 512);
   lantern.shadow.camera.near = 0.1;
@@ -521,7 +520,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   // them (a big bias made blocks look like they floated off walls/floor).
   lantern.shadow.bias = -0.0008;
   lantern.shadow.normalBias = 0.02;
-  figure.add(lantern);
+  scene.add(lantern);
   // A faint cool fill, south of the figure and without shadows, so the
   // camera-facing sides of nearby walls read. Short range, so it can't
   // light anything around a corner.
@@ -565,15 +564,19 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }
   }
 
-  /** Push the player out of every nearby wall; returns the closed doors touched. */
-  function resolveCollisions(p) {
+  /**
+   * Wall, door and block edges around a point. Blocks only count if their
+   * top rises above `above` (cells): for the figure that's its feet, for the
+   * lamp its own height.
+   */
+  function nearbySegments(p, above) {
     const segs = [];
     const cx = Math.floor(p.x), cy = Math.floor(p.y);
     const seen = new Set();
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       edgeSegments(cx + dx, cy + dy, segs);
       for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
-        if (seen.has(b) || b.top <= p.z + 0.05) continue; // at or below your feet: walkable
+        if (seen.has(b) || b.top <= above) continue;
         seen.add(b);
         // facing = the side's outward direction, for push-to-climb.
         segs.push({ ax: b.x0, ay: b.y0, bx: b.x1, by: b.y0, block: b, facing: 'N' },
@@ -582,6 +585,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
           { ax: b.x0, ay: b.y1, bx: b.x0, by: b.y0, block: b, facing: 'W' });
       }
     }
+    return segs;
+  }
+
+  /** Push the player out of every nearby wall; returns the doors and blocks touched. */
+  function resolveCollisions(p) {
+    const segs = nearbySegments(p, p.z + 0.05); // at or below your feet: walkable
     const touched = [];
     for (let iter = 0; iter < 3; iter++) {
       for (const s of segs) {
@@ -633,7 +642,58 @@ if (vDitherEW > 0.7 && south > 0.2) {
     return best;
   }
 
-  const canClimb = (b) => b.units < 3 && b.top - state.player.z > 0.05 && b.top - state.player.z <= RULES.climbMaxUnits * UNIT + 0.01;
+  // ---------------------------------------------------------------------------
+  // The lamp: offset from the body, but never inside or through a wall.
+
+  const LAMP_SIDE = 0.14, LAMP_FWD = 0.12; // cells, right and forward of the body
+  const LAMP_CLEAR = 0.14;  // from a wall line (walls are 0.08 thick, inside the cell)
+
+  /** Ray (px,py)+t(dx,dy), t in [0,1], against a segment; returns t or null. */
+  function raySeg(px, py, dx, dy, g) {
+    const ex = g.bx - g.ax, ey = g.by - g.ay;
+    const den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-9) return null;
+    const wx = g.ax - px, wy = g.ay - py;
+    const t = (wx * ey - wy * ex) / den, u = (wx * dy - wy * dx) / den;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null;
+  }
+
+  /**
+   * Put the light at the held lamp: cast from the body's center toward the
+   * lamp's spot, stop short of the first wall, door or taller block, then
+   * keep a little clearance from every edge. The lamp mesh follows.
+   */
+  function placeLamp(p, height) {
+    const c = Math.cos(p.angle), sn = Math.sin(p.angle);
+    // three.js rotation.y: local (x, z) -> world (x c + z s, -x s + z c)
+    const ox = LAMP_SIDE * c + LAMP_FWD * sn, oy = -LAMP_SIDE * sn + LAMP_FWD * c;
+    const len = Math.hypot(ox, oy);
+    const segs = nearbySegments(p, p.z + height - 0.05);
+    let t = 1;
+    for (const g of segs) {
+      const hit = raySeg(p.x, p.y, ox, oy, g);
+      if (hit !== null) t = Math.min(t, hit);
+    }
+    if (t < 1) t = Math.max(0, t - LAMP_CLEAR / len);
+    const q = { x: p.x + ox * t, y: p.y + oy * t };
+    for (let iter = 0; iter < 2; iter++) {
+      for (const g of segs) {
+        const vx = g.bx - g.ax, vy = g.by - g.ay;
+        const k = THREE.MathUtils.clamp(((q.x - g.ax) * vx + (q.y - g.ay) * vy) / (vx * vx + vy * vy), 0, 1);
+        const dx = q.x - (g.ax + vx * k), dy = q.y - (g.ay + vy * k);
+        const d = Math.hypot(dx, dy);
+        if (d < LAMP_CLEAR && d > 1e-6) { q.x += dx / d * (LAMP_CLEAR - d); q.y += dy / d * (LAMP_CLEAR - d); }
+      }
+    }
+    lantern.position.set(q.x * S, (p.z + height) * S, q.y * S);
+    // The lamp mesh, back in the body's local frame.
+    const wx = q.x - p.x, wy = q.y - p.y;
+    lanternMesh.position.x = (wx * c - wy * sn) * S;
+    lanternMesh.position.z = (wx * sn + wy * c) * S;
+  }
+
+  const canClimb = (b) => b.top - state.player.z > 0.05 &&
+    b.top - state.player.z <= RULES.climbMaxUnits * UNIT + 0.01 && b.top <= RULES.climbMaxTop * UNIT + 0.01;
 
   /** A climbable block right in front of the figure, if no door is closer. */
   function blockNear(p) {
@@ -662,6 +722,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const ty = THREE.MathUtils.clamp(p.y + dir.y * (RADIUS + 0.3), b.y0 + m(b.y0, b.y1), b.y1 - m(b.y0, b.y1));
     state.climb = { fx: p.x, fy: p.y, fz: p.z, tx, ty, tz: b.top, t: 0 };
     state.push.key = null;
+    if (state.crouch) toggleCrouch(); // vaulting stands you up
   }
 
   function act(near) {
@@ -918,10 +979,13 @@ if (vDitherEW > 0.7 && south > 0.2) {
     if (state.climb) {
       const c = state.climb;
       c.t = Math.min(1, c.t + dt / CLIMB_TIME);
-      const e = easeOut(c.t);
-      p.x = c.fx + (c.tx - c.fx) * e;
-      p.y = c.fy + (c.ty - c.fy) * e;
-      p.z = c.fz + (c.tz - c.fz) * Math.min(1, e * 1.4) + Math.sin(Math.PI * c.t) * 0.08;
+      // Rise first, then carry forward, both eased in and out, so the hop
+      // has no sudden starts or stops; a small arc over the lip.
+      const rise = easeInOut(THREE.MathUtils.clamp(c.t / 0.65, 0, 1));
+      const carry = easeInOut(THREE.MathUtils.clamp((c.t - 0.2) / 0.8, 0, 1));
+      p.x = c.fx + (c.tx - c.fx) * carry;
+      p.y = c.fy + (c.ty - c.fy) * carry;
+      p.z = c.fz + (c.tz - c.fz) * rise + Math.sin(Math.PI * c.t) * 0.04;
       if (c.t >= 1) { p.z = c.tz; p.vz = 0; state.climb = null; }
       inp = { x: 0, y: 0, mag: 0 };
     }
@@ -1031,7 +1095,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     bodyRig.scale.y = 1 - (1 - CROUCH_SCALE) * ca;
     bodyRig.position.y = moving ? Math.abs(Math.sin(p.phase)) * 0.05 * S * (1 - 0.7 * ca) : 0;
     // Never let the lantern rise above the walls (it would light other rooms).
-    lantern.position.y = Math.max(0.2, Math.min(0.75 - 0.4 * ca, WALL_H - 0.15 - p.z)) * S;
+    placeLamp(p, Math.max(0.2, Math.min(0.75 - 0.4 * ca, WALL_H - 0.15 - p.z)));
 
     // Hidden: crouched, right up against a block (every block is taller
     // than a crouched figure). Nothing hunts you yet; this is the hook.

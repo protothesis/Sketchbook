@@ -38,7 +38,8 @@
     propAttempts: 0.32,       // placement attempts per chamber cell
     propAttemptsCorridor: 0.12,
     blockUnit: 1.3 / 3,       // one stacked unit (cells); a 1-unit block hides a crouched figure
-    climbMaxUnits: 2,         // columns (3 units) can't be climbed
+    climbMaxUnits: 1,         // a single step up at a time
+    climbMaxTop: 1,           // units: never stand higher than one block (head room)
     detailChance: 0.35,
   };
 
@@ -117,7 +118,7 @@
       const [ax, ay] = subList[Math.floor(pick * subList.length)].split(',').map(Number);
       const horiz = dirRoll < 0.5;
       const kind = !chamber ? 'single'
-        : kindRoll < 0.38 ? 'single' : kindRoll < 0.58 ? 'double' : kindRoll < 0.78 ? 'big' : 'row';
+        : kindRoll < 0.3 ? 'single' : kindRoll < 0.48 ? 'double' : kindRoll < 0.78 ? 'big' : 'row';
       let units = hRoll < 0.55 ? 1 : hRoll < 0.85 ? 2 : 3;
       let shape;
       if (kind === 'single') shape = [[0, 0]];

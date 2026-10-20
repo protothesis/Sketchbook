@@ -39,8 +39,10 @@ Determinism).
   doubles, full 2×2s, and partition rows. They stack 1–3 units high, and 3
   units reach the ceiling as a column. Crouch (C, or the button) to crawl;
   crouched against a block that rises above you, you're **hidden**. Push into
-  a block, or press E facing it, to **climb** on top (up to 2 units, so not
-  columns). You can walk across tops of equal height, and you drop down when
+  a block, or press E facing it, to **climb** on top. You can only step up
+  one unit at a time, and never higher than one unit off the floor (any
+  higher and you'd bump the ceiling). Climbing stands you up if you were
+  crouched. You can walk across tops of equal height, and you drop down when
   you step off an edge. Nothing hunts you yet, so for now hiding is only the
   shadow play and the hook.
 - **Collapse.** Stand at a door you opened and press E (or tap the prompt),
@@ -83,14 +85,14 @@ forward; collapsing is the only thing entropy buys.
 | Minimap | unopened doors orange, locked doors blue, opened doors green; traces grey; imprinted cells get a violet tick | so overlapping rooms stay readable |
 | Big map | M or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close | walking pauses while it's open |
 | Cracks | canvas-drawn fissures with a violet core on imprinted tiles; more trace layers, more cracks | seeded per cell; glows faintly even in the dark |
-| Blocks | flat-shaded boxes a shade darker than the walls, filling half-cell subgrid squares flush (no gaps between neighbours), stacked in units of 0.43 cells with a hairline seam | cast shadows; never dither. The figure shows through them instead |
+| Blocks | flat-shaded boxes a shade darker than the walls, filling half-cell subgrid squares flush (no gaps between neighbours), 1–3 units of 0.43 cells tall, one seamless box each | cast shadows; never dither. The figure shows through them instead |
 | Silhouette | the parts of the figure hidden behind anything draw as a dithered lantern-orange silhouette | GreaterDepth pass, so it only appears where something is in front |
 | Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
 | Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
 | Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. Door frames cap at 45%, door panels at 60% | side (north–south) walls never dither; doorways in south walls stay readable |
-| Light | the lantern is a shadow-casting point light over the body's center; ambient is almost zero | plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02), so shadows meet what casts them |
+| Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
 | Pickups | violet octahedron (shard), small gold key | bob and turn; lit by the lantern, so they hide in the dark too |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
 | Captions | a short typewriter-style log line when you enter a space | e.g. "s7 · chamber · damp · depth 3" (the Navidson Record feel) |
@@ -108,8 +110,8 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | C or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
-| Climb | push into a block for 0.35 s or press E facing it; up to 2 units above your feet; a 0.32 s hop; gravity 9 cells/s² when stepping off |
-| Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 38%, double 20%, 2×2 20%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
+| Climb | push into a block for 0.35 s or press E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out); gravity 9 cells/s² when stepping off |
+| Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Collapse price | 1 per cell + 2 per room across the whole branch, divided by 15 and rounded up to whole charges |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |

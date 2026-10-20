@@ -88,6 +88,16 @@ All notable changes to this sketch are logged here, per
   - The dither now only touches east–west walls. Door frames (45%) and door
     panels (60%) are capped so doorways stay readable.
 
+- 2026-10-20 (feel pass):
+  - Blocks render as one seamless box each (no seam between units). 2×2s
+    are more common (30% of chamber attempts, up from 20%).
+  - Climbing is one unit at a time, never above one unit. It stands you up
+    if you were crouched, and the hop rises first and then carries forward,
+    eased in and out.
+  - The lantern light is back on the held lamp (its direction was part of
+    the feel) and now has its own collision. A ray from the body stops it
+    short of walls, closed doors and taller blocks.
+
 ### Fixed
 
 - 2026-10-20: The lantern light could end up inside a wall (it sat at the
