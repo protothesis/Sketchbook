@@ -2,7 +2,7 @@
 //
 // Every unresolved exit is a closed door. Pushing one open calls expand +
 // commit straight away, and the new space assembles itself outward from the
-// threshold. Standing at a door you opened, you can spend entropy to close
+// threshold. Standing at a door you opened, you can spend entropy charges to close
 // it and collapse everything beyond (engine reverts); reopening it rerolls.
 // Game rules (loot, locks, costs) live in play-rules.js.
 //
@@ -38,7 +38,8 @@
   const REVEAL_STEP = 0.07; // seconds of delay per cell from the door
   const REVEAL_DUR = 0.45;
   const DISSOLVE_DUR = 0.7;
-  const DITHER_RADIUS = 0.17; // fraction of the shorter screen side
+  const DITHER_RADIUS = 0.27; // fraction of the shorter screen side
+  const DITHER_APPROACH = 2.5; // cells: south walls start a light dither this close
   const CAM_OFFSET = new THREE.Vector3(0, 10.5, 7.5);
   const SEAM = 0xc4502a;    // the map view's open-doorway orange
   const LOCK_SEAM = 0x6fa8d8;
@@ -64,32 +65,45 @@
   // Barely any ambient: what the lantern can't reach stays dark.
   scene.add(new THREE.AmbientLight(0x8a90b8, 0.06));
 
-  // Screen-door dither: wall pixels in front of the figure, inside a soft
-  // circle around it on screen, are discarded in a 4x4 Bayer pattern. The
-  // shadow pass uses its own material, so dithered walls still block light.
+  // Screen-door dither on wall pixels south of the figure (between it and
+  // the camera), discarded in a 4x4 Bayer pattern: fully inside a soft
+  // circle around the figure on screen, and lightly across the whole wall
+  // as the figure approaches it. The test uses world position, so a wall's
+  // whole face clears, not just its top. The shadow pass uses its own
+  // material, so dithered walls still block light.
   const dither = {
     uDitherCenter: { value: new THREE.Vector2(-1e4, -1e4) },
     uDitherRadius: { value: 1 },
-    uDitherDepth: { value: 0 },
+    uDitherPlayer: { value: new THREE.Vector2(1e4, 1e4) }, // world x, z
   };
+  const DITHER_VERT_HEAD = `
+varying vec3 vDitherWorld;`;
+  const DITHER_VERT_BODY = `
+vDitherWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`;
   const DITHER_HEAD = `
+varying vec3 vDitherWorld;
 uniform vec2 uDitherCenter;
 uniform float uDitherRadius;
-uniform float uDitherDepth;
+uniform vec2 uDitherPlayer;
 float ditherBayer(vec2 p) {
   int i = int(mod(p.x, 4.0)) + int(mod(p.y, 4.0)) * 4;
   float m[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
   return (m[i] + 0.5) / 16.0;
 }`;
   const DITHER_BODY = `
-if (vViewPosition.z < uDitherDepth) {
+float south = vDitherWorld.z - uDitherPlayer.y;
+if (south > 0.2) {
   float dd = distance(gl_FragCoord.xy, uDitherCenter) / uDitherRadius;
-  float da = 0.88 * (1.0 - smoothstep(0.5, 1.0, dd));
-  if (ditherBayer(gl_FragCoord.xy) < da) discard;
+  float circle = 0.92 * (1.0 - smoothstep(0.35, 1.0, dd));
+  float approach = 0.3 * (1.0 - smoothstep(0.4, ${(DITHER_APPROACH * S).toFixed(1)}, south));
+  if (ditherBayer(gl_FragCoord.xy) < max(circle, approach)) discard;
 }`;
   function withDither(mat) {
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, dither);
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\n' + DITHER_VERT_HEAD)
+        .replace('#include <project_vertex>', '#include <project_vertex>\n' + DITHER_VERT_BODY);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\n' + DITHER_HEAD)
         .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n' + DITHER_BODY);
@@ -156,10 +170,10 @@ if (vViewPosition.z < uDitherDepth) {
 
   function freshRun(rootSeed) {
     return {
-      rootSeed, entropy: RULES.entropyStart, keys: 0,
+      rootSeed, charges: RULES.chargesStart, shards: 0, keys: 0,
       shardsFound: 0, keysFound: 0, keysUsed: 0,
-      collapses: 0, roomsCollapsed: 0, entropySpent: 0,
-      walked: 0, collected: [], unlocked: [],
+      collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
+      walked: 0, collected: [], unlocked: [], extracted: null,
     };
   }
 
@@ -170,6 +184,11 @@ if (vViewPosition.z < uDitherDepth) {
         state.exitAt.set(ekey(ex.cell.x, ex.cell.y, ex.facing), { spaceId: id, exit: ex });
       }
     }
+  }
+
+  /** Locked and not yet unlocked by this run (unlocked doors are checkpoints). */
+  function isLockedNow(space, ex) {
+    return !ex.connectionId && DP.isLocked(space, ex) && !state.run.unlocked.includes(space.id + '/' + ex.id);
   }
 
   function ownsDoorPanel(spaceId, ex) {
@@ -267,13 +286,14 @@ if (vViewPosition.z < uDitherDepth) {
   }
 
   function addDoor(edgeGroup, space, ex, beyond) {
-    const locked = !ex.connectionId && DP.isLocked(space, ex);
+    const gate = !ex.connectionId && DP.isLocked(space, ex); // keeps its iron bands once unlocked
+    const locked = isLockedNow(space, ex);
     const pivot = new THREE.Group();
     pivot.position.set(-DOOR_W / 2 * S, 0, 0);
     const panel = shadowed(new THREE.Mesh(geo.door, ex.connectionId ? doorOpenMat : locked ? lockMat : doorMat));
     panel.position.set(DOOR_W / 2 * S, DOOR_H * S / 2, 0);
     pivot.add(panel);
-    if (locked) {
+    if (gate) {
       for (const y of [0.25, 0.75]) {
         const band = new THREE.Mesh(geo.band, bandMat);
         band.position.set(DOOR_W / 2 * S, DOOR_H * S * y, 0);
@@ -457,7 +477,7 @@ if (vViewPosition.z < uDitherDepth) {
       const d = Math.hypot(p.x - (ax + bx) / 2, p.y - (ay + by) / 2);
       if (d >= bestD) continue;
       let action = null, child = null;
-      if (!ex.connectionId) action = DP.isLocked(sp, ex) ? 'locked' : 'open';
+      if (!ex.connectionId) action = isLockedNow(sp, ex) ? 'locked' : 'open';
       else if ((child = DP.childThrough(exp, sp.id, ex))) action = 'collapse';
       if (!action) continue;
       bestD = d;
@@ -465,7 +485,7 @@ if (vViewPosition.z < uDitherDepth) {
     }
     if (best && best.action === 'collapse') {
       best.price = DP.collapseCost(DP.branch(exp, best.child.id));
-      best.affordable = best.price.cost <= state.run.entropy;
+      best.affordable = best.price.charges <= state.run.charges;
     }
     return best;
   }
@@ -477,17 +497,22 @@ if (vViewPosition.z < uDitherDepth) {
     if (near.action === 'open') {
       openDoor(near.space.id, near.exit.id);
     } else if (near.action === 'locked') {
-      if (run.unlocked.includes(doorKey)) { showComplete(near); return; }
       if (run.keys <= 0) { showCaption('locked. you need a key'); return; }
       run.keys--;
       run.keysUsed++;
       run.unlocked.push(doorKey);
+      const door = state.doors.get(doorKey);
+      if (door) {
+        door.locked = false;
+        door.panel.material = doorMat;
+        door.seam.material = seamMat;
+      }
       savePlayer();
       refreshHud();
-      showComplete(near);
+      showRecord(near.space.id, near.exit.id, 'checkpoint');
     } else if (near.action === 'collapse') {
       if (!near.affordable) {
-        showCaption(`too much lies beyond: ${near.price.cost} entropy, you have ${run.entropy}`);
+        showCaption(`too much lies beyond: ${chargeText(near.price.charges)}, you have ${run.charges}`);
         return;
       }
       collapseThrough(near);
@@ -545,8 +570,8 @@ if (vViewPosition.z < uDitherDepth) {
     if (!loopsIntoParent) touched.delete(near.space.id);
 
     DP.collapse(exp, near.child.id);
-    run.entropy -= near.price.cost;
-    run.entropySpent += near.price.cost;
+    run.charges -= near.price.charges;
+    run.chargesSpent += near.price.charges;
     run.collapses++;
     run.roomsCollapsed += spaces.length;
     rebuildExitIndex();
@@ -557,7 +582,7 @@ if (vViewPosition.z < uDitherDepth) {
     const door = state.doors.get(near.space.id + '/' + near.exit.id);
     if (door) door.dir = -1;
 
-    showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${near.price.cost} entropy`);
+    showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}`);
     save();
     savePlayer();
     refreshHud();
@@ -573,7 +598,7 @@ if (vViewPosition.z < uDitherDepth) {
     if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
     const k = e.key.toLowerCase();
     if (state.paused) {
-      if (k === 'escape') hideComplete();
+      if (k === 'escape' && recordMode === 'checkpoint') hideRecord();
       return;
     }
     keys.add(k);
@@ -620,7 +645,7 @@ if (vViewPosition.z < uDitherDepth) {
   newBtn.addEventListener('click', (e) => { requestNewMap(); newBtn.blur(); e.preventDefault(); });
 
   function newExpedition() {
-    hideComplete();
+    hideRecord();
     setExpedition(DE.createExpedition(DE.randomRootSeed()), null);
     showCaption('a new expedition. seed ' + state.exp.rootSeed);
   }
@@ -707,7 +732,7 @@ if (vViewPosition.z < uDitherDepth) {
     if (inp.mag > 0) {
       for (const s of touched) {
         const d = DE.DIRS[s.facing];
-        if (d.x * inp.x + d.y * inp.y > 0.5 && !DP.isLocked(exp.spaces[s.door.spaceId], s.door.exit)) {
+        if (d.x * inp.x + d.y * inp.y > 0.5 && !isLockedNow(exp.spaces[s.door.spaceId], s.door.exit)) {
           pushing = s.door;
           break;
         }
@@ -729,10 +754,18 @@ if (vViewPosition.z < uDitherDepth) {
       it.mesh.parent.remove(it.mesh);
       state.items.delete(k);
       if (it.item.kind === 'shard') {
-        const before = run.entropy;
-        run.entropy = Math.min(RULES.entropyMax, run.entropy + RULES.shardEntropy);
         run.shardsFound++;
-        showCaption(run.entropy > before ? `a shard · +${run.entropy - before} entropy` : 'a shard · your entropy is full');
+        const per = RULES.shardsPerCharge;
+        if (run.charges >= RULES.chargesMax) {
+          run.shards = Math.min(per - 1, run.shards + 1);
+          showCaption('a shard · your entropy is full');
+        } else if (++run.shards >= per) {
+          run.shards -= per;
+          run.charges++;
+          showCaption(`${per} shards fuse · a charge of entropy (${run.charges})`);
+        } else {
+          showCaption(`a shard · ${run.shards}/${per}`);
+        }
       } else {
         run.keys++;
         run.keysFound++;
@@ -775,8 +808,7 @@ if (vViewPosition.z < uDitherDepth) {
     tmpV.set(p.x * S, 0.35 * S, p.y * S).project(camera);
     dither.uDitherCenter.value.set((tmpV.x + 1) / 2 * tmpV2.x, (tmpV.y + 1) / 2 * tmpV2.y);
     dither.uDitherRadius.value = DITHER_RADIUS * Math.min(tmpV2.x, tmpV2.y);
-    tmpV.set(p.x * S, 0.35 * S, p.y * S).applyMatrix4(camera.matrixWorldInverse);
-    dither.uDitherDepth.value = -tmpV.z - 0.35 * S;
+    dither.uDitherPlayer.value.set(p.x * S, p.y * S);
 
     // Doors swinging open (dir 1) or shut (dir -1).
     for (const d of state.doors.values()) {
@@ -810,26 +842,25 @@ if (vViewPosition.z < uDitherDepth) {
 
   const touchUi = global.matchMedia && global.matchMedia('(hover: none)').matches;
   const verb = touchUi ? 'tap' : 'E';
+  const chargeText = (n) => `${n} charge${n === 1 ? '' : 's'}`;
 
   let lastPrompt = '';
   function updatePrompt(near) {
     let text = '', cls = '';
     if (near) {
       const run = state.run;
-      const key = near.space.id + '/' + near.exit.id;
       if (near.action === 'open') {
         text = state.push.key ? 'opening…' : `a closed door · push, or ${verb}`;
       } else if (near.action === 'locked') {
         cls = 'lock';
-        text = run.unlocked.includes(key) ? `the unlocked door · ${verb}`
-          : run.keys > 0 ? `a locked door · ${verb} to unlock (1 key)` : 'a locked door · you need a key';
+        text = run.keys > 0 ? `a locked door · ${verb} to unlock (1 key)` : 'a locked door · you need a key';
       } else {
         const pr = near.price;
         const rooms = `${pr.rooms} room${pr.rooms === 1 ? '' : 's'}`;
         cls = near.affordable ? 'collapse' : 'blocked';
         text = near.affordable
-          ? `close & collapse ${rooms} · ${pr.cost} entropy · ${verb}`
-          : `too much lies beyond · ${rooms}, ${pr.cost} entropy`;
+          ? `close & collapse ${rooms} · ${chargeText(pr.charges)} · ${verb}`
+          : `too much lies beyond · ${rooms}, ${chargeText(pr.charges)}`;
       }
     }
     const sig = text + '|' + cls;
@@ -853,8 +884,13 @@ if (vViewPosition.z < uDitherDepth) {
     const s = DE.stats(state.exp);
     const run = state.run;
     $('stats').textContent = `seed ${state.exp.rootSeed} · ${s.spaces} rooms · ${s.openExits} closed doors`;
-    $('entropy-fill').style.width = (100 * run.entropy / RULES.entropyMax) + '%';
-    $('entropy-num').textContent = run.entropy;
+    const charges = $('charges');
+    charges.innerHTML = '';
+    for (let i = 0; i < RULES.chargesMax; i++) charges.append(el('span', i < run.charges ? 'charge on' : 'charge'));
+    const shards = $('shard-pips');
+    shards.innerHTML = '';
+    for (let i = 0; i < RULES.shardsPerCharge; i++) shards.append(el('span', i < run.shards ? 'pip on' : 'pip'));
+    charges.parentElement.title = `${run.charges} of ${RULES.chargesMax} charges · ${run.shards}/${RULES.shardsPerCharge} shards toward the next`;
     $('keys-num').textContent = run.keys;
   }
 
@@ -883,8 +919,7 @@ if (vViewPosition.z < uDitherDepth) {
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
       for (const ex of sp.exits) {
-        if (ex.connectionId) continue;
-        ctx.fillStyle = DP.isLocked(sp, ex) ? '#6fa8d8' : '#c4502a';
+        ctx.fillStyle = ex.connectionId ? '#5fbf7a' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
         const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);
         ctx.fillRect(ox + Math.min(ax, bx) * px - 1.5, oy + Math.min(ay, by) * px - 1.5,
           Math.abs(bx - ax) * px + 3, Math.abs(by - ay) * px + 3);
@@ -904,7 +939,9 @@ if (vViewPosition.z < uDitherDepth) {
   }
 
   // ---------------------------------------------------------------------------
-  // Level complete: the seed chain from the root to the unlocked door.
+  // The expedition record: the seed chain from the root to a locked door.
+  // Unlocking one is a checkpoint (continue down, or leave the dungeon);
+  // leaving ends the run on the same record.
 
   const short = (h) => (h ? h.slice(0, 8) : '');
   function el(tag, cls, text) {
@@ -914,15 +951,27 @@ if (vViewPosition.z < uDitherDepth) {
     return e;
   }
 
-  function showComplete(near) {
+  let recordMode = null;   // 'checkpoint' | 'extracted' | null
+  let recordDoor = null;   // { spaceId, exitId }
+
+  function showRecord(spaceId, exitId, mode) {
     const exp = state.exp;
     const run = state.run;
+    if (!exp.spaces[spaceId]) return;
+    recordMode = mode;
+    recordDoor = { spaceId, exitId };
     const s = DE.stats(exp);
-    const chain = DP.seedChain(exp, near.space.id);
+    const chain = DP.seedChain(exp, spaceId);
     const generated = exp.history.filter((ev) => ev.type === 'commit' && !ev.loop).length + 1;
     let deepest = 0;
     for (const id in exp.spaces) deepest = Math.max(deepest, exp.spaces[id].depth);
 
+    const out = mode === 'extracted';
+    $('done-kicker').textContent = out ? 'expedition record' : 'checkpoint';
+    $('done-title').textContent = out ? 'You left the dungeon.' : 'The locked door gives.';
+    $('done-lede').textContent = out
+      ? 'What you charted stays charted.'
+      : 'Beyond it the dungeon goes on. Continue down, or leave with what you have charted.';
     $('done-seed').textContent = exp.rootSeed;
     const list = $('done-chain');
     list.innerHTML = '';
@@ -937,16 +986,18 @@ if (vViewPosition.z < uDitherDepth) {
       list.append(li);
     }
     const last = el('li', 'door');
-    last.append(el('span', 'sid', '⟶'), el('span', 'hash', `locked door ${near.space.id}/${near.exit.id}, unlocked`));
+    last.append(el('span', 'sid', '⟶'),
+      el('span', 'hash', `locked door ${spaceId}/${exitId}, unlocked${out ? '. left the dungeon here' : ''}`));
     list.append(last);
 
     const mins = Math.floor(run.walked / 60), secs = Math.floor(run.walked % 60);
     const rows = [
       ['rooms standing', s.spaces], ['rooms ever opened', generated], ['loops', s.cycles],
       ['cells charted', s.cells], ['deepest', deepest], ['chain length', chain.length],
-      ['shards found', run.shardsFound], ['keys found', run.keysFound], ['keys used', run.keysUsed],
-      ['collapses', run.collapses], ['rooms collapsed', run.roomsCollapsed], ['entropy spent', run.entropySpent],
-      ['entropy left', run.entropy], ['time walked', `${mins}:${String(secs).padStart(2, '0')}`],
+      ['shards found', run.shardsFound], ['keys found', run.keysFound], ['checkpoints', run.keysUsed],
+      ['collapses', run.collapses], ['rooms collapsed', run.roomsCollapsed], ['charges spent', run.chargesSpent],
+      ['charges left', `${run.charges} + ${run.shards}/${RULES.shardsPerCharge}`],
+      ['time walked', `${mins}:${String(secs).padStart(2, '0')}`],
     ];
     const dl = $('done-stats');
     dl.innerHTML = '';
@@ -956,18 +1007,30 @@ if (vViewPosition.z < uDitherDepth) {
       dl.append(cell);
     }
 
+    for (const id of ['done-continue', 'done-leave']) $(id).hidden = out;
+    for (const id of ['done-new', 'done-chart']) $(id).hidden = !out;
     state.paused = true;
     keys.clear();
     $('done').hidden = false;
   }
 
-  function hideComplete() {
+  function hideRecord() {
+    recordMode = null;
     state.paused = false;
     $('done').hidden = true;
   }
 
+  $('done-continue').addEventListener('click', () => {
+    const d = recordDoor;
+    hideRecord();
+    if (d && state.exp.spaces[d.spaceId]) openDoor(d.spaceId, d.exitId);
+  });
+  $('done-leave').addEventListener('click', () => {
+    state.run.extracted = Object.assign({}, recordDoor);
+    savePlayer();
+    showRecord(recordDoor.spaceId, recordDoor.exitId, 'extracted');
+  });
   $('done-new').addEventListener('click', newExpedition);
-  $('done-close').addEventListener('click', hideComplete);
   $('done-export').addEventListener('click', () => {
     const blob = new Blob([DE.exportRecord(state.exp)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -1020,6 +1083,9 @@ if (vViewPosition.z < uDitherDepth) {
     save();
     savePlayer();
     refreshHud();
+    // A run that left the dungeon reopens on its record.
+    const x = state.run.extracted;
+    if (x && exp.spaces[x.spaceId]) showRecord(x.spaceId, x.exitId, 'extracted');
   }
 
   // ---------------------------------------------------------------------------
@@ -1061,5 +1127,5 @@ if (vViewPosition.z < uDitherDepth) {
   global.addEventListener('pagehide', savePlayer);
 
   // Handy from the console.
-  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showComplete });
+  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord });
 })(window);

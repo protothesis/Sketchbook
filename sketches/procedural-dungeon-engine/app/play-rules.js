@@ -14,13 +14,17 @@
 
   // Tunables. PLAY.md has the reasoning ("moderate" pacing).
   const RULES = {
-    entropyStart: 30,
-    entropyMax: 100,
-    shardEntropy: 10,
-    shardChance: { chamber: 0.3, corridor: 0.12, stub: 0.25 },
+    // Entropy comes in whole charges; 3 shards make one. A collapse spends
+    // whole charges (rounded up), so a partial need still burns a charge.
+    shardsPerCharge: 3,
+    chargeEntropy: 15,        // collapse cost one charge covers
+    chargesStart: 2,
+    chargesMax: 8,
+    shardChance: { chamber: 0.75, corridor: 0.4, stub: 0.5 },
+    bigChamberCells: 20,      // chambers this large can hold a second shard
     keyChance: 1 / 30,
     keyMinDepth: 3,
-    lockChance: 0.1,
+    lockChance: 0.025,
     lockMinDepth: 4,          // depth of the space the locked door leads out of
     collapsePerCell: 1,
     collapsePerSpace: 2,
@@ -37,9 +41,12 @@
       : cells.slice();
     const items = [];
     const chance = space.deadEnd ? RULES.shardChance.stub : RULES.shardChance[space.archetype] || 0;
-    if (r.chance(chance)) items.push({ id: 'shard', kind: 'shard', cell: spots[0] });
+    let n = 0;
+    if (r.chance(chance)) n++;
+    if (space.cells.length >= RULES.bigChamberCells && r.chance(chance * 0.6)) n++;
+    for (let i = 0; i < n; i++) items.push({ id: 'shard' + i, kind: 'shard', cell: spots[i % spots.length] });
     if (space.depth >= RULES.keyMinDepth && r.chance(RULES.keyChance)) {
-      items.push({ id: 'key', kind: 'key', cell: spots[1 % spots.length] });
+      items.push({ id: 'key', kind: 'key', cell: spots[n % spots.length] });
     }
     return items;
   }
@@ -76,7 +83,8 @@
 
   function collapseCost(spaces) {
     const cells = spaces.reduce((n, s) => n + s.cells.length, 0);
-    return { rooms: spaces.length, cells, cost: cells * RULES.collapsePerCell + spaces.length * RULES.collapsePerSpace };
+    const cost = cells * RULES.collapsePerCell + spaces.length * RULES.collapsePerSpace;
+    return { rooms: spaces.length, cells, cost, charges: Math.ceil(cost / RULES.chargeEntropy) };
   }
 
   /** Revert a whole branch, deepest first. History records each revert. */

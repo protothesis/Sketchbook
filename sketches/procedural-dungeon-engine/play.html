@@ -13,10 +13,10 @@
   <div class="hud top-left">
     <h1>Dungeon Walk</h1>
     <p id="stats"></p>
-    <div class="meter" title="Entropy: spent to collapse rooms you've opened. Shards refill it.">
+    <div class="meter">
       <span class="meter-label">entropy</span>
-      <div class="bar"><div id="entropy-fill" class="fill"></div></div>
-      <span id="entropy-num" class="num"></span>
+      <span id="charges" class="charges"></span>
+      <span id="shard-pips" class="pips" title="Shards toward the next charge"></span>
       <span class="keys" title="Keys open locked doors">&#9911; <span id="keys-num">0</span></span>
     </div>
     <div class="hud-buttons">
@@ -39,18 +39,20 @@
 
   <div id="done" class="done" hidden>
     <div class="done-card">
-      <p class="done-kicker">expedition record</p>
-      <h2>The locked door gives.</h2>
+      <p class="done-kicker" id="done-kicker">checkpoint</p>
+      <h2 id="done-title">The locked door gives.</h2>
+      <p class="done-lede" id="done-lede"></p>
       <p class="done-seed">root seed <code id="done-seed"></code></p>
       <h3>The chain to this door</h3>
       <ol id="done-chain" class="chain"></ol>
       <h3>Tally</h3>
       <dl id="done-stats" class="tally"></dl>
       <div class="done-buttons">
+        <button class="btn primary" id="done-continue" type="button">Continue down</button>
+        <button class="btn" id="done-leave" type="button">Leave the dungeon</button>
         <button class="btn primary" id="done-new" type="button">New expedition</button>
         <button class="btn" id="done-export" type="button">Export record</button>
-        <a class="btn" href="index.html">Chart view</a>
-        <button class="btn" id="done-close" type="button">Keep walking</button>
+        <a class="btn" id="done-chart" href="index.html">Chart view</a>
       </div>
     </div>
   </div>

@@ -130,16 +130,18 @@ kbd {
 .prompt.blocked { color: var(--muted); border-color: var(--border); cursor: default; }
 
 .meter { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: var(--muted); }
-.meter .bar {
-  flex: 0 0 110px;
-  height: 7px;
-  border-radius: 4px;
-  background: rgba(181, 156, 255, 0.12);
-  border: 1px solid rgba(181, 156, 255, 0.3);
-  overflow: hidden;
+.charges { display: inline-flex; gap: 2px; }
+.charge {
+  width: 10px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid rgba(181, 156, 255, 0.35);
+  background: rgba(181, 156, 255, 0.08);
 }
-.meter .fill { height: 100%; background: var(--entropy); transition: width 0.4s ease; }
-.meter .num { color: var(--entropy); min-width: 2ch; font-variant-numeric: tabular-nums; }
+.charge.on { background: var(--entropy); border-color: var(--entropy); }
+.pips { display: inline-flex; gap: 3px; margin-left: 3px; }
+.pip { width: 5px; height: 5px; transform: rotate(45deg); border: 1px solid rgba(181, 156, 255, 0.5); }
+.pip.on { background: var(--entropy); }
 .meter .keys { margin-left: 6px; color: var(--key); }
 
 .done {
@@ -169,6 +171,8 @@ kbd {
 .done h2 { margin: 4px 0 8px; font: italic 22px Georgia, "Times New Roman", serif; }
 .done h3 { margin: 16px 0 6px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
 .done-seed { margin: 0; color: var(--muted); }
+.done-lede { margin: 0 0 8px; }
+.done-buttons [hidden] { display: none; }
 .done code { color: var(--text); font: 13px ui-monospace, Consolas, monospace; }
 .chain {
   margin: 0;

@@ -29,18 +29,25 @@ Determinism).
 ## The loop (first pass)
 
 - **Explore.** Push doors open. Each one is a fresh, unrerollable draw.
-- **Collect.** Rooms sometimes hold a **shard** (+10 entropy) or, rarely, a
-  **key**.
+- **Collect.** Most rooms hold a **shard**, and big chambers sometimes hold
+  two. Three shards fuse into one **charge** of entropy. Rarely, a room
+  holds a **key**.
 - **Collapse.** Stand at a door you opened and press E (or tap the prompt),
   and the door shuts. The whole branch beyond it (that room and every room
-  opened from it, deepest first) dissolves. The price is **1 entropy per
-  cell plus 2 per room**, shown before you commit. Reopening the door draws
-  fresh entropy: that's the reroll. If the price is more than your meter,
+  opened from it, deepest first) dissolves. The price is **1 per cell plus
+  2 per room, paid in whole charges** (15 each, rounded up), so a cost that
+  needs only part of a charge still burns the whole charge. Shards
+  collected toward your next charge are kept. Reopening the door draws fresh
+  entropy: that's the reroll. If the price is more charges than you have,
   the door stays open: "too much lies beyond."
-- **Escape.** Locked doors appear past depth 4. Unlocking one with a key
-  ends the walk on the **expedition record**: the seed chain from the root
-  to that door (`H(parent | exit | entropy) → seed` per step) and a tally of
-  rooms, loops, cells, shards, keys, collapses and entropy spent.
+- **Checkpoints.** Locked doors are rare and appear past depth 4. Unlocking
+  one with a key opens the **expedition record** (the seed chain from the
+  root to that door, `H(parent | exit | entropy) → seed` per step, and a
+  tally) and offers a choice:
+  - **Continue down:** the door opens like any other, and you can collapse
+    it later.
+  - **Leave the dungeon:** this ends the run, and the record comes back if
+    you reload.
 
 There's no passive regen and no lose state yet. You can always keep walking
 forward; collapsing is the only thing entropy buys.
@@ -54,9 +61,11 @@ forward; collapsing is the only thing entropy buys.
 | Floor | one tile per cell, with a dark gap between tiles | the gaps make the grid you're walking on visible |
 | Doorways | 0.6 cells wide, 1.0 tall, with a lintel above | |
 | Closed door | dark panel with a warm orange seam of light under it | the same orange as the chart view's open doorways |
-| Locked door | iron-grey panel with two bands and a cold blue seam | also blue on the minimap |
+| Locked door | iron-grey panel with two bands and a cold blue seam | blue on the minimap; once unlocked it keeps its bands and gets an orange seam |
+| Minimap | unopened doors orange, locked doors blue, opened doors green | so overlapping rooms stay readable |
+| Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
-| Occlusion | screen-door dither on walls in front of the figure, inside a soft circle around it (17% of the screen) | walls never move; only a "porthole" opens around you |
+| Occlusion | screen-door dither on wall pixels south of the figure (a world-position test): full inside a soft circle around it (27% of the screen), and a light 30% dither across any south wall within 2.5 cells | walls never move; the whole face clears, top to bottom |
 | Light | the lantern is a shadow-casting point light; ambient is almost zero | plus a faint, short-range cool fill so nearby wall faces read |
 | Pickups | violet octahedron (shard), small gold key | bob and turn; lit by the lantern, so they hide in the dark too |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
@@ -70,16 +79,17 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | --- | --- |
 | Move | WASD / arrows (Shift runs at 4 cells/s instead of 2.4); touch: drag for a stick |
 | Open a door | walk into it for 0.35 s, or press E / tap the prompt |
-| Entropy | starts at 30, capped at 100 |
-| Shard | +10 entropy; found in 30% of chambers, 12% of corridors, 25% of dead ends |
+| Entropy | whole charges: start with 2, hold up to 8; 3 shards make 1 charge |
+| Shard | in 75% of chambers, 40% of corridors, 50% of dead ends; chambers of 20+ cells can hold a second |
 | Key | 1 in 30 rooms at depth 3 or deeper |
-| Locked door | 10% of unresolved exits on rooms at depth 4 or deeper |
-| Collapse price | 1 per cell + 2 per room across the whole branch |
+| Locked door | 2.5% of unresolved exits on rooms at depth 4 or deeper |
+| Collapse price | 1 per cell + 2 per room across the whole branch, divided by 15 and rounded up to whole charges |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
-In a 2,000-room simulation that works out to about 0.2 shards and 0.024 keys
-per room. Collapsing one average room (~10 cells) costs about what you find
-in 6 rooms of exploring.
+In a 2,000-room simulation that works out to about 0.7 shards per room (one
+charge every ~4 rooms) and 0.027 keys per room. Collapsing a single room
+costs 1.4 charges on average, and a 120-room map has under one locked door
+on its frontier at a time.
 
 ## Determinism
 
@@ -89,10 +99,11 @@ stream, so a replayed expedition holds identical shards, keys and locks. A
 collapsed-and-regenerated room has a new seed and so new loot. A collected
 item is remembered as `spaceId:seed:itemId`.
 
-## Playtest notes, 2026-10-20 (next pass, not built yet)
+## Playtest notes, 2026-10-20 (all five addressed)
 
-From the first hand-played session. Each has a suspected cause and a
-proposed fix.
+From the first hand-played session. All five were fixed the same day as
+described below. Two details changed along the way: locks went to 2.5%,
+and a charge covers 15 cost.
 
 1. **Opened doors vanish from the minimap.** It only draws unresolved
    doors, and overlapping rooms make the chart hard to read without them.

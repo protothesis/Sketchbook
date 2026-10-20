@@ -46,9 +46,22 @@ All notable changes to this sketch are logged here, per
   front of it get a screen-door dither inside a soft circle around it
   instead. The door prompt is now a button, so on touch you tap it to
   open, unlock or collapse.
+- 2026-10-20 (playtest pass):
+  - Entropy now comes in whole **charges**: 3 shards fuse into one, you
+    start with 2, and you can hold up to 8. Shards are much more common.
+  - A collapse spends whole charges, rounded up (one charge covers 15
+    cost), and partial shards are kept.
+  - Locked doors are rarer (2.5%) and are now **checkpoints**: unlocking
+    one offers **Continue down** (it opens like any other door) or
+    **Leave the dungeon** (this ends the run on the record, which persists).
+  - The minimap now shows opened doors in green.
 
 ### Fixed
 
+- 2026-10-20: The walk-mode dither now tests world position instead of view
+  depth, so a south wall's whole face clears when you stand against it
+  (before, a solid band stayed under the figure). The circle is also bigger
+  and softer, and south walls get a light dither as you approach.
 - 2026-10-19: You can now move between views either way and start a new map
   from walk mode. Walk mode has **Chart view** and **New map** buttons (press
   New map twice to confirm, instead of `window.confirm()`, which some
