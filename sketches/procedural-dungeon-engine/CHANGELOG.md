@@ -20,3 +20,10 @@ All notable changes to this sketch are logged here, per
   Expeditions autosave to `localStorage`.
 - `stress-test.js`: headless checks for overlaps, registry rebuild, replay
   and cycles.
+- 2026-10-19: Walk mode (`play.html`, `app/play.js`), a third-person 3D
+  client built on three.js (vendored r160). You move with WASD or a touch
+  stick. Pushing into a closed door (or pressing E) calls `expand` + `commit`
+  with fresh entropy. The new space then appears outward from the door while
+  the door swings open. It also has lantern lighting with black fog, a
+  cutaway for walls south of the figure, per-space captions, and a minimap.
+  It shares the map view's autosave. Design parameters are in `PLAY.md`.

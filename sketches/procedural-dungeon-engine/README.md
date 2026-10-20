@@ -29,6 +29,11 @@ doorway to see a ghosted preview of the space beyond, then **Accept** or
 pinch to zoom. Export an expedition as JSON, then re-import it to replay it
 cell-for-cell. The current expedition autosaves in your browser.
 
+**Walk mode:** open `play.html` to walk the same expedition in 3D with
+WASD (or drag on touch). Every closed door is unresolved until you push it
+open, and the space behind it assembles as the door swings. The design
+parameters are in [`PLAY.md`](PLAY.md).
+
 Headless engine check: `node stress-test.js [expansions] [runs]`.
 
 ## Structure
@@ -39,12 +44,16 @@ engine/          pure data + logic, no DOM; also loads under Node
   shapes.js        grid helpers + chamber / corridor / stub generators
   expedition.js    createExpedition, expand, commit, revert, setCaps,
                    replay, exportRecord, importRecord, stats
-app/             the prototype renderer, one possible client of the engine
+app/             clients of the engine
   renderer.js      Canvas 2D top-down map, hit-testing, pan/zoom
   app.js           controls, inspector, pointer input, autosave
   styles.css
+  play.js          walk mode: three.js world, collision, doors, minimap
+  play.css
+vendor/three/    three.js r160 classic build (walk mode only)
 stress-test.js   headless milestone checks (Node)
 DESIGN.md        the design brief
+PLAY.md          walk mode's visual + game design parameters
 NOTES.md         implementation decisions
 ```
 

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Dungeon Walk</title>
+<meta name="description" content="Walk the procedural dungeon in 3D: every closed door is unresolved until you push it open, and the space behind it is generated as it swings." />
+<link rel="stylesheet" href="app/play.css" />
+</head>
+<body>
+  <canvas id="view" aria-label="3D dungeon view"></canvas>
+
+  <div class="hud top-left">
+    <h1>Dungeon Walk</h1>
+    <p id="stats"></p>
+    <p class="links"><a href="index.html">Chart view</a> · <a href="PLAY.md">Design brief</a></p>
+  </div>
+
+  <canvas id="minimap" class="hud minimap" width="180" height="180" aria-label="Minimap"></canvas>
+
+  <p id="prompt" class="prompt" hidden></p>
+  <p id="caption" class="caption"></p>
+
+  <div class="hud bottom-left help">
+    <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · walk into a door or <kbd>E</kbd> to open ·
+    <kbd>M</kbd> map · <kbd>N</kbd> new
+  </div>
+
+  <div id="stick" class="stick" hidden><div class="knob"></div></div>
+
+  <script src="vendor/three/three.min.js"></script>
+  <script src="engine/rng.js"></script>
+  <script src="engine/shapes.js"></script>
+  <script src="engine/expedition.js"></script>
+  <script src="app/play.js"></script>
+</body>
+</html>
