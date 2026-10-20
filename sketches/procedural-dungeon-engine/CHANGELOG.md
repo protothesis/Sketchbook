@@ -138,6 +138,12 @@ All notable changes to this sketch are logged here, per
   The collapse price is a flat 1 charge per room (was 1 per cell + 2 per
   room, in 15-point charges).
 
+- 2026-10-20: Jar placement:
+  - Placing never prompts; a failed use of any item shakes the hotbar.
+  - F picks the nearest free quarter-tile in front of you, including on
+    top of one-unit blocks. Only a doorway's mouth is off limits.
+  - A sigil takes up to four jars (one per quarter), each full jar giving
+    +1 entropy max (up to +4).
 - 2026-10-20: **Hotbar, jars and sigils.**
   - **Hotbar.** A slot bar for carried things. 1–9, the wheel or a tap
     selects; E interacts with the world, and F (or "use" on touch) uses the

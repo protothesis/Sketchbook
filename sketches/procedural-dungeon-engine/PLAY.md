@@ -98,8 +98,11 @@ Determinism).
   mouse wheel, or a tap. **E** interacts with the world (doors, climbing,
   lifting a placed jar). **F** (or "use" on touch) uses the selected item.
 - **Jars.** Found in about 1 room in 15 (depth 1+). F sets one down on the
-  half-cell in front of you: a small solid thing you can't climb, and ghosts
-  float over it. E lifts it again, with whatever's inside. A jar holds up
+  nearest free quarter-tile in front of you: on the floor, or on top of a
+  one-unit block. It's a small solid thing you can't climb or stand on, and
+  ghosts float over it. Nothing prompts you to place one. If there's no
+  room (say you're facing a wall), the hotbar gives a little shake, and so
+  does any other F that can't do anything. E lifts it again, with whatever's inside. A jar holds up
   to 3 hash ghosts, which you can add two ways:
   - Select echoes and F at a jar to pour one in.
   - Lead a following ghost into a placed jar and it's caught.
@@ -107,11 +110,14 @@ Determinism).
   Collapsing a room with a jar in it shatters the jar, and its ghosts
   become echoes.
 - **Sigil tiles.** A glowing hex on the floor of about 1 room in 25 (depth
-  1+, not the smallest rooms; never under blocks). Stand a jar on it and the
-  sigil wakes, **one stage per ghost in the jar**. At stage 3 (a full jar)
-  it blazes gold and your **entropy max goes up by 1** for as long as it
-  stays that way. Lifting the jar, or anything that drops it below stage
-  3, takes the +1 away. Sigils stack. If the max drops while you're above
+  1+, not the smallest rooms; never under blocks). It takes up to **four
+  jars**, one per quarter of its tile. It wakes **one stage per ghost** in
+  its fullest jar, and **every full jar on it is +1 entropy max** (so up to
+  +4 per sigil) for as long as it stays there and full. Lifting a jar
+  takes its +1 away. Sigils stack.
+- **Echoes** are what's left of a hash ghost once it unravels: when you
+  collapse a room with a ghost in it, or a jar with ghosts in it shatters.
+  One echo is one ghost's worth; pour it into a jar. If the max drops while you're above
   it, you keep the extra charges until spent but can't gain more.
 - **Door chalk.** A rare find (about 1 room in 33, from depth 2). Select it,
   face any bare wall, and press F (or tap the prompt) to draw a door there. It's a
@@ -182,8 +188,8 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
 | Collapse price | a flat 1 charge per room in the branch |
 | Door chalk | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (chalk selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
-| Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); capacity 3; placed 0.47 cells ahead on a free half-cell (not on a door's cell, not into a wall); 0.38 cells tall; a following ghost within 0.38 cells of a jar with room is caught |
-| Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); stage = ghosts in a jar standing on its tile; stage 3 = entropy max +1, stacking |
+| Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); capacity 3; F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall; a following ghost within 0.38 cells of a jar with room is caught |
+| Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 jars (one per quarter); stage = the fullest jar's fill; each full jar on it = entropy max +1 (up to +4), stacking across sigils |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
 In a 2,000-room simulation that works out to about 0.7 shards per room (one

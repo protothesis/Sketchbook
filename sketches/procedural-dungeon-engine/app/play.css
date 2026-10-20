@@ -395,3 +395,12 @@ kbd {
 @media (hover: hover) and (min-width: 561px) {
   .hotbar { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 40px); }
 }
+/* "That didn't work": a quick shake of the hotbar. */
+.hotbar.shake { animation: hotbar-shake 0.32s ease; }
+@keyframes hotbar-shake {
+  0%, 100% { translate: 0 0; }
+  20% { translate: -7px 0; }
+  40% { translate: 6px 0; }
+  60% { translate: -4px 0; }
+  80% { translate: 2px 0; }
+}

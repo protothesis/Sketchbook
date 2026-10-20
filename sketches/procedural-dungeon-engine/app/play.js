@@ -859,6 +859,14 @@ if (vDitherEW > 0.7 && south > 0.2) {
 
   const ICON = { jar: '⚱', chalk: '✎', echo: '◌', key: '⚷' };
   const NAME = { jar: 'jar', chalk: 'door chalk', echo: 'echoes', key: 'keys' };
+  function shakeHotbar() {
+    const bar = $('hotbar');
+    if (!bar) return;
+    bar.classList.remove('shake');
+    void bar.offsetWidth; // restart the animation
+    bar.classList.add('shake');
+  }
+
   function refreshHotbar() {
     const bar = $('hotbar');
     if (!bar) return;
@@ -916,13 +924,18 @@ if (vDitherEW > 0.7 && south > 0.2) {
 
   function addJarToWorld(j) {
     const x0 = j.sx / 2, y0 = j.sy / 2;
-    const block = { x0, y0, x1: x0 + 0.5, y1: y0 + 0.5, top: JAR_H, units: 1, jar: true, spaceId: 'jar:' + j.id };
+    // Standing on the floor, or on a one-unit block filling its quarter.
+    let base = 0;
+    for (const bl of state.blockAt.get(DE.key(Math.floor(x0), Math.floor(y0))) || []) {
+      if (!bl.jar && bl.units === 1 && bl.x0 <= x0 && bl.x1 >= x0 + 0.5 && bl.y0 <= y0 && bl.y1 >= y0 + 0.5) base = Math.max(base, bl.top);
+    }
+    const block = { x0, y0, x1: x0 + 0.5, y1: y0 + 0.5, top: base + JAR_H, base, units: 1, jar: true, spaceId: 'jar:' + j.id };
     const k = DE.key(Math.floor(x0), Math.floor(y0));
     const list = state.blockAt.get(k) || [];
     list.push(block);
     state.blockAt.set(k, list);
     const mesh = makeJarMesh();
-    mesh.position.set((x0 + 0.25) * S, 0, (y0 + 0.25) * S);
+    mesh.position.set((x0 + 0.25) * S, base * S, (y0 + 0.25) * S);
     scene.add(mesh);
     const rec = { id: j.id, sx: j.sx, sy: j.sy, fill: j.fill || 0, block, mesh };
     state.jars.push(rec);
@@ -939,28 +952,68 @@ if (vDitherEW > 0.7 && south > 0.2) {
 
   function clearJars() { for (const r of state.jars.slice()) removeJarFromWorld(r); }
 
-  /** The half-cell a jar would go on: just in front of you, if it's free. */
-  function jarSpot(p) {
-    if (p.z > 0.05) return null;
-    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
-    const sx = Math.floor((p.x + fx * (RADIUS + 0.27)) * 2), sy = Math.floor((p.y + fy * (RADIUS + 0.27)) * 2);
-    const cx = Math.floor(sx / 2), cy = Math.floor(sy / 2), k = DE.key(cx, cy);
+  /**
+   * Where a jar set down at half-cell (sx, sy) would stand: the floor (0),
+   * or the top of a one-unit block filling that quarter. null if it can't
+   * go there: off the map, through a wall, onto a taller block or another
+   * jar, into a doorway's mouth, or onto the figure.
+   */
+  function jarBaseAt(sx, sy, p) {
     const exp = state.exp;
-    const sid = exp.registry[k];
+    const cx = Math.floor(sx / 2), cy = Math.floor(sy / 2);
+    const sid = exp.registry[DE.key(cx, cy)];
     if (sid === undefined) return null;
     const pcx = Math.floor(p.x), pcy = Math.floor(p.y);
-    if ((cx !== pcx || cy !== pcy) && !(Math.abs(cx - pcx) + Math.abs(cy - pcy) === 1 && passable(pcx, pcy, cx, cy))) return null;
-    if (exp.spaces[sid].exits.some((e) => e.cell.x === cx && e.cell.y === cy)) return null; // keep doorways clear
+    const dcx = cx - pcx, dcy = cy - pcy;
+    if (Math.abs(dcx) > 1 || Math.abs(dcy) > 1) return null;
+    if (dcx && dcy) { // diagonal: some L-shaped way round must be open
+      if (!((passable(pcx, pcy, cx, pcy) && passable(cx, pcy, cx, cy)) ||
+            (passable(pcx, pcy, pcx, cy) && passable(pcx, cy, cx, cy)))) return null;
+    } else if ((dcx || dcy) && !passable(pcx, pcy, cx, cy)) return null;
     const x0 = sx / 2, y0 = sy / 2, x1 = x0 + 0.5, y1 = y0 + 0.5;
-    for (const b of state.blockAt.get(k) || []) if (b.x0 < x1 && b.x1 > x0 && b.y0 < y1 && b.y1 > y0) return null;
+    // Keep a doorway's mouth (the two quarters against its edge) clear.
+    for (const e of exp.spaces[sid].exits) {
+      if (e.cell.x !== cx || e.cell.y !== cy) continue;
+      const qx = sx - cx * 2, qy = sy - cy * 2; // 0 or 1: which quarter
+      if ((e.facing === 'N' && qy === 0) || (e.facing === 'S' && qy === 1) ||
+          (e.facing === 'W' && qx === 0) || (e.facing === 'E' && qx === 1)) return null;
+    }
+    let base = 0;
+    for (const bl of state.blockAt.get(DE.key(cx, cy)) || []) {
+      if (!(bl.x0 < x1 && bl.x1 > x0 && bl.y0 < y1 && bl.y1 > y0)) continue;
+      if (bl.jar || bl.units !== 1 || !(bl.x0 <= x0 && bl.x1 >= x1 && bl.y0 <= y0 && bl.y1 >= y1)) return null;
+      base = Math.max(base, bl.top);
+    }
     const ex = Math.max(x0 - p.x, 0, p.x - x1), ey = Math.max(y0 - p.y, 0, p.y - y1);
-    if (Math.hypot(ex, ey) < RADIUS + 0.02) return null; // not on top of you
-    return { sx, sy };
+    if (Math.hypot(ex, ey) < RADIUS + 0.02 && Math.abs(base - p.z) < JAR_H) return null; // not onto the figure
+    return base;
+  }
+
+  /**
+   * Where F would set a jar down: the free quarter nearest the spot just
+   * ahead of you, among the quarters in front of you.
+   */
+  function jarSpot(p) {
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    const ax = p.x + fx * (RADIUS + 0.27), ay = p.y + fy * (RADIUS + 0.27);
+    const bsx = Math.floor(ax * 2), bsy = Math.floor(ay * 2);
+    const cands = [];
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const sx = bsx + dx, sy = bsy + dy;
+      const qx = (sx + 0.5) / 2, qy = (sy + 0.5) / 2;
+      if ((qx - p.x) * fx + (qy - p.y) * fy <= 0.05) continue; // in front only
+      cands.push({ sx, sy, d: Math.hypot(qx - ax, qy - ay) });
+    }
+    cands.sort((u, v) => u.d - v.d);
+    for (const c of cands) {
+      const base = jarBaseAt(c.sx, c.sy, p);
+      if (base !== null) return { sx: c.sx, sy: c.sy, base };
+    }
+    return null;
   }
 
   /** A placed jar right in front of you. */
   function jarAhead(p) {
-    if (p.z > 0.05) return null;
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     let best = null, bestD = RADIUS + 0.32;
     for (const j of state.jars) {
@@ -1014,19 +1067,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const p = state.player, run = state.run;
     const u = useNear(p);
     const slot = selectedSlot();
-    if (!u) {
-      if (!slot) showCaption('nothing to use');
-      else if (slot.kind === 'jar') showCaption('no room to set the jar down here');
-      else if (slot.kind === 'chalk') showCaption('face a bare wall to draw a door');
-      else if (slot.kind === 'echo') showCaption('face a jar with room in it to pour an echo in');
-      else showCaption('keys open locked doors (E)');
-      return;
-    }
+    if (!u) { shakeHotbar(); return; } // "that didn't work"
+
     if (u.action === 'place') {
       const j = u.slot.jar;
       run.jars = run.jars.filter((o) => o !== j);
       addJarToWorld({ id: j.id, sx: u.spot.sx, sy: u.spot.sy, fill: j.fill });
-      showCaption(j.fill ? `you set the jar down · ${j.fill}/${RULES.jarCapacity}` : 'you set the jar down');
     } else if (u.action === 'carve') {
       carveDoor(u);
       return;
@@ -1138,28 +1184,33 @@ if (vDitherEW > 0.7 && south > 0.2) {
     state.sigils.set(space.id, { cell: sg.cell, mat, stage: -1, phase: Math.random() * 10 });
   }
 
-  /** Stage = ghosts in a jar standing on the sigil (0-3); stage 3 grants +1 entropy max. */
+  /**
+   * A sigil takes up to four jars, one per quarter of its tile. Its stage is
+   * the fullest jar's fill (0-3); every full jar on it is +1 entropy max.
+   */
   function updateSigils() {
     let powered = 0;
     for (const sg of state.sigils.values()) {
-      let stage = 0;
+      let stage = 0, full = 0;
       for (const j of state.jars) {
-        if (Math.floor(j.sx / 2) === sg.cell.x && Math.floor(j.sy / 2) === sg.cell.y) stage = Math.max(stage, Math.min(3, j.fill));
+        if (Math.floor(j.sx / 2) !== sg.cell.x || Math.floor(j.sy / 2) !== sg.cell.y) continue;
+        stage = Math.max(stage, Math.min(3, j.fill));
+        if (j.fill >= RULES.jarCapacity) full++;
       }
       if (sg.stage !== -1 && stage > sg.stage && stage < 3) showCaption(`the sigil stirs · stage ${stage} of 3`);
       sg.stage = stage;
-      if (stage === 3) powered++;
+      powered += full;
       const t = state.time + sg.phase;
       const flicker = stage === 0 ? 1 : stage === 1 ? 0.9 + 0.1 * Math.sin(t * 9)
         : stage === 2 ? 0.75 + 0.25 * Math.abs(Math.sin(t * 13) * Math.sin(t * 5.3)) : 0.85 + 0.15 * Math.sin(t * 3);
-      sg.mat.opacity = [0.22, 0.45, 0.7, 1][stage] * flicker;
+      sg.mat.opacity = [0.22, 0.45, 0.7, 1][stage] * flicker * (1 + 0.15 * Math.max(0, full - 1));
       sg.mat.color.setHex(stage === 3 ? 0xffd28a : stage === 2 ? 0xd2a8ff : 0xb59cff);
     }
     if (powered !== state.buff) {
       const up = powered > state.buff;
       state.buff = powered;
       if (state.buffReady) {
-        showCaption(up ? `the sigil blazes · entropy max ${maxCharges()}` : `a sigil gutters out · entropy max ${maxCharges()}`);
+        showCaption(up ? `the sigil blazes · entropy max ${maxCharges()}` : `a sigil dims · entropy max ${maxCharges()}`);
       }
       refreshHud();
     }
@@ -1489,7 +1540,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     if (!state.climb) {
       let support = 0;
       for (const b of state.blockAt.get(DE.key(Math.floor(p.x), Math.floor(p.y))) || []) {
-        if (b.top <= p.z + 0.05 && p.x > b.x0 && p.x < b.x1 && p.y > b.y0 && p.y < b.y1) support = Math.max(support, b.top);
+        if (!b.jar && b.top <= p.z + 0.05 && p.x > b.x0 && p.x < b.x1 && p.y > b.y0 && p.y < b.y1) support = Math.max(support, b.top);
       }
       if (p.z > support) {
         p.vz = (p.vz || 0) - GRAVITY * dt;
@@ -1804,7 +1855,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   function subBlocked(sx, sy) {
     const x = (sx + 0.5) / 2, y = (sy + 0.5) / 2;
     for (const b of blocksAt(Math.floor(x), Math.floor(y))) {
-      if (b.top > GHOST.tall && x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1) return true;
+      if (!b.jar && b.top > GHOST.tall && x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1) return true;
     }
     return false;
   }
@@ -2263,8 +2314,7 @@ void main() {
         cls = 'chalk';
         text = `a bare wall · ${verbF} to draw a door (${state.run.chalk} chalk)`;
       } else if (near.action === 'place') {
-        cls = 'jar';
-        text = `${verbF} to set the jar down`;
+        text = ''; // placing a jar never prompts
       } else if (near.action === 'pour') {
         cls = 'jar';
         text = `a jar (${near.jar.fill}/${RULES.jarCapacity}) · ${verbF} to pour in an echo`;
