@@ -89,6 +89,43 @@ stream, so a replayed expedition holds identical shards, keys and locks. A
 collapsed-and-regenerated room has a new seed and so new loot. A collected
 item is remembered as `spaceId:seed:itemId`.
 
+## Playtest notes, 2026-10-20 (next pass, not built yet)
+
+From the first hand-played session. Each has a suspected cause and a
+proposed fix.
+
+1. **Opened doors vanish from the minimap.** It only draws unresolved
+   doors, and overlapping rooms make the chart hard to read without them.
+   *Fix:* draw opened (connected) doors too, in green instead of orange.
+2. **Locked doors are too common, and "Keep walking" is broken.**
+   - Frequency: `lockChance` (10%) applies to every unresolved exit at
+     depth 4 or deeper, and the whole frontier ends up that deep, so locks
+     pile up. *Fix:* drop it to about 2–3%, or limit it per branch.
+   - After unlocking, `act()` just reopens the record screen; the door
+     never opens.
+   - *Fix:* make locked doors **checkpoints**. Unlocking offers **Leave the
+     dungeon** (extract and show the record) or **Continue down**, and an
+     unlocked door then opens like any other. An extraction mechanic could
+     grow from this.
+3. **Shards should come in threes.** The original idea was that 3 shards
+   make one complete item, and that got merged into a smooth meter.
+   - Shards drop much more often (each one is small).
+   - Every 3 shards make one whole **charge**, and the meter shows whole
+     charges plus a 0–2 shard partial.
+   - A collapse spends whole charges, rounding up: a cost that needs only
+     part of a charge uses up the entire charge. Partial shards collected
+     toward the next charge are kept.
+4. **The south wall draws back in when you're close.** The dither tests
+   view depth (`vViewPosition.z < uDitherDepth`). The camera looks down at
+   the wall, so the lower part of the wall's face is farther from the
+   camera than the figure and stays solid when you stand against it (a
+   band under the figure). *Fix:* test world position instead (is this
+   wall pixel south of the figure, e.g. via a `vWorldPos` varying).
+5. **The dither should be bigger and softer.** *Fix:* make the radius big
+   enough that the wall directly above the figure never comes back, with a
+   longer falloff. Also add a light dither over the whole south wall as the
+   figure approaches it, on top of the full dither near the figure.
+
 ## Future directions (noted, not built)
 
 From the 2026-10-19 design chat. The meter is the seed of a bigger idea:
