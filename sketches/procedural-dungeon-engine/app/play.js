@@ -551,35 +551,6 @@ if (vDitherEW > 0.7 && south > 0.2) {
   body.position.y = 0.23 * S;
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.085 * S, 14, 10), bone);
   head.position.y = 0.55 * S;
-  // A face: a smiley with a mustache, black on the head, looking where you walk.
-  const face = (() => {
-    const n = 128, cv = document.createElement('canvas');
-    cv.width = cv.height = n;
-    const g = cv.getContext('2d');
-    g.fillStyle = '#111'; g.strokeStyle = '#111'; g.lineCap = 'round';
-    for (const x of [0.34, 0.66]) { g.beginPath(); g.arc(n * x, n * 0.32, n * 0.085, 0, Math.PI * 2); g.fill(); } // eyes
-    g.lineWidth = n * 0.075;
-    g.beginPath(); g.arc(n * 0.5, n * 0.5, n * 0.26, Math.PI * 0.2, Math.PI * 0.8); g.stroke(); // smile
-    // Mustache: two curled lobes meeting under the nose.
-    for (const side of [-1, 1]) {
-      g.beginPath();
-      g.moveTo(n * 0.5, n * 0.56);
-      g.bezierCurveTo(n * (0.5 + side * 0.08), n * 0.47, n * (0.5 + side * 0.24), n * 0.5, n * (0.5 + side * 0.28), n * 0.6);
-      g.bezierCurveTo(n * (0.5 + side * 0.32), n * 0.66, n * (0.5 + side * 0.36), n * 0.6, n * (0.5 + side * 0.35), n * 0.55);
-      g.bezierCurveTo(n * (0.5 + side * 0.3), n * 0.62, n * (0.5 + side * 0.14), n * 0.62, n * 0.5, n * 0.6);
-      g.closePath();
-      g.fill();
-    }
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    // A patch of the head's own sphere, so the face wraps the front of it
-    // (a flat card read as a sliver from the high camera).
-    const geoF = new THREE.SphereGeometry(0.0865 * S, 24, 16, Math.PI * 0.15, Math.PI * 0.7, Math.PI * 0.18, Math.PI * 0.62);
-    const m = new THREE.Mesh(geoF, new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
-    m.position.y = 0.55 * S;
-    m.rotation.x = -0.35; // tip the face up a little toward the camera
-    return m;
-  })();
   const lanternMesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.04 * S, 10, 8),
     new THREE.MeshBasicMaterial({ color: 0xffc27a }));
@@ -590,7 +561,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   blob.rotation.x = -Math.PI / 2;
   blob.position.y = 0.01;
   const bodyRig = new THREE.Group();
-  bodyRig.add(body, head, face, lanternMesh);
+  bodyRig.add(body, head, lanternMesh);
   // When something stands between the camera and the figure (a block, or
   // the solid part of a dithered wall), the hidden part of the figure shows
   // through as a dithered, lantern-orange silhouette. GreaterDepth: these
