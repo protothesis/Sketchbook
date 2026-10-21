@@ -29,6 +29,21 @@ doorway to see a ghosted preview of the space beyond, then **Accept** or
 pinch to zoom. Export an expedition as JSON, then re-import it to replay it
 cell-for-cell. The current expedition autosaves in your browser.
 
+**Walk mode:** open `play.html` to walk the same expedition in 3D with
+WASD (or drag on touch). Every closed door is unresolved until you push it
+open, and the space behind it assembles as the door swings. Spend
+**entropy** to close a door you opened and collapse everything beyond it
+(reopening rerolls). Shards refill entropy, and a rare key opens a locked
+door, which ends the walk on the expedition record. The design and the
+tunables are in [`PLAY.md`](PLAY.md).
+
+**Playtesting over the network:** serve the repo with
+`python tools/serve.py` (from the repo root; port 8791 by default) and open
+`http://<your IP>:8791/sketches/procedural-dungeon-engine/play.html`. It
+sends no-cache headers, so every machine always gets the current files.
+Plain `python -m http.server` lets browsers keep stale scripts. If a page
+still looks wrong, hard-refresh it (Ctrl+Shift+R, Cmd+Shift+R on a Mac).
+
 Headless engine check: `node stress-test.js [expansions] [runs]`.
 
 ## Structure
@@ -39,12 +54,17 @@ engine/          pure data + logic, no DOM; also loads under Node
   shapes.js        grid helpers + chamber / corridor / stub generators
   expedition.js    createExpedition, expand, commit, revert, setCaps,
                    replay, exportRecord, importRecord, stats
-app/             the prototype renderer, one possible client of the engine
+app/             clients of the engine
   renderer.js      Canvas 2D top-down map, hit-testing, pan/zoom
   app.js           controls, inspector, pointer input, autosave
   styles.css
+  play-rules.js    walk mode's game rules: seeded loot + locks, collapse cost
+  play.js          walk mode: three.js world, shadows, collision, doors, HUD
+  play.css
+vendor/three/    three.js r160 classic build (walk mode only)
 stress-test.js   headless milestone checks (Node)
 DESIGN.md        the design brief
+PLAY.md          walk mode's visual + game design parameters
 NOTES.md         implementation decisions
 ```
 

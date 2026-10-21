@@ -139,7 +139,32 @@
         ctx.globalAlpha = 1;
       };
 
+      // Traces of reverted spaces: greyed and dashed, under everything live.
+      const traces = Object.values(exp.traces || {});
+      if (traces.length) {
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = colors.ghost;
+        for (const t of traces) for (const k of t.cells) {
+          const c = DE.parseKey(k);
+          ctx.fillRect(X(c.x), Y(c.y), s + 0.5, s + 0.5);
+        }
+        ctx.globalAlpha = 1;
+      }
+
       for (const id in exp.spaces) drawSpace(exp.spaces[id], false);
+
+      // Live cells standing on a trace carry its imprint: a hatch mark.
+      if (traces.length && s >= 4) {
+        ctx.strokeStyle = colors.ghost;
+        ctx.lineWidth = Math.max(1, s * 0.06);
+        ctx.beginPath();
+        for (const id in exp.spaces) for (const k of exp.spaces[id].cells) {
+          if (!DE.imprintAt(exp, k).length) continue;
+          const c = DE.parseKey(k);
+          ctx.moveTo(X(c.x + 0.25), Y(c.y + 0.75)); ctx.lineTo(X(c.x + 0.75), Y(c.y + 0.25));
+        }
+        ctx.stroke();
+      }
 
       if (toggles.path && selectedId && exp.spaces[selectedId]) {
         const path = DE.pathToRoot(exp, selectedId).map((id) => centroid(exp.spaces[id]));

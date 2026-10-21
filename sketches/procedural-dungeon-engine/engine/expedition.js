@@ -10,15 +10,24 @@
 //                cells: "x,y"[], exits: Exit[], depth, deadEnd, meta,
 //                nextExitIndex }
 //   Connection { id, a:{spaceId,exitId}, b:{spaceId,exitId}, loop }
+//   Trace      { id, seed, parentId, viaExitId, entropy, archetype, cells,
+//                depth, deadEnd, meta, revertedAt }   (a reverted space)
 //   Expedition { version:1, rootSeed, params, spaces, connections,
-//                registry: { "x,y": spaceId }, history: Event[], counters }
+//                registry: { "x,y": spaceId }, history: Event[], counters,
+//                traces: { spaceId: Trace } }
 //   Event      { type:'commit', parentId, viaExitId, entropy, loop? }
 //            | { type:'revert', spaceId }
 //            | { type:'caps', caps }
+//            | { type:'carve', spaceId, cell:{x,y}, facing }   (an exit cut into a wall)
 //
 // Determinism rule: same seed + same registry state => same candidate. Replay
 // re-applies `history` in order from the root, which reproduces every seed,
 // id and cell exactly.
+//
+// Traces: a reverted space is gone from the map, but never forgotten. Its
+// seed and cells stay in `traces` (a branch that existed but wasn't kept).
+// Traces never block placement; clients read them per cell via imprintAt()
+// to show cracks, corruption, ghosts. Replay rebuilds them from history.
 (function (global) {
   'use strict';
 
@@ -56,6 +65,7 @@
       registry: {},
       history: [],
       counters: { space: 0, connection: 0 },
+      traces: {},
     };
     // Space 0: a chamber at the origin, seeded straight from the root seed.
     const seed = hash(exp.rootSeed, 'root');
@@ -365,6 +375,50 @@
     for (const k of space.cells) delete exp.registry[k];
     delete exp.spaces[spaceId];
     exp.history.push({ type: 'revert', spaceId });
+    if (!exp.traces) exp.traces = {};
+    exp.traces[spaceId] = {
+      id: space.id, seed: space.seed, parentId: space.parentId, viaExitId: space.viaExitId,
+      entropy: space.entropy, archetype: space.archetype, cells: space.cells.slice(),
+      depth: space.depth, deadEnd: space.deadEnd, meta: space.meta, revertedAt: exp.history.length - 1,
+    };
+    if (exp._imprints) exp._imprints = null; // keeps it non-enumerable (not exported)
+  }
+
+  /**
+   * Can a new exit be cut into this space's wall at (cell, facing)? The cell
+   * must belong to the space, the edge must be a wall (not open to its own
+   * floor), with no exit there already, and no unopened door on the far side
+   * facing back (open that one instead).
+   */
+  function canCarve(exp, spaceId, cell, facing) {
+    const sp = exp.spaces[spaceId];
+    if (!sp || exp.registry[key(cell.x, cell.y)] !== spaceId) return false;
+    const n = step(cell, facing);
+    const other = exp.registry[key(n.x, n.y)];
+    if (other === spaceId) return false;
+    if (sp.exits.some((e) => e.cell.x === cell.x && e.cell.y === cell.y && e.facing === facing)) return false;
+    if (other !== undefined && exp.spaces[other].exits.some((e) =>
+      e.cell.x === n.x && e.cell.y === n.y && e.facing === OPPOSITE[facing])) return false;
+    return true;
+  }
+
+  /**
+   * Cut a new, unresolved exit into a space's wall: a tool for applications
+   * (walk mode's door chalk). It behaves like any generated exit: expanding
+   * it generates a space (or a loop, if the far side is already a space).
+   * Recorded in history, so replay reproduces it.
+   */
+  function carve(exp, spaceId, cell, facing) {
+    if (!canCarve(exp, spaceId, cell, facing)) throw new Error('Cannot carve an exit at ' + spaceId + ' ' + key(cell.x, cell.y) + facing);
+    const sp = exp.spaces[spaceId];
+    const ex = {
+      id: 'e' + sp.nextExitIndex, index: sp.nextExitIndex,
+      cell: { x: cell.x, y: cell.y }, facing, kind: 'standard', connectionId: null, tags: ['carved'],
+    };
+    sp.nextExitIndex++;
+    sp.exits.push(ex);
+    exp.history.push({ type: 'carve', spaceId, cell: { x: cell.x, y: cell.y }, facing });
+    return ex;
   }
 
   function setCaps(exp, caps) {
@@ -400,6 +454,8 @@
         commit(exp, cand);
       } else if (ev.type === 'revert') {
         revert(exp, ev.spaceId);
+      } else if (ev.type === 'carve') {
+        carve(exp, ev.spaceId, ev.cell, ev.facing);
       } else if (ev.type === 'caps') {
         setCaps(exp, ev.caps);
       }
@@ -433,6 +489,20 @@
 
   // ---------------------------------------------------------------------------
   // Queries
+
+  /**
+   * Every trace lying under a cell, oldest first: [{ id, seed, depth, ... }].
+   * Cached per expedition; any revert clears the cache.
+   */
+  function imprintAt(exp, cellKey) {
+    if (!exp._imprints) {
+      const idx = {};
+      const traces = Object.values(exp.traces || {}).sort((a, b) => a.revertedAt - b.revertedAt);
+      for (const t of traces) for (const k of t.cells) (idx[k] = idx[k] || []).push(t);
+      Object.defineProperty(exp, '_imprints', { value: idx, writable: true, configurable: true, enumerable: false });
+    }
+    return exp._imprints[cellKey] || [];
+  }
 
   function pathToRoot(exp, spaceId) {
     const path = [];
@@ -470,7 +540,7 @@
 
   Object.assign(DE, {
     deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
-    replay, exportRecord, importRecord, rebuildRegistry,
-    pathToRoot, cycleCount, stats, parseKey,
+    canCarve, carve, replay, exportRecord, importRecord, rebuildRegistry,
+    pathToRoot, cycleCount, stats, parseKey, imprintAt,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

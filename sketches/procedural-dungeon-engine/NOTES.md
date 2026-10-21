@@ -67,6 +67,26 @@ Each one is a default that can change.
   becomes unresolved again.
 - A re-opened exit **draws new entropy** next time it's opened. It doesn't
   remember the old result.
+- **Traces** (added 2026-10-20 for walk mode's "rerolls leave a mark"). The
+  reverted space is copied into `exp.traces[id]` (seed, cells, parent, exit,
+  entropy, depth, meta, and `revertedAt` = its history index). Traces are
+  derived state, like the registry: replay rebuilds them, and they never
+  block placement. `imprintAt(exp, key)` indexes them per cell (cached
+  outside the export and cleared on every revert). An application decides
+  what an imprint means; the engine only remembers.
+
+## Carving exits
+
+- `carve(exp, spaceId, cell, facing)` adds an unresolved exit to an
+  existing space's wall, tagged `carved`, and records a
+  `{ type: 'carve', spaceId, cell, facing }` event that replay re-applies.
+  `canCarve` requires the cell to be in the space, the edge to be a wall
+  (not open to the space's own floor), no exit already on that edge, and no
+  unopened exit on the far side facing back.
+- A carved exit then behaves like any generated one. Expanding it seeds a
+  new space from `H(seed | index | entropy)` with the next exit index, or
+  makes a loop if the far cell is already occupied. Walk mode uses it for
+  door chalk; the engine stays rule-free.
 
 ## Caps
 
