@@ -138,6 +138,27 @@ All notable changes to this sketch are logged here, per
   The collapse price is a flat 1 charge per room (was 1 per cell + 2 per
   room, in 15-point charges).
 
+- 2026-10-20: **Chalk marks, doorstones, sigil energy.**
+  - **Chalk marks replace map pins.** Chalk comes in five colours, each
+    with its own mark (silver arrow, gold triangle, crimson cross, teal
+    waves, violet crescent). A stick is 3 strokes, and the hotbar icon
+    loses a third per stroke. F draws on the nearest free quarter-tile ahead
+    (floor or a one-unit block); E on a mark wipes it. Marks show on the
+    maps and persist. You start with one silver stick; more are found in
+    about 1 room in 13.
+  - **Group hotbar slots:** chalk sits in one slot. Click it again or hold
+    it to open a colour picker, or press its number again to cycle. Built
+    to generalise to other items.
+  - **Doorstones** replace door chalk for opening doors in bare walls (same
+    rarity; old saves' door chalk converts).
+  - **The big map is a view only**, and opens zoomed in on you.
+  - **Jars are how you collect ghosts.** Collapses no longer give echoes:
+    ghosts in a collapsed branch (or in a jar that shatters) come undone,
+    tallied with a short log in `run.unmade` for later. Echo pouring is gone.
+  - **Sigil energy:**
+    - stage 1–2: a beam and rising motes
+    - a full jar: a flash, a big beam with a bright core, a radiating floor
+      ring, and a pooled violet point light (no shadows)
 - 2026-10-20: **Locked doors just open** (with a key). The checkpoint
   overlay is gone, but `showRecord` is kept for later. The first room past a
   locked door is marked "beyond a lock": a gold floor warmth, the caption,

@@ -90,42 +90,56 @@ Determinism).
   the figure does, only fainter. The closer
   a ghost is, the more the screen wobbles; contact fills it with purple
   glitch and static. Both hold for a moment once you're clear, then wear
-  off over a few seconds. The only way to be rid of one is to collapse the
-  room it's in: it unravels and leaves an **echo**, a resource that does
-  nothing yet.
+  off over a few seconds. **Jars are how you collect them** (below).
+  Collapsing a room a ghost is in simply undoes it: nothing is gained, but
+  the run keeps a tally and a short log (`run.unmade`) for whatever that
+  becomes later.
 - **The hotbar.** Carried things sit in slots at the bottom of the screen:
-  each jar (with its fill), chalk, echoes, keys. Pick a slot with 1–9, the
-  mouse wheel, or a tap. **E** interacts with the world (doors, climbing,
-  lifting a placed jar). **F** (or "use" on touch) uses the selected item.
+  each jar (with its fill), chalk, doorstones, keys. Pick a slot with 1–9,
+  the mouse wheel, or a tap. **E** interacts with the world (doors,
+  climbing, lifting a placed jar, wiping a chalk mark you're standing on).
+  **F** (or "use" on touch) uses the selected item. Some slots are
+  **groups**: one slot, several variants (for now, chalk colours). Click a
+  selected group again (or press and hold it) to open its picker, or press
+  its number again to cycle.
+- **Chalk marks.** Your own markup, drawn in the world, and it shows up on
+  the maps. Chalk comes in five colours, each with its own simple mark:
+  silver arrow (it points the way you faced), gold triangle, crimson
+  cross, teal waves, violet crescent. A stick is good for **3 strokes**,
+  and its hotbar icon loses a third per stroke. F draws a mark on the
+  nearest free quarter-tile ahead (the floor, or the top of a one-unit
+  block). E, standing on a mark, wipes it. You start with one silver stick,
+  and more turn up in about 1 room in 13 (seeded colour). Marks persist with
+  the run, and vanish with a room you collapse.
 - **Jars.** Found in about 1 room in 15 (depth 1+). F sets one down on the
   nearest free quarter-tile in front of you: on the floor, or on top of a
   one-unit block. It's a small solid thing you can't climb or stand on, and
   ghosts float over it. Nothing prompts you to place one. If there's no
   room (say you're facing a wall), the hotbar gives a little shake, and so
-  does any other F that can't do anything. E lifts it again, with whatever's inside. A jar holds up
-  to 3 hash ghosts, which you can add two ways:
-  - Select echoes and F at a jar to pour one in.
-  - Lead a following ghost into a placed jar and it's caught.
-
-  Collapsing a room with a jar in it shatters the jar, and its ghosts
-  become echoes.
+  does any other F that can't do anything. E lifts it again, with whatever's
+  inside. A jar is a **trap**: lead a following ghost into a placed jar and
+  it's caught (up to 3). A collapse shatters any jar in the branch, and its
+  ghosts come undone.
 - **Sigil tiles.** A glowing hex on the floor of about 1 room in 25 (depth
   1+, not the smallest rooms; never under blocks). It takes up to **four
   jars**, one per quarter of its tile. It wakes **one stage per ghost** in
-  its fullest jar, and **every full jar on it is +1 entropy max** (so up to
-  +4 per sigil) for as long as it stays there and full. Lifting a jar
-  takes its +1 away. Sigils stack.
-- **Echoes** are what's left of a hash ghost once it unravels: when you
-  collapse a room with a ghost in it, or a jar with ghosts in it shatters.
-  One echo is one ghost's worth; pour it into a jar. If the max drops while you're above
-  it, you keep the extra charges until spent but can't gain more.
-- **Door chalk.** A rare find (about 1 room in 33, from depth 2). Select it,
-  face any bare wall, and press F (or tap the prompt) to draw a door there. It's a
-  real, unopened door: opening it generates a room from fresh entropy,
-  or loops into the room behind the wall if there already is one. You can
-  collapse through it like any other. Drawn doors are never locked. The
-  engine records the door (a `carve` event), so replay, export and the
-  chart view all keep it.
+  its fullest jar:
+  - stage 1: a thin shaft of energy with a few rising motes
+  - stage 2: a little more energised
+  - a full jar: a flash, a big beam with a bright core, a ring of energy
+    radiating across the floor, and a violet light (no shadows)
+
+  Every full jar on it is **+1 entropy max** (so up to +4 per sigil) for
+  as long as it stays there and full. Lifting a jar takes its +1 away.
+  Sigils stack. If the max drops while you're above it, you keep the extra
+  charges until spent but can't gain more.
+- **Doorstones.** A rare find (about 1 room in 33, from depth 2). Select
+  one, face any bare wall, and press F (or tap the prompt) to open a door
+  there. It's a real, unopened door: opening it generates a room from
+  fresh entropy, or loops into the room behind the wall if there already
+  is one. You can collapse through it like any other. Such doors are never
+  locked. The engine records the door (a `carve` event), so replay, export
+  and the chart view all keep it.
 - **Locked doors.** Rare, and they appear past depth 3. A key opens one and
   the walk simply goes on. The **first room past a locked door** is special:
   it's worked out from seeds (the door it was opened through was generated
@@ -134,15 +148,9 @@ Determinism).
   on the maps. Nothing more yet: it's a hook. The expedition-record /
   leave-the-dungeon screen (`showRecord`) is still in the code, unused, for
   whatever a lock leads to later.
-- **Map pins.** Markup for the chart: simple coloured circles. You start
-  with 3 silver pins, and more turn up as a semi-rare find (about 1 room in
-  13, seeded colour: gold, crimson, teal or violet). Two ways to use them:
-  - With a pin selected, F drops it on the tile ahead of you (or your own);
-    F on a pinned tile takes it back.
-  - On the big map (M), click a spot to pin it with the chosen colour (the
-    palette in the map's bar picks it), and click a pin to take it back.
-
-  Pins show on the minimap and big map, and persist with the run.
+- **The big map** (M, or tap the minimap) is a view: it opens zoomed in on
+  you (two wheel steps back from the closest zoom); drag to pan, wheel or
+  pinch to zoom.
 
 There's no passive regen and no lose state yet. You can always keep walking
 forward; collapsing is the only thing entropy buys.
@@ -165,10 +173,11 @@ forward; collapsing is the only thing entropy buys.
 | Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
 | Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
 | Hash ghost | translucent violet head with a trailing wisp and four orbiting "bits"; faintly self-lit so you can see one coming | watching you: an amber "?" with a ring (violet and filling while lit, dim and rewinding when not; drawn over walls), slow bits, and an amber dot on the maps. Following you: a purple "!!" whose ring is its cool-down, hotter magenta glow, flicker, jitter, faster bits, and a magenta dot. Off-screen: an edge marker with an arrow. Hidden behind something: a dithered violet silhouette |
-| Door chalk | a tilted white stick; a ✎ slot on the hotbar; a white "draw a door" prompt at a bare wall | the drawn door looks like any other |
-| Hotbar | bottom-centre slots: ⚱ jar (three fill pips), ✎ chalk, ◌ echoes, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
+| Doorstone | a small white slab with a dark doorway in it; a ⌂ slot on the hotbar; a "open a door here" prompt at a bare wall | the door looks like any other |
+| Chalk | sticks in five colours; on the hotbar, one group slot: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
+| Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
+| Hotbar | bottom-centre slots: ⚱ jar (three fill pips), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
 | Jar | a small glass jar with a dark lid; violet wisps bob inside, one per ghost | a solid half-cell |
-| Map pin | a coloured circle with a dark rim and a highlight, on the minimap and big map; in the world, a coloured pinhead on a needle | the big map's bar has the pin palette (counts per colour) |
 | Beyond a lock | a faint gold warmth on the floor, "beyond a lock" in the caption, a gold outline on the maps | |
 | Sigil | a seeded star polygon (pentagram, hexagram, {7/3}, {8/3}) in a double ring with glyph marks, drawn additively | stage 0 a faint violet trace; 1 a dim glow; 2 brighter and flickering; 3 pulsing gold. A +1 max shows as a gold-edged ninth charge slot |
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
@@ -196,11 +205,11 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
 | Climb | push into a block for 0.35 s or press E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
-| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. Collapse a room to unravel its ghosts: +1 echo each |
+| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. A placed jar with room catches a following ghost within 0.38 cells; a collapse just undoes ghosts in the branch (tallied in `run.unmade`) |
 | Collapse price | a flat 1 charge per room in the branch |
-| Door chalk | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (chalk selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
+| Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); capacity 3; F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall; a following ghost within 0.38 cells of a jar with room is caught |
-| Map pins | start with 3 silver; 1/12 of rooms at depth 1+ hold one (seeded on the loot stream, drawn after jars; colour from gold/crimson/teal/violet); F drops on the tile ahead or your own (F again takes it back); big-map click places / takes back |
+| Chalk | start with one silver stick (3 strokes); 1/12 of rooms at depth 1+ hold a stick (seeded on the loot stream, after jars; colour from silver/gold/crimson/teal/violet); F draws on the nearest free quarter ahead (floor or a one-unit block's top, not under a jar, not on another mark); E on a mark wipes it |
 | Beyond a lock | `DP.pastLock(exp, space)`: the room's entry door was generated locked (`lockedBySeed`, ignoring that it's since been opened) |
 | Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 jars (one per quarter); stage = the fullest jar's fill; each full jar on it = entropy max +1 (up to +4), stacking across sigils |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |

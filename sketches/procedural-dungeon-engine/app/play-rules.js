@@ -30,16 +30,16 @@
     lockChancePerDepth: 0.0075,
     lockChanceMax: 0.09,
     lockMinDepth: 3,          // depth of the space the locked door leads out of
-    // Door chalk: draw a door on any wall. About as rare as keys turn out.
+    // Doorstones: open a door in any bare wall. About as rare as keys turn out.
     chalkChance: 0.045,
     chalkMinDepth: 2,
     // Jars hold up to 3 hash ghosts; sigil tiles power up with a filled jar.
     jarChance: 1 / 15,
     jarMinDepth: 1,
     jarCapacity: 3,
-    pinChance: 1 / 12,        // map pins: a semi-rare find (you start with 3 silver)
-    pinMinDepth: 1,
-    pinColors: ['gold', 'crimson', 'teal', 'violet'],
+    stickChance: 1 / 12,      // chalk sticks (3 marks each): semi-rare; you start with one silver
+    stickMinDepth: 1,
+    chalkColors: ['silver', 'gold', 'crimson', 'teal', 'violet'],
     sigilChance: 0.052,       // ~1 room in 25 (small rooms and the root never get one)
     sigilMinDepth: 1,
     chargesPerRoom: 1,        // collapse price: a flat charge per room in the branch
@@ -79,15 +79,15 @@
     }
     // Drawn last so adding it never shifted the rolls above.
     if (r.chance(RULES.chalkChance) && space.depth >= RULES.chalkMinDepth) {
-      items.push({ id: 'chalk', kind: 'chalk', cell: spots[(n + 2) % spots.length] });
+      items.push({ id: 'chalk', kind: 'doorstone', cell: spots[(n + 2) % spots.length] }); // id kept from 'door chalk'
     }
     // Drawn after chalk, so neither the chalk nor anything above shifted.
     if (r.chance(RULES.jarChance) && space.depth >= RULES.jarMinDepth) {
       items.push({ id: 'jar', kind: 'jar', cell: spots[(n + 3) % spots.length] });
     }
-    // Pins come after jars (same reason). Each has a seeded colour.
-    if (r.chance(RULES.pinChance) && space.depth >= RULES.pinMinDepth) {
-      items.push({ id: 'pin', kind: 'pin', color: r.pick(RULES.pinColors), cell: spots[(n + 4) % spots.length] });
+    // Chalk sticks come after jars (same reason). Each has a seeded colour.
+    if (r.chance(RULES.stickChance) && space.depth >= RULES.stickMinDepth) {
+      items.push({ id: 'pin', kind: 'chalk', color: r.pick(RULES.chalkColors), cell: spots[(n + 4) % spots.length] }); // id kept from 'map pin'
     }
     return items;
   }
