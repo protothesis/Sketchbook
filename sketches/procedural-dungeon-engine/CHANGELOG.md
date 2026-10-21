@@ -138,6 +138,9 @@ All notable changes to this sketch are logged here, per
   The collapse price is a flat 1 charge per room (was 1 per cell + 2 per
   room, in 15-point charges).
 
+- 2026-10-20: The figure has a face: a black smiley with a mustache, wrapped on
+  the front of its head (tipped a little toward the camera so it reads from
+  above).
 - 2026-10-20: **Chalk marks, doorstones, sigil energy.**
   - **Chalk marks replace map pins.** Chalk comes in five colours, each
     with its own mark (silver arrow, gold triangle, crimson cross, teal
