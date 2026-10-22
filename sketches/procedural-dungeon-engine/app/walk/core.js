@@ -13,7 +13,8 @@
 // Walk mode is split into classic scripts (no modules: the page has to open
 // from file://), which play.html loads in this order:
 //
-//   core, world, figure, items, restore, actions, input, ghosts, fx, hud, main
+//   core, world, figure, items, restore, waystones, actions, input, ghosts, fx,
+//   hud, main
 //
 // Each file is its own IIFE sharing one namespace, DungeonPlay.walk ("W").
 // A file takes what it needs from earlier files by destructuring W at the
@@ -115,6 +116,8 @@
     push: { key: null, t: 0 },
     pushBlocks: [],      // push blocks in built rooms (see restore.js)
     sconces: [],         // sconces in built rooms (see restore.js)
+    waystones: [],       // waystones in built halls (see waystones.js)
+    gutter: null,        // { t } while the lamp is guttering out
     time: 0,
     minimap: true,
     bigmap: null,        // { cx, cy, px } while the enlarged map is open
@@ -145,6 +148,9 @@
       doorstones: 0,         // open a door in a bare wall
       pushed: {},            // push blocks moved: { "spaceId:seed:id": { sx, sy, done } }
       lit: {},               // sconces lit: { "spaceId:seed:id": true }
+      waystones: {},         // waystones woken: { "spaceId:seed": true } (the starter's is always awake)
+      hearth: null,          // "spaceId:seed" of the waystone you last woke or used: where you wake
+      surfaced: false,       // went up the surface door (the record shows until you go back down)
     };
   }
 

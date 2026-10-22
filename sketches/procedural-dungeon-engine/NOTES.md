@@ -88,6 +88,34 @@ Each one is a default that can change.
   makes a loop if the far cell is already occupied. Walk mode uses it for
   door chalk; the engine stays rule-free.
 
+## Halls, reserves and the surface exit
+
+Added 2026-10-22 for walk mode's waypoints (see `GAME-DESIGN.md`).
+
+- **Halls** (`hallCells`) aren't grown from a door. They're placed whole, in
+  plain grid coordinates: a rectangle with notched corners. New
+  expeditions' root is one (`params.starter: 'hall'`, centred on the
+  origin). Records without `starter` replay with their root chamber, so old
+  saves are unchanged.
+- **Reserves** claim cells ahead of time: `reserve(exp, { seed, kind,
+  cells, ...data })` records a `reserve` history event; extra fields (walk
+  mode's `pin` and `tier`) are kept as-is. `reservedAt` indexes waiting
+  reserves per cell (non-enumerable cache, like imprints).
+  - `fits` treats waiting reserve cells as taken, so nothing grows into
+    them.
+  - `expand` into a waiting reserve builds that space from the reserve's
+    own seed and cells, whatever door you came by. No entropy, so the
+    commit event has `entropy: null`, and replay lands in the same branch.
+  - `exitSlotOk` always keeps a door facing a reserve, and `buildSpace`
+    adds one door into each reserve a new space touches (no draws, so
+    spaces away from reserves are unchanged).
+  - Reverting a reserved space puts the reserve back to waiting.
+- **The surface exit** is an `Exit` with `kind: 'surface'`, on a north
+  wall of the root hall. `expand` refuses it, `stats` doesn't count it as
+  open, and the chart view neither draws it as openable nor lets you click
+  it. Nothing keeps rooms from being built on its far side (it never
+  opens, so that's harmless).
+
 ## Caps
 
 - `maxSpaces`, `maxArea` (cells) and `maxDepth`. Once one is reached, every

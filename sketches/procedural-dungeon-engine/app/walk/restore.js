@@ -6,16 +6,14 @@
 
   const W = global.DungeonPlay.walk;
   const { DE, DP, RULES, THREE, S, RADIUS, UNIT, WALL_T, ekey, scene, state, savePlayer, easeOut,
-    maxCharges, ITEMS, inDoorMouth } = W;
+    maxCharges, inDoorMouth } = W;
 
   const SLIDE_TIME = 0.22; // seconds for a push to slide one half-cell
 
   const pushGeo = {
     block: new THREE.BoxGeometry(0.5 * S * 0.98, UNIT * S, 0.5 * S * 0.98),
-    inset: new THREE.PlaneGeometry(0.5 * S * 0.6, 0.5 * S * 0.6),
     mark: new THREE.PlaneGeometry(0.5 * S * 0.94, 0.5 * S * 0.94),
   };
-  const stoneMat = new THREE.MeshLambertMaterial({ color: 0x8c8474, emissive: 0x15120d });
 
   // The floor mark: a square outline with corner ticks, in the block's colour.
   const markTex = {};
@@ -65,20 +63,18 @@
       mark.position.set((pb.to.sx / 2 + 0.25) * S - markTile.position.x, 0.062, (pb.to.sy / 2 + 0.25) * S - markTile.position.z);
       markTile.add(mark);
 
+      // The whole block takes its colour (programmer art for now).
       const mesh = new THREE.Group();
-      const body = new THREE.Mesh(pushGeo.block, stoneMat);
+      const bodyMat = new THREE.MeshLambertMaterial({ color: col, emissive: col.clone().multiplyScalar(0.12) });
+      const body = new THREE.Mesh(pushGeo.block, bodyMat);
       body.castShadow = body.receiveShadow = true;
       body.position.y = UNIT * S / 2;
-      const insetMat = new THREE.MeshLambertMaterial({ color: col, emissive: col.clone().multiplyScalar(0.15) });
-      const inset = new THREE.Mesh(pushGeo.inset, insetMat);
-      inset.rotation.x = -Math.PI / 2;
-      inset.position.y = UNIT * S + 0.004;
-      mesh.add(body, inset);
+      mesh.add(body);
       rec.group.add(mesh);
 
       const b = {
         key, spaceId: space.id, push: true, units: 1, top: UNIT, color: col,
-        to: pb.to, done: !!(saved && saved.done), mesh, insetMat, markMat,
+        to: pb.to, done: !!(saved && saved.done), mesh, bodyMat, markMat,
         tile: tileAt[cellOf(pb.from.sx, pb.from.sy)], slide: null,
       };
       const at = saved ? { sx: saved.sx, sy: saved.sy } : pb.from;
@@ -125,7 +121,7 @@
   /** Home: the block locks in place, its mark lights up, and the room pays entropy. */
   function settle(b, now) {
     b.done = true;
-    b.insetMat.emissive.copy(b.color).multiplyScalar(0.9);
+    b.bodyMat.emissive.copy(b.color).multiplyScalar(0.55);
     b.markMat.opacity = 1;
     if (!now) return;
     const run = state.run, gain = Math.max(0, Math.min(RULES.restoreCharges, maxCharges() - run.charges));
@@ -188,8 +184,8 @@
 
   // ---------------------------------------------------------------------------
   // Sconces: unlit on a room's walls. E at one lights it from your lantern,
-  // for a shard of entropy, once. A lit sconce burns for good and lights the
-  // room around it.
+  // which costs a shard of entropy. A lit sconce burns for good, lights the
+  // room around it, and stops the room draining your lamp.
 
   const SCONCE_Y = 0.78;     // cells above the floor
   const SCONCE_OUT = 0.12;   // cells from the wall's inner face to the flame
@@ -255,15 +251,15 @@
     return best;
   }
 
+  /** Lighting a sconce takes a shard of your lamp's flame; the room never drains the lamp again. */
   function lightSconce(sc) {
     const run = state.run;
+    if (!W.spendShards(RULES.sconceCost)) { W.showCaption('your lamp is too low to share its flame'); return; }
     sc.lit = true;
     sc.flame.visible = true;
     run.lit[sc.key] = true;
     run.restored = (run.restored || 0) + 1;
-    let caption = '';
-    for (let i = 0; i < RULES.sconceShards; i++) caption = ITEMS.shard.take(run);
-    W.showCaption('the sconce catches · ' + caption);
+    W.showCaption(`the sconce catches · −${RULES.sconceCost} shard · this room won't drain your lamp`);
     savePlayer();
     W.refreshHud();
   }

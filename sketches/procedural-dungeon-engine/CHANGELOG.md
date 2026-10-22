@@ -266,6 +266,38 @@ All notable changes to this sketch are logged here, per
   restoration, so a thorough player earns a charge every ~2.5 rooms, most
   of it by restoring. Rooms that held a shard may now not, and items that
   came after the shards in a room's loot can sit on a different tile.
+- 2026-10-22: **A goal and a clock** (the second slice of
+  [`GAME-DESIGN.md`](GAME-DESIGN.md), sections 7–10, written up the same
+  day).
+  - **Halls**, a new archetype: big, with notched corners. New expeditions
+    start in one (`params.starter: 'hall'`), with at least two doors, a
+    **surface door** (`Exit.kind: 'surface'`, never expands; walk mode asks
+    "Up to the surface (quit game)?" and shows the expedition record until
+    you go back down) and an awake waystone. Older saves keep their root
+    chamber.
+  - **Reserved footprints** in the engine (`DE.reserve`, a `'reserve'`
+    history event, `exp.reserves`). Ordinary rooms never grow into one; a
+    door into it builds the reserved space from its own seed; any room built
+    against one gets a door into it. Replay, export and the chart view keep
+    them. The stress test now reserves footprints too.
+  - **Waypoints**: sets of three hall footprints (two near, one far,
+    `DP.waypointSet`), shown as a glowing violet "?" on both maps (pinned to
+    the edge when off the map), not at the footprint's exact centre. The
+    first set comes from the starter hall; opening a door into a waypoint's
+    hall reveals the next set, out past it. A setpiece hall is committed on
+    arrival and always holds three push blocks (in different colours), at
+    least one sconce and a waystone.
+  - **Waystones**: small monoliths with seeded glyphs. Wake one for 1
+    charge; E at an awake one travels to another (free). New file
+    `app/walk/waystones.js`, loaded after `restore.js`.
+  - **The lamp burns entropy**: a shard every 12 s in a dark room, nothing
+    in a lit one (a lit sconce or an awake waystone). It dims on the last
+    charge; when it runs out it gutters, the world fades out, and you wake
+    at your last waystone with 2 charges, keeping everything else.
+- 2026-10-22: **Lighting a sconce costs a shard** instead of paying one; in
+  return its room never drains the lamp.
+- 2026-10-22: **Push blocks are solid colour** (the whole block, not a
+  coloured top). Programmer art for now.
 
 ### Fixed
 

@@ -32,7 +32,16 @@
         cls = 'chalk';
         text = `${it.kind === 'chalk' ? `a stick of ${it.color || 'silver'} chalk` : 'a doorstone'} · ${verb} to take it`;
       } else if (near.action === 'light') {
-        text = `an unlit sconce · ${verb} to light it from your lantern`;
+        text = `an unlit sconce · ${verb} to light it from your lantern (${RULES.sconceCost} shard)`;
+      } else if (near.action === 'wake') {
+        cls = 'collapse';
+        text = `a dormant waystone · ${verb} to wake it (${chargeText(RULES.waystoneCharges)})`;
+      } else if (near.action === 'travel') {
+        cls = 'collapse';
+        text = `a waystone · ${verb} to travel`;
+      } else if (near.action === 'surface') {
+        cls = 'surface';
+        text = `a door up to the surface · ${verb}`;
       } else if (near.action === 'pull') {
         cls = 'jar';
         text = `a block out of place · push it home, or ${verb} to pull`;
@@ -227,7 +236,7 @@
           continue;
         }
         if (conn && !conn.loop && !DP.childThrough(exp, id, ex)) continue; // the side that opened it draws it
-        ctx.fillStyle = conn ? '#5fbf7a' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
+        ctx.fillStyle = conn ? '#5fbf7a' : ex.kind === 'surface' ? '#dcebff' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
         ctx.fillRect(ox + Math.min(ax, bx) * px - (ay === by ? 0 : t), oy + Math.min(ay, by) * px - (ay === by ? t : 0),
           Math.abs(bx - ax) * px + (ay === by ? 0 : 2 * t), Math.abs(by - ay) * px + (ay === by ? 2 * t : 0));
         if (!conn) {
@@ -254,6 +263,45 @@
       ctx.lineWidth = Math.max(1, px * 0.05);
       ctx.strokeStyle = 'rgba(10, 8, 14, 0.85)';
       ctx.stroke();
+    }
+    // Waystones: a small slab, glowing when awake.
+    for (const st of state.waystones) {
+      const mx = ox + (st.ws.x0 + st.ws.x1) / 2 * px, my = oy + (st.ws.y0 + st.ws.y1) / 2 * px;
+      const sw = Math.max(4, px * 0.32), sh = Math.max(7, px * 0.62);
+      ctx.save();
+      if (st.awake) { ctx.shadowColor = 'rgba(165, 140, 255, 0.9)'; ctx.shadowBlur = 8; }
+      ctx.fillStyle = st.awake ? '#cdbfff' : '#7d7888';
+      ctx.fillRect(mx - sw / 2, my - sh / 2, sw, sh);
+      ctx.restore();
+    }
+    // Waypoints still waiting: a glowing violet "?", pinned to the edge
+    // when it's off the map so you always know which way to go.
+    for (const r of W.waitingPins()) {
+      let mx = ox + r.pin.x * px, my = oy + r.pin.y * px;
+      const m = 12, off = mx < m || mx > w - m || my < m || my > h - m;
+      if (off) {
+        // Slide toward the centre along the line from it, to the edge.
+        const dx = mx - w / 2, dy = my - h / 2;
+        const k = Math.min((w / 2 - m) / Math.abs(dx || 1e-6), (h / 2 - m) / Math.abs(dy || 1e-6));
+        mx = w / 2 + dx * k; my = h / 2 + dy * k;
+      }
+      const s = off ? 13 : Math.max(16, px * 1.1);
+      ctx.save();
+      ctx.globalAlpha = off ? 0.75 : 1;
+      ctx.shadowColor = 'rgba(176, 120, 255, 0.95)';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = 'rgba(122, 70, 220, 0.9)';
+      ctx.fillRect(mx - s / 2, my - s / 2, s, s);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#d9c8ff';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(mx - s / 2, my - s / 2, s, s);
+      ctx.fillStyle = '#f4eeff';
+      ctx.font = `bold ${Math.round(s * 0.7)}px Georgia, serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('?', mx, my + 1);
+      ctx.restore();
     }
     // Hash ghosts watching you (amber) or following you (magenta).
     for (const g of state.ghosts) {
@@ -383,12 +431,14 @@
     let deepest = 0;
     for (const id in exp.spaces) deepest = Math.max(deepest, exp.spaces[id].depth);
 
-    const out = mode === 'extracted';
-    $('done-kicker').textContent = out ? 'expedition record' : 'checkpoint';
-    $('done-title').textContent = out ? 'You left the dungeon.' : 'The locked door gives.';
-    $('done-lede').textContent = out
-      ? 'What you charted stays charted.'
-      : 'Beyond it the dungeon goes on. Continue down, or leave with what you have charted.';
+    const out = mode === 'extracted', up = mode === 'surface';
+    $('done-kicker').textContent = out || up ? 'expedition record' : 'checkpoint';
+    $('done-title').textContent = up ? 'You climbed back to the surface.' : out ? 'You left the dungeon.' : 'The locked door gives.';
+    $('done-lede').textContent = up
+      ? 'The dungeon will be here when you go back down. What you charted stays charted.'
+      : out
+        ? 'What you charted stays charted.'
+        : 'Beyond it the dungeon goes on. Continue down, or leave with what you have charted.';
     $('done-seed').textContent = exp.rootSeed;
     const list = $('done-chain');
     list.innerHTML = '';
@@ -404,7 +454,8 @@
     }
     const last = el('li', 'door');
     last.append(el('span', 'sid', '⟶'),
-      el('span', 'hash', `locked door ${spaceId}/${exitId}, unlocked${out ? '. left the dungeon here' : ''}`));
+      el('span', 'hash', up ? `the surface door ${spaceId}/${exitId}. up to the surface`
+        : `locked door ${spaceId}/${exitId}, unlocked${out ? '. left the dungeon here' : ''}`));
     list.append(last);
 
     const mins = Math.floor(run.walked / 60), secs = Math.floor(run.walked % 60);
@@ -414,6 +465,9 @@
       ['shards found', run.shardsFound], ['keys found', run.keysFound], ['checkpoints', run.keysUsed], ['doors drawn', run.chalkUsed],
       ['collapses', run.collapses], ['rooms collapsed', run.roomsCollapsed], ['charges spent', run.chargesSpent],
       ['charges left', `${run.charges} + ${run.shards}/${RULES.shardsPerCharge}`],
+      ['waystones awake', state.waystones.filter((o) => o.awake).length],
+      ['waypoints reached', Object.values(exp.reserves || {}).filter((r) => r.spaceId).length],
+      ['lamp gutters', run.gutters || 0],
       ['time walked', `${mins}:${String(secs).padStart(2, '0')}`],
     ];
     const dl = $('done-stats');
@@ -424,8 +478,10 @@
       dl.append(cell);
     }
 
-    for (const id of ['done-continue', 'done-leave']) $(id).hidden = out;
-    for (const id of ['done-new', 'done-chart']) $(id).hidden = !out;
+    $('done-continue').hidden = out;
+    $('done-continue').textContent = up ? 'Go back down' : 'Continue down';
+    $('done-leave').hidden = out || up;
+    for (const id of ['done-new', 'done-chart']) $(id).hidden = !(out || up);
     state.paused = true;
     keys.clear();
     $('done').hidden = false;
@@ -439,9 +495,45 @@
 
   $('done-continue').addEventListener('click', () => {
     const d = recordDoor;
+    if (state.recordMode === 'surface') { // back down the stairs, into the starter hall
+      state.run.surfaced = false;
+      savePlayer();
+      hideRecord();
+      return;
+    }
     hideRecord();
     if (d && state.exp.spaces[d.spaceId]) openDoor(d.spaceId, d.exitId);
   });
+
+  // ---------------------------------------------------------------------------
+  // A small modal: a question and a few buttons (the surface door, waystone
+  // travel). Walking pauses while it's open; Escape closes it.
+
+  function openDialog(o) {
+    $('dialog-kicker').textContent = o.kicker || '';
+    $('dialog-title').textContent = o.title;
+    $('dialog-text').textContent = o.text || '';
+    const box = $('dialog-buttons');
+    box.innerHTML = '';
+    for (const b of o.buttons) {
+      const btn = el('button', 'btn' + (b.primary ? ' primary' : '') + (b.quiet ? ' quiet' : ''), b.label);
+      btn.type = 'button';
+      btn.addEventListener('click', () => { closeDialog(); if (b.onClick) b.onClick(); });
+      box.append(btn);
+    }
+    state.dialog = true;
+    state.paused = true;
+    keys.clear();
+    $('dialog').hidden = false;
+    const first = box.querySelector('button');
+    if (first) first.focus();
+  }
+  function closeDialog() {
+    if (!state.dialog) return;
+    state.dialog = false;
+    state.paused = false;
+    $('dialog').hidden = true;
+  }
   $('done-leave').addEventListener('click', () => {
     state.run.extracted = Object.assign({}, recordDoor);
     savePlayer();
@@ -461,5 +553,5 @@
 
   Object.assign(W, { verbF, updatePrompt, showCaption, stanceEl, refreshHud, notice,
     REFRESH_HINT, drawMinimap, openBigMap, closeBigMap, drawBigMap, showRecord,
-    hideRecord });
+    hideRecord, openDialog, closeDialog });
 })(window);

@@ -60,6 +60,26 @@
     return { archetype: 'corridor', cells, dims: { len, bend, side }, end };
   }
 
+  /**
+   * Hall: a big w x d rectangle with notched corners, in plain grid
+   * coordinates (0..w-1, 0..d-1). Halls aren't grown from a door: they're
+   * placed whole (the root, and waypoint footprints reserved ahead of time).
+   */
+  function hallCells(rng, min, max) {
+    const w = rng.int(min, max), d = rng.int(min, max);
+    const cut = new Set();
+    for (const [cx, cy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      if (!rng.chance(0.65)) continue;
+      const nw = rng.int(1, 2), nd = rng.int(1, 2);
+      for (let j = 0; j < nd; j++) for (let i = 0; i < nw; i++) {
+        cut.add(key(cx ? w - 1 - i : i, cy ? d - 1 - j : j));
+      }
+    }
+    const cells = [];
+    for (let y = 0; y < d; y++) for (let x = 0; x < w; x++) if (!cut.has(key(x, y))) cells.push({ x, y });
+    return { cells, w, d };
+  }
+
   function stubShape() {
     return { archetype: 'stub', cells: [{ u: 0, v: 0 }], dims: {}, end: null };
   }
@@ -106,7 +126,7 @@
   Object.assign(DE, {
     DIRS, FACINGS, OPPOSITE, RIGHT_OF,
     key, parseKey, step,
-    chamberShape, corridorShape, stubShape,
+    chamberShape, corridorShape, hallCells, stubShape,
     placeShape, boundarySlots,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

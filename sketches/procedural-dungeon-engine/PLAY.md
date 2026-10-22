@@ -97,8 +97,37 @@ Determinism).
   Collapsing a room a ghost is in simply undoes it: nothing is gained, but
   the run keeps a tally and a short log (`run.unmade`) for whatever that
   becomes later.
+- **Halls and waypoints.** New expeditions start in a **hall**: a big room
+  with notched corners, an awake **waystone**, at least two doors and a
+  pale **surface door** on a north wall. Three violet **"?" pins** on the
+  map are **waypoints**, two near and one far: each marks a hall reserved
+  ahead of time (the footprint isn't shown, and the pin isn't at its
+  exact centre). Off the edge of the map, a pin sits on the edge, pointing
+  the way. Ordinary rooms grow around a footprint, never into it, and any
+  room built against one gets a door into it. Open that door and you're
+  there: the hall holds from the moment you arrive (no rerolling it), and
+  three new pins appear, out past it. A waypoint's hall always has three
+  push blocks, at least one sconce and a dormant waystone, plus anything
+  else a room can hold. See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections 8
+  and 9.
+- **Waystones.** A small slab with seeded glyphs, in the middle of a hall.
+  E at a dormant one wakes it for **1 charge** (the glyphs glow). E at an
+  awake one lists the other awake waystones; pick one to travel there
+  (free). The last waystone you woke or used is where you wake if your lamp
+  runs out. The starter hall's is always awake.
+- **The lamp burns entropy.** In a dark room, your lamp burns a shard every
+  12 s; in a lit room (a lit sconce, or an awake waystone) it doesn't, and
+  the meter's label stops pulsing. Rerolls draw on the same pool. With 3
+  shards or fewer left the lantern dims and flickers. When it runs out it
+  gutters, the world fades to black, and you wake at your last waystone
+  with 2 charges. Everything else stays: the map, what you carry, what you
+  restored.
+- **The surface door.** Only in the starter hall. Opening it asks "Up to
+  the surface (quit game)?" Going up saves and shows the expedition record
+  (it stays up across reloads) until you choose to go back down. A
+  placeholder for whatever lies above the dungeon.
 - **Push blocks (restoration).** About 1 room in 5 (depth 1+) has a stone
-  block with a coloured top that's out of place, and a matching coloured
+  block in a solid colour that's out of place, and a matching coloured
   square on the floor where it belongs, in the same row or column. Walk into
   the block for a beat and it slides half a cell. E, facing it, pulls it one
   half-cell toward you (you step back), which is how a block shoved into a
@@ -111,8 +140,9 @@ Determinism).
 - **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
   sconce on a wall, chambers sometimes two. Never on a south wall: the
   camera looks north and would only see its back. E, facing one in your
-  room, lights it from your lantern for **1 shard**, once. A lit sconce
-  burns for good (saved with the run) and lights the room around it: the
+  room, lights it from your lantern, which **costs 1 shard**. A lit sconce
+  burns for good (saved with the run), stops its room draining your lamp,
+  and lights the room around it: the
   three lit sconces nearest you get real lights (a fixed pool, so lighting
   more never recompiles materials). Doors carved later through a sconce's
   wall take the sconce's place.
@@ -188,8 +218,9 @@ Determinism).
   you (two wheel steps back from the closest zoom); drag to pan, wheel or
   pinch to zoom.
 
-There's no passive regen and no lose state yet. You can always keep walking
-forward; collapsing is the only thing entropy buys.
+There's no passive regen. Entropy buys rerolls, waking waystones and
+lighting sconces, and the lamp burns it. Running out isn't a loss, only a
+trip back to your last waystone.
 
 ## Visual parameters
 
@@ -225,6 +256,11 @@ forward; collapsing is the only thing entropy buys.
 | Tools lying | a chalk stick on its side, a doorstone on its back (doorway inset up), at a seeded angle | still; E within 0.55 cells takes one |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
 | Captions | a short typewriter-style log line when you enter a space | e.g. "s7 · chamber · damp · depth 3" (the Navidson Record feel) |
+| Waypoint pin | a violet square with a "?" and a glow, on both maps; off the map, a smaller one on the edge in its direction | |
+| Waystone | a grey slab, 0.38 × 0.18 cells, 2.5 units tall, with five seeded glyphs on its north and south faces; awake, the glyphs glow violet and pulse slowly | on the maps, a small slab, glowing when awake |
+| Surface door | weathered pale panel with a daylight-white seam | white on the maps |
+| Push block | the whole block in its colour; home, it glows | |
+| Low lamp | at 3 shards or fewer, the lantern dims (to about a third at 0) and flickers; guttering fades it out and the world to black over ~1 s | the entropy label pulses orange while the lamp burns |
 
 ## Game parameters
 
@@ -236,8 +272,12 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Open a door | walk into it for 0.35 s, or press E / tap the prompt |
 | Entropy | whole charges: start with 2, hold up to 8; 3 shards make 1 charge |
 | Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
-| Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); home = 1 charge, once |
-| Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second), never on south walls; lit = 1 shard, once |
+| Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 1 charge, once |
+| Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second; halls: always one, 50% a second), never on south walls; lighting one costs 1 shard and stops the room draining the lamp |
+| Lamp | burns 1 shard every 12 s in a dark room (no lit sconce, no awake waystone); dims at 3 shards or fewer; out: wake at your last waystone with 2 charges |
+| Halls | starter: 6–8 cells a side; waypoints: 7–9; corners notched (65% each, 1–2 cells). Waypoint halls: 3 push blocks, 1–2 sconces, a waystone; loot as a chamber |
+| Waypoints | sets of 3: two near (10–15 cells centre to centre), one far (22–30), with a free ring around each; from the root, spread all round; from a hall, fanned outward. Pin within ±2 cells of the centre |
+| Waystones | wake: 1 charge; travel: free, awake to awake only |
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |

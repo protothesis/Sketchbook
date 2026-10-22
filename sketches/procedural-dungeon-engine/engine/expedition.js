@@ -6,19 +6,32 @@
 //
 //   Exit       { id, index, cell:{x,y}, facing:'N'|'E'|'S'|'W', kind,
 //                connectionId|null, loopMade?, tags? }
+//                kind: 'standard', or 'surface' (leads out of the dungeon;
+//                never expands)
 //   Space      { id, seed, parentId, viaExitId, entropy, archetype,
 //                cells: "x,y"[], exits: Exit[], depth, deadEnd, meta,
-//                nextExitIndex }
+//                nextExitIndex, reserveId? }
 //   Connection { id, a:{spaceId,exitId}, b:{spaceId,exitId}, loop }
 //   Trace      { id, seed, parentId, viaExitId, entropy, archetype, cells,
 //                depth, deadEnd, meta, revertedAt }   (a reverted space)
+//   Reserve    { id, seed, kind, cells: "x,y"[], spaceId|null, ...data }
+//                (cells claimed ahead of time for a space that isn't there
+//                yet; extra fields are the application's, kept as-is)
 //   Expedition { version:1, rootSeed, params, spaces, connections,
 //                registry: { "x,y": spaceId }, history: Event[], counters,
-//                traces: { spaceId: Trace } }
+//                traces: { spaceId: Trace }, reserves: { id: Reserve } }
 //   Event      { type:'commit', parentId, viaExitId, entropy, loop? }
 //            | { type:'revert', spaceId }
 //            | { type:'caps', caps }
 //            | { type:'carve', spaceId, cell:{x,y}, facing }   (an exit cut into a wall)
+//            | { type:'reserve', reserve }   (a footprint claimed ahead of time)
+//
+// Reserves: an application can claim a footprint before anything stands
+// there (walk mode's waypoints). Ordinary spaces never grow into it. A door
+// whose far cell is reserved opens into the reserved space itself, built
+// from the reserve's own seed and cells (so it's the same whichever door
+// you reach it by), and any space built against a footprint gets a door
+// into it.
 //
 // Determinism rule: same seed + same registry state => same candidate. Replay
 // re-applies `history` in order from the root, which reproduces every seed,
@@ -52,6 +65,9 @@
       maxSpaces: null,
       maxArea: null,
       maxDepth: null,
+      // The root room. Records from before halls have no `starter`, so
+      // their replays keep the root chamber they were made with.
+      starter: 'hall',
     };
   }
 
@@ -64,18 +80,37 @@
       connections: {},
       registry: {},
       history: [],
-      counters: { space: 0, connection: 0 },
+      counters: { space: 0, connection: 0, reserve: 0 },
       traces: {},
+      reserves: {},
     };
-    // Space 0: a chamber at the origin, seeded straight from the root seed.
+    // Space 0 at the origin, seeded straight from the root seed: a hall
+    // (with a door up to the surface), or a chamber in older records.
     const seed = hash(exp.rootSeed, 'root');
     const rng = createRng(seed);
-    const shape = DE.chamberShape(rng, exp.params);
-    const placed = DE.placeShape(shape, { x: 0, y: 0 }, 'N');
+    let placed;
+    if (exp.params.starter === 'hall') {
+      const h = DE.hallCells(rng, 6, 8);
+      const ox = Math.floor(h.w / 2), oy = Math.floor(h.d / 2);
+      placed = { archetype: 'hall', cells: h.cells.map((c) => ({ x: c.x - ox, y: c.y - oy })), end: null };
+    } else {
+      placed = DE.placeShape(DE.chamberShape(rng, exp.params), { x: 0, y: 0 }, 'N');
+    }
     const space = buildSpace(exp, rng, {
       id: 's0', seed, parentId: null, viaExitId: null, entropy: null, depth: 0,
       placed, entry: null, deadEnd: false, minExits: 2,
     });
+    if (exp.params.starter === 'hall') {
+      // The surface door: on a north wall, where the camera sees it.
+      const used = new Set(space.exits.map((e) => key(e.cell.x, e.cell.y)));
+      const north = DE.boundarySlots(space.cells).filter((s) => s.facing === 'N' && !used.has(key(s.cell.x, s.cell.y)));
+      const slot = north[Math.floor(rng.next() * north.length)];
+      space.exits.push({
+        id: 'e' + space.nextExitIndex, index: space.nextExitIndex,
+        cell: { x: slot.cell.x, y: slot.cell.y }, facing: 'N', kind: 'surface', connectionId: null,
+      });
+      space.nextExitIndex++;
+    }
     writeSpace(exp, space);
     exp.counters.space = 1;
     // Caps go through history so replay sees them change at the right moment.
@@ -90,6 +125,7 @@
     const b = step(slot.cell, slot.facing);
     const bk = key(b.x, b.y);
     if (ownSet.has(bk) || bk === forbidKey) return false;
+    if (reservedAt(exp, bk)) return true; // a way into a reserved footprint
     // Facing into an existing space: keep it only sometimes, as a loop door.
     if (exp.registry[bk] !== undefined) return rng.chance(exp.params.loopChance);
     return true;
@@ -112,6 +148,7 @@
       meta: {},
       nextExitIndex: 0,
     };
+    if (o.reserveId) space.reserveId = o.reserveId;
     const usedCells = new Set();
     const addExit = (cell, facing) => {
       const ex = {
@@ -150,6 +187,8 @@
         count = 1 + Math.floor(rng.next() * exp.params.exitBias * 1.5);
       } else if (space.archetype === 'corridor') {
         count = rng.chance(0.2) ? 1 : 0;
+      } else if (space.archetype === 'hall') {
+        count = 2 + Math.floor(rng.next() * 2);
       } else {
         count = 0;
       }
@@ -161,6 +200,15 @@
         if (!exitSlotOk(exp, rng, ownSet, slot, forbid)) continue;
         addExit(slot.cell, slot.facing);
         count--;
+      }
+      // Built against a reserved footprint: always at least one door into
+      // it. No draws, so spaces nowhere near a reserve are unchanged.
+      const into = (ex) => { const b = step(ex.cell, ex.facing); return reservedAt(exp, key(b.x, b.y)); };
+      for (const slot of DE.boundarySlots(cells)) {
+        const res = into(slot);
+        if (!res || usedCells.has(key(slot.cell.x, slot.cell.y))) continue;
+        if (space.exits.some((ex) => into(ex) === res)) continue;
+        addExit(slot.cell, slot.facing);
       }
     }
 
@@ -180,9 +228,52 @@
 
   function fits(exp, placed) {
     for (const c of placed.cells) {
-      if (exp.registry[key(c.x, c.y)] !== undefined) return false;
+      const k = key(c.x, c.y);
+      if (exp.registry[k] !== undefined || reservedAt(exp, k)) return false;
     }
     return true;
+  }
+
+  /**
+   * The reserve still waiting on this cell (nothing built there yet), or
+   * null. Indexed per expedition; reserving, committing a reserved space
+   * and reverting one clear the index.
+   */
+  function reservedAt(exp, cellKey) {
+    if (!exp.reserves) return null;
+    if (!exp._reserved) {
+      const idx = {};
+      for (const id in exp.reserves) {
+        const r = exp.reserves[id];
+        if (!r.spaceId) for (const k of r.cells) idx[k] = r;
+      }
+      Object.defineProperty(exp, '_reserved', { value: idx, writable: true, configurable: true, enumerable: false });
+    }
+    return exp._reserved[cellKey] || null;
+  }
+  function clearReserved(exp) { if (exp._reserved) exp._reserved = null; }
+
+  /** Could these cells be reserved? None built on or already reserved. */
+  function canReserve(exp, cells) {
+    return cells.length > 0 && cells.every((k) => exp.registry[k] === undefined && !reservedAt(exp, k));
+  }
+
+  /**
+   * Claim a footprint for a space that isn't there yet. `r` needs `seed`,
+   * `kind` (the archetype it will be built as) and `cells` ("x,y" keys);
+   * any other fields are the application's, kept as-is. Returns the reserve.
+   */
+  function reserve(exp, r) {
+    if (!canReserve(exp, r.cells)) throw new Error('Cannot reserve: cells taken');
+    if (!exp.reserves) exp.reserves = {};
+    if (exp.counters.reserve == null) exp.counters.reserve = 0;
+    const res = Object.assign({}, r, { id: 'r' + exp.counters.reserve++, cells: r.cells.slice(), spaceId: null });
+    exp.reserves[res.id] = res;
+    clearReserved(exp);
+    const ev = Object.assign({}, res);
+    delete ev.id; delete ev.spaceId;
+    exp.history.push({ type: 'reserve', reserve: ev });
+    return res;
   }
 
   /** Seeded sequence of alternative shapes to try when the first overlaps. */
@@ -247,10 +338,23 @@
     const exit = parent.exits.find((e) => e.id === exitId);
     if (!exit) throw new Error('No exit ' + exitId + ' on ' + spaceId);
     if (exit.connectionId) throw new Error('Exit ' + spaceId + '/' + exitId + ' is already resolved');
+    if (exit.kind === 'surface') throw new Error('Exit ' + spaceId + '/' + exitId + ' leads out of the dungeon');
 
     const beyond = step(exit.cell, exit.facing);
     const bk = key(beyond.x, beyond.y);
     const facingBack = OPPOSITE[exit.facing];
+
+    // Into a reserved footprint: the reserved space itself, from its own seed.
+    const res = reservedAt(exp, bk);
+    if (res) {
+      const space = buildSpace(exp, createRng(res.seed), {
+        id: 's' + exp.counters.space, seed: res.seed, parentId: spaceId, viaExitId: exitId,
+        entropy: null, depth: parent.depth + 1, deadEnd: false, reserveId: res.id,
+        placed: { archetype: res.kind, cells: res.cells.map(parseKey), end: null },
+        entry: { cell: beyond, facing: facingBack },
+      });
+      return { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: null, space, reserveId: res.id };
+    }
 
     const occupant = exp.registry[bk];
     if (occupant !== undefined) {
@@ -340,6 +444,7 @@
     }
     writeSpace(exp, space);
     exp.counters.space++;
+    if (space.reserveId) { exp.reserves[space.reserveId].spaceId = space.id; clearReserved(exp); }
     const cid = connect(exp,
       { spaceId: cand.parentId, exitId: cand.viaExitId },
       { spaceId: space.id, exitId: space.exits[0].id }, false);
@@ -374,6 +479,8 @@
     }
     for (const k of space.cells) delete exp.registry[k];
     delete exp.spaces[spaceId];
+    // A reserved space goes back to waiting (its door would rebuild it as is).
+    if (space.reserveId && exp.reserves[space.reserveId]) { exp.reserves[space.reserveId].spaceId = null; clearReserved(exp); }
     exp.history.push({ type: 'revert', spaceId });
     if (!exp.traces) exp.traces = {};
     exp.traces[spaceId] = {
@@ -458,6 +565,8 @@
         carve(exp, ev.spaceId, ev.cell, ev.facing);
       } else if (ev.type === 'caps') {
         setCaps(exp, ev.caps);
+      } else if (ev.type === 'reserve') {
+        reserve(exp, ev.reserve);
       }
     }
     return exp;
@@ -528,7 +637,7 @@
 
   function stats(exp) {
     let open = 0;
-    for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId) open++;
+    for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId && e.kind !== 'surface') open++;
     return {
       spaces: Object.keys(exp.spaces).length,
       cells: Object.keys(exp.registry).length,
@@ -541,6 +650,6 @@
   Object.assign(DE, {
     deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
     canCarve, carve, replay, exportRecord, importRecord, rebuildRegistry,
-    pathToRoot, cycleCount, stats, parseKey, imprintAt,
+    pathToRoot, cycleCount, stats, parseKey, imprintAt, reservedAt, canReserve, reserve,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

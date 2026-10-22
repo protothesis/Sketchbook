@@ -483,10 +483,10 @@ Built as planned; kept for the record.
 **Not in this slice:** candles, cross-room tasks, multi-room rerolls, seeds,
 any door-connection changes, pushback. They're all described above for when their turn comes.
 
-## Second slice (2026-10-22)
+## Second slice (built 2026-10-22)
 
 Built together, since none of it means much alone. Programmer art is fine
-throughout.
+throughout. What exists and its tuning is in [`PLAY.md`](PLAY.md).
 
 1. **Push blocks in solid colour.** The whole block takes its colour
    instead of a coloured decal on top.

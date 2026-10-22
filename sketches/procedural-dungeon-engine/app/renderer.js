@@ -50,7 +50,7 @@
       let best = null;
       for (const id in exp.spaces) {
         for (const ex of exp.spaces[id].exits) {
-          if (ex.connectionId) continue;
+          if (ex.connectionId || ex.kind === 'surface') continue; // the surface door never opens
           const m = exitMarker(ex);
           const dist = Math.hypot(m.x - w.x, m.y - w.y);
           if (dist < radius && (!best || dist < best.dist)) best = { type: 'exit', spaceId: id, exitId: ex.id, dist };
@@ -131,7 +131,7 @@
           if (ex.connectionId) continue;
           const m = exitMarker(ex);
           const r = Math.max(3, s * 0.22);
-          ctx.fillStyle = colors.open;
+          ctx.fillStyle = ex.kind === 'surface' ? '#dcebff' : colors.open;
           ctx.beginPath();
           ctx.arc(X(m.x), Y(m.y), r, 0, Math.PI * 2);
           ctx.fill();
