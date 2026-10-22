@@ -194,14 +194,19 @@ Every seed keeps a random element: an oak seed doesn't always grow the same
 oak. This is the biggest engine change on the list. Build it once seeds have
 proved themselves in play.
 
-## 5. Pressed doors
+## 5. Door connections: pressed doors, loops, one-way doors and layers
 
-**What happens.** Sometimes a room B is generated against a wall where room
-A already has an unopened door. A shows a door; B shows solid wall and has
-no record of the door. Opening it makes a **loop**: B gets a matching door
-and the two rooms are connected. This is tracked cleanly. Replay reproduces
-it, a loop never makes B part of A's branch, and reverting either room
-undoes the loop correctly.
+**No change for now.** The door code stays as it is, inconsistency
+included. This section keeps the context and the ideas for when it's
+picked up.
+
+**What happens today.** Sometimes a room B is generated against a wall where
+room A already has an unopened door (a "pressed door"). A shows a door; B
+shows solid wall and has no record of it. Opening it makes a **loop**: B
+gets a matching door and the two rooms are connected. This is tracked
+cleanly. Replay reproduces it, a loop never makes B part of A's branch, and
+reverting either room undoes the loop correctly. With the commit rule, a
+loop also commits both rooms.
 
 It happens two ways:
 
@@ -211,24 +216,39 @@ It happens two ways:
    later. Placement checks only that cells are free, not what's in front of
    other rooms' doors.
 
-**The gap** is that before it's opened, the two sides disagree. In walk
-mode, A's door panel has B's wall behind it. On the maps, a door points
-into a wall.
+**The known gap:** before it's opened, the two sides disagree. In walk mode,
+A's door panel has B's wall behind it. On the maps, a door points into a
+wall. That's accepted for now. If it's fixed later, B would show the door
+from its side as an outline pressed into its wall, and the maps would mark
+these doors distinctly.
 
-**Decision: keep the plain loop for now, made consistent and visible.**
+**What a pressed door could lead to.** These could all exist side by side,
+granted by items, abilities or energy, with **one default** so the rule
+stays learnable.
 
-- When a room is placed against another room's unopened door, it shows that
-  door from its side too: an outline pressed into its wall. Before it's
-  opened, both rooms agree a door is there.
-- The maps mark these doors distinctly from ordinary unopened doors.
-- Opening one behaves as now: a normal two-way passage. With the commit
-  rule, a loop commits both rooms.
+### Loops (today's behaviour)
 
-### Future direction: layers
+A normal two-way passage between two rooms that already exist. Loops still
+have a place: they make the map a network instead of a tree, and finding
+that "this door opens onto a room I've been in" is a good House of Leaves
+beat. They're also the natural fallback for every other outcome.
 
-The most interesting outcome for a pressed door is **impossible space**.
-Opening it leads into a room that overlaps the rooms around it but exists
-in another layer.
+### One-way passages
+
+A connection with only one end. You pass from A into B, and B's side stays
+wall. Go back around to A and the door is still open onto B, but stepping
+through B's side again meets a wall.
+
+- It's easy to build on the engine: a connection that only one room knows
+  about, which collision and ghost pathing respect in one direction.
+- It needs its own visual language, because green arrows already mean "the
+  way this door rerolls".
+
+### Layers ("impossible space")
+
+Opening the door leads into a room that overlaps the rooms around it, but
+exists in another layer: a branch of reality that joins the first only at
+that threshold. It can happen again from inside a layer, going deeper.
 
 - **How it maps onto the engine:** the registry (which room owns each cell)
   is a flat grid today. Make the layer a third coordinate. A door whose far
@@ -237,7 +257,8 @@ in another layer.
 - **Shared layer, not private pockets.** If layer 1 is one shared space, two
   doors into it from far-apart parts of layer 0 grow rooms that can meet and
   loop inside it. That gives shortcuts between distant points of the real
-  map, for free. Going deeper (layer 2 out of layer 1) works the same way.
+  map, for free. This is the "connect two points of layer 1 while walking in
+  layer 2" idea. Going deeper (layer 2 out of layer 1) works the same way.
   Private pockets per door are simpler, but each is a dead-end branch.
 - **Styling:** each layer looks different, and only your current layer is
   drawn (other layers perhaps faintly).
@@ -247,13 +268,6 @@ in another layer.
 
 ### Other outcomes
 
-These could be granted later by items, abilities or energy, alongside the
-default. Have **one default outcome**, so the rule is learnable.
-
-- **One-way passages.** A connection with only one end: you pass from A into
-  B, and B's side stays wall. Strong and eerie. It needs its own visual
-  language, because green arrows already mean "the way this door
-  collapses".
 - **Older doors win.** A's door was there first, so B was placed illegally.
   Opening A's door makes a provisional B reroll out of the way.
 - **The space inside the wall.** The door opens into a narrow passage
@@ -286,20 +300,17 @@ own.
    through rerolls a provisional room, for one charge. A committed room's
    doors offer no collapse. The prompt and the green arrows say which rooms
    are still provisional.
-2. **Pressed doors, made consistent.** A room placed against another room's
-   unopened door shows that door on its side as a pressed outline. The maps
-   mark these doors distinctly. Opening one stays a plain loop.
-3. **Push blocks.** A pushable block variant that slides cell by cell, with
+2. **Push blocks.** A pushable block variant that slides cell by cell, with
    a matching coloured floor mark where it belongs. Seeded per room on a new
    stream. Placing it pays entropy once.
-4. **Sconces.** Unlit wall sconces, seeded per room on a new stream. Light
+3. **Sconces.** Unlit wall sconces, seeded per room on a new stream. Light
    one by holding your lantern to it. Lighting pays entropy once, and it
    stays lit (saved with the run).
-5. **Retune entropy.** Fewer shards. Restoration becomes the main income.
+4. **Retune entropy.** Fewer shards. Restoration becomes the main income.
    Tune by playing.
 
 **Not in this slice:** candles, cross-room tasks, multi-room rerolls, seeds,
-layers, pushback. They're all described above for when their turn comes.
+any door-connection changes, pushback. They're all described above for when their turn comes.
 
 ## Open questions
 
