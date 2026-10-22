@@ -438,7 +438,7 @@
     let base = 0;
     for (const bl of state.blockAt.get(DE.key(cx, cy)) || []) {
       if (!(bl.x0 < x1 && bl.x1 > x0 && bl.y0 < y1 && bl.y1 > y0)) continue;
-      if (bl.jar || bl.units !== 1 || !(bl.x0 <= x0 && bl.x1 >= x1 && bl.y0 <= y0 && bl.y1 >= y1)) return null;
+      if (bl.jar || bl.push || bl.units !== 1 || !(bl.x0 <= x0 && bl.x1 >= x1 && bl.y0 <= y0 && bl.y1 >= y1)) return null;
       base = Math.max(base, bl.top);
     }
     return base;
@@ -934,7 +934,7 @@
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups, toolNear,
-    takeItem, spawnObject, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn, addJarToWorld,
     clearJars, jarNear, pickUpJar, useNear, useSelected, jarCatches, shatterJarsIn, noteUnmade,
     updateJars, addSigil, updateSigils });

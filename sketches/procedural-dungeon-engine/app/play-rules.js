@@ -19,7 +19,9 @@
     shardsPerCharge: 3,
     chargesStart: 2,
     chargesMax: 8,
-    shardChance: { chamber: 0.75, corridor: 0.4, stub: 0.5 },
+    // Shards are a supplement: restoration (push blocks, sconces) is the main
+    // income (GAME-DESIGN.md). Was 0.75 / 0.4 / 0.5 before restoration.
+    shardChance: { chamber: 0.3, corridor: 0.15, stub: 0.2 },
     bigChamberCells: 20,      // chambers this large can hold a second shard
     // Locks come first, keys later: a room's seed only makes it able to
     // hold a key; the walk layer shows that key only while there are more
@@ -50,6 +52,17 @@
     blockUnit: 1.3 / 3,       // one stacked unit (cells); a 1-unit block hides a crouched figure
     climbMaxUnits: 1,         // a single step up at a time
     climbMaxTop: 1,           // units: never stand higher than one block (head room)
+    // Restoration (GAME-DESIGN.md): a push block out of place and the floor
+    // mark where it belongs. Putting one home pays entropy once.
+    pushChance: 0.25,
+    pushMinDepth: 1,
+    pushColors: ['#e0a94a', '#57cdbf', '#c47be0', '#e86a6a'],
+    restoreCharges: 1,
+    // Sconces: unlit, on a room's walls; lighting one pays shards, once.
+    sconceChance: 0.35,
+    sconceMinDepth: 1,
+    sconceSecond: 0.4,        // chambers: chance of a second sconce
+    sconceShards: 1,
     detailChance: 0.35,
     // Hash ghosts: about 1 room in 14; rooms on cracked (imprinted) floor
     // get a boost that grows with how much of the room is cracked.
@@ -274,6 +287,125 @@
     return sp && sp.parentId === spaceId && sp.viaExitId === exit.id ? sp : null;
   }
 
+  /**
+   * A push block out of place in this room, and the floor mark where it
+   * belongs: [{ id, from: { sx, sy }, to: { sx, sy }, color }] in half-cell
+   * units (one block fills one half-cell), or []. The two lie in one row or
+   * column with a clear run between them and room to stand behind the
+   * block, so one straight push puts it home. Seeded on its own stream;
+   * never on a door, item or sigil cell or a prop, and the block never cuts
+   * off any part of the floor.
+   */
+  function pushBlocks(space) {
+    if (!space.parentId || space.deadEnd || space.depth < RULES.pushMinDepth) return [];
+    const r = DE.deriveRng(space.seed, 'push');
+    if (!r.chance(RULES.pushChance)) return [];
+    const sk = (x, y) => x + ',' + y;
+    const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
+    const sg = sigil(space);
+    if (sg) avoid.add(DE.key(sg.cell.x, sg.cell.y));
+    const blocked = new Set();
+    for (const b of props(space).blocks) {
+      for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) blocked.add(sk(x, y));
+    }
+    const floor = new Set(), free = [];
+    for (const k of space.cells) {
+      const c = DE.parseKey(k);
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
+        const s = sk(c.x * 2 + i, c.y * 2 + j);
+        if (blocked.has(s)) continue;
+        floor.add(s);
+        if (!avoid.has(k)) free.push(s);
+      }
+    }
+    free.sort();
+    const freeSet = new Set(free);
+    const connectedWithout = (s0) => { // is every floor half-cell still reachable with a block on s0?
+      const start = Array.from(floor).find((s) => s !== s0);
+      const seen = new Set([start]), q = [start];
+      while (q.length) {
+        const [x, y] = q.pop().split(',').map(Number);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = sk(x + dx, y + dy);
+          if (floor.has(n) && n !== s0 && !seen.has(n)) { seen.add(n); q.push(n); }
+        }
+      }
+      return seen.size === floor.size - 1;
+    };
+    const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let a = 0; a < 30 && free.length; a++) {
+      const [tx, ty] = free[Math.floor(r.next() * free.length)].split(',').map(Number);
+      const [dx, dy] = DIRS4[Math.floor(r.next() * 4)];
+      const dist = r.int(2, 4);
+      const run = []; // target, the half-cells between, the block's start, and where you stand to push
+      for (let i = 0; i <= dist + 1; i++) run.push(sk(tx - dx * i, ty - dy * i));
+      if (!run.every((s, i) => (i <= dist ? freeSet.has(s) : floor.has(s)))) continue;
+      if (!connectedWithout(run[dist]) || !connectedWithout(run[0])) continue;
+      const [fx, fy] = run[dist].split(',').map(Number);
+      return [{ id: 'push0', from: { sx: fx, sy: fy }, to: { sx: tx, sy: ty }, color: r.pick(RULES.pushColors) }];
+    }
+    return [];
+  }
+
+  /**
+   * Unlit sconces on this room's walls: [{ id, cell, facing }], the wall
+   * edge of `cell` that faces out of the room. Seeded on its own stream,
+   * from the walls the room was made with (doors added later by loops or
+   * doorstones don't shift the choice; walk mode just leaves out a sconce
+   * whose wall has since become a door).
+   */
+  function sconces(space) {
+    if (!space.parentId || space.deadEnd || space.depth < RULES.sconceMinDepth) return [];
+    const r = DE.deriveRng(space.seed, 'sconce');
+    if (!r.chance(RULES.sconceChance)) return [];
+    const n = space.archetype === 'chamber' && r.chance(RULES.sconceSecond) ? 2 : 1;
+    const own = new Set(space.cells);
+    const later = (e) => e.loopMade || (e.tags && e.tags.includes('carved'));
+    const doorEdges = new Set(space.exits.filter((e) => !later(e)).map((e) => e.cell.x + ',' + e.cell.y + ',' + e.facing));
+    const walls = [];
+    for (const k of space.cells.slice().sort()) {
+      const c = DE.parseKey(k);
+      for (const f of DE.FACINGS) {
+        const nb = DE.step(c, f);
+        // Not on south walls: the camera looks north, so it only ever sees their backs.
+        if (f === 'S' || own.has(DE.key(nb.x, nb.y)) || doorEdges.has(c.x + ',' + c.y + ',' + f)) continue;
+        walls.push({ cell: c, facing: f });
+      }
+    }
+    const out = [];
+    for (let i = 0; i < n && walls.length; i++) {
+      const w = walls.splice(Math.floor(r.next() * walls.length), 1)[0];
+      out.push({ id: 'sconce' + i, cell: w.cell, facing: w.facing });
+    }
+    return out;
+  }
+
+  /**
+   * A room is committed (fixed) once a door out of it has ever been opened,
+   * or a loop has opened a door into it. Until then it's provisional and can
+   * be rerolled. Committing is for good: rerolling the room beyond doesn't
+   * undo it. Derived from the expedition's history (space ids are never
+   * reused), so it needs no saved state. The root is always committed.
+   */
+  const openedFrom = new WeakMap(); // exp -> { n: history length, ids: Set of spaces a door was opened from }
+  function committed(exp, space) {
+    if (!space.parentId) return true;
+    let c = openedFrom.get(exp);
+    if (!c || c.n !== exp.history.length) {
+      c = { n: exp.history.length, ids: new Set() };
+      for (const ev of exp.history) if (ev.type === 'commit') c.ids.add(ev.parentId);
+      openedFrom.set(exp, c);
+    }
+    return c.ids.has(space.id) || space.exits.some((e) => e !== space.exits[0] && e.connectionId);
+  }
+
+  /** The provisional room through this door, if closing it would reroll one. */
+  function rerollThrough(exp, spaceId, exit) {
+    const child = childThrough(exp, spaceId, exit);
+    return child && !committed(exp, child) ? child : null;
+  }
+
   /** Every space at or beyond `spaceId` in the generation tree, deepest first. */
   function branch(exp, spaceId) {
     const kids = {};
@@ -315,5 +447,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

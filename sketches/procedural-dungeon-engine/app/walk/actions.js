@@ -5,17 +5,18 @@
 
   const W = global.DungeonPlay.walk;
   const { DE, DP, RADIUS, USE_RANGE, state, rebuildExitIndex, isLockedNow, chargeText, save,
-    savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, dissolveSpace, edgeEnds, blockNear,
+    savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
     climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn, toolNear,
-    takeItem } = W;
+    takeItem, pullNear, pull, sconceNear, lightSconce } = W;
 
   // ---------------------------------------------------------------------------
   // Doors: open, unlock, or close + collapse
 
   /**
    * The door in the player's own room within reach, and what can be done
-   * with it: 'open' | 'locked' | 'collapse'. Loop doors and the way back
-   * into a room have no action.
+   * with it: 'open' | 'locked' | 'collapse'. Collapse (a reroll) is only
+   * offered into a room that's still provisional. Loop doors, the way back
+   * into a room, and doors into committed rooms have no action.
    */
   function doorNear(p) {
     const exp = state.exp;
@@ -29,7 +30,7 @@
       let action = null, child = null;
       if (p.z > 0.05) continue; // no doors from on top of a block
       if (!ex.connectionId) action = isLockedNow(sp, ex) ? 'locked' : 'open';
-      else if ((child = DP.childThrough(exp, sp.id, ex))) action = 'collapse';
+      else if ((child = DP.rerollThrough(exp, sp.id, ex))) action = 'collapse';
       if (!action) continue;
       bestD = d;
       best = { space: sp, exit: ex, action, child };
@@ -76,7 +77,9 @@
   }
 
   /** What E would do right now, in priority order (F uses the hotbar item: useNear). */
-  const actionNear = (p) => doorNear(p) || toolNear(p) || jarNear(p) || markNear(p) || blockNear(p);
+  const actionNear = (p) =>
+    doorNear(p) || toolNear(p) || jarNear(p) || markNear(p) || pullNear(p) || sconceNear(p) ||
+    blockNear(p);
 
   function act(near) {
     if (!near || state.paused || state.climb) return;
@@ -84,6 +87,8 @@
     if (near.action === 'carve') { carveDoor(near); return; }
     if (near.action === 'pickjar') { pickUpJar(near.jar); return; }
     if (near.action === 'take') { takeItem(near.key, near.it); return; }
+    if (near.action === 'pull') { pull(near); return; }
+    if (near.action === 'light') { lightSconce(near.sconce); return; }
     if (near.action === 'erase') {
       removeMarkFromWorld(near.mark);
       W.showCaption('you wipe the chalk away');
@@ -113,7 +118,7 @@
       W.refreshHud();
     } else if (near.action === 'collapse') {
       if (!near.affordable) {
-        W.showCaption(`too much lies beyond: ${chargeText(near.price.charges)}, you have ${run.charges}`);
+        W.showCaption(`not enough entropy to reroll: ${chargeText(near.price.charges)}, you have ${run.charges}`);
         return;
       }
       collapseThrough(near);
@@ -135,6 +140,7 @@
   function openDoor(spaceId, exitId) {
     const exp = state.exp;
     const needKey = keyNeeded();
+    const settling = !DP.committed(exp, exp.spaces[spaceId]); // opening a door out commits this room
     let cand;
     try {
       cand = DE.expand(exp, spaceId, exitId);
@@ -148,13 +154,14 @@
     if (door) {
       door.dir = 1;
       door.seam.visible = false;
-      door.arrow.visible = cand.type !== 'loop';
       door.panel.material = doorOpenMat;
     }
+    refreshArrows();
     if (cand.type === 'loop') {
       buildSpace(exp.spaces[cand.targetId], false);
-      W.showCaption('this door opens onto ' + cand.targetId + '. you have been here');
+      W.showCaption('this door opens onto ' + cand.targetId + '. you have been here' + (settling ? ` · ${spaceId} holds now` : ''));
     } else {
+      if (settling) W.showCaption(`${spaceId} holds now · no rerolling it`);
       const sp = cand.space;
       if (needKey && DP.loot(sp).some((it) => it.kind === 'key')) state.run.keyRooms.push(sp.id + ':' + sp.seed);
       buildSpace(sp, true);
@@ -200,7 +207,8 @@
     spaces.forEach((s) => dissolveSpace(s.id, maxDepth - s.depth));
     for (const id of touched) if (exp.spaces[id]) buildSpace(exp.spaces[id], false);
     const door = state.doors.get(near.space.id + '/' + near.exit.id);
-    if (door) { door.dir = -1; door.arrow.visible = false; }
+    if (door) door.dir = -1;
+    refreshArrows();
 
     W.showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}` +
       (unravelled ? ` · ${unravelled === 1 ? 'a hash ghost comes undone' : unravelled + ' hash ghosts come undone'}` : '') +

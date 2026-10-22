@@ -45,13 +45,16 @@ Determinism).
   crouched. You can walk across tops of equal height, and you drop down when
   you step off an edge. Nothing hunts you yet, so for now hiding is only the
   shadow play and the hook.
-- **Collapse.** Stand at a door you opened and press E (or tap the prompt),
-  and the door shuts. The whole branch beyond it (that room and every room
-  opened from it, deepest first) dissolves. The price is a flat **1 charge
-  per room** in the branch, whatever its size. Shards collected toward your
-  next charge are kept. Reopening the door draws fresh
-  entropy: that's the reroll. If the price is more charges than you have,
-  the door stays open: "too much lies beyond."
+- **Rerolling (collapse).** A new room is **provisional** until you open a
+  door out of it (or a loop opens one into it); from then on it's
+  **committed** for good (`DP.committed`, derived from history). Stand at
+  the door into a provisional room and press E (or tap the prompt): the
+  door shuts and that one room dissolves, for **1 charge**. Reopening the
+  door draws fresh entropy: that's the reroll. A provisional room never has
+  rooms beyond it, so a reroll is always one room. Doors into committed
+  rooms offer nothing. Green arrows (on the floor and the maps) mark only
+  the doors into provisional rooms. Scouting is fine: walk in, take what's
+  there, then reroll. See [`GAME-DESIGN.md`](GAME-DESIGN.md).
 - **Traces.** A collapsed room isn't deleted. The engine keeps its seed and
   cells as a **trace** (a branch that existed but wasn't kept), shown
   greyed on the minimap, the big map and the chart view. A new room that
@@ -94,6 +97,25 @@ Determinism).
   Collapsing a room a ghost is in simply undoes it: nothing is gained, but
   the run keeps a tally and a short log (`run.unmade`) for whatever that
   becomes later.
+- **Push blocks (restoration).** About 1 room in 5 (depth 1+) has a stone
+  block with a coloured top that's out of place, and a matching coloured
+  square on the floor where it belongs, in the same row or column. Walk into
+  the block for a beat and it slides half a cell. E, facing it, pulls it one
+  half-cell toward you (you step back), which is how a block shoved into a
+  corner comes back out. A block only moves within its room, onto bare
+  floor, never into a doorway's mouth. Home, it locks in place, its top and
+  its mark light up, and it pays **1 charge** of entropy, once. Blocks can't
+  be climbed, and jars and chalk can't go on them. Positions persist with
+  the run; a rerolled room rolls a new one. See
+  [`GAME-DESIGN.md`](GAME-DESIGN.md).
+- **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
+  sconce on a wall, chambers sometimes two. Never on a south wall: the
+  camera looks north and would only see its back. E, facing one in your
+  room, lights it from your lantern for **1 shard**, once. A lit sconce
+  burns for good (saved with the run) and lights the room around it: the
+  three lit sconces nearest you get real lights (a fixed pool, so lighting
+  more never recompiles materials). Doors carved later through a sconce's
+  wall take the sconce's place.
 - **Three kinds of item.** Every item belongs to one class, and the class
   decides how it behaves (`ITEMS` in `app/walk/items.js`):
   - **Pickups** (shards, keys) float and turn where they lie. Walk into
@@ -213,7 +235,9 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Move | WASD / arrows (Shift runs at 4 cells/s instead of 2.4); touch: drag for a stick |
 | Open a door | walk into it for 0.35 s, or press E / tap the prompt |
 | Entropy | whole charges: start with 2, hold up to 8; 3 shards make 1 charge |
-| Shard | in 75% of chambers, 40% of corridors, 50% of dead ends; chambers of 20+ cells can hold a second |
+| Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
+| Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); home = 1 charge, once |
+| Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second), never on south walls; lit = 1 shard, once |
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
@@ -221,7 +245,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. A placed jar with room catches a following ghost within 0.38 cells; a collapse just undoes ghosts in the branch (tallied in `run.unmade`) |
-| Collapse price | a flat 1 charge per room in the branch |
+| Reroll price | 1 charge; only a provisional room (no door out of it ever opened) |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); capacity 3; F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall; a following ghost within 0.38 cells of a jar with room is caught |
 | Chalk | start with one silver stick (3 strokes); 1/12 of rooms at depth 1+ hold a stick (seeded on the loot stream, after jars; colour from silver/gold/crimson/teal/violet); F draws on the nearest free quarter ahead (floor or a one-unit block's top, not under a jar, not on another mark); E on a mark wipes it |
@@ -229,8 +253,12 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 jars (one per quarter); stage = the fullest jar's fill; each full jar on it = entropy max +1 (up to +4), stacking across sigils |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
-In a 2,000-room simulation that works out to about 0.7 shards per room (one
-charge every ~4 rooms), and collapsing a room costs 1 charge. In random 80-room walks, the first locked door shows up after a
+Entropy income, measured over ~700 rooms (2026-10-21): shards lying around
+give about 0.27 shards per room, push blocks 0.5 and sconces 0.4 (in shard
+terms, if you restore everything). That's a charge every ~2.5 rooms for a
+thorough player, about three quarters of it from restoration, and a charge
+every ~11 rooms from pickups alone. A reroll costs 1 charge. (Before
+restoration, pickups gave about 0.7 shards per room, a charge every ~4.) In random 80-room walks, the first locked door shows up after a
 median of 18 rooms (90th percentile: 47), with about 6 locked doors on the
 frontier by room 80. About 2.6 blocks land per room. A fine-grained
 flood fill with the player's real radius, over ~360 rooms, found every free

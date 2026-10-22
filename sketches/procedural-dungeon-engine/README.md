@@ -36,7 +36,9 @@ open, and the space behind it assembles as the door swings. Spend
 (reopening rerolls). Shards refill entropy, and a rare key opens a locked
 door, which ends the walk on the expedition record. The design and the
 tunables are in [`PLAY.md`](PLAY.md). A look back and some loose thoughts on
-where to go next: [`CLOSING-THOUGHTS.md`](CLOSING-THOUGHTS.md).
+where to go next: [`CLOSING-THOUGHTS.md`](CLOSING-THOUGHTS.md). The plan
+that followed (rerolling, restoration as the way to earn entropy, seeds,
+door connections) is in [`GAME-DESIGN.md`](GAME-DESIGN.md).
 
 **Playtesting over the network:** serve the repo with
 `python tools/serve.py` (from the repo root; port 8791 by default) and open
@@ -65,6 +67,7 @@ app/             clients of the engine
     world.js         dither, materials, building and dissolving spaces
     figure.js        the figure and lantern, collision, climbing, crouch
     items.js         hotbar, chalk marks, jars, sigils
+    restore.js       restoration: push blocks and their floor marks, sconces
     actions.js       doors: open, unlock, collapse; doorstones
     input.js         keyboard, touch stick, buttons
     ghosts.js        hash ghosts
@@ -77,6 +80,7 @@ stress-test.js   headless milestone checks (Node)
 DESIGN.md        the design brief
 PLAY.md          walk mode's visual + game design parameters
 CLOSING-THOUGHTS.md  a look back at walk mode, and loose thoughts on next steps (not a plan)
+GAME-DESIGN.md   the plan from there: entropy, rerolling, restoration, seeds, door connections
 NOTES.md         implementation decisions
 ```
 
