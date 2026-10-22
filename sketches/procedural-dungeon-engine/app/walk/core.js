@@ -14,7 +14,7 @@
 // from file://), which play.html loads in this order:
 //
 //   core, world, figure, items, restore, waystones, lamp, actions, input,
-//   ghosts, fx, hud, main
+//   ecology, wells, pixies, ghosts, fx, hud, main
 //
 // Each file is its own IIFE sharing one namespace, DungeonPlay.walk ("W").
 // A file takes what it needs from earlier files by destructuring W at the
@@ -102,7 +102,10 @@
     blockAt: new Map(),  // "x,y" -> [{ x0, y0, x1, y1, h, spaceId }] for collision
     player: { x: 0.5, y: 0.5, z: 0, vz: 0, angle: 0, spaceId: null, phase: 0 },
     climb: null,         // { fx, fy, fz, tx, ty, tz, t } while stepping up
-    ghosts: [],          // live hash ghosts (see "Hash ghosts")
+    ghosts: [],          // live hash ghosts (see ghosts.js)
+    ghostTouch: false,   // in a ghost's reach this frame (drains psychic stamina)
+    pixies: [],          // free pixies (see pixies.js)
+    wells: [],           // entropy wells in built rooms (see wells.js)
     jars: [],            // jars standing in the world (see "Inventory")
     sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
     buff: 0,             // powered sigils: +1 entropy max each
@@ -141,7 +144,11 @@
       unmade: { count: 0, log: [] }, // hash ghosts undone by a collapse (or in a jar that shattered); no use yet
       ghostSeen: [], // "spaceId:seed:ghost" for rooms whose ghost roll has happened
       ghosts: [],    // saved positions: [{ id, x, y, mode }]
-      jars: [],      // jars carried: [{ id, fill }]
+      stamina: 1,    // psychic stamina, 0..1 (see lamp.js)
+      pixieSeen: [], // "spaceId:seed:pixie" for rooms whose pixie roll has happened
+      pixies: [],    // free pixies' saved positions: [{ id, x, y }]
+      wells: {},     // entropy wells drawn on: { "spaceId:seed:well": { level, drawn } } (see wells.js)
+      jars: [],      // jars carried: [{ id, fill }] (fill 1: a pixie inside)
       placedJars: [], // jars set down: [{ id, sx, sy, fill }] (half-cell coordinates)
       jarSeq: 0,
       chalks: { silver: 3 }, // chalk carried, by colour, in strokes (3 per stick)
@@ -206,6 +213,7 @@
     state.run.marks = state.marks.map((m) => ({ sx: m.sx, sy: m.sy, color: m.color, rot: m.rot, base: m.base }));
     state.run.placedJars = state.jars.map((j) => ({ id: j.id, sx: j.sx, sy: j.sy, fill: j.fill }));
     state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
+    state.run.pixies = state.pixies.map((o) => ({ id: o.id, x: +o.x.toFixed(3), y: +o.y.toFixed(3) }));
     try {
       localStorage.setItem(PLAYER_KEY, JSON.stringify({
         v: RUN_VERSION, rootSeed: state.exp.rootSeed, x: p.x, y: p.y, angle: p.angle, run: state.run,
@@ -216,7 +224,7 @@
   // The run save's format version. When the shape of `run` changes, bump it
   // and add a step to RUN_MIGRATIONS: step i takes a version-i run to i + 1.
   // Saves from before versioning count as version 0.
-  const RUN_VERSION = 2;
+  const RUN_VERSION = 3;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
@@ -229,6 +237,11 @@
       run.fuel = (run.charges || 0) + (run.shards || 0) / RULES.shardsPerCharge;
       delete run.charges;
       delete run.shards;
+    },
+    // 2 -> 3: jars held up to three ghosts; now one pixie. Any filled jar
+    // keeps a pixie, so a jar that powered a sigil still does.
+    (run) => {
+      for (const j of (run.jars || []).concat(run.placedJars || [])) j.fill = j.fill > 0 ? 1 : 0;
     },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */

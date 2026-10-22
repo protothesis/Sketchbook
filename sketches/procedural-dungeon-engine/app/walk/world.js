@@ -239,6 +239,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }
 
     W.addSigil(space, tileAt);
+    W.addWell(space, tileAt);
     W.addPushBlocks(space, rec, tileAt);
     W.addSconces(space, edgeAt);
     W.addWaystone(space, rec, tileAt);
@@ -282,6 +283,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       const gc = DP.ghostSpawn(space, exp);
       if (gc) W.addGhost({ id: gid, x: gc.x + 0.5, y: gc.y + 0.5 });
     }
+    W.spawnPixie(space); // and a pixie (also rolled once, ever)
 
     const spaceKey = space.id + ':' + space.seed;
     for (const item of DP.loot(space)) {
@@ -352,6 +354,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     state.sconces = state.sconces.filter((sc) => sc.spaceId !== id);
     state.waystones = state.waystones.filter((st) => st.spaceId !== id);
     state.pushBlocks = state.pushBlocks.filter((b) => b.spaceId !== id);
+    state.wells = state.wells.filter((w) => w.spaceId !== id);
     const sg = state.sigils.get(id);
     if (sg && sg.fx) scene.remove(sg.fx.group);
     state.sigils.delete(id);
@@ -382,6 +385,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
 
   function buildWorld() {
     W.clearGhosts();
+    W.clearPixies();
     W.clearJars();
     W.clearMarks();
     for (const id of Array.from(state.spaces.keys())) disposeSpace(id);

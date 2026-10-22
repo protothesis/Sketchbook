@@ -4,12 +4,16 @@
 // spend whole charges, and the lamp burns it steadily, except within a tile
 // of a lit sconce. A gain holds the burn for a moment (RULES.lampGrace), so
 // a charge you just earned doesn't start draining that instant. When it
-// runs out the lamp gutters and you wake at your last waystone.
+// runs out the lamp goes dark, and the dark wears on your psychic stamina.
 //
-// You should feel it without looking at the meter: as the fuel falls, the
-// lamp's colour goes from yellow through orange and red to grey and starts
-// to flicker, its dithered halo shrinks and fades, its trail of sparks
-// thins out, and the light itself gets dimmer and shorter.
+// Psychic stamina is your other meter (GAME-DESIGN.md, section 12). A
+// ghost's touch drains it, and so does the dark. Empty, you pass out and
+// wake at your last waystone. It refills in light once nothing drains it.
+//
+// You should feel the lamp without looking at the meter: as the fuel falls,
+// its colour goes from yellow through orange and red to grey and starts to
+// flicker, its halo shrinks and fades, its embers thin out, and the light
+// itself gets dimmer and shorter.
 (function (global) {
   'use strict';
 
@@ -26,14 +30,17 @@
   /**
    * Add entropy (in charges). Never past the max, but a meter already above
    * it (a sigil's +1 lost) keeps its extra. Holds the burn for a moment and
-   * shows a +◆ over your head. Returns what was added.
+   * shows a +◆ over your head (unless `quiet`: a well pours a little every
+   * frame and pops its own). Returns what was added.
    */
-  function gainFuel(amount) {
+  function gainFuel(amount, quiet) {
     const run = state.run, max = maxCharges();
     const add = Math.max(0, Math.min(amount, max - run.fuel));
+    const wasOut = run.fuel <= 0;
     run.fuel += add;
     state.lampGrace = RULES.lampGrace;
-    if (add > 1e-6) popEntropy(add);
+    if (add > 1e-6 && !quiet) popEntropy(add);
+    if (wasOut && add > 1e-6) W.showCaption('your lamp catches again');
     return add;
   }
 
@@ -66,10 +73,11 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Burning, guttering, waking
+  // Burning, the dark, stamina, passing out and waking
 
-  const GUTTER_FADE = 1.2, GUTTER_DARK = 1.4; // seconds: the flame dies, then darkness
+  const GUTTER_FADE = 1.2, GUTTER_DARK = 1.4; // seconds: you sink, then darkness
   let lampMode = '';
+  let staminaIdle = 0; // seconds since anything last drained your stamina
 
   function updateLamp(dt) {
     const run = state.run, p = state.player;
@@ -81,22 +89,49 @@
     let mode = 'burning';
     if (state.paused || state.bigmap) mode = 'paused';
     else if (litAt(p)) mode = 'sheltered';
+    else if (run.fuel <= 0) mode = 'dark';
     else if (state.lampGrace > 0) mode = 'held';
     state.lampGrace = Math.max(0, (state.lampGrace || 0) - (mode === 'paused' ? 0 : dt));
     lampMode = mode;
-    if (mode !== 'burning') return;
-    const before = run.fuel;
-    run.fuel = Math.max(0, run.fuel - DRAIN * dt);
-    run.lampBurned = (run.lampBurned || 0) + (before - run.fuel);
-    if (run.fuel <= 0) gutter();
-    else if (before > RULES.lampDanger && run.fuel <= RULES.lampDanger) W.showCaption('your lamp is running low');
+    if (mode === 'paused') return;
+    if (mode === 'burning') {
+      const before = run.fuel;
+      run.fuel = Math.max(0, run.fuel - DRAIN * dt);
+      run.lampBurned = (run.lampBurned || 0) + (before - run.fuel);
+      if (run.fuel <= 0) W.showCaption('your lamp goes out · the dark presses in · find light');
+      else if (before > RULES.lampDanger && run.fuel <= RULES.lampDanger) W.showCaption('your lamp is running low');
+    }
+    updateStamina(dt, mode);
   }
 
-  function gutter() {
+  /**
+   * Psychic stamina: a ghost's touch (state.ghostTouch, from ghosts.js)
+   * knocks a chunk off once and drains it while you stay in its reach; the
+   * dark drains it at the same rate. In light, with nothing draining it for
+   * a moment, it refills.
+   */
+  function updateStamina(dt, mode) {
+    const run = state.run;
+    const touch = !!state.ghostTouch, dark = mode === 'dark';
+    if (touch && !state.wasTouched) run.stamina -= RULES.staminaHit;
+    state.wasTouched = touch;
+    if (touch || dark) {
+      run.stamina -= RULES.staminaDrain * dt;
+      staminaIdle = 0;
+    } else {
+      staminaIdle += dt;
+      if (staminaIdle >= RULES.staminaRegenDelay) run.stamina += RULES.staminaRegen * dt;
+    }
+    run.stamina = THREE.MathUtils.clamp(run.stamina, 0, 1);
+    if (run.stamina <= 0) passOut(touch ? 'the ghost is too much · you pass out' : 'the dark is too much · you pass out');
+  }
+
+  function passOut(text) {
     state.gutter = { t: 0 };
     state.paused = true;
+    state.wasTouched = false;
     W.keys.clear();
-    W.showCaption('your lantern gutters out');
+    W.showCaption(text);
     const f = $('fade');
     if (f) f.classList.add('on');
   }
@@ -105,7 +140,8 @@
     const run = state.run;
     state.gutter = null;
     state.paused = false;
-    run.fuel = RULES.chargesStart;
+    run.fuel = Math.max(run.fuel, RULES.chargesStart);
+    run.stamina = 1;
     run.gutters = (run.gutters || 0) + 1;
     state.lampGrace = RULES.lampGrace;
     const st = W.hearth();
@@ -119,7 +155,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // How the lamp looks: colour, halo, sparks, light
+  // How the lamp looks: colour, halo, embers, light
 
   /** 0..1: full at RULES.lampFullCharges or more, 0 when empty. */
   function lampLevel() {
@@ -140,32 +176,37 @@
     return out.copy(STOPS[STOPS.length - 1][1]);
   }
 
-  // The halo: a dithered disc (a 4x4 Bayer pattern thinning out toward the
-  // rim), additive, in the lamp's colour. Twice and a half the lamp's size
-  // at full, shrinking and fading as the fuel goes.
-  function ditherDisc() {
-    const n = 32, cv = document.createElement('canvas');
+  // The halo: a flat, see-through disc with a hard edge, in the lamp's
+  // colour. HALO.full across at full, shrinking and fading as the fuel goes.
+  const HALO = {
+    full: 0.34 * S,   // diameter at full (the lamp itself is 0.08 S)
+    minScale: 0.4,    // of full, as the lamp empties
+    opacity: 0.3,     // at full
+    lowOpacity: 0.1,  // at the danger line, falling to almost nothing below
+  };
+  function hardDisc() {
+    const n = 128, cv = document.createElement('canvas');
     cv.width = cv.height = n;
     const g = cv.getContext('2d');
-    const m = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-      const r = Math.hypot(x + 0.5 - n / 2, y + 0.5 - n / 2) / (n / 2);
-      const v = Math.max(0, 1 - r) * 1.25;
-      if (v > (m[(x % 4) + (y % 4) * 4] + 0.5) / 16) { g.fillStyle = '#fff'; g.fillRect(x, y, 1, 1); }
-    }
-    const t = new THREE.CanvasTexture(cv);
-    t.magFilter = THREE.NearestFilter;
-    t.minFilter = THREE.NearestFilter;
-    return t;
+    g.fillStyle = '#fff';
+    g.beginPath(); g.arc(n / 2, n / 2, n / 2 - 2, 0, Math.PI * 2); g.fill();
+    return new THREE.CanvasTexture(cv);
   }
-  const haloMat = new THREE.SpriteMaterial({ map: ditherDisc(), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false });
+  const haloMat = new THREE.SpriteMaterial({ map: hardDisc(), transparent: true, depthWrite: false });
   const halo = new THREE.Sprite(haloMat);
-  const HALO_FULL = 0.2 * S; // 2.5x the lamp's diameter
   halo.renderOrder = 5;
   scene.add(halo); // follows the lamp in world space (the figure's rig squashes when crouched)
 
-  // Sparks: short-lived points rising off the lamp, left behind as you
-  // walk (a trail). Additive, so a dead one is just black.
+  // Embers: points rising off the lamp. Walking, they spray and trail
+  // behind you; standing still, they rise in a slow, swaying column, like
+  // embers off a flame. Additive, so a dead one is just black.
+  const EMBER = {
+    still: 0.25,  // cells/s: below this you count as standing
+    walk: { rate: 22, life: [0.35, 0.75], spread: 0.25, rise: [0.25, 0.6], sway: 0 },
+    idle: { rate: 9, life: [0.9, 1.6], spread: 0.05, rise: [0.12, 0.22], sway: 0.12 },
+    swayHz: [1.2, 2.2], // how fast an idle ember weaves
+    drag: 2.5,          // of its sideways speed, lost per second
+  };
   const SPARKS = 48;
   const sparkPos = new Float32Array(SPARKS * 3), sparkCol = new Float32Array(SPARKS * 3);
   const sparkGeo = new THREE.BufferGeometry();
@@ -176,13 +217,18 @@
   }));
   sparks.frustumCulled = false;
   scene.add(sparks);
-  const spark = Array.from({ length: SPARKS }, () => ({ life: 0, max: 1, vx: 0, vy: 0, vz: 0 }));
-  let sparkClock = 0, sparkNext = 0;
+  const spark = Array.from({ length: SPARKS }, () => ({ life: 0, max: 1, vx: 0, vy: 0, vz: 0, sway: 0, hz: 1, ph: 0 }));
+  let sparkClock = 0, sparkNext = 0, stillness = 0;
   const lampWorld = new THREE.Vector3();
+  const lastPos = { x: 0, y: 0 };
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const between = (r) => r[0] + Math.random() * (r[1] - r[0]);
 
   function updateLampLook(dt) {
     const t = state.time;
     const g = state.gutter ? Math.max(0, 1 - state.gutter.t / GUTTER_FADE) : 1;
+    // An empty lamp is out: only a faint glow, as if from the wick.
+    const out = state.run.fuel <= 0 ? 0.12 : 1;
     const level = lampLevel() * g;
     // Flicker grows as the level falls below half.
     const shake = Math.max(0, 0.5 - level) * 2;
@@ -191,37 +237,54 @@
     lanternMesh.material.color.copy(lampColor);
 
     lantern.color.setHex(0xffb36b).lerp(lampColor, 0.5);
-    lantern.intensity = LANTERN * (0.3 + 0.7 * level) * flick * g * (0.94 + 0.06 * Math.sin(t * 9.3) * Math.sin(t * 3.1));
-    lantern.distance = LANTERN_RANGE * (0.4 + 0.6 * level);
+    lantern.intensity = LANTERN * (0.3 + 0.7 * level) * out * flick * g * (0.94 + 0.06 * Math.sin(t * 9.3) * Math.sin(t * 3.1));
+    lantern.distance = LANTERN_RANGE * (0.4 + 0.6 * level) * (out < 1 ? 0.5 : 1);
 
     lanternMesh.getWorldPosition(lampWorld);
     haloMat.color.copy(lampColor);
     halo.position.copy(lampWorld);
-    halo.scale.setScalar(HALO_FULL * (0.25 + 0.75 * level));
+    halo.scale.setScalar(HALO.full * (HALO.minScale + (1 - HALO.minScale) * level));
     const danger = RULES.lampDanger / RULES.lampFullCharges;
-    haloMat.opacity = (level > 0.66 ? 0.85 : level > danger ? 0.2 + 0.65 * (level - danger) / (0.66 - danger) : 0.06 + 0.14 * level / danger) * flick;
+    haloMat.opacity = (level > 0.66 ? HALO.opacity
+      : level > danger ? lerp(HALO.lowOpacity, HALO.opacity, (level - danger) / (0.66 - danger))
+        : HALO.lowOpacity * 0.3 * level / danger) * (out < 1 ? 0 : 1) * flick;
 
-    // Sparks: fewer, dimmer and shorter-lived as the lamp fails.
+    // Embers: fewer, dimmer and shorter-lived as the lamp fails. How still
+    // you are (eased) blends the walking spray into the idle column.
+    const p = state.player;
+    const speed = dt > 0 ? Math.hypot(p.x - lastPos.x, p.y - lastPos.y) / dt : 0;
+    lastPos.x = p.x; lastPos.y = p.y;
+    stillness += ((speed < EMBER.still ? 1 : 0) - stillness) * Math.min(1, dt * 3);
+    const mix = (k) => lerp(EMBER.walk[k], EMBER.idle[k], stillness);
+    const mixR = (k) => [mix0(k, 0), mix0(k, 1)];
+    const mix0 = (k, i) => lerp(EMBER.walk[k][i], EMBER.idle[k][i], stillness);
     sparkClock += dt;
-    const rate = level > 0.01 && !state.paused ? 4 + 22 * level : 0;
+    const rate = level > 0.01 && out === 1 && !state.paused ? mix('rate') * (0.2 + 0.8 * level) : 0;
     while (rate && sparkClock >= sparkNext) {
       sparkClock -= sparkNext;
       sparkNext = 1 / rate * (0.6 + Math.random() * 0.8);
       const s = spark.find((o) => o.life <= 0);
       if (!s) break;
       const i = spark.indexOf(s);
-      s.max = s.life = (0.35 + 0.4 * Math.random()) * (0.6 + 0.4 * level);
-      s.vx = (Math.random() - 0.5) * 0.25 * S; s.vz = (Math.random() - 0.5) * 0.25 * S;
-      s.vy = (0.25 + Math.random() * 0.35) * S;
+      s.max = s.life = between(mixR('life')) * (0.6 + 0.4 * level);
+      const spread = mix('spread');
+      s.vx = (Math.random() - 0.5) * spread * S; s.vz = (Math.random() - 0.5) * spread * S;
+      s.vy = between(mixR('rise')) * S;
+      s.sway = mix('sway') * S; s.hz = between(EMBER.swayHz); s.ph = Math.random() * Math.PI * 2;
       sparkPos[i * 3] = lampWorld.x + (Math.random() - 0.5) * 0.04 * S;
       sparkPos[i * 3 + 1] = lampWorld.y;
       sparkPos[i * 3 + 2] = lampWorld.z + (Math.random() - 0.5) * 0.04 * S;
     }
     if (!rate) sparkClock = 0;
+    const drag = Math.exp(-EMBER.drag * dt);
     spark.forEach((s, i) => {
       if (s.life > 0) {
         s.life -= dt;
-        sparkPos[i * 3] += s.vx * dt; sparkPos[i * 3 + 1] += s.vy * dt; sparkPos[i * 3 + 2] += s.vz * dt;
+        s.vx *= drag; s.vz *= drag;
+        // A weave that widens as it rises, like heat off a flame.
+        const age = s.max - s.life;
+        const w = Math.cos(age * s.hz * Math.PI * 2 + s.ph) * s.sway * Math.min(1, age * 2);
+        sparkPos[i * 3] += (s.vx + w) * dt; sparkPos[i * 3 + 1] += s.vy * dt; sparkPos[i * 3 + 2] += (s.vz + w * 0.4) * dt;
       }
       const k = Math.max(0, s.life / s.max) * (0.5 + 0.5 * level);
       sparkCol[i * 3] = lampColor.r * k; sparkCol[i * 3 + 1] = lampColor.g * k; sparkCol[i * 3 + 2] = lampColor.b * k;
@@ -235,13 +298,23 @@
   // ---------------------------------------------------------------------------
   // The lamp on the HUD: an icon in the lamp's colour, and a fluid meter cut
   // into one section per charge. The section that's burning shows dimmer.
+  // Under it, psychic stamina: a thin bar, and the screen's edges closing in
+  // as it falls.
 
   const meterEl = $('lamp-meter'), iconEl = $('lamp-icon'), stateEl = $('lamp-state');
+  const staminaEl = $('stamina'), vignetteEl = $('vignette');
   let built = -1, lastSig = '';
-  const STATE_TEXT = { burning: 'burning', sheltered: 'by a sconce · not burning', held: 'held', paused: '' };
+  const STATE_TEXT = { burning: 'burning', sheltered: 'by a sconce · not burning', held: 'held', dark: 'out · find light', paused: '' };
   function updateLampHud(force) {
     if (!meterEl) return;
     const run = state.run, max = maxCharges();
+    if (staminaEl) {
+      staminaEl.firstChild.style.width = (run.stamina * 100).toFixed(1) + '%';
+      staminaEl.classList.toggle('low', run.stamina < 0.35);
+      staminaEl.classList.toggle('draining', !!state.ghostTouch || lampMode === 'dark');
+      staminaEl.title = `psychic stamina ${Math.round(run.stamina * 100)}% · a ghost's touch and the dark drain it; it comes back in light`;
+    }
+    if (vignetteEl) vignetteEl.style.opacity = ((1 - run.stamina) * 0.85).toFixed(3);
     const n = Math.max(max, Math.ceil(run.fuel - 1e-6));
     if (n !== built || force) {
       meterEl.innerHTML = '';
@@ -254,7 +327,7 @@
       lastSig = '';
     }
     const mode = state.gutter ? 'out' : lampMode;
-    const sig = run.fuel.toFixed(3) + mode;
+    const sig = run.fuel.toFixed(3) + mode + W.drinking();
     if (sig === lastSig) return;
     lastSig = sig;
     Array.from(meterEl.children).forEach((sec, i) => {
@@ -265,7 +338,7 @@
     iconEl.style.color = '#' + lampColor.getHexString();
     iconEl.classList.toggle('burning', mode === 'burning');
     iconEl.classList.toggle('danger', run.fuel <= RULES.lampDanger);
-    if (stateEl) stateEl.textContent = mode === 'out' ? 'out' : STATE_TEXT[mode] || '';
+    if (stateEl) stateEl.textContent = mode === 'out' ? 'passed out' : W.drinking() ? 'drinking from a well' : STATE_TEXT[mode] || '';
     meterEl.parentElement.parentElement.title =
       `entropy ${run.fuel.toFixed(2)} of ${max} charges · the lamp burns a charge every ${RULES.lampSeconds * RULES.shardsPerCharge} s in the dark`;
   }

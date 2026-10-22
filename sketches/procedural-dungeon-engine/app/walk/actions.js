@@ -36,8 +36,11 @@
       best = { space: sp, exit: ex, action, child };
     }
     if (best && best.action === 'collapse') {
-      best.price = DP.collapseCost(DP.branch(exp, best.child.id));
+      const branch = DP.branch(exp, best.child.id);
+      best.price = DP.collapseCost(branch);
       best.affordable = best.price.charges <= state.run.fuel + 1e-6;
+      // Ghosts stay: a room can't be rerolled while one is in it.
+      best.haunted = W.ghostIn(new Set(branch.map((s) => s.id)));
     }
     return best;
   }
@@ -120,6 +123,10 @@
       savePlayer();
       W.refreshHud();
     } else if (near.action === 'collapse') {
+      if (near.haunted) {
+        W.showCaption(`a hash ghost lingers in ${near.child.id} · it won't let the room unmake`);
+        return;
+      }
       if (!near.affordable) {
         W.showCaption(`not enough entropy to reroll: ${chargeText(near.price.charges)}, you have ${chargeText(run.fuel)}`);
         return;
@@ -217,8 +224,9 @@
     }));
     if (!loopsIntoParent) touched.delete(near.space.id);
 
-    const unravelled = W.banishGhostsIn(ids);
+    const unravelled = W.banishGhostsIn(ids); // none, normally: a haunted room can't be rerolled
     const shattered = shatterJarsIn(ids);
+    W.dropPixiesIn(ids);
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
     W.spendFuel(near.price.charges);

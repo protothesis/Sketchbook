@@ -18,7 +18,7 @@
     // of one. Rerolls and waystones cost whole charges.
     shardsPerCharge: 3,
     chargesStart: 2,
-    chargesMax: 8,
+    chargesMax: 6,            // a smaller tank, so staying full takes restoring (was 8)
     // Shards are a supplement: restoration (push blocks, sconces) is the main
     // income (GAME-DESIGN.md). Was 0.75 / 0.4 / 0.5 before restoration.
     shardChance: { chamber: 0.3, corridor: 0.15, stub: 0.2, hall: 0.3 },
@@ -35,15 +35,33 @@
     // Doorstones: open a door in any bare wall. About as rare as keys turn out.
     chalkChance: 0.045,
     chalkMinDepth: 2,
-    // Jars hold up to 3 hash ghosts; sigil tiles power up with a filled jar.
+    // Jars hold one pixie each; a sigil tile powers up with a pixie jar.
     jarChance: 1 / 15,
     jarMinDepth: 1,
-    jarCapacity: 3,
+    jarCapacity: 1,
+    // Pixies: small winged lights, drifting in about 1 room in 10. Catch one
+    // in an empty jar; ghosts are drawn to them, free or jarred.
+    pixieChance: 0.1,
+    pixieMinDepth: 1,
     stickChance: 1 / 12,      // chalk sticks (3 marks each): semi-rare; you start with one silver
     stickMinDepth: 1,
     chalkColors: ['silver', 'gold', 'crimson', 'teal', 'violet'],
     sigilChance: 0.052,       // ~1 room in 25 (small rooms and the root never get one)
     sigilMinDepth: 1,
+    // Entropy wells (GAME-DESIGN.md, section 13): a floor tile that pours
+    // entropy into your lamp while you stand in it, up to wellCapacity, and
+    // then runs dry. A surge well comes back all at once after
+    // wellSurgeCooldown seconds; a trickle well starts refilling
+    // wellTrickleDelay seconds after you last drew on it, a full well every
+    // wellTrickleTime seconds. Times are walking time (run.walked).
+    wellChance: 0.05,         // ~1 room in 20
+    wellMinDepth: 1,
+    wellSurge: 0.5,           // share of wells that surge (the rest trickle)
+    wellCapacity: 1,          // charges
+    wellRate: 0.6,            // charges per second while you stand in it
+    wellSurgeCooldown: 90,
+    wellTrickleDelay: 10,
+    wellTrickleTime: 120,
     chargesPerRoom: 1,        // collapse price: a flat charge per room in the branch
     // Props: blocks on a half-cell subgrid, stacked in half-cell-ish units
     // (3 units = floor to ceiling), plus flat floor detail.
@@ -57,7 +75,7 @@
     pushChance: 0.25,
     pushMinDepth: 1,
     pushColors: ['#e0a94a', '#57cdbf', '#c47be0', '#e86a6a'],
-    restoreCharges: 1,
+    restoreCharges: 2 / 3,    // two shards (was a whole charge)
     // Sconces: unlit, on a room's walls. Lighting one costs a shard of your
     // lamp's entropy, and the room never drains the lamp again.
     sconceChance: 0.35,
@@ -68,10 +86,20 @@
     // shard's worth every lampSeconds, except within a tile of a lit sconce.
     // Any gain holds the burn for lampGrace seconds. The lamp looks full at
     // lampFullCharges or more and is in danger at lampDanger or less.
-    lampSeconds: 12,
+    lampSeconds: 18,          // was 12: less hurry, leaning toward careful
     lampGrace: 3,
     lampFullCharges: 3,
     lampDanger: 1,
+    // Psychic stamina (GAME-DESIGN.md, section 12): a meter from 0 to 1. A
+    // ghost's touch knocks off staminaHit and drains it for as long as you
+    // stay in the ghost's (swollen) reach; an empty lamp drains it too, at
+    // the same rate, while you're out of a sconce's light. Empty: you pass
+    // out and wake at your last waystone. It refills once nothing has
+    // drained it for staminaRegenDelay seconds and you're in light.
+    staminaHit: 0.15,
+    staminaDrain: 0.2,        // per second: a full meter lasts 5 s
+    staminaRegen: 0.12,       // per second
+    staminaRegenDelay: 1.5,
     // Halls (setpieces at waypoints): sizes, and what they always hold.
     hallMin: 7,
     hallMax: 9,
@@ -85,8 +113,12 @@
     waypointFar: [45, 60],
     waypointOdds: [0.1, 0.45, 0.35, 0.1], // chance of 0, 1, 2, 3
     waypointPinJitter: 2,     // cells: the pin sits in or around the footprint
-    // Waystones: waking one costs this many charges; travel is free.
+    // Waystones: waking one costs this many charges. Travel rides the ley
+    // lines between awake waystones (each joins its leyNeighbours nearest,
+    // and the network is always connected), at travelShardsPerHop per line.
     waystoneCharges: 1,
+    leyNeighbours: 2,
+    travelShardsPerHop: 1,
     detailChance: 0.35,
     // Hash ghosts: about 1 room in 14; rooms on cracked (imprinted) floor
     // get a boost that grows with how much of the room is cracked.
@@ -148,6 +180,26 @@
   }
 
   /**
+   * An entropy well in this space, if it has one: { cell, kind: 'surge' |
+   * 'trickle' }. Seeded on its own stream; never on a door, item, sigil or
+   * waystone cell, and blocks keep off it.
+   */
+  function well(space) {
+    if (!space.parentId || space.depth < RULES.wellMinDepth || space.cells.length < 4) return null;
+    const r = DE.deriveRng(space.seed, 'well');
+    if (!r.chance(RULES.wellChance)) return null;
+    const kind = r.chance(RULES.wellSurge) ? 'surge' : 'trickle';
+    const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
+    const sg = sigil(space), ws = waystone(space);
+    if (sg) avoid.add(DE.key(sg.cell.x, sg.cell.y));
+    if (ws) avoid.add(DE.key(ws.cell.x, ws.cell.y));
+    const free = space.cells.slice().sort().filter((k) => !avoid.has(k));
+    if (!free.length) return null;
+    return { cell: DE.parseKey(free[Math.floor(r.next() * free.length)]), kind };
+  }
+
+  /**
    * Props in a space, on a 2x2 subgrid per cell (half-cell units), in
    * absolute grid units:
    *   blocks:  [{ x0, y0, x1, y1, units }]   solid; `units` stacked half-cell
@@ -175,6 +227,8 @@
     const lootCells = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
     const sg = sigil(space); // keep a sigil tile clear of blocks
     if (sg) lootCells.add(DE.key(sg.cell.x, sg.cell.y));
+    const wl = well(space); // and a well's
+    if (wl) lootCells.add(DE.key(wl.cell.x, wl.cell.y));
     const ws = waystone(space); // and the waystone's cell, where you wake
     if (ws) lootCells.add(DE.key(ws.cell.x, ws.cell.y));
     const chamber = (space.archetype === 'chamber' || space.archetype === 'hall') && !space.deadEnd;
@@ -279,6 +333,16 @@
     return DE.parseKey(cells[Math.floor(pick * cells.length)]);
   }
 
+  /** Does a pixie start in this space? Returns its cell, or null. */
+  function pixieSpawn(space) {
+    if (!space.parentId || space.depth < RULES.pixieMinDepth) return null;
+    const r = DE.deriveRng(space.seed, 'pixie');
+    const roll = r.next(), pick = r.next();
+    if (roll >= RULES.pixieChance) return null;
+    const cells = space.cells.slice().sort();
+    return DE.parseKey(cells[Math.floor(pick * cells.length)]);
+  }
+
   /** Is this unresolved exit a locked door? Seeded per exit, never the entry. */
   function isLocked(space, exit) {
     return !exit.connectionId && lockedBySeed(space, exit);
@@ -337,6 +401,8 @@
     for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     const sg = sigil(space);
     if (sg) avoid.add(DE.key(sg.cell.x, sg.cell.y));
+    const wl = well(space);
+    if (wl) avoid.add(DE.key(wl.cell.x, wl.cell.y));
     const ws = waystone(space);
     if (ws) avoid.add(DE.key(ws.cell.x, ws.cell.y));
     const blocked = new Set();
@@ -586,5 +652,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, sigil, well, props, ghostSpawn, pixieSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

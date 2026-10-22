@@ -1,12 +1,13 @@
 // Walk mode: where you're going and how you get back (GAME-DESIGN.md,
 // sections 8 and 9). Waypoints (reserved hall footprints, a "?" on the map)
 // and waystones in halls: wake one to reveal new waypoints, and travel
-// between awake ones on the map. The lamp is in lamp.js.
+// between awake ones on the map, along ley lines, for entropy. The lamp is
+// in lamp.js.
 (function (global) {
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, S, UNIT, state, save, savePlayer, chargeText } = W;
+  const { DE, DP, RULES, THREE, S, UNIT, scene, state, save, savePlayer, chargeText } = W;
 
   // ---------------------------------------------------------------------------
   // Waypoints
@@ -81,6 +82,39 @@
 
   const DORMANT = new THREE.Color(0x000000), AWAKE = new THREE.Color(0xa58cff);
 
+  // An awake waystone is hard to miss: its glyphs shine (an additive copy
+  // laid over each face, so they ignore light and shadow), a faint shaft of
+  // light rises from it (a quieter cousin of a sigil's beam), and the
+  // nearest awake ones get a real violet-blue light (a fixed pool, like the
+  // sconces', so waking more never recompiles materials).
+  const GLOW = {
+    color: 0x8f86ff,
+    lights: 2,           // pooled
+    intensity: 5,
+    range: 3.6,          // cells
+    shaftRadius: 0.32,   // cells
+    shaftHeight: 3.2,    // cells
+    shaftOpacity: 0.16,
+  };
+  const glowLights = Array.from({ length: GLOW.lights }, () => {
+    const l = new THREE.PointLight(GLOW.color, 0, GLOW.range * S, 1.6);
+    scene.add(l);
+    return l;
+  });
+  const shaftTex = (() => {
+    const cv = document.createElement('canvas');
+    cv.width = 4; cv.height = 64;
+    const g = cv.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.75, 'rgba(255,255,255,0.5)');
+    grad.addColorStop(1, 'rgba(255,255,255,1)');
+    g.fillStyle = grad; g.fillRect(0, 0, 4, 64);
+    return new THREE.CanvasTexture(cv);
+  })();
+  const shaftGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true);
+  const glyphPlane = new THREE.PlaneGeometry(1, 1);
+
   /** A hall's waystone, standing on its cell's tile (so it rises with the room). */
   function addWaystone(space, rec, tileAt) {
     const ws = DP.waystone(space);
@@ -95,8 +129,25 @@
     mesh.scale.set((ws.x1 - ws.x0) * S, STONE_H * S, (ws.y1 - ws.y0) * S);
     mesh.position.set(((ws.x0 + ws.x1) / 2) * S - tile.position.x, STONE_H * S / 2 + 0.05, ((ws.y0 + ws.y1) / 2) * S - tile.position.z);
     tile.add(mesh);
+    // The shining glyphs: the cut marks again, additive, just off each face.
+    const shine = new THREE.MeshBasicMaterial({
+      map: emap, color: 0xc8bcff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    for (const side of [1, -1]) {
+      const g = new THREE.Mesh(glyphPlane, shine);
+      g.position.z = side * 0.502;
+      if (side < 0) g.rotation.y = Math.PI;
+      mesh.add(g); // scaled with the slab, so it covers the face exactly
+    }
+    const shaft = new THREE.Mesh(shaftGeo, new THREE.MeshBasicMaterial({
+      map: shaftTex, color: GLOW.color, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    }));
+    shaft.scale.set(GLOW.shaftRadius * S, GLOW.shaftHeight * S, GLOW.shaftRadius * S);
+    shaft.position.set(mesh.position.x, GLOW.shaftHeight * S / 2, mesh.position.z);
+    tile.add(shaft);
     const stone = {
-      key, spaceId: space.id, ws, face, phase: ws.cell.x * 0.7 + ws.cell.y,
+      key, spaceId: space.id, ws, face, shine, shaft, phase: ws.cell.x * 0.7 + ws.cell.y,
       awake: !space.parentId || !!state.run.waystones[key], // the starter's is always awake
     };
     // Solid, and too tall to climb.
@@ -139,6 +190,81 @@
     W.refreshHud();
   }
 
+  // ---------------------------------------------------------------------------
+  // Ley lines: the travel network. Each awake waystone joins its
+  // RULES.leyNeighbours nearest awake ones, and a minimum spanning tree
+  // over them all keeps the network in one piece. Travel rides the lines:
+  // the trip goes by the fewest lines (the shorter way on a tie), and each
+  // line costs RULES.travelShardsPerHop shards.
+
+  const centre = (st) => ({ x: (st.ws.x0 + st.ws.x1) / 2, y: (st.ws.y0 + st.ws.y1) / 2 });
+  let leyCache = { sig: '', edges: [] };
+
+  /** The network's lines: [[a, b]] (waystone records), recomputed only when the awake set changes. */
+  function leyLines() {
+    const awake = state.waystones.filter((o) => o.awake).sort((a, b) => (a.key < b.key ? -1 : 1));
+    const sig = awake.map((o) => o.key).join('|');
+    if (sig === leyCache.sig) return leyCache.edges;
+    const n = awake.length, pts = awake.map(centre);
+    const dist = (i, j) => Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+    const seen = new Set(), edges = [];
+    const add = (i, j) => {
+      const k = Math.min(i, j) + ',' + Math.max(i, j);
+      if (i === j || seen.has(k)) return;
+      seen.add(k);
+      edges.push([awake[i], awake[j]]);
+    };
+    for (let i = 0; i < n; i++) {
+      const near = [...Array(n).keys()].filter((j) => j !== i).sort((a, b) => dist(i, a) - dist(i, b));
+      near.slice(0, RULES.leyNeighbours).forEach((j) => add(i, j));
+    }
+    // Prim's: join the pieces, cheapest line first.
+    const inTree = new Set(n ? [0] : []);
+    while (inTree.size < n) {
+      let best = null;
+      for (const i of inTree) for (let j = 0; j < n; j++) {
+        if (inTree.has(j)) continue;
+        if (!best || dist(i, j) < best.d) best = { i, j, d: dist(i, j) };
+      }
+      add(best.i, best.j);
+      inTree.add(best.j);
+    }
+    leyCache = { sig, edges };
+    return edges;
+  }
+
+  /** The way from one waystone to another along the lines: { path: [stones], hops, shards }, or null. */
+  function leyRoute(from, to) {
+    const edges = leyLines();
+    const nbr = new Map();
+    for (const [a, b] of edges) {
+      nbr.set(a, (nbr.get(a) || []).concat(b));
+      nbr.set(b, (nbr.get(b) || []).concat(a));
+    }
+    // Fewest hops, then shortest: Dijkstra on (hops, distance).
+    const best = new Map([[from, { hops: 0, d: 0, prev: null }]]);
+    const open = [from];
+    while (open.length) {
+      open.sort((u, v) => best.get(u).hops - best.get(v).hops || best.get(u).d - best.get(v).d);
+      const u = open.shift(), bu = best.get(u);
+      if (u === to) break;
+      for (const v of nbr.get(u) || []) {
+        const cu = centre(u), cv = centre(v);
+        const cand = { hops: bu.hops + 1, d: bu.d + Math.hypot(cu.x - cv.x, cu.y - cv.y), prev: u };
+        const bv = best.get(v);
+        if (!bv || cand.hops < bv.hops || (cand.hops === bv.hops && cand.d < bv.d)) {
+          best.set(v, cand);
+          if (!open.includes(v)) open.push(v);
+        }
+      }
+    }
+    if (!best.has(to)) return null;
+    const path = [];
+    for (let c = to; c; c = best.get(c).prev) path.unshift(c);
+    const hops = path.length - 1;
+    return { path, hops, shards: hops * RULES.travelShardsPerHop };
+  }
+
   /** E at an awake waystone: the map opens on the others; pick one to go there. */
   function travelFrom(st) {
     state.run.hearth = st.key;
@@ -158,12 +284,23 @@
     W.snapCamera();
   }
 
-  function travelTo(st) {
+  /** Ride the ley lines to another awake waystone, paying for every line. */
+  function travelTo(st, from) {
+    const route = from && leyRoute(from, st);
+    const cost = route ? route.shards / RULES.shardsPerCharge : 0;
+    if (route && !W.spendFuel(cost)) {
+      W.showCaption(`not enough entropy to ride ${route.hops} line${route.hops === 1 ? '' : 's'}: ${route.shards} shard${route.shards === 1 ? '' : 's'}`);
+      return false;
+    }
     placeAt(st);
     state.run.hearth = st.key;
     state.run.travels = (state.run.travels || 0) + 1;
-    W.showCaption(`you step out by the waystone in ${st.spaceId}`);
+    state.run.chargesSpent += cost;
+    W.showCaption(`you step out by the waystone in ${st.spaceId}` +
+      (route ? ` · ${route.hops} line${route.hops === 1 ? '' : 's'} · −${route.shards} shard${route.shards === 1 ? '' : 's'}` : ''));
     savePlayer();
+    W.refreshHud();
+    return true;
   }
 
   /** Where you wake: your last waystone, if it's still there, else the start. */
@@ -172,15 +309,29 @@
       state.waystones.find((o) => o.spaceId === 's0') || null;
   }
 
-  /** Awake markings pulse slowly. */
+  /** Awake markings pulse slowly and shine; the nearest awake stones get the lights. */
   function updateWaystones() {
-    const t = state.time;
+    const t = state.time, p = state.player;
     for (const st of state.waystones) {
-      if (st.awake) st.face.emissive.copy(AWAKE).multiplyScalar(0.75 + 0.25 * Math.sin(t * 1.6 + st.phase));
+      const pulse = 0.75 + 0.25 * Math.sin(t * 1.6 + st.phase);
+      if (st.awake) st.face.emissive.copy(AWAKE).multiplyScalar(pulse);
       else st.face.emissive.copy(DORMANT);
+      st.shine.opacity = st.awake ? 0.9 * pulse : 0;
+      st.shaft.material.opacity = st.awake ? GLOW.shaftOpacity * (0.8 + 0.2 * Math.sin(t * 1.1 + st.phase)) : 0;
+      st.shaft.visible = st.awake;
     }
+    const lit = state.waystones.filter((o) => o.awake)
+      .map((o) => ({ o, d: Math.hypot(centre(o).x - p.x, centre(o).y - p.y) }))
+      .sort((a, b) => a.d - b.d);
+    glowLights.forEach((l, i) => {
+      const it = lit[i];
+      if (!it) { l.intensity = 0; return; }
+      const c = centre(it.o);
+      l.position.set(c.x * S, 1.1 * S, c.y * S);
+      l.intensity = GLOW.intensity * (0.85 + 0.15 * Math.sin(t * 1.6 + it.o.phase));
+    });
   }
 
   Object.assign(W, { revealWaypoints, ensureWaypoints, arrive, waitingPins, addWaystone, waystoneNear,
-    wakeWaystone, travelFrom, travelTo, placeAt, hearth, updateWaystones });
+    wakeWaystone, travelFrom, travelTo, placeAt, hearth, updateWaystones, leyLines, leyRoute });
 })(window);

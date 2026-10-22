@@ -4,8 +4,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, RULES, THREE, $, S, UNIT, scene, camera, state, savePlayer, passable, lantern,
-    jarCatches, noteUnmade } = W;
+  const { DE, THREE, $, S, UNIT, scene, camera, state, passable, lantern, noteUnmade, roomGap } = W;
 
   // ---------------------------------------------------------------------------
   // Hash ghosts
@@ -17,10 +16,13 @@
   // the light on it and a ring fills around the "?"; a full ring and it
   // follows ("!!"), slowly. Light off and the ring drains. "In your light"
   // is a 3D ray from the lamp, so walls and blocks (crouch behind one) hide it. A follower gives up after a couple of seconds out of your
-  // light, or once a room lies between you. Contact glitches the screen.
+  // light, or once a room lies between you. Contact glitches the screen and
+  // drains your psychic stamina (lamp.js); once it touches you, its reach
+  // swells for a moment, so you have to hurry clear.
   // (Nearness used to wobble it; that's switched off with WOBBLE below.)
-  // The only way to be rid of one is to collapse the rooms it's in, which
-  // unravels it and leaves you an echo (a resource with no use yet).
+  // Ghosts stay: there's no catching them, and a room can't be rerolled
+  // while one is in it. What you can do is move them, since they're drawn
+  // to pixies (the ecology's rules, ecology.js), jarred ones included.
 
   // The proximity wobble: off for now. It cost frames, left artifacts, and
   // felt ghosts through walls (it went by distance alone). The code stays.
@@ -28,6 +30,8 @@
 
   const GHOST = {
     contact: 0.34,       // cells, figure to ghost
+    swell: 0.8,          // cells: its reach once it's touching you
+    swellShrink: 1,      // s for the reach to shrink back once you're clear
     markRooms: 1,        // an idle ghost off screen gets a marker this many rooms away or nearer
     markRange: 14,       // cells: and only within this distance
     wanderSpeed: 0.35,
@@ -245,28 +249,6 @@
     return undefined;
   }
 
-  /** Rooms between two spaces through open doors (Infinity past `max`). */
-  function roomGap(a, b, max) {
-    if (a === b) return 0;
-    const exp = state.exp;
-    let frontier = [a];
-    const seen = new Set([a]);
-    for (let d = 1; d <= max; d++) {
-      const nxt = [];
-      for (const id of frontier) {
-        for (const ex of exp.spaces[id].exits) {
-          if (!ex.connectionId) continue;
-          const c = exp.connections[ex.connectionId];
-          const o = c.a.spaceId === id ? c.b.spaceId : c.a.spaceId;
-          if (o === b) return d;
-          if (!seen.has(o)) { seen.add(o); nxt.push(o); }
-        }
-      }
-      frontier = nxt;
-    }
-    return Infinity;
-  }
-
   /**
    * Drift toward a point: only into cells it can float between and never
    * into a tall block (and kept a little clear of their sides). True on arrival.
@@ -311,6 +293,7 @@
 
   function wander(g, dt) {
     if (g.pause > 0) { g.pause -= dt; return; }
+    if (!g.target) g.target = W.ecology.seek('ghost', g); // drawn to something (a pixie)?
     if (!g.target) {
       const exp = state.exp;
       const here = exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))];
@@ -342,17 +325,6 @@
     for (const g of state.ghosts.slice()) {
       const lit = lightReaches(lamp, { x: g.x, y: g.y, h: g.h });
       g.litNow = lit;
-      if (!frozen && g.mode === 'chase' && g.stun <= 0) {
-        const jar = jarCatches(g);
-        if (jar) {
-          jar.fill++;
-          removeGhost(g);
-          W.showCaption(`the jar drinks in the hash ghost · ${jar.fill}/${RULES.jarCapacity}`);
-          savePlayer();
-          W.refreshHud();
-          continue;
-        }
-      }
       if (!frozen) {
         // Bump into one and it's onto you at once, though it reels for a beat first.
         if (g.mode !== 'chase' && Math.hypot(p.x - g.x, p.y - g.y) < GHOST.contact && p.z < 0.6) {
@@ -404,7 +376,11 @@
       }
       const d = Math.hypot(p.x - g.x, p.y - g.y);
       nearest = Math.min(nearest, d);
-      if (d < GHOST.contact && p.z < 0.6) touching = true;
+      // Its reach: the contact radius, swollen while it has hold of you.
+      const reach = GHOST.contact + (GHOST.swell - GHOST.contact) * (g.swell || 0);
+      const holds = d < reach && p.z < 0.6 && !frozen;
+      if (holds) { touching = true; g.swell = 1; }
+      else if (!frozen) g.swell = Math.max(0, (g.swell || 0) - dt / GHOST.swellShrink);
 
       // Look: bob, orbiting "bits", and a hotter, jittery glow when following.
       const chasing = g.mode === 'chase';
@@ -433,6 +409,7 @@
       });
     }
     updateEdgeMarkers();
+    state.ghostTouch = touching; // read by the lamp's stamina
 
     // Screen effects: wobble grows with nearness, glitch with contact. Both
     // hold for a moment once you're clear, then wear off.
@@ -518,6 +495,12 @@
     }
   }
 
+  /** Is a ghost in any of these rooms? (A room can't be rerolled while one is.) */
+  function ghostIn(ids) {
+    const reg = state.exp.registry;
+    return state.ghosts.some((g) => ids.has(reg[DE.key(Math.floor(g.x), Math.floor(g.y))]));
+  }
+
   /** Ghosts inside rooms about to collapse come undone with them (noted, nothing gained). */
   function banishGhostsIn(ids) {
     const reg = state.exp.registry;
@@ -527,5 +510,5 @@
     return gone.length;
   }
 
-  Object.assign(W, { addGhost, clearGhosts, lightReaches, updateGhosts, banishGhostsIn });
+  Object.assign(W, { addGhost, clearGhosts, lightReaches, updateGhosts, ghostIn, banishGhostsIn });
 })(window);

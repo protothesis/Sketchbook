@@ -326,6 +326,48 @@ All notable changes to this sketch are logged here, per
     your room or the next get one too.
   - Fixed: waking or travelling showed the room's log line instead of the
     wake/travel caption.
+- 2026-10-22: **After the voice-memo playtest** (the transcript is
+  [`notes/playtest-2026-10-22-voice-memo.md`](notes/playtest-2026-10-22-voice-memo.md);
+  points in `PLAY.md`):
+  - **The lamp's look**: the halo is a flat, see-through disc with a hard
+    edge (no dither), and bigger (`HALO` in `lamp.js`). Standing still, the
+    sparks become embers rising in a slow, swaying column; walking, they
+    still trail (`EMBER`).
+  - **Slower pacing**: the lamp burns a shard every 18 s (was 12), the tank
+    holds 6 charges (was 8), and a push block pays 2 shards (was a charge).
+  - **Psychic stamina**, a second meter under the lamp's. A ghost's touch
+    knocks off 15% and drains it while you're in its reach, which swells
+    once it has hold of you (`GHOST.swell`). An empty lamp no longer
+    gutters at once: it goes dark and the dark drains stamina at the same
+    rate. Empty stamina: you pass out and wake at your last waystone. It
+    refills in light after 1.5 s of nothing draining it. The screen's edges
+    close in as it falls.
+  - **Ghosts stay.** Jars no longer catch them, and a room can't be
+    rerolled while a ghost is in it.
+  - **Pixies** (new, `app/walk/pixies.js`): small violet lights with wings
+    in about 1 room in 10 (`'pixie'` stream). F with an empty jar near one
+    catches it. A jar holds one pixie (was three ghosts); a pixie jar on a
+    sigil wakes it fully, +1 entropy max. Run save v3 migrates filled jars
+    to pixie jars.
+  - **The ecology** (new, `app/walk/ecology.js`): a first pass at emergent
+    behaviour. Creatures respond to tags through a small table of rules:
+    ghosts seek pixies (free or jarred), pixies flee ghosts, pixies linger
+    at wells. See [`EMERGENCE.md`](EMERGENCE.md).
+  - **Entropy wells** (new, `app/walk/wells.js`, `DP.well`): a basin in
+    about 1 room in 20. Stand in it and it pours entropy into the lamp, a
+    charge at most, then runs dry. Surge wells come back all at once after
+    90 s; trickle wells refill slowly from 10 s after you last drew on them.
+    Blocks keep off a well's tile, so rooms that gained a well may have
+    shifted blocks.
+  - **Awake waystones glow**: their glyphs shine through light and shadow,
+    a faint violet shaft rises from them, and the nearest two cast a
+    violet-blue light.
+  - **Ley lines**: awake waystones join their two nearest and form one
+    network, drawn on both maps. Travel rides the lines, a shard per line,
+    by the fewest lines; the travel map shows each stone's fare and lights
+    up the route under the pointer.
+  - **Fewer unmarked halls**: 1 room in 100 (was 1 in 40), for new
+    expeditions; older records keep their odds.
 
 ### Fixed
 

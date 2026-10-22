@@ -96,11 +96,15 @@ Determinism).
   glitch and static, which holds for a moment once you're clear, then wears
   off over a few seconds. (Nearness used to wobble the screen too; that's
   switched off, `WOBBLE` in `app/walk/ghosts.js`: it cost frames, left
-  artifacts, and worked through walls.) **Jars are how you collect them**
-  (below).
-  Collapsing a room a ghost is in simply undoes it: nothing is gained, but
-  the run keeps a tally and a short log (`run.unmade`) for whatever that
-  becomes later.
+  artifacts, and worked through walls.)
+
+  **Contact drains your psychic stamina** (below), and once a ghost has
+  hold of you its reach swells from 0.34 to 0.8 cells, shrinking back over
+  a second once you're clear, so you have to hurry away.
+
+  **Ghosts stay.** Nothing catches them, and a room can't be rerolled
+  while a ghost is in it (the prompt says so). What you can do is move
+  them: they're drawn to pixies, free or in a jar (the ecology, below).
 - **Halls and waypoints.** New expeditions start in a **hall**: a big room
   with notched corners, an awake **waystone**, at least two doors and a
   pale **surface door** on a north wall. Three violet **"?" pins** on the
@@ -119,27 +123,53 @@ Determinism).
   when new waypoints appear: 0–3, seeded by the hall (0: 10%, 1: 45%, 2:
   35%, 3: 10%; never 0 if no waypoint is left waiting), near and far by
   turns, fanned out past it. E at an awake one opens the big map on every
-  awake waystone, glowing; tap one to travel there (free). The last
-  waystone you woke or used is where you wake if your lamp runs out. The
-  starter hall's is always awake. A waystone doesn't light its room.
+  awake waystone, glowing; tap one to travel there. The last waystone you
+  woke or used is where you wake if you pass out. The starter hall's is
+  always awake. An awake waystone is hard to miss: its glyphs shine
+  regardless of light, a faint violet shaft rises from it, and the nearest
+  two cast a violet-blue light. It still doesn't shelter the lamp.
+- **Ley lines.** Awake waystones are joined into a network: each joins its
+  two nearest, and the lines always connect everything. They're drawn on
+  both maps (dashed, and bright on the travel map). Travel rides the lines,
+  by the fewest of them, and costs **a shard per line**. The travel map
+  shows each stone's fare in ◆ (greyed if you can't afford it) and lights
+  up the route under the pointer.
 - **The lamp burns entropy.** Entropy is a fluid amount of charges, and the
-  lamp burns it steadily: a shard's worth every 12 s (a charge every 36 s),
+  lamp burns it steadily: a shard's worth every 18 s (a charge every 54 s),
   everywhere except within a tile of a lit sconce (its tile and the 8
   around it). A shard pours a third of a charge in; push blocks a whole
   one. Any gain holds the burn for 3 s, so what you just earned doesn't
-  start draining at once. Rerolls and waystones draw on the same pool.
-  When it runs out the lamp gutters, the world fades to black, and you wake
-  at your last waystone with 2 charges. Everything else stays: the map,
-  what you carry, what you restored.
+  start draining at once. Rerolls, waystones and travel draw on the same
+  pool. When it runs out the lamp **goes dark** (a faint glow from the
+  wick, no halo, no embers) and the dark wears on your psychic stamina. Any
+  entropy you find relights it.
+- **Psychic stamina.** A thin pink bar under the lamp's meter, 0 to 100%.
+  A ghost's touch knocks off 15% and drains 20% a second while you're in
+  its reach; the dark (an empty lamp, away from a lit sconce) drains it at
+  the same rate. Empty: you pass out, the world fades to black, and you
+  wake at your last waystone with your stamina full and at least 2
+  charges. Everything else stays: the map, what you carry, what you
+  restored. It refills (12% a second) once nothing has drained it for
+  1.5 s and you're in light. The screen's edges close in as it falls, and
+  the bar pulses while something drains it.
+- **Entropy wells.** A dark stone basin with a glowing pool, in about 1
+  room in 20 (depth 1+). Stand in it and it pours entropy into your lamp,
+  0.6 charges a second, a charge at most; then it's dry. **Surge** wells
+  (violet) come back all at once 90 s after you last drew on them;
+  **trickle** wells (teal) start refilling 10 s after, a full well every
+  120 s, so you can always come back for a little. The pool's size and
+  glow show its level, on the maps too. Times are walking time.
 - **The lamp on the HUD** sits bottom left, by the hotbar: a lantern icon
   in the lamp's colour (its flame sways while it burns, and stutters in
   danger) and a fluid meter, one section per charge, with the one that's
-  burning shown dimmer. Under it: burning, held, or by a sconce, and your
-  keys. The top-left panel is information and settings only.
+  burning shown dimmer. Under it, the stamina bar, then: burning, held, by
+  a sconce, drinking from a well, or out, and your keys. The top-left panel is information and settings only.
 - **You can feel the lamp.** As it falls below 3 charges, the lamp's colour
   goes from yellow through orange and red toward grey and flickers more;
-  its dithered halo shrinks and fades (barely there below 1 charge); its
-  trail of sparks thins; and the light gets dimmer and shorter. Gaining
+  its halo (a flat, see-through disc with a hard edge) shrinks and fades
+  (barely there below 1 charge); its embers thin; and the light gets
+  dimmer and shorter. Walking, the embers trail behind you; standing
+  still, they rise in a slow, swaying column, like a flame's. Gaining
   entropy pops a purple +◆ over your head (+◆◆◆ for a charge).
 - **The surface door.** Only in the starter hall. Opening it asks "Up to
   the surface (quit game)?" Going up saves and shows the expedition record
@@ -152,7 +182,7 @@ Determinism).
   half-cell toward you (you step back), which is how a block shoved into a
   corner comes back out. A block only moves within its room, onto bare
   floor, never into a doorway's mouth. Home, it and its mark light up, and
-  it pays **1 charge** of entropy. It can still be moved: off its mark, the
+  it pays **2 shards** of entropy. It can still be moved: off its mark, the
   room takes the charge back (what you still have, and never enough to put
   your lamp out), and home again pays back only what was taken, so a block
   can't be farmed. Blocks can't
@@ -178,18 +208,21 @@ Determinism).
   - **Objects** (jars) are things in the world as themselves. A jar from a
     room's loot is already standing there when the room appears. E lifts
     it, F sets it down again, with whatever's inside.
+  - **Creatures** (ghosts, pixies) aren't items: they move on their own,
+    by the ecology's rules.
 - **The hotbar.** Tools and objects sit in slots at the bottom of the
   screen. Pick a slot with 1–9, the mouse wheel, or a tap. **E** interacts
   with the world (doors, climbing, taking a tool, lifting a jar, wiping a
   chalk mark you're standing on). **F** (or "use" on touch) uses the
   selected item. Some slots are **groups**: one slot, several variants
-  (chalk colours; jars by fill). Click a selected group again (or press and
+  (chalk colours; jars by contents). Click a selected group again (or press and
   hold it) to open its picker, or press its number again to cycle.
-- **All your jars share one slot.** It's grouped by fill (empty, 1/3, 2/3,
-  full), with a count on each group. Its default, **auto**, sets down your
-  fullest jar when the spot is on a sigil tile (to power it) and your
-  emptiest one anywhere else (a trap). Pick a group in the picker to set
-  down that one instead, just for the next jar.
+- **All your jars share one slot.** It's grouped by contents (empty, or a
+  pixie), with a count on each group. Its default, **auto**, catches a
+  pixie in an empty jar when one is within reach, sets down a pixie jar
+  when the spot is on a sigil tile (to power it), and an empty one
+  anywhere else. Pick a group in the picker to use that one instead, just
+  for the next jar.
 - **Chalk marks.** Your own markup, drawn in the world, and it shows up on
   the maps. Chalk comes in five colours, each with its own simple mark:
   silver arrow (it points the way you faced), gold triangle, crimson
@@ -205,20 +238,33 @@ Determinism).
   ghosts float over it. Nothing prompts you to place one. If there's no
   room (say you're facing a wall), the hotbar gives a little shake, and so
   does any other F that can't do anything. E lifts it again, with whatever's
-  inside. A jar is a **trap**: lead a following ghost into a placed jar and
-  it's caught (up to 3). A collapse shatters any jar in the branch, and its
-  ghosts come undone.
+  inside. A jar holds **one pixie**. A collapse shatters any jar in the
+  branch, and a pixie in it is lost.
+- **Pixies.** Small violet lights with fluttering wings, in about 1 room
+  in 10 (depth 1+; rolled once per room, like ghosts). They drift about
+  their room, flee ghosts that come close, and linger at entropy wells.
+  With an empty jar, F within 0.75 cells of one catches it (the prompt
+  says so). Set a pixie jar down and ghosts are drawn to it: they drift
+  over and circle it, wander off, and come back. That's how you move a
+  ghost out of your way. Or put it on a sigil.
+- **The ecology.** How creatures treat each other comes from one small
+  table of rules in `app/walk/ecology.js`, by tag, not from special cases:
+  ghosts seek pixies (70% of their wander goals, within 12 cells and a
+  room), pixies flee ghosts (within 2.2 cells), pixies seek wells (50%,
+  their own room). A jarred pixie still wears the 'pixie' tag, which is
+  why a jar draws ghosts. Because pixies gather at wells and ghosts gather
+  at pixies, ghosts end up haunting wells, which no rule says. See
+  [`EMERGENCE.md`](EMERGENCE.md).
 - **Sigil tiles.** A glowing hex on the floor of about 1 room in 25 (depth
   1+, not the smallest rooms; never under blocks). It takes up to **four
-  jars**, one per quarter of its tile. It wakes **one stage per ghost** in
-  its fullest jar:
-  - stage 1: a thin shaft of energy with a few rising motes
-  - stage 2: a little more energised
-  - a full jar: a flash, a big beam with a bright core, a ring of energy
-    radiating across the floor, and a violet light (no shadows)
+  jars**, one per quarter of its tile. A **pixie jar** on it wakes it: a
+  flash, a big beam with a bright core, a ring of energy radiating across
+  the floor, and a violet light (no shadows). (Stages 1 and 2, for jars of
+  one or two ghosts, are still in the code but nothing reaches them now.)
 
-  Every full jar on it is **+1 entropy max** (so up to +4 per sigil) for
-  as long as it stays there and full. Lifting a jar takes its +1 away.
+  Every pixie jar on it is **+1 entropy max** (so up to +4 per sigil) for
+  as long as it stays there. Lifting a jar takes its +1 away. That's the
+  trade-off: a pixie jar powers a sigil, or it moves ghosts, not both.
   Sigils stack. If the max drops while you're above it, you keep the extra
   charges until spent but can't gain more.
 - **Doorstones.** A rare find (about 1 room in 33, from depth 2). Select
@@ -240,9 +286,10 @@ Determinism).
   you (two wheel steps back from the closest zoom); drag to pan, wheel or
   pinch to zoom.
 
-There's no passive regen. Entropy buys rerolls, waking waystones and
-lighting sconces, and the lamp burns it. Running out isn't a loss, only a
-trip back to your last waystone.
+There's no passive regen, only wells. Entropy buys rerolls, waking
+waystones, travel and lighting sconces, and the lamp burns it. Running out
+isn't a loss in itself: it's the dark, and the dark wears you down until
+you pass out and wake at your last waystone.
 
 ## Visual parameters
 
@@ -266,12 +313,15 @@ trip back to your last waystone.
 | Chalk | sticks in five colours; on the hotbar, one group slot: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
 | Hotbar | bottom-centre slots: ⚱ jars (one group slot: "auto" or a fill's pips, ×n), chalk (a group slot with a colour picker), ⌂ doorstones; the selected slot is outlined in orange. Keys are a ⚷ count beside the entropy meter | a "use" button on touch screens |
-| Jar | a small glass jar with a dark lid; violet wisps bob inside, one per ghost | a solid half-cell |
+| Jar | a small glass jar with a dark lid; a pixie flits inside when it holds one | a solid half-cell |
+| Pixie | a small pale-violet sphere with two fluttering translucent wings and a soft additive glow, bobbing about 0.6 cells up | no light of its own (cost) |
+| Entropy well | a dark stone ring on the floor around an additive pool, violet (surge) or teal (trickle); the pool's size and brightness are its level; motes rise slowly, and fast while you drink | on the maps a small circle, filled by its level |
+| Stamina | a thin pink bar under the lamp's meter, redder below 35%, pulsing while something drains it; a dark violet vignette closes in as it falls | |
 | Beyond a lock | a faint gold warmth on the floor, "beyond a lock" in the caption, a gold outline on the maps | |
 | Sigil | a seeded star polygon (pentagram, hexagram, {7/3}, {8/3}) in a double ring with glyph marks, drawn additively | stage 0 a faint violet trace; 1 a dim glow; 2 brighter and flickering; 3 pulsing gold. A +1 max shows as a gold-edged ninth charge slot |
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
 | Lamp HUD | bottom left: a lantern icon (46 px, like a hotbar slot) in the lamp's colour, and a fluid meter of 8 sections (more with sigils), the burning one dimmer; a state line and keys under it | violet liquid, gold for a sigil's extra sections |
-| Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges); a dithered additive halo, 2.5x the lamp at full, shrinks and fades (opacity ~0.85 down to ~0.2 at 1 charge, then barely there); additive sparks rise off it (up to 26/s, 0.35–0.75 s), thinning as it fails; the light's intensity falls to 30% and its range to 40% at empty; flicker grows below half | |
+| Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges); a flat, hard-edged, see-through halo (`HALO`), about 4x the lamp across at full, shrinks to 40% and fades (opacity 0.3 down to 0.1 at 1 charge, then barely there); embers (`EMBER`): walking, up to 22/s spraying and trailing (0.35–0.75 s); standing, 9/s rising slowly in a swaying column (0.9–1.6 s); the light's intensity falls to 30% and its range to 40% at empty; flicker grows below half. Out (no fuel): 12% intensity, half range, no halo or embers | |
 | Entropy popup | "+◆" (one diamond per shard's worth, up to three) floats up over the head in violet; "−◆" greyer when a block takes its charge back | |
 | Ghost markers | on a ring around the figure, radius 42% of the shorter screen side | idle ghosts: a faint ghost icon, violet border |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
@@ -282,10 +332,11 @@ trip back to your last waystone.
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
 | Captions | a short typewriter-style log line when you enter a space | e.g. "s7 · chamber · damp · depth 3" (the Navidson Record feel) |
 | Waypoint pin | a violet square with a "?" and a glow, on both maps; off the map, a smaller one on the edge in its direction | |
-| Waystone | a grey slab, 0.38 × 0.18 cells, 2.5 units tall, with five seeded glyphs on its north and south faces; awake, the glyphs glow violet and pulse slowly | on the maps, a small slab, glowing when awake |
+| Waystone | a grey slab, 0.38 × 0.18 cells, 2.5 units tall, with five seeded glyphs on its north and south faces; awake, the glyphs glow violet, pulse slowly and shine (an additive copy over each face, so light and shadow don't touch them), a faint additive shaft rises 3.2 cells, and the two awake stones nearest you get a violet-blue point light (`GLOW` in `waystones.js`, pooled, no shadows) | on the maps, a small slab, glowing when awake |
+| Ley lines | between awake waystones on both maps: dashed and faint, solid and brighter on the travel map; the route to the stone under the pointer glows; fares in ◆ by each stone's id | |
 | Surface door | weathered pale panel with a daylight-white seam | white on the maps |
 | Push block | the whole block in its colour; home, it glows | |
-| Guttering | the lamp fades out and the world goes black over ~1 s; HUD and captions stay | |
+| Passing out | the lamp fades out and the world goes black over ~1 s; HUD and captions stay | |
 
 ## Game parameters
 
@@ -295,27 +346,31 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | --- | --- |
 | Move | WASD / arrows (Shift runs at 4 cells/s instead of 2.4); touch: drag for a stick |
 | Open a door | walk into it for 0.35 s, or press E / tap the prompt |
-| Entropy | a fluid amount in charges (`run.fuel`): start with 2, hold up to 8; a shard is a third of a charge |
+| Entropy | a fluid amount in charges (`run.fuel`): start with 2, hold up to 6 (`chargesMax`, was 8); a shard is a third of a charge |
 | Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
-| Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 1 charge; off its mark takes back what it paid (never below 0.05) |
+| Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 2 shards (`restoreCharges`, was 1 charge); off its mark takes back what it paid (never below 0.05) |
 | Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second; halls: always one, 50% a second), never on south walls; lighting one costs 1 shard; the lamp doesn't burn within one tile of it (3x3, same room) |
-| Lamp | burns a shard's worth every 12 s (`lampSeconds`), continuously, except by a lit sconce; any gain holds it 3 s (`lampGrace`); looks full at 3 charges (`lampFullCharges`), danger at 1 (`lampDanger`); out: wake at your last waystone with 2 charges |
-| Halls | starter: 6–8 cells a side; waypoints: 7–9; unmarked: 6–8, 2.5% of rooms at depth 3+ (`params.hallChance`, own `'hall'` stream); corners notched (65% each, 1–2 cells). Halls: 3 push blocks, 1–2 sconces, a waystone; loot as a chamber |
+| Lamp | burns a shard's worth every 18 s (`lampSeconds`, was 12), continuously, except by a lit sconce; any gain holds it 3 s (`lampGrace`); looks full at 3 charges (`lampFullCharges`), danger at 1 (`lampDanger`); out: dark, and stamina drains |
+| Stamina | 0..1 (`run.stamina`); a ghost's touch: −0.15 once (`staminaHit`), then 0.2/s (`staminaDrain`) while in its reach; the dark: 0.2/s; refills 0.12/s (`staminaRegen`) after 1.5 s undrained (`staminaRegenDelay`); empty: pass out, wake at your last waystone with full stamina and at least 2 charges |
+| Wells | 1/20 of rooms at depth 1+ (`wellChance`, `'well'` stream; 4+ cells; not on door, item, sigil or waystone cells; blocks keep off); half surge, half trickle (`wellSurge`); 1 charge each (`wellCapacity`), poured at 0.6/s (`wellRate`) while you stand within 0.42 cells of its centre; surge: full again 90 s after the last draw (`wellSurgeCooldown`); trickle: refills from 10 s after (`wellTrickleDelay`), a full well per 120 s (`wellTrickleTime`); saved as `run.wells` |
+| Pixies | 1/10 of rooms at depth 1+ (`pixieChance`, `'pixie'` stream), rolled once per room; wander 0.6 cells/s in their room, pausing 0.6–2 s; flee at up to 1.5 cells/s (`PIXIE` in `pixies.js`); caught within 0.75 cells |
+| Ecology | `ECOLOGY.rules` in `ecology.js`: ghost seeks pixie (70%, orbit 0.45–1.1 cells, within 12 cells and 1 room); pixie flees ghost (2.2 cells); pixie seeks well (50%, orbit 0.15–0.6, own room) |
+| Halls | starter: 6–8 cells a side; waypoints: 7–9; unmarked: 6–8, 1% of rooms at depth 3+ (`params.hallChance`, own `'hall'` stream; was 2.5%, which older records keep); corners notched (65% each, 1–2 cells). Halls: 3 push blocks, 1–2 sconces, a waystone; loot as a chamber |
 | Waypoints | the start: two near (25–35 cells centre to centre), one far (45–60), all round the root. Waking a waystone: 0–3 (`waypointOdds`), near/far/near, fanned outward. A free ring around each footprint; pin within ±2 cells of the centre |
-| Waystones | wake: 1 charge, reveals waypoints; travel: free, awake to awake only, picked on the big map |
+| Waystones | wake: 1 charge (`waystoneCharges`), reveals waypoints; travel: awake to awake only, picked on the big map, along ley lines (each stone joins its 2 nearest, `leyNeighbours`, plus a minimum spanning tree), the fewest lines first, then the shortest; 1 shard per line (`travelShardsPerHop`) |
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
 | Climb | push into a block for 0.35 s or press E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
-| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. A placed jar with room catches a following ghost within 0.38 cells; a collapse just undoes ghosts in the branch (tallied in `run.unmade`) |
+| Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells, swelling to 0.8 while it touches you and shrinking back over 1 s (`swell`, `swellShrink`). No catching; a room with a ghost in it can't be rerolled |
 | Reroll price | 1 charge; only a provisional room (no door out of it ever opened) |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
-| Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); capacity 3; F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall; a following ghost within 0.38 cells of a jar with room is caught |
+| Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); one pixie each (`jarCapacity`); F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall |
 | Chalk | start with one silver stick (3 strokes); 1/12 of rooms at depth 1+ hold a stick (seeded on the loot stream, after jars; colour from silver/gold/crimson/teal/violet); F draws on the nearest free quarter ahead (floor or a one-unit block's top, not under a jar, not on another mark); E on a mark wipes it |
 | Beyond a lock | `DP.pastLock(exp, space)`: the room's entry door was generated locked (`lockedBySeed`, ignoring that it's since been opened) |
-| Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 jars (one per quarter); stage = the fullest jar's fill; each full jar on it = entropy max +1 (up to +4), stacking across sigils |
+| Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 jars (one per quarter); a pixie jar wakes it fully; each pixie jar on it = entropy max +1 (up to +4), stacking across sigils |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
 Entropy income, measured over ~700 rooms (2026-10-21): shards lying around
@@ -352,6 +407,52 @@ Whether a room starts with a hash ghost is seeded (`'ghost'` stream, plus
 the room's imprint, which is fixed once the room exists). Where ghosts drift
 afterwards is run state: their positions are saved with the run, and each
 room's roll happens once (`run.ghostSeen`).
+
+## Playtest notes, 2026-10-22 (voice memo)
+
+A half-hour voice memo after playing the build above; the transcript is
+[`notes/playtest-2026-10-22-voice-memo.md`](notes/playtest-2026-10-22-voice-memo.md).
+Addressed the same day unless marked later.
+
+- **Lamp particles** looked good while walking but too random standing
+  still: more like a flame, or wisps of embers. Now an idle ember column.
+- **The dithered halo** was noisy and started too small; wanted a
+  semi-transparent stylised circle with a hard edge. Done, and bigger.
+- **The lamp as a timer** works and changes how you play, but a full meter
+  was easy to keep, which turned careful exploring into running for
+  resources. Wanted something in between, leaning slower. Slower burn,
+  smaller tank, push blocks pay less.
+- **Waypoints farther apart** is much better, but random big halls that
+  weren't waypoints made the real ones feel less special. Unmarked halls
+  are rarer. (Their irregular shape is liked; most rooms are boxes. A
+  separate engine pass on room shapes and archetypes is planned for its
+  own branch, later.)
+- **The dungeon feels empty of life**, and ghosts got rare. Catching ghosts
+  in jars was overpowered (a stealth threat became an easy lure). Ghosts
+  should stay, as lingering threats that make you slow down and think
+  about position; maybe no rerolling a room with a ghost in it. Done.
+- **Ghost contact should cost something** now that passing out exists, but
+  not unavoidably: walking through a door into a closet with a ghost in it
+  shouldn't send you home. Hence psychic stamina, a chunk on contact and a
+  drain while you stay, with a reach that swells so you have to hustle.
+  The dark drains it too, instead of the lamp sending you home at once.
+- **Entropy tiles** that refill the lamp, deplete, and recover, either
+  after a full cooldown or by trickling. Both built as wells. *Later:*
+  temporary entropy with a potency that drains fast, so it can't be
+  carried across the map.
+- **Pixies in jars** instead of ghosts: catch one with a jar, set it down,
+  and ghosts drift around it like moths. A way to manage ghosts, not get
+  rid of them, and a trade-off against powering a sigil. Built.
+- **Emergent behaviour**: generalise "ghosts like pixie jars" into
+  properties that interact, like an ecosystem. A first pass (the ecology
+  rules) and a briefing ([`EMERGENCE.md`](EMERGENCE.md)).
+- **Waystones should look awake**: a light like a sconce's in violet or
+  blue, glyphs that glow regardless of light, a subtle shaft like a
+  sigil's. Done. Waking already costs a charge (it was easy to miss).
+- **Fast travel as a network with a cost**: see how waystones connect (ley
+  lines), make connections matter, and charge for distance. Built as a
+  shard per line. *Later:* abilities or items that make travel cheaper or
+  farther.
 
 ## Playtest notes, 2026-10-22 (waypoints and the lamp)
 
@@ -459,7 +560,7 @@ undoing gets harder and more consequential the deeper you go.
 
 ## Out of scope for now
 
-- Combat, health, enemies, and any lose state.
+- Combat and a real lose state. (Psychic stamina is a health bar of sorts, but passing out only sends you back to a waystone.)
 - Exit kinds in the engine itself (locks live in the walk layer for now).
 - Ceilings, first-person view, and camera rotation.
 - Performance work. One mesh per tile and per wall, plus point-light
@@ -467,7 +568,7 @@ undoing gets harder and more consequential the deeper you go.
 
 ## Open questions
 
-- Should entropy regenerate slowly, or only come from shards?
+- Should entropy regenerate slowly, or only come from shards? (Wells are a first answer: local, depletable regen.)
 - Is "collapse the whole branch" too blunt once branches loop back into
   rooms you're keeping?
 - Should rooms you've lit keep a faint "memory glow" in 3D, or is the
