@@ -7,6 +7,85 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-10-12: **Board look** (`ui/styles/board.js`), the first cut of the
+  presentation-board style (style system step 6):
+  - Light paper of its own, with faint stepped terrain bands and hairline
+    contours that fade out before the map's edge.
+  - Crisp vector water with no outline, ended by a hard frame circle, so
+    a coast meets the arc.
+  - Inside the settlement's territory: grass ground, stepped height
+    shading, and patterned fields (row hatches turned along each field,
+    stipple pasture, dotted orchards, dashed fallow). Buildings and
+    squares are white with no outline; roads are the paper's colour.
+  - The territory is shaped by the fields, buildings and roads. Outlying
+    farmsteads are joined to the town along their road. Its edge snaps to
+    contour lines running close to it, taking in or carving out the
+    pocket between, but never carving through fields or buildings. Where
+    it snaps, its edge *is* that contour line; where contours are packed
+    close it steps along them; elsewhere it's smooth. A patchy halftone of
+    shrinking dots comes off the edge here and there, shaded like the
+    ground it stands on.
+  - Woods are flat and opaque. One mostly inside the territory is shaded
+    whole, past the edge too. Any other is shaded where it's near the
+    territory, and hatched and outlined beyond. A wood that lies mostly on
+    the visible side is hatched whole; one mostly far out, or cut off by
+    the map's edge, is broken up by the halftone fade. The hatch and
+    outline share one weight.
+  - The open sea is solid and ended by the frame. A lake is drawn whole:
+    solid if any of it is inside the territory, else a light horizontal
+    hatch with a matching outline.
+  - Outside the territory, roads get a grey edge that the halftone fade
+    breaks up with distance, so no road visibly ends.
+  - Topography sits over the ground and under the fields. Contour lines
+    run across most of the map. Outside the territory they're eaten away
+    by a halftone fade, holes that grow with distance, so they're nearly
+    whole at the edge and just bits by the map's edge. They're a little stronger
+    closer in.
+  - Lone and edge trees are solid crowns (no outline) close to the woods'
+    green that fade in from zoom 0.8. They're drawn whole wherever the tree
+    stands inside the territory. Trees inside a wood aren't drawn, since
+    the wood is.
+  - Labels are spaced capitals. Hovering the legend colours that
+    category's buildings.
+- 2026-10-12: **Look** switcher (under Layers, or V) between Natural and
+  Board. It's kept in the URL as `st`. Natural stays the default.
+- 2026-10-12: Renderer support for the board look (natural is unchanged):
+  - The style `frame` circle, a hard clip that layers opt out of with
+    `frame: false`.
+  - A layer `fade`: radial from the map's origin, or `'focus'`, a soft,
+    uneven falloff with distance from the focus area.
+  - Areas come in parts (each wood, say) with `focusShare`, how much of
+    each lies inside the focus area. Filters can take `{ min, max }`.
+  - Layer `within: 'area.x'` clips to another area. Stop-gap
+    `area.reach` is the territory grown by about 60 m with its own uneven
+    edge. Water is an area too, in parts with a `sea` flag.
+  - A pattern's `px` keeps it at least that many whole screen pixels
+    apart, so it stays visible zoomed out without flickering. Trees can
+    skip an area (`outside`), keep only those centred in one (`inside`),
+    and drop their outline (`edgeWidth: 0`).
+  - A `halftone` draw function: shrinking dots coming off an area's edge,
+    in patches.
+  - A faded layer keeps its `focus` clip and the roads' exit rule.
+  - `fade: 'halftone'` with a style's `halftoneFade` (holes growing with
+    distance from an area). Area parts carry `fadeShare`, how much of each
+    lies on its visible side.
+  - Terrain is traced once, on one grid, for water, bands, the generic
+    contour lines and the territory's edge, so they line up exactly.
+  - A style `paper` colour of its own.
+  - `terrain.bands`: vector stepped bands traced from the height field.
+  - `water.*` features: standing water traced from the height field as
+    crisp vector rings.
+  - Stop-gap areas: `area.territory` (the farmed extent and buildings
+    grown and smoothed, with tapering arms along roads and a noisy edge),
+    `area.settled` (built-up footprint) and `area.forest` (where tree
+    crowns cover most of the ground).
+  - Trees can fade in with an `alpha` zoom stop.
+  - The "what's here" highlight in the generic `fill`.
+  - Font `caps` and `tracking`, and labels without halos when a style's
+    halo has no width.
+  - Colour tints mix toward the style palette's own `paper` when it has
+    one, so board's colours don't change with the theme.
+
 - 2026-10-12: Style system, step 4 (renderer only; no style uses it yet,
   so no visual change):
   - **Focus clip.** A style's `focus: { area: 'area.boundary' }` plus a
