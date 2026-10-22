@@ -1,29 +1,43 @@
 # Game design: entropy, order and seeds
 
-The direction for walk mode's next stretch, settled in a design discussion on
-2026-10-21. It guides the buildout and is the reference for why things work
-the way they do. Unlike [`CLOSING-THOUGHTS.md`](CLOSING-THOUGHTS.md), this
-**is** a plan. Its first slice (at the end) is what gets built next;
-everything after that is direction, to be designed in more detail when its
-turn comes.
+The direction for walk mode, settled in two design discussions. The first
+(2026-10-21) set up entropy, committing and restoration: sections 1–6 and
+the first slice, now built. The second (2026-10-22) gave the game a goal and
+a clock: sections 7–11 and the second slice. This guides the buildout and is
+the reference for why things work the way they do. Unlike
+[`CLOSING-THOUGHTS.md`](CLOSING-THOUGHTS.md), this **is** a plan. The
+slices near the end say what gets built and when; everything after them is
+direction, to be designed in more detail when its turn comes.
 
 For what exists today and its tuning, see [`PLAY.md`](PLAY.md). For engine
 decisions, see [`NOTES.md`](NOTES.md).
 
 ## The loop
 
-1. **Open a door and look.** A new room is provisional. Walk in, scout it,
+1. **Set out from a waystone** toward a waypoint: a "?" on the map, near or
+   far. Something in the ether is pulling you there.
+2. **Open a door and look.** A new room is provisional. Walk in, scout it,
    take what's there, and decide.
-2. **Keep it or reroll it.** Rerolling costs entropy, and every reroll in the
-   same spot leaves the floor more cracked.
-3. **Commit** by opening any door out of the room. From then on it's fixed.
-4. **Restore** the dungeon: put things back where they belong, light what
-   was dark. That's the main way to earn entropy.
-5. **Harvest and plant seeds** (later) to shape the map with a scarcer
+3. **Keep it or reroll it.** Rerolling steers you toward the waypoint, and
+   costs entropy. Every reroll in the same spot leaves the floor more
+   cracked.
+4. **Commit** by opening any door out of the room. From then on it's fixed.
+5. **Your lamp burns entropy** in dark rooms. It's the same pool rerolls
+   draw from, so every reroll shortens how far you can go.
+6. **Restore** the dungeon on the way: put things back where they belong,
+   light what was dark. Push blocks pay entropy; a lit room stops draining
+   your lamp.
+7. **Arrive.** The waypoint is a setpiece, a big hall. Arriving reveals the
+   next set of waypoints. Wake its waystone and it joins your fast-travel
+   network.
+8. **If the lamp runs out,** you wake at the last waystone you used.
+   Everything you did stays done.
+9. **Harvest and plant seeds** (later) to shape the map with a scarcer
    resource than entropy.
 
-Entropy is the energy. Order is how you earn it. Seeds are how you get
-agency over what the dungeon grows.
+Entropy is the energy, and now also the light. Order is how you earn it.
+Waypoints are where you're going. Waystones are how you get back. Seeds are
+how you get agency over what the dungeon grows.
 
 The ethos runs against the usual dungeon crawler: **leave it better than you
 found it.** Smashing and looting everything is the wrong instinct here;
@@ -292,10 +306,165 @@ that threshold. It can happen again from inside a layer, going deeper.
   - doors past a lock that can't be undone
   - a second, actually threatening entity
 
-## First slice
+## 7. Why play: the problem the second discussion solved
 
-What gets built next, in order. Each step is small enough to playtest on its
-own.
+After the first slice, exploring was satisfying but had no purpose. Three
+reasons:
+
+- **The economy only fed itself.** Restoration earned entropy, entropy paid
+  for rerolls, rerolls made new rooms with more restoration in them. Nothing
+  outside that cycle wanted anything from it.
+- **A reroll had no target.** Standing at a provisional door, there was
+  nothing in particular to hope for, so there was no reason to prefer one
+  room over another.
+- **Everything behind you was spent.** Restoration paid once, and a
+  committed room had nothing left to give. The game pushed you forward and
+  never back.
+
+A clock (stamina, a timer, the lamp) fixes pacing but not purpose. The
+answer is a **want** first (waypoints, section 8), then a **limit** that
+gives it tension (the lamp, section 10), and a reason to **come back**
+(waystones, section 9).
+
+**The shape: a persistent world, bounded expeditions.** Not a fresh seed per
+run, and not one endless walk either. The dungeon persists, and each trip
+into it is limited by the lamp and anchored at waystones. That isn't a
+roguelike (a fresh world each run, with permadeath) or a roguelite (runs
+reset, some progress carries over). It's closer to a procedural Hollow
+Knight, with Minit's short pushes and Death Stranding's building.
+Games worth looking at for each piece:
+
+| Piece | Who does it well |
+| --- | --- |
+| Persistent world, bounded runs | Minit, Outer Wilds, Loop Hero |
+| Light as a clock | Darkest Dungeon, Don't Starve |
+| Lit rooms are safe rooms | Dungeon of the Endless |
+| Your building makes later trips easier | Death Stranding |
+| Checkpoints and hub-to-hub travel | Hollow Knight (benches, stag stations), Dark Souls |
+| Putting things where they belong | Unpacking, PowerWash Simulator, Wilmot's Warehouse |
+| Unknown nodes you choose to go to | Slay the Spire's "?" rooms |
+| Secrets in a dense map | Animal Well, Tunic |
+
+**A rule carried over from earlier games: never force backtracking, reward
+it.** The main thread never makes you retrace your steps. Going back should
+be fast and safe when you choose to (waystones, lit rooms). Cross-room fetch
+tasks, when they come, are the one place you're asked to go back, so they
+can't arrive before fast travel is solid.
+
+## 8. Waypoints
+
+**A set of three "?" pins on the map: two near, one farther.** Each marks a
+place the dungeon will grow a setpiece. Pick one; the far one is the
+push-your-luck option.
+
+- **A pin is the pull.** It gives rerolls a target: a room whose doors all
+  lead away from where you're going is worth rerolling.
+- **The footprint is reserved in the engine,** not just marked. The
+  setpiece's cells are claimed when the set is made, so ordinary rooms grow
+  around it and can't crowd it out. A door that runs into the footprint
+  opens into the setpiece, the way a loop opens into an existing room. Any
+  room built against the footprint always gets at least one door into it.
+- **The footprint isn't shown.** The pin sits somewhere in or around it,
+  not at its centre, so you know roughly where, not exactly.
+- **Arriving reveals the next set.** Opening the setpiece's door places
+  three more pins, out past it (away from the start).
+- Reservations are history events, so replay, export and the chart view all
+  keep them.
+
+**Later:**
+
+- **What's there varies.** Not always a setpiece: sometimes a false flag
+  (an ordinary room, or nothing much), sometimes a threat. A category of
+  points of interest, with some chance to it.
+- **Setpieces in ordinary generation too,** without a pin, as a rare find.
+- **Chapters.** Group waypoints into sets that, when finished, reveal the
+  next set farther out or deeper. Arcs without a size cap. (Today every
+  arrival adds a set, so unvisited pins pile up. Chapters would tidy that.)
+
+**Caveats:**
+
+- A footprint can still get boxed in, by rooms that touched it before it
+  was reserved (they have no door toward it). Doorstones are the backstop.
+  Watch for it in play.
+- An endless map is fine for now. Revisit a cap or a resource limit if it
+  stops being fun or fast.
+
+## 9. Setpieces, the starter hall and waystones
+
+**Halls** are a new room archetype: large (7–9 cells a side for setpieces,
+6–8 for the starter), a rectangle with notched corners so it reads
+differently from a chamber.
+
+- **The starter hall** replaces the root chamber in new expeditions. It's
+  the first waypoint, in effect: always at least two ordinary doors, one
+  **surface door** (below) and an awake waystone.
+- **A setpiece hall** always has three push blocks, at least one sconce and
+  a dormant waystone, plus whatever else any room can hold (loot, props,
+  sigils, ghosts). Setpieces are committed the moment you arrive: no
+  rerolling them.
+- **Later:** setpieces ask for things from elsewhere (books, dishes,
+  paintings, a statue's head), turning section 3's cross-room tasks into a
+  shopping list. Fully restoring one earns a reward still to be decided.
+  Restoring isn't what wakes the waystone: a multistage restoration would
+  be too much to ask before you can travel.
+
+**Waystones** are small monoliths, half a cell wide and about 2.5 block
+units tall, covered in arcane markings.
+
+- **Waking one costs a little entropy** (one charge). An awake waystone's
+  markings glow.
+- **Fast travel goes waystone to waystone,** never from anywhere. E at an
+  awake waystone lists the others. Travel is free for now.
+- The last waystone you woke or travelled through is where you wake if your
+  lamp runs out (section 10).
+- A room with an awake waystone counts as lit.
+
+**The surface door** is a placeholder exit from the game loop. Opening it
+asks "Up to the surface (quit game)?" Going up saves and shows the
+expedition record. It's the bridge to something above the dungeon later: a
+town, a place where seeds are cultivated, whatever happens between
+expeditions.
+
+## 10. The lamp
+
+**One pool of entropy is both your light and your rerolls.** That's the
+"spend to get" the economy was missing: every reroll toward a waypoint burns
+fuel you need to get there.
+
+- **The lamp burns entropy in dark rooms,** a shard every few seconds. In a
+  lit room (a lit sconce, or an awake waystone) it doesn't burn.
+- **Lighting a sconce costs you a shard** (you give it some of your flame)
+  instead of paying one. In return that room never drains your lamp again.
+  Restoration becomes an investment in the way back, not a one-time payout.
+- **Push blocks still pay a charge.** A setpiece's three blocks make it an
+  oasis.
+- **Running low dims the lamp.** On the last charge, the light shrinks and
+  flickers.
+- **Running out:** the lamp gutters, and you wake at your last waystone
+  with the starting entropy. Everything else stays: the map, what you
+  carry, what you restored. **You lose only your position.** Start gentle;
+  add bite (dropped items, a corpse run) only if it's too soft.
+
+**Later:** cover the lantern on purpose (to slip past hash ghosts, which are
+drawn to light) at the price of relighting it. That pairs with a second
+kind of threat that lives in the dark (section 6), so light and dark each
+have dangers and which one you want depends on the room.
+
+## 11. Walked paths stay alive (later)
+
+"Everything behind you is spent" has a second answer, held for later: the
+routes you actually use stay lit and swept, and branches you leave alone
+slowly dim and gather dust. Planners call these desire paths.
+
+- It's a **bonus for use, never a tax for neglect.** Nothing you restored is
+  taken back, and nothing has to be maintained. A dimmed room just costs
+  lamp fuel to cross again.
+- Hold it until the lamp, waypoints and waystones have proved themselves.
+  Decay is invisible complexity, and a maintenance game isn't the goal.
+
+## First slice (built 2026-10-21)
+
+Built as planned; kept for the record.
 
 1. **Commit on exit.** A room becomes fixed when you open any door out of it
    (derived from its doors, so no new save state). Closing the door you came
@@ -314,12 +483,39 @@ own.
 **Not in this slice:** candles, cross-room tasks, multi-room rerolls, seeds,
 any door-connection changes, pushback. They're all described above for when their turn comes.
 
+## Second slice (2026-10-22)
+
+Built together, since none of it means much alone. Programmer art is fine
+throughout.
+
+1. **Push blocks in solid colour.** The whole block takes its colour
+   instead of a coloured decal on top.
+2. **Halls.** The archetype, the starter hall for new expeditions (older
+   saves keep their root chamber) and the surface door.
+3. **Waypoints.** Reserved footprints in the engine, three pins per set, a
+   door into every footprint you build against, a setpiece on arrival, and
+   the next set when you arrive.
+4. **Waystones.** Wake one for a charge; travel between awake ones.
+5. **The lamp.** Burns a shard every few seconds in dark rooms; sconces cost
+   a shard to light and stop the drain; dims when low; gutters and wakes
+   you at your last waystone.
+
+**Next, after playtesting it:** what's at a waypoint varies (false flags,
+threats); setpieces ask for things from elsewhere; setpieces in ordinary
+generation; a reward for fully restoring one.
+
+**Later:** walked paths stay alive (section 11); covering the lantern and a
+threat in the dark; chapters of waypoints; seeds (section 4); secrets.
+
 ## Open questions
 
 - How is the power for bigger rerolls earned: a level, an ability, a relic?
-- Rooms that are completely restored: do they become something more (safe
-  rooms, anchors, places seeds grow)?
-- Where does cultivation happen: a place you return to between runs, or
-  somewhere inside the dungeon?
-- What ends a run? Extraction (the record screen still exists), or no end at
-  all?
+- What does fully restoring a setpiece earn? (Waking its waystone is
+  separate and cheap.)
+- Where does cultivation happen? Perhaps on the surface, past the surface
+  door.
+- How do secrets work in a procedural map? Animal Well and Tunic hide them
+  in a hand-made one. Pressed doors, false walls and rules you learn (not
+  places you memorise) are candidates.
+- Does the lamp's drain rate feel like tension or like a nag? Tune by
+  playing.
