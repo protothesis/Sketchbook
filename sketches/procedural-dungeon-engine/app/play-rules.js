@@ -19,7 +19,9 @@
     shardsPerCharge: 3,
     chargesStart: 2,
     chargesMax: 8,
-    shardChance: { chamber: 0.75, corridor: 0.4, stub: 0.5 },
+    // Shards are a supplement: restoration (push blocks, sconces) is the main
+    // income (GAME-DESIGN.md). Was 0.75 / 0.4 / 0.5 before restoration.
+    shardChance: { chamber: 0.3, corridor: 0.15, stub: 0.2 },
     bigChamberCells: 20,      // chambers this large can hold a second shard
     // Locks come first, keys later: a room's seed only makes it able to
     // hold a key; the walk layer shows that key only while there are more

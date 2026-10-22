@@ -235,7 +235,9 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Move | WASD / arrows (Shift runs at 4 cells/s instead of 2.4); touch: drag for a stick |
 | Open a door | walk into it for 0.35 s, or press E / tap the prompt |
 | Entropy | whole charges: start with 2, hold up to 8; 3 shards make 1 charge |
-| Shard | in 75% of chambers, 40% of corridors, 50% of dead ends; chambers of 20+ cells can hold a second |
+| Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
+| Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); home = 1 charge, once |
+| Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second), never on south walls; lit = 1 shard, once |
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
@@ -251,8 +253,12 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 jars (one per quarter); stage = the fullest jar's fill; each full jar on it = entropy max +1 (up to +4), stacking across sigils |
 | Persistence | the expedition is shared with the chart view; position and run state are saved per root seed |
 
-In a 2,000-room simulation that works out to about 0.7 shards per room (one
-charge every ~4 rooms), and collapsing a room costs 1 charge. In random 80-room walks, the first locked door shows up after a
+Entropy income, measured over ~700 rooms (2026-10-21): shards lying around
+give about 0.27 shards per room, push blocks 0.5 and sconces 0.4 (in shard
+terms, if you restore everything). That's a charge every ~2.5 rooms for a
+thorough player, about three quarters of it from restoration, and a charge
+every ~11 rooms from pickups alone. A reroll costs 1 charge. (Before
+restoration, pickups gave about 0.7 shards per room, a charge every ~4.) In random 80-room walks, the first locked door shows up after a
 median of 18 rooms (90th percentile: 47), with about 6 locked doors on the
 frontier by room 80. About 2.6 blocks land per room. A fine-grained
 flood fill with the player's real radius, over ~360 rooms, found every free

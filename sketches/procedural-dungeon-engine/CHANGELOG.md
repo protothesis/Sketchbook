@@ -259,6 +259,13 @@ All notable changes to this sketch are logged here, per
   E lights it from your lantern for 1 shard, once; it stays lit
   (`run.lit`) and lights the room, through a pool of three real lights
   given to the nearest lit sconces.
+- 2026-10-21: **Entropy retuned toward restoration** (step 4 of
+  [`GAME-DESIGN.md`](GAME-DESIGN.md)). Shards are rarer: 30% of chambers,
+  15% of corridors, 20% of dead ends (were 75/40/50%). Measured income is
+  now about 0.27 shards per room from pickups and about 0.9 from
+  restoration, so a thorough player earns a charge every ~2.5 rooms, most
+  of it by restoring. Rooms that held a shard may now not, and items that
+  came after the shards in a room's loot can sit on a different tile.
 
 ### Fixed
 
