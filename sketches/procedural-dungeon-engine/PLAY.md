@@ -45,13 +45,16 @@ Determinism).
   crouched. You can walk across tops of equal height, and you drop down when
   you step off an edge. Nothing hunts you yet, so for now hiding is only the
   shadow play and the hook.
-- **Collapse.** Stand at a door you opened and press E (or tap the prompt),
-  and the door shuts. The whole branch beyond it (that room and every room
-  opened from it, deepest first) dissolves. The price is a flat **1 charge
-  per room** in the branch, whatever its size. Shards collected toward your
-  next charge are kept. Reopening the door draws fresh
-  entropy: that's the reroll. If the price is more charges than you have,
-  the door stays open: "too much lies beyond."
+- **Rerolling (collapse).** A new room is **provisional** until you open a
+  door out of it (or a loop opens one into it); from then on it's
+  **committed** for good (`DP.committed`, derived from history). Stand at
+  the door into a provisional room and press E (or tap the prompt): the
+  door shuts and that one room dissolves, for **1 charge**. Reopening the
+  door draws fresh entropy: that's the reroll. A provisional room never has
+  rooms beyond it, so a reroll is always one room. Doors into committed
+  rooms offer nothing. Green arrows (on the floor and the maps) mark only
+  the doors into provisional rooms. Scouting is fine: walk in, take what's
+  there, then reroll. See [`GAME-DESIGN.md`](GAME-DESIGN.md).
 - **Traces.** A collapsed room isn't deleted. The engine keeps its seed and
   cells as a **trace** (a branch that existed but wasn't kept), shown
   greyed on the minimap, the big map and the chart view. A new room that
@@ -221,7 +224,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells. A placed jar with room catches a following ghost within 0.38 cells; a collapse just undoes ghosts in the branch (tallied in `run.unmade`) |
-| Collapse price | a flat 1 charge per room in the branch |
+| Reroll price | 1 charge; only a provisional room (no door out of it ever opened) |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); capacity 3; F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall; a following ghost within 0.38 cells of a jar with room is caught |
 | Chalk | start with one silver stick (3 strokes); 1/12 of rooms at depth 1+ hold a stick (seeded on the loot stream, after jars; colour from silver/gold/crimson/teal/violet); F draws on the nearest free quarter ahead (floor or a one-unit block's top, not under a jar, not on another mark); E on a mark wipes it |

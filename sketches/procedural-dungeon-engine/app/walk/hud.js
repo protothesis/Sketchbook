@@ -42,12 +42,12 @@
         cls = 'lock';
         text = run.keys > 0 ? `a locked door · ${verb} to unlock (1 key)` : 'a locked door · you need a key';
       } else if (near.action === 'collapse') {
+        // Only a provisional room (one with no door out opened yet) offers this.
         const pr = near.price;
-        const rooms = `${pr.rooms} room${pr.rooms === 1 ? '' : 's'}`;
         cls = near.affordable ? 'collapse' : 'blocked';
         text = near.affordable
-          ? `close & collapse ${rooms} · ${chargeText(pr.charges)} · ${verb}`
-          : `too much lies beyond · ${rooms}, ${chargeText(pr.charges)}`;
+          ? `close & reroll ${near.child.id} · ${chargeText(pr.charges)} · ${verb}`
+          : `not enough entropy to reroll · ${chargeText(pr.charges)}`;
       }
     }
     const sig = text + '|' + cls;
@@ -199,9 +199,9 @@
     }
     // Doors, one tile wide. Unopened (orange) and locked (blue) doors are a
     // bar with a point on the outside, toward where they'd open. An opened
-    // door is a green arrow pointing the way it was opened (the only way it
-    // can be collapsed); the far side of that doorway draws nothing, and a
-    // loop is a plain green line.
+    // door into a room that's still provisional is a green arrow pointing
+    // into it (close it to reroll the room). Other opened doors, including
+    // loops, are a plain green bar, drawn from the side that opened them.
     const t = Math.max(1, px * 0.08); // half the line's thickness
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
@@ -209,7 +209,7 @@
         const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);
         if (!visible(ex.cell)) continue;
         const conn = ex.connectionId && exp.connections[ex.connectionId];
-        if (conn && DP.childThrough(exp, id, ex)) {
+        if (conn && DP.rerollThrough(exp, id, ex)) {
           const d = DE.DIRS[ex.facing], mx = (ax + bx) / 2, my = (ay + by) / 2;
           const hx = (bx - ax) * 0.4, hy = (by - ay) * 0.4; // half the base
           ctx.fillStyle = '#5fbf7a';
@@ -221,7 +221,7 @@
           ctx.fill();
           continue;
         }
-        if (conn && !conn.loop) continue; // the opened side draws the arrow
+        if (conn && !conn.loop && !DP.childThrough(exp, id, ex)) continue; // the side that opened it draws it
         ctx.fillStyle = conn ? '#5fbf7a' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
         ctx.fillRect(ox + Math.min(ax, bx) * px - (ay === by ? 0 : t), oy + Math.min(ay, by) * px - (ay === by ? t : 0),
           Math.abs(bx - ax) * px + (ay === by ? 0 : 2 * t), Math.abs(by - ay) * px + (ay === by ? 2 * t : 0));

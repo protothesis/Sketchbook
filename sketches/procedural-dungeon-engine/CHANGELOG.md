@@ -237,6 +237,15 @@ All notable changes to this sketch are logged here, per
 - 2026-10-21: Map walls are near-black. A closed door's point starts at its
   bar's outer edge, and it shows in walk mode too, as an orange (or blue,
   if locked) floor point just past the door.
+- 2026-10-21: **Rooms commit when you open a door out of them** (first step
+  of [`GAME-DESIGN.md`](GAME-DESIGN.md)). Until then a room is provisional:
+  closing the door you came in by rerolls it, for 1 charge. Once you open
+  any door out of it, or a loop opens one into it, it's committed for good,
+  and its door offers nothing. So a reroll only ever touches one room, and
+  the old whole-branch collapse is gone. Green arrows now mark only doors
+  into provisional rooms; other opened doors show as a plain green bar on
+  the maps. Committing is derived from the expedition history
+  (`DP.committed`), so old saves need no migration.
 
 ### Fixed
 

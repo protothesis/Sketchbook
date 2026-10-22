@@ -274,6 +274,31 @@
     return sp && sp.parentId === spaceId && sp.viaExitId === exit.id ? sp : null;
   }
 
+  /**
+   * A room is committed (fixed) once a door out of it has ever been opened,
+   * or a loop has opened a door into it. Until then it's provisional and can
+   * be rerolled. Committing is for good: rerolling the room beyond doesn't
+   * undo it. Derived from the expedition's history (space ids are never
+   * reused), so it needs no saved state. The root is always committed.
+   */
+  const openedFrom = new WeakMap(); // exp -> { n: history length, ids: Set of spaces a door was opened from }
+  function committed(exp, space) {
+    if (!space.parentId) return true;
+    let c = openedFrom.get(exp);
+    if (!c || c.n !== exp.history.length) {
+      c = { n: exp.history.length, ids: new Set() };
+      for (const ev of exp.history) if (ev.type === 'commit') c.ids.add(ev.parentId);
+      openedFrom.set(exp, c);
+    }
+    return c.ids.has(space.id) || space.exits.some((e) => e !== space.exits[0] && e.connectionId);
+  }
+
+  /** The provisional room through this door, if closing it would reroll one. */
+  function rerollThrough(exp, spaceId, exit) {
+    const child = childThrough(exp, spaceId, exit);
+    return child && !committed(exp, child) ? child : null;
+  }
+
   /** Every space at or beyond `spaceId` in the generation tree, deepest first. */
   function branch(exp, spaceId) {
     const kids = {};
@@ -315,5 +340,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -321,7 +321,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const arrow = new THREE.Mesh(geo.arrow, arrowMat);
     arrow.position.y = 0.03;
     arrow.scale.z = beyond; // local +z, flipped to point out of this space
-    arrow.visible = !!DP.childThrough(state.exp, space.id, ex);
+    arrow.visible = !!DP.rerollThrough(state.exp, space.id, ex);
     edgeGroup.add(pivot, seam, arrow);
     const door = {
       key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, point, arrow, locked,
@@ -329,6 +329,15 @@ if (vDitherEW > 0.7 && south > 0.2) {
     };
     pivot.rotation.y = door.openAngle * door.t;
     state.doors.set(door.key, door);
+  }
+
+  /** Green arrows mark only doors whose room beyond is still provisional (rerollable). */
+  function refreshArrows() {
+    const exp = state.exp;
+    for (const d of state.doors.values()) {
+      const sp = exp.spaces[d.spaceId], ex = sp && sp.exits.find((e) => e.id === d.exitId);
+      d.arrow.visible = !!(ex && DP.rerollThrough(exp, d.spaceId, ex));
+    }
   }
 
   function forgetSpace(id) {
@@ -404,6 +413,6 @@ if (vDitherEW > 0.7 && south > 0.2) {
     return !!(hit && hit.exit.connectionId);
   }
 
-  Object.assign(W, { dither, geo, doorMat, doorOpenMat, seamMat, buildSpace, dissolveSpace,
-    buildWorld, easeOut, easeInOut, applyReveal, applyDissolve, passable });
+  Object.assign(W, { dither, geo, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows,
+    dissolveSpace, buildWorld, easeOut, easeInOut, applyReveal, applyDissolve, passable });
 })(window);
