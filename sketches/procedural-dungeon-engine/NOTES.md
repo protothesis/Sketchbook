@@ -97,6 +97,13 @@ Added 2026-10-22 for walk mode's waypoints (see `GAME-DESIGN.md`).
   expeditions' root is one (`params.starter: 'hall'`, centred on the
   origin). Records without `starter` replay with their root chamber, so old
   saves are unchanged.
+- **Unmarked halls** (`params.hallChance`, `hallMinDepth`): a rare ordinary
+  room is a hall, grown from its door (`hallShape`, the hall in the travel
+  frame with the entry on an unnotched near-wall cell). Whether it's a hall
+  and its shape are drawn from the room's own `'hall'` stream, so the usual
+  draws are untouched, and if it doesn't fit (three tries) the room is
+  ordinary. Records without `hallChance` never roll one, so their replays
+  don't change.
 - **Reserves** claim cells ahead of time: `reserve(exp, { seed, kind,
   cells, ...data })` records a `reserve` history event; extra fields (walk
   mode's `pin` and `tier`) are kept as-is. `reservedAt` indexes waiting

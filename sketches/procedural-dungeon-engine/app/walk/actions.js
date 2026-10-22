@@ -37,7 +37,7 @@
     }
     if (best && best.action === 'collapse') {
       best.price = DP.collapseCost(DP.branch(exp, best.child.id));
-      best.affordable = best.price.charges <= state.run.charges;
+      best.affordable = best.price.charges <= state.run.fuel + 1e-6;
     }
     return best;
   }
@@ -121,7 +121,7 @@
       W.refreshHud();
     } else if (near.action === 'collapse') {
       if (!near.affordable) {
-        W.showCaption(`not enough entropy to reroll: ${chargeText(near.price.charges)}, you have ${run.charges}`);
+        W.showCaption(`not enough entropy to reroll: ${chargeText(near.price.charges)}, you have ${chargeText(run.fuel)}`);
         return;
       }
       collapseThrough(near);
@@ -168,7 +168,7 @@
       const sp = cand.space;
       if (needKey && DP.loot(sp).some((it) => it.kind === 'key')) state.run.keyRooms.push(sp.id + ':' + sp.seed);
       buildSpace(sp, true);
-      if (cand.reserveId) W.arrive(sp); // a waypoint's hall: the next set appears
+      if (sp.archetype === 'hall') W.arrive(sp);
     }
     save();
     W.refreshHud();
@@ -221,7 +221,7 @@
     const shattered = shatterJarsIn(ids);
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
-    run.charges -= near.price.charges;
+    W.spendFuel(near.price.charges);
     run.chargesSpent += near.price.charges;
     run.collapses++;
     run.roomsCollapsed += spaces.length;

@@ -25,11 +25,10 @@ decisions, see [`NOTES.md`](NOTES.md).
 5. **Your lamp burns entropy** in dark rooms. It's the same pool rerolls
    draw from, so every reroll shortens how far you can go.
 6. **Restore** the dungeon on the way: put things back where they belong,
-   light what was dark. Push blocks pay entropy; a lit room stops draining
-   your lamp.
-7. **Arrive.** The waypoint is a setpiece, a big hall. Arriving reveals the
-   next set of waypoints. Wake its waystone and it joins your fast-travel
-   network.
+   light what was dark. Push blocks pay entropy; a lit sconce gives the
+   lamp a place to rest.
+7. **Arrive.** The waypoint is a setpiece, a big hall. Wake its waystone
+   and it joins your fast-travel network, and new waypoints may appear.
 8. **If the lamp runs out,** you wake at the last waystone you used.
    Everything you did stays done.
 9. **Harvest and plant seeds** (later) to shape the map with a scarcer
@@ -366,8 +365,14 @@ push-your-luck option.
   room built against the footprint always gets at least one door into it.
 - **The footprint isn't shown.** The pin sits somewhere in or around it,
   not at its centre, so you know roughly where, not exactly.
-- **Arriving reveals the next set.** Opening the setpiece's door places
-  three more pins, out past it (away from the start).
+- **Far apart.** Opening doors costs nothing, so a waypoint has to be a
+  journey: two near (25–35 cells) and one far (45–60) to start.
+- **Waking a waystone reveals more,** not arriving: 0–3, with 0 and 3
+  rare, and never 0 while no pin is left waiting. Arriving at every hall
+  and adding three each time filled the map with pins (playtest,
+  2026-10-22).
+- **Unmarked halls** also turn up as a rare ordinary room, so a run of
+  0s doesn't strand you, and stumbling on a hub is its own small event.
 - Reservations are history events, so replay, export and the chart view all
   keep them.
 
@@ -376,10 +381,10 @@ push-your-luck option.
 - **What's there varies.** Not always a setpiece: sometimes a false flag
   (an ordinary room, or nothing much), sometimes a threat. A category of
   points of interest, with some chance to it.
-- **Setpieces in ordinary generation too,** without a pin, as a rare find.
+- **Maps as items:** a found object that marks a new waypoint, another way
+  to get pins besides waking waystones.
 - **Chapters.** Group waypoints into sets that, when finished, reveal the
-  next set farther out or deeper. Arcs without a size cap. (Today every
-  arrival adds a set, so unvisited pins pile up. Chapters would tidy that.)
+  next set farther out or deeper. Arcs without a size cap.
 
 **Caveats:**
 
@@ -411,13 +416,14 @@ differently from a chamber.
 **Waystones** are small monoliths, half a cell wide and about 2.5 block
 units tall, covered in arcane markings.
 
-- **Waking one costs a little entropy** (one charge). An awake waystone's
-  markings glow.
+- **Waking one costs a little entropy** (one charge), and reveals new
+  waypoints (section 8). An awake waystone's markings glow.
 - **Fast travel goes waystone to waystone,** never from anywhere. E at an
-  awake waystone lists the others. Travel is free for now.
+  awake waystone opens the map with the others highlighted; pick one.
+  Travel is free for now.
 - The last waystone you woke or travelled through is where you wake if your
   lamp runs out (section 10).
-- A room with an awake waystone counts as lit.
+- A waystone doesn't shelter the lamp. Only sconces do.
 
 **The surface door** is a placeholder exit from the game loop. Opening it
 asks "Up to the surface (quit game)?" Going up saves and shows the
@@ -431,15 +437,22 @@ expeditions.
 "spend to get" the economy was missing: every reroll toward a waypoint burns
 fuel you need to get there.
 
-- **The lamp burns entropy in dark rooms,** a shard every few seconds. In a
-  lit room (a lit sconce, or an awake waystone) it doesn't burn.
+- **The lamp burns entropy steadily,** a shard's worth every few seconds,
+  everywhere except right by a lit sconce (its tile and the ones around
+  it).
+- **Entropy is fluid.** The meter is a countdown you can watch drain,
+  sectioned into charges. A shard pours in a third of a charge; any gain
+  holds the burn for a moment so it isn't gone the instant you earn it.
 - **Lighting a sconce costs you a shard** (you give it some of your flame)
-  instead of paying one. In return that room never drains your lamp again.
-  Restoration becomes an investment in the way back, not a one-time payout.
-- **Push blocks still pay a charge.** A setpiece's three blocks make it an
+  instead of paying one. In return there's a spot by it where the lamp
+  rests. Restoration becomes an investment in the way back, not a one-time
+  payout.
+- **Push blocks still pay a charge,** and can be moved again; moving one
+  off its mark takes the charge back. A setpiece's three blocks make it an
   oasis.
-- **Running low dims the lamp.** On the last charge, the light shrinks and
-  flickers.
+- **You feel it running low** without reading the meter: the lamp's colour
+  slides from yellow to red to grey and flickers, its halo shrinks, its
+  sparks thin out, and the light gets dimmer and shorter.
 - **Running out:** the lamp gutters, and you wake at your last waystone
   with the starting entropy. Everything else stays: the map, what you
   carry, what you restored. **You lose only your position.** Start gentle;
@@ -500,9 +513,15 @@ throughout. What exists and its tuning is in [`PLAY.md`](PLAY.md).
    a shard to light and stop the drain; dims when low; gutters and wakes
    you at your last waystone.
 
-**Next, after playtesting it:** what's at a waypoint varies (false flags,
-threats); setpieces ask for things from elsewhere; setpieces in ordinary
-generation; a reward for fully restoring one.
+**Revised after the first playtest (2026-10-22):** waypoints much farther
+apart and revealed by waking waystones (0–3); rare unmarked halls; only
+sconces shelter the lamp, within a tile; travel picked on the map; the lamp
+as a fluid meter with a HUD of its own and a lamp you can read at a
+glance; push blocks movable again. Notes in [`PLAY.md`](PLAY.md).
+
+**Next, after playtesting that:** what's at a waypoint varies (false flags,
+threats); setpieces ask for things from elsewhere; a reward for fully
+restoring one; maps as items.
 
 **Later:** walked paths stay alive (section 11); covering the lantern and a
 threat in the dark; chapters of waypoints; seeds (section 4); secrets.

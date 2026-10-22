@@ -1,25 +1,24 @@
 // Walk mode: where you're going and how you get back (GAME-DESIGN.md,
-// sections 8–10). Waypoints (reserved hall footprints, a "?" on the map),
-// waystones in halls (wake one, travel between them), and the lamp, which
-// burns entropy in dark rooms and wakes you at your last waystone when it
-// runs out.
+// sections 8 and 9). Waypoints (reserved hall footprints, a "?" on the map)
+// and waystones in halls: wake one to reveal new waypoints, and travel
+// between awake ones on the map. The lamp is in lamp.js.
 (function (global) {
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, $, S, UNIT, state, save, savePlayer, chargeText } = W;
+  const { DE, DP, RULES, THREE, S, UNIT, state, save, savePlayer, chargeText } = W;
 
   // ---------------------------------------------------------------------------
   // Waypoints
 
-  /** Reveal the next set of waypoints from a point. Returns how many. */
-  function revealWaypoints(from) {
-    const set = DP.waypointSet(state.exp, from);
+  /** Reveal waypoints from a point (count: see DP.waypointSet). Returns how many. */
+  function revealWaypoints(from, count) {
+    const set = DP.waypointSet(state.exp, from, count);
     for (const r of set) DE.reserve(state.exp, r);
     return set.length;
   }
 
-  /** An expedition with no waypoints yet gets its first set, from the root. */
+  /** An expedition with no waypoints yet gets its starting set, from the root. */
   function ensureWaypoints() {
     const exp = state.exp;
     if (Object.values(exp.reserves || {}).some((r) => r.kind === 'hall')) return;
@@ -27,11 +26,11 @@
     save();
   }
 
-  /** You just opened a door into a waypoint's hall: the next set appears. */
+  /** You just opened a door into a hall: a waypoint's, or a rare unmarked one. */
   function arrive(space) {
-    const n = revealWaypoints(DP.centerOf(space));
     // Shown as you step in (instead of the room's log line), so it isn't missed.
-    state.arrival = { spaceId: space.id, text: `a waypoint · a waystone stands here${n ? ` · ${n} new waypoint${n === 1 ? '' : 's'} on your map` : ''}` };
+    const what = space.reserveId ? 'a waypoint' : 'an unmarked hall';
+    state.arrival = { spaceId: space.id, text: `${what} · a dormant waystone stands here` };
   }
 
   /** Waypoints still waiting: [{ id, pin: { x, y }, tier }]. */
@@ -123,37 +122,32 @@
     return null;
   }
 
+  /** Wake a waystone: it joins the network, becomes your hearth, and may reveal waypoints. */
   function wakeWaystone(st) {
     const run = state.run, cost = RULES.waystoneCharges;
-    if (run.charges < cost) { W.showCaption(`not enough entropy to wake it: ${chargeText(cost)}, you have ${run.charges}`); return; }
-    run.charges -= cost;
+    if (!W.spendFuel(cost)) { W.showCaption(`not enough entropy to wake it: ${chargeText(cost)}`); return; }
     run.chargesSpent += cost;
     st.awake = true;
     run.waystones[st.key] = true;
     run.hearth = st.key;
-    W.showCaption(`the waystone wakes · −${chargeText(cost)} · you can travel here, and you'll wake here`);
+    const sp = state.exp.spaces[st.spaceId];
+    const n = revealWaypoints(DP.centerOf(sp), DP.waypointCount(state.exp, sp));
+    save();
+    W.showCaption(`the waystone wakes · −${chargeText(cost)} · ` +
+      (n ? `${n} new waypoint${n === 1 ? '' : 's'} on your map` : 'nothing new stirs'));
     savePlayer();
     W.refreshHud();
   }
 
-  /** E at an awake waystone: pick another awake one to travel to. */
+  /** E at an awake waystone: the map opens on the others; pick one to go there. */
   function travelFrom(st) {
     state.run.hearth = st.key;
     savePlayer();
-    const others = state.waystones.filter((o) => o.awake && o !== st)
-      .sort((a, b) => parseInt(a.spaceId.slice(1), 10) - parseInt(b.spaceId.slice(1), 10));
-    if (!others.length) { W.showCaption('the waystone hums · no other waystone is awake yet'); return; }
-    const exp = state.exp;
-    W.openDialog({
-      kicker: 'waystone',
-      title: 'Travel to another waystone',
-      text: `You'll wake there if your lamp runs out.`,
-      buttons: others.map((o) => {
-        const sp = exp.spaces[o.spaceId];
-        const label = sp.parentId ? `${sp.id} · hall · ${sp.meta.mood} · depth ${sp.depth}` : `${sp.id} · the first hall`;
-        return { label, onClick: () => travelTo(o) };
-      }).concat([{ label: 'Stay here', quiet: true }]),
-    });
+    if (!state.waystones.some((o) => o.awake && o !== st)) {
+      W.showCaption('the waystone hums · no other waystone is awake yet');
+      return;
+    }
+    W.openBigMap({ travelFrom: st });
   }
 
   /** Stand at a waystone's wake spot and look at it. */
@@ -178,94 +172,6 @@
       state.waystones.find((o) => o.spaceId === 's0') || null;
   }
 
-  // ---------------------------------------------------------------------------
-  // The lamp: one pool of entropy is your light and your rerolls. It burns a
-  // shard every RULES.lampSeconds in a dark room; a lit sconce or an awake
-  // waystone makes a room lit. When it runs out, it gutters, and you wake at
-  // your last waystone with the starting entropy. Nothing else is lost.
-
-  const shardsLeft = (run) => run.charges * RULES.shardsPerCharge + run.shards;
-
-  /** Take shards from the meter (breaking a charge if needed). False if there aren't enough. */
-  function spendShards(n) {
-    const run = state.run;
-    if (shardsLeft(run) < n) return false;
-    for (let i = 0; i < n; i++) {
-      if (run.shards > 0) run.shards--;
-      else { run.charges--; run.shards = RULES.shardsPerCharge - 1; }
-    }
-    return true;
-  }
-
-  function roomLit(spaceId) {
-    return state.sconces.some((sc) => sc.lit && sc.spaceId === spaceId) ||
-      state.waystones.some((st) => st.awake && st.spaceId === spaceId);
-  }
-
-  const GUTTER_FADE = 1.2, GUTTER_DARK = 1.4; // seconds: the flame dies, then darkness
-  let lampClock = 0, burning = null;
-
-  function updateLamp(dt) {
-    const run = state.run, p = state.player;
-    if (state.gutter) {
-      state.gutter.t += dt;
-      if (state.gutter.t >= GUTTER_FADE + GUTTER_DARK) wake();
-      return;
-    }
-    const dark = !!p.spaceId && !roomLit(p.spaceId);
-    const draining = dark && !state.paused && !state.bigmap;
-    if (draining !== burning) {
-      burning = draining;
-      const m = $('charges');
-      if (m) m.parentElement.classList.toggle('burning', draining);
-    }
-    if (!draining) return;
-    lampClock += dt;
-    if (lampClock < RULES.lampSeconds) return;
-    lampClock = 0;
-    spendShards(1);
-    run.lampBurned = (run.lampBurned || 0) + 1;
-    W.refreshHud();
-    if (shardsLeft(run) <= 0) gutter();
-    else if (shardsLeft(run) === RULES.lampLowShards) W.showCaption('your lamp is running low');
-  }
-
-  function gutter() {
-    state.gutter = { t: 0 };
-    state.paused = true;
-    W.keys.clear();
-    W.showCaption('your lantern gutters out');
-    const f = $('fade');
-    if (f) f.classList.add('on');
-  }
-
-  function wake() {
-    const run = state.run;
-    state.gutter = null;
-    state.paused = false;
-    run.charges = RULES.chargesStart;
-    run.shards = 0;
-    run.gutters = (run.gutters || 0) + 1;
-    lampClock = 0;
-    const st = hearth();
-    if (st) placeAt(st);
-    else { Object.assign(state.player, W.spawnPoint(state.exp), { z: 0, vz: 0 }); W.snapCamera(); }
-    const f = $('fade');
-    if (f) f.classList.remove('on');
-    W.showCaption(`you wake by the waystone in ${st ? st.spaceId : 's0'} · ${chargeText(run.charges)} of entropy`);
-    savePlayer();
-    W.refreshHud();
-  }
-
-  /** The lantern's brightness, 0..1: dims on the last few shards, dies when it gutters. */
-  function lampFactor() {
-    if (state.gutter) return Math.max(0, 1 - state.gutter.t / GUTTER_FADE) * 0.3;
-    const left = shardsLeft(state.run);
-    if (left > RULES.lampLowShards) return 1;
-    const t = state.time;
-    return (0.35 + 0.55 * left / RULES.lampLowShards) * (0.85 + 0.15 * Math.sin(t * 23) * Math.sin(t * 7.7));
-  }
-
   /** Awake markings pulse slowly. */
   function updateWaystones() {
     const t = state.time;
@@ -276,6 +182,5 @@
   }
 
   Object.assign(W, { revealWaypoints, ensureWaypoints, arrive, waitingPins, addWaystone, waystoneNear,
-    wakeWaystone, travelFrom, travelTo, hearth, spendShards, roomLit, updateLamp, lampFactor,
-    updateWaystones, shardsLeft });
+    wakeWaystone, travelFrom, travelTo, placeAt, hearth, updateWaystones });
 })(window);

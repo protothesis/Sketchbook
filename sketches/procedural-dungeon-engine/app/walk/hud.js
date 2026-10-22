@@ -89,21 +89,11 @@
   function refreshHud() {
     const s = DE.stats(state.exp);
     const run = state.run;
+    // The top-left panel is information and settings only; game state lives
+    // in its own elements (the lamp, the hotbar).
     setText('stats', `seed ${state.exp.rootSeed} · ${s.spaces} rooms · ${s.openExits} closed doors`);
-    const charges = $('charges');
-    if (charges) {
-      charges.innerHTML = '';
-      for (let i = 0; i < maxCharges(); i++) {
-        charges.append(el('span', (i < run.charges ? 'charge on' : 'charge') + (i >= RULES.chargesMax ? ' buff' : '')));
-      }
-      charges.parentElement.title = `${run.charges} of ${maxCharges()} charges · ${run.shards}/${RULES.shardsPerCharge} shards toward the next`;
-    }
-    const shards = $('shard-pips');
-    if (shards) {
-      shards.innerHTML = '';
-      for (let i = 0; i < RULES.shardsPerCharge; i++) shards.append(el('span', i < run.shards ? 'pip on' : 'pip'));
-    }
-    // Keys are counted here, not carried on the hotbar: a locked door takes one by itself.
+    W.updateLampHud(true);
+    // Keys are counted by the lamp, not carried on the hotbar: a locked door takes one by itself.
     const keyEl = $('keys');
     if (keyEl) {
       keyEl.hidden = run.keys <= 0;
@@ -264,7 +254,9 @@
       ctx.strokeStyle = 'rgba(10, 8, 14, 0.85)';
       ctx.stroke();
     }
-    // Waystones: a small slab, glowing when awake.
+    // Waystones: a small slab, glowing when awake. On the travel map, the
+    // ones you can go to pulse in a ring, with their room's id.
+    const travel = cv === bm && state.bigmap && state.bigmap.travel;
     for (const st of state.waystones) {
       const mx = ox + (st.ws.x0 + st.ws.x1) / 2 * px, my = oy + (st.ws.y0 + st.ws.y1) / 2 * px;
       const sw = Math.max(4, px * 0.32), sh = Math.max(7, px * 0.62);
@@ -272,6 +264,21 @@
       if (st.awake) { ctx.shadowColor = 'rgba(165, 140, 255, 0.9)'; ctx.shadowBlur = 8; }
       ctx.fillStyle = st.awake ? '#cdbfff' : '#7d7888';
       ctx.fillRect(mx - sw / 2, my - sh / 2, sw, sh);
+      if (travel && st.awake) {
+        const here = st === travel;
+        const pulse = here ? 0 : 0.5 + 0.5 * Math.sin(state.time * 4);
+        ctx.shadowBlur = here ? 0 : 12;
+        ctx.strokeStyle = here ? 'rgba(243, 236, 220, 0.6)' : `rgba(205, 191, 255, ${0.6 + 0.4 * pulse})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(mx, my, 14 + 3 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = here ? 'rgba(243, 236, 220, 0.75)' : '#e6deff';
+        ctx.font = '12px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(here ? 'you are here' : st.spaceId, mx, my - 22);
+      }
       ctx.restore();
     }
     // Waypoints still waiting: a glowing violet "?", pinned to the edge
@@ -339,16 +346,46 @@
   const bmCtx = bm.getContext('2d');
   // Zoom limits for the big map; it opens two wheel steps back from the closest.
   const BIGMAP_MAX_PX = 60, WHEEL_STEP = Math.exp(-100 * 0.0015);
-  function openBigMap() {
+  /**
+   * Open the big map. With `travelFrom` (a waystone), it's the travel
+   * picker: framed on every awake waystone, which glow; tap one to go there.
+   */
+  function openBigMap(opts) {
     if (state.paused) return;
     keys.clear();
-    state.bigmap = { cx: state.player.x, cy: state.player.y, px: BIGMAP_MAX_PX * WHEEL_STEP * WHEEL_STEP };
+    state.bigmap = { cx: state.player.x, cy: state.player.y, px: BIGMAP_MAX_PX * WHEEL_STEP * WHEEL_STEP, travel: null };
+    const from = opts && opts.travelFrom;
+    if (from) {
+      const pts = state.waystones.filter((o) => o.awake).map((o) => o.ws.wake);
+      const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      const r = bm.getBoundingClientRect();
+      const w = r.width || global.innerWidth, h = (r.height || global.innerHeight) - 60;
+      Object.assign(state.bigmap, {
+        travel: from, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2,
+        px: THREE.MathUtils.clamp(Math.min(w / (x1 - x0 + 10), h / (y1 - y0 + 10)), 2.5, BIGMAP_MAX_PX * WHEEL_STEP),
+      });
+    }
+    $('bigmap-hint').hidden = !from;
     $('bigmap').hidden = false;
     mm.classList.add('hidden');
+  }
+  /** The awake waystone (not the one you're at) nearest a screen point on the travel map, if one is close. */
+  function travelPick(sx, sy) {
+    const v = state.bigmap, r = bm.getBoundingClientRect();
+    const gx = v.cx + (sx - r.left - r.width / 2) / v.px, gy = v.cy + (sy - r.top - r.height / 2) / v.px;
+    let best = null, bd = Math.max(1.2, 24 / v.px);
+    for (const st of state.waystones) {
+      if (!st.awake || st === v.travel) continue;
+      const d = Math.hypot(st.ws.wake.x - gx, st.ws.wake.y - gy);
+      if (d < bd) { bd = d; best = st; }
+    }
+    return best;
   }
   function closeBigMap() {
     state.bigmap = null;
     $('bigmap').hidden = true;
+    $('bigmap-hint').hidden = true;
     mm.classList.remove('hidden');
   }
   function drawBigMap() {
@@ -394,6 +431,11 @@
     }
   });
   const bmUp = (e) => {
+    // A tap on the travel map: go to the waystone under it.
+    if (bmTap && e.type === 'pointerup' && state.bigmap && state.bigmap.travel) {
+      const st = travelPick(e.clientX, e.clientY);
+      if (st) { closeBigMap(); W.travelTo(st); }
+    }
     bmTap = null;
     bmPointers.delete(e.pointerId);
     pinchDist = 0;
@@ -464,7 +506,7 @@
       ['cells charted', s.cells], ['deepest', deepest], ['chain length', chain.length],
       ['shards found', run.shardsFound], ['keys found', run.keysFound], ['checkpoints', run.keysUsed], ['doors drawn', run.chalkUsed],
       ['collapses', run.collapses], ['rooms collapsed', run.roomsCollapsed], ['charges spent', run.chargesSpent],
-      ['charges left', `${run.charges} + ${run.shards}/${RULES.shardsPerCharge}`],
+      ['entropy left', chargeText(run.fuel)],
       ['waystones awake', state.waystones.filter((o) => o.awake).length],
       ['waypoints reached', Object.values(exp.reserves || {}).filter((r) => r.spaceId).length],
       ['lamp gutters', run.gutters || 0],

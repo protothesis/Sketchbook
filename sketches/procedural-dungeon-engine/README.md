@@ -35,8 +35,9 @@ open, and the space behind it assembles as the door swings. Spend
 **entropy** to close a door you opened and collapse everything beyond it
 (reopening rerolls). Shards refill entropy, and a rare key opens a locked
 door. Violet "?" pins on the map are waypoints: halls to reach, each with
-a waystone you can wake and travel between. Your lamp burns entropy in dark
-rooms; if it runs out you wake at your last waystone. The design and the
+a waystone you can wake (revealing more) and travel between. Your lamp
+burns entropy everywhere but by a lit sconce; if it runs out you wake at
+your last waystone. The design and the
 tunables are in [`PLAY.md`](PLAY.md). A look back and some loose thoughts on
 where to go next: [`CLOSING-THOUGHTS.md`](CLOSING-THOUGHTS.md). The plan
 that followed (rerolling, restoration, waypoints, waystones, the lamp,
@@ -70,7 +71,8 @@ app/             clients of the engine
     figure.js        the figure and lantern, collision, climbing, crouch
     items.js         hotbar, chalk marks, jars, sigils
     restore.js       restoration: push blocks and their floor marks, sconces
-    waystones.js     waypoints, waystones and travel, the lamp burning entropy
+    waystones.js     waypoints, waystones, and travel on the map
+    lamp.js          the lamp: entropy as fuel, its meter, its look, +◆ popups
     actions.js       doors: open, unlock, collapse; doorstones; the surface door
     input.js         keyboard, touch stick, buttons
     ghosts.js        hash ghosts

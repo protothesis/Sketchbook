@@ -13,13 +13,6 @@
   <div class="hud top-left">
     <h1>Dungeon Walk</h1>
     <p id="stats"></p>
-    <div class="meter">
-      <span class="meter-label">entropy</span>
-      <span id="charges" class="charges"></span>
-      <span id="shard-pips" class="pips" title="Shards toward the next charge"></span>
-      <span id="keys" class="keys" hidden></span>
-      <span id="stance" class="stance"></span>
-    </div>
     <div class="hud-buttons">
       <a class="btn" href="index.html">Chart view</a>
       <button class="btn" id="new-btn" type="button">New map</button>
@@ -30,6 +23,7 @@
 
   <div id="bigmap" class="bigmap" hidden>
     <canvas id="bigmap-canvas" aria-label="Map"></canvas>
+    <p id="bigmap-hint" class="bigmap-hint" hidden>Pick a waystone to travel to</p>
     <div class="bigmap-bar">
       <span class="legend"><i class="sw sw-pin">?</i>waypoint <i class="sw sw-stone"></i>waystone <i class="sw sw-open"></i>unopened <i class="sw sw-lock"></i>locked <i class="sw sw-opened"></i>opened <i class="sw sw-surface"></i>surface <i class="sw sw-trace"></i>trace <i class="sw sw-sealed"></i>beyond a lock</span>
       <button class="btn" id="bigmap-center" type="button">Center</button>
@@ -43,6 +37,24 @@
   <button id="use-btn" class="use-btn" type="button" title="Use the selected item (F)">use</button>
 
   <div id="hotbar" class="hotbar" hidden aria-label="Inventory"></div>
+
+  <!-- The lamp: your entropy, burning down. -->
+  <div id="lamp" class="lamp-hud" aria-label="Lamp">
+    <div id="lamp-icon" class="lamp-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 32" width="24" height="32">
+        <path d="M8 6 a4 4 0 0 1 8 0" fill="none" stroke="#8d8578" stroke-width="1.6" />
+        <rect x="6" y="6" width="12" height="3" rx="1" fill="#8d8578" />
+        <rect x="7" y="9" width="10" height="16" rx="2" fill="none" stroke="#8d8578" stroke-width="1.4" />
+        <path class="flame" d="M12 12 C15 16 15 19 12 22 C9 19 9 16 12 12 Z" fill="currentColor" />
+        <rect x="6" y="25" width="12" height="3" rx="1" fill="#8d8578" />
+      </svg>
+    </div>
+    <div class="lamp-body">
+      <div id="lamp-meter" class="lamp-meter"></div>
+      <div class="lamp-row"><span id="lamp-state" class="lamp-state"></span><span id="keys" class="keys" hidden></span></div>
+    </div>
+  </div>
+  <div id="popups" class="popups" aria-hidden="true"></div>
 
   <button id="prompt" class="prompt" type="button" hidden></button>
   <p id="caption" class="caption"></p>
@@ -97,6 +109,7 @@
   <script src="app/walk/items.js"></script>
   <script src="app/walk/restore.js"></script>
   <script src="app/walk/waystones.js"></script>
+  <script src="app/walk/lamp.js"></script>
   <script src="app/walk/actions.js"></script>
   <script src="app/walk/input.js"></script>
   <script src="app/walk/ghosts.js"></script>

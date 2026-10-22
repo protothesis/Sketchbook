@@ -13,8 +13,8 @@
 // Walk mode is split into classic scripts (no modules: the page has to open
 // from file://), which play.html loads in this order:
 //
-//   core, world, figure, items, restore, waystones, actions, input, ghosts, fx,
-//   hud, main
+//   core, world, figure, items, restore, waystones, lamp, actions, input,
+//   ghosts, fx, hud, main
 //
 // Each file is its own IIFE sharing one namespace, DungeonPlay.walk ("W").
 // A file takes what it needs from earlier files by destructuring W at the
@@ -118,6 +118,7 @@
     sconces: [],         // sconces in built rooms (see restore.js)
     waystones: [],       // waystones in built halls (see waystones.js)
     gutter: null,        // { t } while the lamp is guttering out
+    lampGrace: 0,        // seconds the lamp holds its burn after a gain
     time: 0,
     minimap: true,
     bigmap: null,        // { cx, cy, px } while the enlarged map is open
@@ -132,7 +133,7 @@
 
   function freshRun(rootSeed) {
     return {
-      rootSeed, charges: RULES.chargesStart, shards: 0, keys: 0,
+      rootSeed, fuel: RULES.chargesStart, keys: 0, // fuel: entropy, in charges (see lamp.js)
       shardsFound: 0, keysFound: 0, keysUsed: 0, chalk: 0, chalkFound: 0, chalkUsed: 0,
       collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
       walked: 0, collected: [], unlocked: [], extracted: null,
@@ -182,7 +183,10 @@
     violet: { css: '#ba95ff', hex: 0xba95ff, sym: '☾', name: 'crescent' },
   };
 
-  const chargeText = (n) => `${n} charge${n === 1 ? '' : 's'}`;
+  const chargeText = (n) => {
+    const v = Math.round(n * 10) / 10;
+    return `${v} charge${v === 1 ? '' : 's'}`;
+  };
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -212,13 +216,19 @@
   // The run save's format version. When the shape of `run` changes, bump it
   // and add a step to RUN_MIGRATIONS: step i takes a version-i run to i + 1.
   // Saves from before versioning count as version 0.
-  const RUN_VERSION = 1;
+  const RUN_VERSION = 2;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
       if (typeof run.chalk === 'number' && run.chalk > 0) { run.doorstones = (run.doorstones || 0) + run.chalk; run.chalk = 0; }
       delete run.pins;
       delete run.echoes;
+    },
+    // 1 -> 2: whole charges plus shards became one fluid amount of fuel.
+    (run) => {
+      run.fuel = (run.charges || 0) + (run.shards || 0) / RULES.shardsPerCharge;
+      delete run.charges;
+      delete run.shards;
     },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */

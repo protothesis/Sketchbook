@@ -68,6 +68,10 @@
       // The root room. Records from before halls have no `starter`, so
       // their replays keep the root chamber they were made with.
       starter: 'hall',
+      // A rare ordinary room is a hall, from this depth on. Records from
+      // before random halls have no `hallChance`, so their rooms don't change.
+      hallChance: 0.025,
+      hallMinDepth: 3,
     };
   }
 
@@ -380,8 +384,19 @@
       placed = DE.placeShape(DE.stubShape(), beyond, exit.facing);
       deadEnd = true;
     } else {
+      // A rare hall, decided and shaped on its own stream so the usual
+      // draws below are untouched; if it doesn't fit, the room is ordinary.
+      if (p.hallChance && depth >= p.hallMinDepth) {
+        const hr = deriveRng(seed, 'hall');
+        if (hr.chance(p.hallChance)) {
+          for (let i = 0; i < 3 && !placed; i++) {
+            const candidate = DE.placeShape(DE.hallShape(hr, 6, 8), beyond, exit.facing);
+            if (fits(exp, candidate)) placed = candidate;
+          }
+        }
+      }
       const archetype = rng.chance(p.corridorWeight) ? 'corridor' : 'chamber';
-      for (const shape of attemptShapes(rng, p, archetype)) {
+      for (const shape of placed ? [] : attemptShapes(rng, p, archetype)) {
         const candidate = DE.placeShape(shape, beyond, exit.facing);
         if (fits(exp, candidate)) { placed = candidate; break; }
       }

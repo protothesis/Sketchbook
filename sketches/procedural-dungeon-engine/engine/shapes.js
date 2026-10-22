@@ -80,6 +80,17 @@
     return { cells, w, d };
   }
 
+  /**
+   * A hall grown from a door (a rare ordinary room): hallCells in the
+   * travel frame, with the entry on a near-wall cell the notches left.
+   */
+  function hallShape(rng, min, max) {
+    const h = hallCells(rng, min, max);
+    const near = h.cells.filter((c) => c.y === 0).map((c) => c.x);
+    const ex = near[Math.floor(rng.next() * near.length)];
+    return { archetype: 'hall', cells: h.cells.map((c) => ({ u: c.y, v: c.x - ex })), dims: { w: h.w, d: h.d }, end: null };
+  }
+
   function stubShape() {
     return { archetype: 'stub', cells: [{ u: 0, v: 0 }], dims: {}, end: null };
   }
@@ -126,7 +137,7 @@
   Object.assign(DE, {
     DIRS, FACINGS, OPPOSITE, RIGHT_OF,
     key, parseKey, step,
-    chamberShape, corridorShape, hallCells, stubShape,
+    chamberShape, corridorShape, hallCells, hallShape, stubShape,
     placeShape, boundarySlots,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

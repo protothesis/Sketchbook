@@ -14,8 +14,8 @@
 
   // Tunables. PLAY.md has the reasoning ("moderate" pacing).
   const RULES = {
-    // Entropy comes in whole charges; 3 shards make one. A collapse costs
-    // one charge per room in the branch.
+    // Entropy is measured in charges, as a fluid amount; a shard is a third
+    // of one. Rerolls and waystones cost whole charges.
     shardsPerCharge: 3,
     chargesStart: 2,
     chargesMax: 8,
@@ -64,20 +64,26 @@
     sconceMinDepth: 1,
     sconceSecond: 0.4,        // chambers: chance of a second sconce (halls: hallSconceSecond)
     sconceCost: 1,            // shards
-    // The lamp burns entropy (GAME-DESIGN.md, section 10): a shard every
-    // lampSeconds in a dark room, nothing in a lit one. With lampLowShards
-    // or fewer left, it dims.
+    // The lamp burns entropy (GAME-DESIGN.md, section 10), steadily: a
+    // shard's worth every lampSeconds, except within a tile of a lit sconce.
+    // Any gain holds the burn for lampGrace seconds. The lamp looks full at
+    // lampFullCharges or more and is in danger at lampDanger or less.
     lampSeconds: 12,
-    lampLowShards: 3,
+    lampGrace: 3,
+    lampFullCharges: 3,
+    lampDanger: 1,
     // Halls (setpieces at waypoints): sizes, and what they always hold.
     hallMin: 7,
     hallMax: 9,
     hallPushBlocks: 3,
     hallSconceSecond: 0.5,
-    // Waypoints: each set is two near and one far, centre to centre from
-    // where it's revealed, with a free ring around each footprint.
-    waypointNear: [10, 15],
-    waypointFar: [22, 30],
+    // Waypoints: the expedition starts with two near and one far. Waking a
+    // waystone reveals 0-3 more (waypointOdds; never 0 while none are
+    // waiting), alternating near and far, centre to centre from the
+    // waystone, with a free ring around each footprint.
+    waypointNear: [25, 35],
+    waypointFar: [45, 60],
+    waypointOdds: [0.1, 0.45, 0.35, 0.1], // chance of 0, 1, 2, 3
     waypointPinJitter: 2,     // cells: the pin sits in or around the footprint
     // Waystones: waking one costs this many charges; travel is free.
     waystoneCharges: 1,
@@ -509,21 +515,26 @@
   }
 
   /**
-   * The next set of waypoints, revealed from `from` (a grid point): up to
-   * three hall footprints, two near and one far, each with a free ring
-   * around it, ready for DE.reserve(). Away from the root they fan out past
-   * `from`; at the root, all the way round. Seeded by the root seed and the
-   * number of reserves so far. The pin (where the "?" goes on the map) sits
-   * in or around the footprint, not at its centre.
+   * The next set of waypoints, revealed from `from` (a grid point): hall
+   * footprints, each with a free ring around it, ready for DE.reserve().
+   * With no `count`, the starting set (two near, one far, all round the
+   * root). With a `count` (a waystone waking), that many, near and far by
+   * turns, fanned out past `from`. Seeded by the root seed and the number
+   * of reserves so far. The pin (where the "?" goes on the map) sits in or
+   * around the footprint, not at its centre.
    */
-  function waypointSet(exp, from) {
+  function waypointSet(exp, from, count) {
     const r = DE.deriveRng(exp.rootSeed, 'waypoints|' + (exp.counters.reserve || 0));
-    const outward = Math.hypot(from.x, from.y) > 4 ? Math.atan2(from.y, from.x) : null;
     const deg = Math.PI / 180;
-    const base = outward === null ? r.range(0, Math.PI * 2) : outward;
-    const plan = outward === null
-      ? [['near', base], ['near', base + 120 * deg], ['far', base + 240 * deg]]
-      : [['near', base - r.range(35, 70) * deg], ['near', base + r.range(35, 70) * deg], ['far', base + r.range(-25, 25) * deg]];
+    let plan;
+    if (count == null) {
+      const base = r.range(0, Math.PI * 2);
+      plan = [['near', base], ['near', base + 120 * deg], ['far', base + 240 * deg]];
+    } else {
+      const outward = Math.hypot(from.x, from.y) > 4 ? Math.atan2(from.y, from.x) : r.range(0, Math.PI * 2);
+      const fan = [0, -1, 1].map((k) => outward + k * r.range(40, 75) * deg);
+      plan = ['near', 'far', 'near'].slice(0, count).map((tier, i) => [tier, fan[i] + r.range(-20, 20) * deg]);
+    }
     const taken = new Set();
     const free = (k) => exp.registry[k] === undefined && !DE.reservedAt(exp, k) && !taken.has(k);
     const set = [];
@@ -549,6 +560,18 @@
     return set;
   }
 
+  /**
+   * How many waypoints waking this hall's waystone reveals (RULES.waypointOdds),
+   * seeded by the hall. Never 0 while no waypoint is left waiting.
+   */
+  function waypointCount(exp, space) {
+    const roll = DE.deriveRng(space.seed, 'waypoints').next();
+    let n = 0, acc = 0;
+    RULES.waypointOdds.forEach((p, i) => { if (roll >= acc) n = i; acc += p; });
+    const waiting = Object.values(exp.reserves || {}).some((r) => !r.spaceId && r.pin);
+    return n === 0 && !waiting ? 1 : n;
+  }
+
   /** Root-to-space seed chain, for the level-complete screen. */
   function seedChain(exp, spaceId) {
     return DE.pathToRoot(exp, spaceId).reverse().map((id) => {
@@ -563,5 +586,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

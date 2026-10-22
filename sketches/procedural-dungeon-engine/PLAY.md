@@ -87,41 +87,60 @@ Determinism).
   Bump into a ghost and it's onto you at once: it goes straight to **!!**,
   but reels in place for 1.2 s before it follows.
 
-  A ghost watching or following you from off-screen gets a marker on the
-  screen edge (its icon, plus an arrow pointing toward it). A ghost hidden
+  An off-screen ghost gets a marker on a ring around the figure (not the
+  screen's edge, so markers never hide in a far corner), with an arrow
+  pointing toward it. Ghosts watching or following you show their status
+  icon; idle ones in your room or the next show a faint ghost. A ghost hidden
   behind a block or wall shows through as a dithered violet silhouette, like
-  the figure does, only fainter. The closer
-  a ghost is, the more the screen wobbles; contact fills it with purple
-  glitch and static. Both hold for a moment once you're clear, then wear
-  off over a few seconds. **Jars are how you collect them** (below).
+  the figure does, only fainter. Contact fills the screen with purple
+  glitch and static, which holds for a moment once you're clear, then wears
+  off over a few seconds. (Nearness used to wobble the screen too; that's
+  switched off, `WOBBLE` in `app/walk/ghosts.js`: it cost frames, left
+  artifacts, and worked through walls.) **Jars are how you collect them**
+  (below).
   Collapsing a room a ghost is in simply undoes it: nothing is gained, but
   the run keeps a tally and a short log (`run.unmade`) for whatever that
   becomes later.
 - **Halls and waypoints.** New expeditions start in a **hall**: a big room
   with notched corners, an awake **waystone**, at least two doors and a
   pale **surface door** on a north wall. Three violet **"?" pins** on the
-  map are **waypoints**, two near and one far: each marks a hall reserved
-  ahead of time (the footprint isn't shown, and the pin isn't at its
-  exact centre). Off the edge of the map, a pin sits on the edge, pointing
-  the way. Ordinary rooms grow around a footprint, never into it, and any
-  room built against one gets a door into it. Open that door and you're
-  there: the hall holds from the moment you arrive (no rerolling it), and
-  three new pins appear, out past it. A waypoint's hall always has three
-  push blocks, at least one sconce and a dormant waystone, plus anything
-  else a room can hold. See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections 8
-  and 9.
+  map are **waypoints**, two near (25–35 cells) and one far (45–60): each
+  marks a hall reserved ahead of time (the footprint isn't shown, and the
+  pin isn't at its exact centre). Off the edge of the map, a pin sits on the
+  edge, pointing the way. Ordinary rooms grow around a footprint, never into
+  it, and any room built against one gets a door into it. Open that door
+  and you're there: the hall holds from the moment you arrive (no rerolling
+  it). A hall always has three push blocks, at least one sconce and a
+  dormant waystone, plus anything else a room can hold. Rarely (1 room in
+  40, depth 3+) an ordinary door opens onto an **unmarked hall**, waystone
+  and all. See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections 8 and 9.
 - **Waystones.** A small slab with seeded glyphs, in the middle of a hall.
-  E at a dormant one wakes it for **1 charge** (the glyphs glow). E at an
-  awake one lists the other awake waystones; pick one to travel there
-  (free). The last waystone you woke or used is where you wake if your lamp
-  runs out. The starter hall's is always awake.
-- **The lamp burns entropy.** In a dark room, your lamp burns a shard every
-  12 s; in a lit room (a lit sconce, or an awake waystone) it doesn't, and
-  the meter's label stops pulsing. Rerolls draw on the same pool. With 3
-  shards or fewer left the lantern dims and flickers. When it runs out it
-  gutters, the world fades to black, and you wake at your last waystone
-  with 2 charges. Everything else stays: the map, what you carry, what you
-  restored.
+  E at a dormant one wakes it for **1 charge** (the glyphs glow), and that's
+  when new waypoints appear: 0–3, seeded by the hall (0: 10%, 1: 45%, 2:
+  35%, 3: 10%; never 0 if no waypoint is left waiting), near and far by
+  turns, fanned out past it. E at an awake one opens the big map on every
+  awake waystone, glowing; tap one to travel there (free). The last
+  waystone you woke or used is where you wake if your lamp runs out. The
+  starter hall's is always awake. A waystone doesn't light its room.
+- **The lamp burns entropy.** Entropy is a fluid amount of charges, and the
+  lamp burns it steadily: a shard's worth every 12 s (a charge every 36 s),
+  everywhere except within a tile of a lit sconce (its tile and the 8
+  around it). A shard pours a third of a charge in; push blocks a whole
+  one. Any gain holds the burn for 3 s, so what you just earned doesn't
+  start draining at once. Rerolls and waystones draw on the same pool.
+  When it runs out the lamp gutters, the world fades to black, and you wake
+  at your last waystone with 2 charges. Everything else stays: the map,
+  what you carry, what you restored.
+- **The lamp on the HUD** sits bottom left, by the hotbar: a lantern icon
+  in the lamp's colour (its flame sways while it burns, and stutters in
+  danger) and a fluid meter, one section per charge, with the one that's
+  burning shown dimmer. Under it: burning, held, or by a sconce, and your
+  keys. The top-left panel is information and settings only.
+- **You can feel the lamp.** As it falls below 3 charges, the lamp's colour
+  goes from yellow through orange and red toward grey and flickers more;
+  its dithered halo shrinks and fades (barely there below 1 charge); its
+  trail of sparks thins; and the light gets dimmer and shorter. Gaining
+  entropy pops a purple +◆ over your head (+◆◆◆ for a charge).
 - **The surface door.** Only in the starter hall. Opening it asks "Up to
   the surface (quit game)?" Going up saves and shows the expedition record
   (it stays up across reloads) until you choose to go back down. A
@@ -132,8 +151,11 @@ Determinism).
   the block for a beat and it slides half a cell. E, facing it, pulls it one
   half-cell toward you (you step back), which is how a block shoved into a
   corner comes back out. A block only moves within its room, onto bare
-  floor, never into a doorway's mouth. Home, it locks in place, its top and
-  its mark light up, and it pays **1 charge** of entropy, once. Blocks can't
+  floor, never into a doorway's mouth. Home, it and its mark light up, and
+  it pays **1 charge** of entropy. It can still be moved: off its mark, the
+  room takes the charge back (what you still have, and never enough to put
+  your lamp out), and home again pays back only what was taken, so a block
+  can't be farmed. Blocks can't
   be climbed, and jars and chalk can't go on them. Positions persist with
   the run; a rerolled room rolls a new one. See
   [`GAME-DESIGN.md`](GAME-DESIGN.md).
@@ -141,8 +163,8 @@ Determinism).
   sconce on a wall, chambers sometimes two. Never on a south wall: the
   camera looks north and would only see its back. E, facing one in your
   room, lights it from your lantern, which **costs 1 shard**. A lit sconce
-  burns for good (saved with the run), stops its room draining your lamp,
-  and lights the room around it: the
+  burns for good (saved with the run); within a tile of it your lamp
+  doesn't burn; and it lights the room around it: the
   three lit sconces nearest you get real lights (a fixed pool, so lighting
   more never recompiles materials). Doors carved later through a sconce's
   wall take the sconce's place.
@@ -248,7 +270,10 @@ trip back to your last waystone.
 | Beyond a lock | a faint gold warmth on the floor, "beyond a lock" in the caption, a gold outline on the maps | |
 | Sigil | a seeded star polygon (pentagram, hexagram, {7/3}, {8/3}) in a double ring with glyph marks, drawn additively | stage 0 a faint violet trace; 1 a dim glow; 2 brighter and flickering; 3 pulsing gold. A +1 max shows as a gold-edged ninth charge slot |
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
-| Entropy meter | 8 charge slots, plus 3 diamond pips for shards toward the next charge | violet |
+| Lamp HUD | bottom left: a lantern icon (46 px, like a hotbar slot) in the lamp's colour, and a fluid meter of 8 sections (more with sigils), the burning one dimmer; a state line and keys under it | violet liquid, gold for a sigil's extra sections |
+| Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges); a dithered additive halo, 2.5x the lamp at full, shrinks and fades (opacity ~0.85 down to ~0.2 at 1 charge, then barely there); additive sparks rise off it (up to 26/s, 0.35–0.75 s), thinning as it fails; the light's intensity falls to 30% and its range to 40% at empty; flicker grows below half | |
+| Entropy popup | "+◆" (one diamond per shard's worth, up to three) floats up over the head in violet; "−◆" greyer when a block takes its charge back | |
+| Ghost markers | on a ring around the figure, radius 42% of the shorter screen side | idle ghosts: a faint ghost icon, violet border |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. Door frames cap at 45%, door panels at 60% | side (north–south) walls never dither; doorways in south walls stay readable |
 | Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
@@ -260,7 +285,7 @@ trip back to your last waystone.
 | Waystone | a grey slab, 0.38 × 0.18 cells, 2.5 units tall, with five seeded glyphs on its north and south faces; awake, the glyphs glow violet and pulse slowly | on the maps, a small slab, glowing when awake |
 | Surface door | weathered pale panel with a daylight-white seam | white on the maps |
 | Push block | the whole block in its colour; home, it glows | |
-| Low lamp | at 3 shards or fewer, the lantern dims (to about a third at 0) and flickers; guttering fades it out and the world to black over ~1 s | the entropy label pulses orange while the lamp burns |
+| Guttering | the lamp fades out and the world goes black over ~1 s; HUD and captions stay | |
 
 ## Game parameters
 
@@ -270,14 +295,14 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | --- | --- |
 | Move | WASD / arrows (Shift runs at 4 cells/s instead of 2.4); touch: drag for a stick |
 | Open a door | walk into it for 0.35 s, or press E / tap the prompt |
-| Entropy | whole charges: start with 2, hold up to 8; 3 shards make 1 charge |
+| Entropy | a fluid amount in charges (`run.fuel`): start with 2, hold up to 8; a shard is a third of a charge |
 | Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
-| Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 1 charge, once |
-| Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second; halls: always one, 50% a second), never on south walls; lighting one costs 1 shard and stops the room draining the lamp |
-| Lamp | burns 1 shard every 12 s in a dark room (no lit sconce, no awake waystone); dims at 3 shards or fewer; out: wake at your last waystone with 2 charges |
-| Halls | starter: 6–8 cells a side; waypoints: 7–9; corners notched (65% each, 1–2 cells). Waypoint halls: 3 push blocks, 1–2 sconces, a waystone; loot as a chamber |
-| Waypoints | sets of 3: two near (10–15 cells centre to centre), one far (22–30), with a free ring around each; from the root, spread all round; from a hall, fanned outward. Pin within ±2 cells of the centre |
-| Waystones | wake: 1 charge; travel: free, awake to awake only |
+| Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 1 charge; off its mark takes back what it paid (never below 0.05) |
+| Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second; halls: always one, 50% a second), never on south walls; lighting one costs 1 shard; the lamp doesn't burn within one tile of it (3x3, same room) |
+| Lamp | burns a shard's worth every 12 s (`lampSeconds`), continuously, except by a lit sconce; any gain holds it 3 s (`lampGrace`); looks full at 3 charges (`lampFullCharges`), danger at 1 (`lampDanger`); out: wake at your last waystone with 2 charges |
+| Halls | starter: 6–8 cells a side; waypoints: 7–9; unmarked: 6–8, 2.5% of rooms at depth 3+ (`params.hallChance`, own `'hall'` stream); corners notched (65% each, 1–2 cells). Halls: 3 push blocks, 1–2 sconces, a waystone; loot as a chamber |
+| Waypoints | the start: two near (25–35 cells centre to centre), one far (45–60), all round the root. Waking a waystone: 0–3 (`waypointOdds`), near/far/near, fanned outward. A free ring around each footprint; pin within ±2 cells of the centre |
+| Waystones | wake: 1 charge, reveals waypoints; travel: free, awake to awake only, picked on the big map |
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
@@ -327,6 +352,35 @@ Whether a room starts with a hash ghost is seeded (`'ghost'` stream, plus
 the room's imprint, which is fixed once the room exists). Where ghosts drift
 afterwards is run state: their positions are saved with the run, and each
 room's roll happens once (`run.ghostSeen`).
+
+## Playtest notes, 2026-10-22 (waypoints and the lamp)
+
+All addressed the same day, as described above.
+
+- **Waypoints were far too close:** some were one door away, and opening
+  doors costs nothing. Now 25–35 and 45–60 cells.
+- **The map filled with pins**, three more at every arrival. Now they come
+  when you wake a waystone, 0–3, with 0 and 3 rare. Unmarked halls can turn
+  up anyway, so a 0 doesn't strand you.
+- **Waystones shouldn't refill the lamp.** Only sconces shelter it now, and
+  only within a tile.
+- **Travel by map, not a list.**
+- **The lamp's timer was unclear.** The drain speed felt fine (unchanged),
+  but nothing showed it was a countdown. Hence the fluid meter, the lamp
+  icon, the colour, halo, sparks and shorter light, and the +◆ popup (the
+  caption at the bottom gets lost).
+- **The HUD panel mixed info with game state.** It's info and settings
+  only now; crouched/hidden is gone (you can see it).
+- **Push blocks should move after they're home**, taking their entropy
+  back.
+- **The ghost wobble** cost frames, made artifacts, and worked through
+  walls: switched off.
+- **Ghost markers** got lost in screen corners and only showed for ghosts
+  that had noticed you: now on a ring, and for idle ghosts nearby too.
+
+Still open: keys are the one consumable without a world object; they sit
+by the lamp for now. A "map" item that reveals a waymark was floated as a
+later way to get new waypoints.
 
 ## Playtest notes, 2026-10-20 (second session)
 

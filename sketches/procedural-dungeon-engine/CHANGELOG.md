@@ -298,6 +298,34 @@ All notable changes to this sketch are logged here, per
   return its room never drains the lamp.
 - 2026-10-22: **Push blocks are solid colour** (the whole block, not a
   coloured top). Programmer art for now.
+- 2026-10-22: **After the first playtest of waypoints and the lamp** (notes
+  in `PLAY.md`):
+  - Waypoints are much farther apart: near 25–35 cells, far 45–60.
+  - New waypoints come from **waking a waystone**, not arriving: 0–3
+    (`RULES.waypointOdds`, seeded by the hall; never 0 while none wait).
+  - **Unmarked halls**: a rare ordinary room (2.5%, depth 3+) is a hall
+    with a dormant waystone (`params.hallChance`, `DE.hallShape`). Older
+    records don't roll them, so they replay unchanged.
+  - **Travel on the map**: E at an awake waystone opens the big map framed
+    on the awake ones, which pulse; tap one to go.
+  - **Entropy is a fluid fuel** (`run.fuel`, in charges; run save v2
+    migrates). The lamp burns it continuously, except within a tile of a
+    lit sconce; waystones no longer shelter it. Any gain holds the burn
+    for 3 s. New file `app/walk/lamp.js` (after `waystones.js`).
+  - **A HUD of its own for the lamp**, bottom left: a lantern icon in the
+    lamp's colour and a sectioned fluid meter, plus keys. The top-left
+    panel is information and settings only; crouched/hidden is gone.
+  - **The lamp shows its state**: colour from yellow through red to grey,
+    flicker, a dithered halo that shrinks and fades, a trail of sparks, and
+    a light that dims and shortens. A purple +◆ floats over your head when
+    entropy comes in.
+  - **Push blocks move after they're home**; off the mark takes their
+    charge back, home again pays back only that.
+  - Ghosts: the proximity **wobble is switched off** (`WOBBLE`, code kept).
+    Off-screen **markers ride a ring** around the figure, and idle ghosts in
+    your room or the next get one too.
+  - Fixed: waking or travelling showed the room's log line instead of the
+    wake/travel caption.
 
 ### Fixed
 

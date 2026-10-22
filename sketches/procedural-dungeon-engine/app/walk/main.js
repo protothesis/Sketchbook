@@ -97,7 +97,7 @@
         if (s.door && p.z <= 0.05 && !isLockedNow(exp.spaces[s.door.spaceId], s.door.exit)) {
           pushing = s.door; pk = s.door.spaceId + '/' + s.door.exit.id; break;
         }
-        if (s.block && s.block.push && !s.block.done && p.z <= 0.05) {
+        if (s.block && s.block.push && p.z <= 0.05) {
           pushingBlock = s.block; pushDir = { x: -d.x, y: -d.y }; pk = 'push:' + s.block.key; break;
         }
         if (s.block && canClimb(s.block)) {
@@ -167,7 +167,6 @@
       stanceEl.textContent = stance;
       stanceEl.className = 'stance' + (hidden ? ' hidden' : '');
     }
-    lantern.intensity = LANTERN * W.lampFactor() * (0.94 + 0.06 * Math.sin(state.time * 9.3) * Math.sin(state.time * 3.1));
 
     // Camera: fixed angle, smoothed follow.
     tmpV.set(p.x * S, 0.6 + p.z * S * 0.6, p.y * S);
@@ -211,13 +210,15 @@
     updateSconces();
     W.updateWaystones();
     W.updateLamp(dt);
+    W.updateLampLook(dt); // the lamp's colour, halo, sparks and light (after placeLamp)
   }
 
   /** Jump the camera to the figure (after travelling, or waking). */
   function snapCamera() {
     const p = state.player;
     camTarget.set(p.x * S, 0.6 + p.z * S * 0.6, p.y * S);
-    p.spaceId = null; // so the room's log line shows
+    // Already "in" the room, so its log line doesn't cover the caller's caption.
+    p.spaceId = state.exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))];
   }
 
   function newExpedition() {
@@ -339,9 +340,10 @@
   // Stale-file check: play.html, the scripts and the CSS are cached
   // separately, so a browser can end up with a mix of versions. If pieces
   // this play.js expects are missing, say so instead of failing oddly later.
-  const expectIds = ['view', 'stats', 'charges', 'shard-pips', 'hotbar', 'use-btn', 'stance',
-    'prompt', 'caption', 'minimap', 'bigmap', 'bigmap-canvas', 'ghost-edges', 'crouch-btn', 'done', 'dialog', 'fade'];
-  const expectFns = [DE.carve, DE.imprintAt, DE.reserve, DP.props, DP.ghostSpawn, DP.loot, DP.waypointSet, W.updateLamp];
+  const expectIds = ['view', 'stats', 'lamp', 'lamp-meter', 'lamp-icon', 'popups', 'hotbar', 'use-btn',
+    'prompt', 'caption', 'minimap', 'bigmap', 'bigmap-canvas', 'bigmap-hint', 'ghost-edges', 'crouch-btn', 'done',
+    'dialog', 'fade'];
+  const expectFns = [DE.carve, DE.imprintAt, DE.reserve, DP.props, DP.ghostSpawn, DP.loot, DP.waypointCount, W.updateLampLook];
   const missing = expectIds.filter((id) => !$(id));
   if (missing.length || expectFns.some((f) => typeof f !== 'function')) {
     notice(`This page's files are out of date (cached copies of different versions). ${REFRESH_HINT}`, 'stale');
