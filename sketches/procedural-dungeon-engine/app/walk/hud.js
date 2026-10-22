@@ -145,9 +145,8 @@
     }
     // Walls: every cell edge that doesn't lead into the same room, so rooms
     // built wall to wall still read as separate.
-    ctx.strokeStyle = 'rgba(226, 218, 198, 0.6)';
-    ctx.lineWidth = Math.max(1, px * 0.09);
-    ctx.lineCap = 'square';
+    ctx.strokeStyle = '#38363d'; // solid dark grey: apart from both the black and the rooms
+    ctx.lineWidth = Math.max(1.5, px * 0.1);
     ctx.beginPath();
     for (const id in exp.spaces) {
       for (const k of exp.spaces[id].cells) {
@@ -163,7 +162,6 @@
       }
     }
     ctx.stroke();
-    ctx.lineCap = 'butt';
     // Rooms past a locked door: a gold outline.
     ctx.strokeStyle = 'rgba(232, 193, 90, 0.9)';
     ctx.lineWidth = Math.max(1, px * 0.1);
@@ -199,10 +197,11 @@
       }
       ctx.stroke();
     }
-    // Doors, one tile wide: unopened orange, locked blue. An opened door is a
-    // green arrow pointing the way it was opened (the only way it can be
-    // collapsed); the far side of that doorway draws nothing, and a loop is
-    // a plain green line.
+    // Doors, one tile wide. Unopened (orange) and locked (blue) doors are a
+    // bar with a point on the outside, toward where they'd open. An opened
+    // door is a green arrow pointing the way it was opened (the only way it
+    // can be collapsed); the far side of that doorway draws nothing, and a
+    // loop is a plain green line.
     const t = Math.max(1, px * 0.08); // half the line's thickness
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
@@ -226,6 +225,16 @@
         ctx.fillStyle = conn ? '#5fbf7a' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
         ctx.fillRect(ox + Math.min(ax, bx) * px - (ay === by ? 0 : t), oy + Math.min(ay, by) * px - (ay === by ? t : 0),
           Math.abs(bx - ax) * px + (ay === by ? 0 : 2 * t), Math.abs(by - ay) * px + (ay === by ? 2 * t : 0));
+        if (!conn) {
+          const d = DE.DIRS[ex.facing], mx = (ax + bx) / 2, my = (ay + by) / 2;
+          const hx = (bx - ax) * 0.3, hy = (by - ay) * 0.3;
+          ctx.beginPath();
+          ctx.moveTo(ox + (mx - hx) * px, oy + (my - hy) * px);
+          ctx.lineTo(ox + (mx + hx) * px, oy + (my + hy) * px);
+          ctx.lineTo(ox + (mx + d.x * 0.3) * px, oy + (my + d.y * 0.3) * px);
+          ctx.closePath();
+          ctx.fill();
+        }
       }
     }
     // Chalk marks: a dot in the chalk's colour, big enough to read at any zoom.

@@ -230,6 +230,10 @@ All notable changes to this sketch are logged here, per
   count. Its default, "auto", sets down your fullest jar onto a sigil tile
   and your emptiest one anywhere else. The picker chooses a group for the
   next jar only.
+- 2026-10-21: Maps: walls are a solid dark grey. Unopened and locked doors
+  keep their bar and gain a point on the outside, toward where they'd
+  open. The big map opens with **Tab** instead of M, so everything sits
+  under the left hand.
 
 ### Fixed
 

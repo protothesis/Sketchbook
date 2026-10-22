@@ -20,7 +20,8 @@
       return;
     }
     if (state.bigmap) {
-      if (k === 'm' || k === 'escape') W.closeBigMap();
+      if ((k === 'tab' && !e.repeat) || k === 'escape') W.closeBigMap();
+      if (k === 'tab') e.preventDefault();
       return;
     }
     if (k === 'escape' && state.expanded) { state.expanded = null; refreshHotbar(); return; }
@@ -35,8 +36,9 @@
     } else if (k === ' ') {
       if (!e.repeat) toggleCrouch();
       e.preventDefault(); // don't also "click" a focused button or scroll
-    } else if (k === 'm') {
-      W.openBigMap();
+    } else if (k === 'tab') { // the map, under the left hand with WASD
+      if (!e.repeat) W.openBigMap();
+      e.preventDefault(); // not a focus change
     } else if (k === 'n') {
       requestNewMap();
     }

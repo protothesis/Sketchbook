@@ -162,7 +162,7 @@ Determinism).
   on the maps. Nothing more yet: it's a hook. The expedition-record /
   leave-the-dungeon screen (`showRecord`) is still in the code, unused, for
   whatever a lock leads to later.
-- **The big map** (M, or tap the minimap) is a view: it opens zoomed in on
+- **The big map** (Tab, or tap the minimap) is a view: it opens zoomed in on
   you (two wheel steps back from the closest zoom); drag to pan, wheel or
   pinch to zoom.
 
@@ -180,7 +180,7 @@ forward; collapsing is the only thing entropy buys.
 | Closed door | dark panel with a warm orange seam of light under it | the same orange as the chart view's open doorways |
 | Locked door | iron-grey panel with two bands and a cold blue seam | blue on the minimap; once unlocked it keeps its bands and gets an orange seam |
 | Minimap | unopened doors orange, locked doors blue, opened doors green; traces grey; imprinted cells get a violet tick | so overlapping rooms stay readable |
-| Big map | M or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close | walking pauses while it's open |
+| Big map | Tab or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close | walking pauses while it's open |
 | Cracks | canvas-drawn fissures with a violet core on imprinted tiles; more trace layers, more cracks | seeded per cell; glows faintly even in the dark |
 | Blocks | flat-shaded boxes a shade darker than the walls, filling half-cell subgrid squares flush (no gaps between neighbours), 1–3 units of 0.43 cells tall, one seamless box each | cast shadows; never dither. The figure shows through them instead |
 | Silhouette | the parts of the figure hidden behind anything draw as a dithered lantern-orange silhouette | GreaterDepth pass, so it only appears where something is in front |
