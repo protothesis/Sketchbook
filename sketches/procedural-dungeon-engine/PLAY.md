@@ -191,7 +191,7 @@ forward; collapsing is the only thing entropy buys.
 
 ## Game parameters
 
-All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
+All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost tunables are in `GHOST`, in `app/walk/ghosts.js`).
 
 | Parameter | Value |
 | --- | --- |

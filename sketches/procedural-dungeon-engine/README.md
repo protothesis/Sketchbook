@@ -60,7 +60,17 @@ app/             clients of the engine
   app.js           controls, inspector, pointer input, autosave
   styles.css
   play-rules.js    walk mode's game rules: seeded loot + locks, collapse cost
-  play.js          walk mode: three.js world, shadows, collision, doors, HUD
+  walk/            walk mode, as classic scripts loaded in this order:
+    core.js          tunables, renderer/scene/camera, run state, saving
+    world.js         dither, materials, building and dissolving spaces
+    figure.js        the figure and lantern, collision, climbing, crouch
+    items.js         hotbar, chalk marks, jars, sigils
+    actions.js       doors: open, unlock, collapse; doorstones
+    input.js         keyboard, touch stick, buttons
+    ghosts.js        hash ghosts
+    fx.js            wobble/glitch post-process, rendering a frame
+    hud.js           prompts, captions, minimap, big map, record screen
+    main.js          per-frame update, expedition setup, boot
   play.css
 vendor/three/    three.js r160 classic build (walk mode only)
 stress-test.js   headless milestone checks (Node)

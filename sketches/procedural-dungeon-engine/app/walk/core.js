@@ -1,0 +1,226 @@
+// Walk mode: a third-person 3D client of the engine (see PLAY.md).
+//
+// Every unresolved exit is a closed door. Pushing one open calls expand +
+// commit straight away, and the new space assembles itself outward from the
+// threshold. Standing at a door you opened, you can spend entropy charges to close
+// it and collapse everything beyond (engine reverts); reopening it rerolls.
+// Game rules (loot, locks, costs) live in play-rules.js.
+//
+// Logic runs in grid units (1 = one cell, y = grid y); rendering scales by S
+// into three.js world space, with grid y mapped to world z. Shares the map
+// view's autosave, so both pages are the same expedition.
+//
+// Walk mode is split into classic scripts (no modules: the page has to open
+// from file://), which play.html loads in this order:
+//
+//   core, world, figure, items, actions, input, ghosts, fx, hud, main
+//
+// Each file is its own IIFE sharing one namespace, DungeonPlay.walk ("W").
+// A file takes what it needs from earlier files by destructuring W at the
+// top, and hands what other files use to W at the bottom. A call into a
+// later file goes through W at call time (W.showCaption(...)), because that
+// file hasn't loaded yet when this one runs.
+//
+// This file: tunables, the three.js renderer, scene and camera, the run
+// state, and saving.
+(function (global) {
+  'use strict';
+
+  const W = (global.DungeonPlay.walk = {});
+
+  const DE = global.DungeonEngine;
+  const DP = global.DungeonPlay;
+  const RULES = DP.RULES;
+  const THREE = global.THREE;
+  const $ = (id) => document.getElementById(id);
+  const STORAGE_KEY = 'dungeon-engine:expedition';
+  const PLAYER_KEY = 'dungeon-engine:player';
+
+  // Tunables, in cells unless noted. PLAY.md has the reasoning.
+  const S = 2;              // world units per cell
+  const WALL_H = 1.3;
+  const WALL_T = 0.08;
+  const DOOR_W = 0.6;
+  const DOOR_H = 1.0;
+  const JAMB = (1 - DOOR_W) / 2;
+  const RADIUS = 0.2;
+  const SPEED = 2.4;
+  const RUN = 4.0;
+  const CROUCH_SPEED = 1.1; // a crawl
+  const CROUCH_SCALE = 0.55; // figure height when crouched (standing is ~0.64 cells tall)
+  const HIDE_RANGE = 0.2;
+  const UNIT = RULES.blockUnit; // one stacked block unit, in cells
+  const CLIMB_TIME = 0.42;      // seconds to step up onto a block
+  const GRAVITY = 9;            // cells/s^2 when stepping off an edge   // cells between the figure and a block to count as hidden
+  const PUSH_TIME = 0.35;   // seconds of walking into a door to open it
+  const USE_RANGE = 0.6;    // E / tap reach to a door's midpoint
+  const PICKUP_RANGE = 0.42;
+  const DOOR_SWING = 0.6;   // seconds
+  const SWING_ANGLE = THREE.MathUtils.degToRad(92);
+  const REVEAL_STEP = 0.07; // seconds of delay per cell from the door
+  const REVEAL_DUR = 0.45;
+  const DISSOLVE_DUR = 0.7;
+  const DITHER_RADIUS = 0.27; // fraction of the shorter screen side
+  const DITHER_APPROACH = 2.5; // cells: south walls start a light dither this close
+  const CAM_OFFSET = new THREE.Vector3(0, 10.5, 7.5);
+  const SEAM = 0xc4502a;    // the map view's open-doorway orange
+  const LOCK_SEAM = 0x6fa8d8;
+  const BG = 0x07060a;
+  const LANTERN = 16;       // point-light intensity (three.js physical units)
+  const LANTERN_RANGE = 13 * S;
+
+  const OPP = DE.OPPOSITE;
+  const ekey = (x, y, f) => x + ',' + y + ',' + f;
+
+  // ---------------------------------------------------------------------------
+  // three.js scaffolding
+
+  const canvas = $('view');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(BG);
+  scene.fog = new THREE.Fog(BG, 13, 28);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+  // Barely any ambient: what the lantern can't reach stays dark.
+  scene.add(new THREE.AmbientLight(0x8a90b8, 0.06));
+
+  // ---------------------------------------------------------------------------
+  // State
+
+  const state = {
+    exp: null,
+    exitAt: new Map(),   // "x,y,f" -> { spaceId, exit }
+    spaces: new Map(),   // spaceId -> { group, edges[], tiles[], revealStart|null }
+    dying: [],           // collapsed space records still dissolving
+    doors: new Map(),    // "spaceId/exitId" -> door
+    items: new Map(),    // "spaceId:seed:itemId" -> { mesh, item, spaceId, tile }
+    blockAt: new Map(),  // "x,y" -> [{ x0, y0, x1, y1, h, spaceId }] for collision
+    player: { x: 0.5, y: 0.5, z: 0, vz: 0, angle: 0, spaceId: null, phase: 0 },
+    climb: null,         // { fx, fy, fz, tx, ty, tz, t } while stepping up
+    ghosts: [],          // live hash ghosts (see "Hash ghosts")
+    jars: [],            // jars standing in the world (see "Inventory")
+    sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
+    buff: 0,             // powered sigils: +1 entropy max each
+    buffReady: false,    // false until the first sigil pass (no caption on load)
+    sel: null,           // the selected hotbar slot's key
+    variant: {},         // per group slot: the variant in use (e.g. chalk colour)
+    expanded: null,      // the group slot whose picker is open
+    marks: [],           // chalk marks drawn in the world
+    fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9 }, // screen effects, 0..1
+    run: null,           // inventory + run stats, see freshRun()
+    push: { key: null, t: 0 },
+    time: 0,
+    minimap: true,
+    bigmap: null,        // { cx, cy, px } while the enlarged map is open
+    crouch: false,
+    crouchAmt: 0,        // 0 standing .. 1 crouched, eased
+    hidden: false,
+    paused: false,
+    recordMode: null,    // 'checkpoint' | 'extracted' while the record screen is up
+  };
+  const world = new THREE.Group();
+  scene.add(world);
+
+  function freshRun(rootSeed) {
+    return {
+      rootSeed, charges: RULES.chargesStart, shards: 0, keys: 0,
+      shardsFound: 0, keysFound: 0, keysUsed: 0, chalk: 0, chalkFound: 0, chalkUsed: 0,
+      collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
+      walked: 0, collected: [], unlocked: [], extracted: null,
+      keyRooms: [],  // "spaceId:seed" of rooms whose key showed up (locks first, keys later)
+      unmade: { count: 0, log: [] }, // hash ghosts undone by a collapse (or in a jar that shattered); no use yet
+      ghostSeen: [], // "spaceId:seed:ghost" for rooms whose ghost roll has happened
+      ghosts: [],    // saved positions: [{ id, x, y, mode }]
+      jars: [],      // jars carried: [{ id, fill }]
+      placedJars: [], // jars set down: [{ id, sx, sy, fill }] (half-cell coordinates)
+      jarSeq: 0,
+      chalks: { silver: 3 }, // chalk carried, by colour, in strokes (3 per stick)
+      marks: [],             // chalk marks drawn: [{ sx, sy, color, rot, base }] (quarter-tiles)
+      doorstones: 0,         // open a door in a bare wall
+    };
+  }
+
+  function rebuildExitIndex() {
+    state.exitAt.clear();
+    for (const id in state.exp.spaces) {
+      for (const ex of state.exp.spaces[id].exits) {
+        state.exitAt.set(ekey(ex.cell.x, ex.cell.y, ex.facing), { spaceId: id, exit: ex });
+      }
+    }
+  }
+
+  /** Locked and not yet unlocked by this run (unlocked doors are checkpoints). */
+  function isLockedNow(space, ex) {
+    return !ex.connectionId && DP.isLocked(space, ex) && !state.run.unlocked.includes(space.id + '/' + ex.id);
+  }
+
+  function ownsDoorPanel(spaceId, ex) {
+    if (!ex.connectionId) return true;
+    const c = state.exp.connections[ex.connectionId];
+    return c.a.spaceId === spaceId && c.a.exitId === ex.id;
+  }
+
+  const CHALK = {
+    silver: { css: '#d6dbe2', hex: 0xd6dbe2, sym: '↑', name: 'arrow' },
+    gold: { css: '#ecc35c', hex: 0xecc35c, sym: '△', name: 'triangle' },
+    crimson: { css: '#e86060', hex: 0xe86060, sym: '✕', name: 'cross' },
+    teal: { css: '#57cdbf', hex: 0x57cdbf, sym: '≈', name: 'waves' },
+    violet: { css: '#ba95ff', hex: 0xba95ff, sym: '☾', name: 'crescent' },
+  };
+
+  const chargeText = (n) => `${n} charge${n === 1 ? '' : 's'}`;
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Persistence (shared with the map view)
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, DE.exportRecord(state.exp)); } catch (e) { /* storage unavailable */ }
+  }
+  function savePlayer() {
+    const p = state.player;
+    state.run.marks = state.marks.map((m) => ({ sx: m.sx, sy: m.sy, color: m.color, rot: m.rot, base: m.base }));
+    state.run.placedJars = state.jars.map((j) => ({ id: j.id, sx: j.sx, sy: j.sy, fill: j.fill }));
+    state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
+    try {
+      localStorage.setItem(PLAYER_KEY, JSON.stringify({
+        v: RUN_VERSION, rootSeed: state.exp.rootSeed, x: p.x, y: p.y, angle: p.angle, run: state.run,
+      }));
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  // The run save's format version. When the shape of `run` changes, bump it
+  // and add a step to RUN_MIGRATIONS: step i takes a version-i run to i + 1.
+  // Saves from before versioning count as version 0.
+  const RUN_VERSION = 1;
+  const RUN_MIGRATIONS = [
+    // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
+    (run) => {
+      if (typeof run.chalk === 'number' && run.chalk > 0) { run.doorstones = (run.doorstones || 0) + run.chalk; run.chalk = 0; }
+      delete run.pins;
+      delete run.echoes;
+    },
+  ];
+  /** Bring a saved run up to RUN_VERSION, in place. */
+  function migrateRun(run, version) {
+    for (let v = version || 0; v < RUN_VERSION; v++) RUN_MIGRATIONS[v](run);
+    return run;
+  }
+
+  Object.assign(W, { DE, DP, RULES, THREE, $, STORAGE_KEY, PLAYER_KEY, S, WALL_H, WALL_T,
+    DOOR_W, DOOR_H, JAMB, RADIUS, SPEED, RUN, CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, UNIT,
+    CLIMB_TIME, GRAVITY, PUSH_TIME, USE_RANGE, PICKUP_RANGE, DOOR_SWING, SWING_ANGLE,
+    REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_RADIUS, DITHER_APPROACH, CAM_OFFSET, SEAM,
+    LOCK_SEAM, LANTERN, LANTERN_RANGE, OPP, ekey, canvas, renderer, scene, camera, state, world,
+    freshRun, rebuildExitIndex, isLockedNow, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,
+    savePlayer });
+})(window);

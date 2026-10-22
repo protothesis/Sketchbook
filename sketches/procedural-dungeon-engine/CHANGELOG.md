@@ -195,6 +195,20 @@ All notable changes to this sketch are logged here, per
   replay, export and the chart view keep drawn doors.
 - 2026-10-20: The sustained contact glitch is at a quarter of the flash's
   strength (was half).
+- 2026-10-21: **Walk mode is split into files.** The 3,200-line
+  `app/play.js` is now ten classic scripts in `app/walk/` (core, world,
+  figure, items, actions, input, ghosts, fx, hud, main), loaded in that
+  order by `play.html`. They share one namespace, `DungeonPlay.walk`. Each
+  file destructures what it needs from earlier files and exports what
+  others use, and calls into a later file go through `W.` at call time.
+  It's a mechanical move with no behaviour change: a scripted session
+  (open doors, collapse, reopen) gave identical worlds and runs before and
+  after.
+- 2026-10-21: **The run save has a version.** `savePlayer` writes `v: 1`,
+  and loading runs each migration step from the save's version up
+  (`migrateRun` in `core.js`). Older saves count as version 0, and their
+  step folds in the old patches: door chalk becomes doorstones, and leftover
+  `pins` / `echoes` fields are dropped.
 
 ### Fixed
 
