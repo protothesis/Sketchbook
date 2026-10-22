@@ -35,11 +35,13 @@ mending, tidying and returning things is the right one.
 other than the one you came in by commits the room. That includes a loop
 door into a room that already exists. A committed room can't be rerolled.
 
-- This can be derived rather than stored: a room is committed when any of
-  its doors other than its entry is open. A loop into a room opens a door on
-  it, so a loop commits the room it lands in too. Carving a door with a
-  doorstone doesn't commit until that door is opened. The root room is
-  always committed.
+- It's derived, not stored: a room is committed if the expedition history
+  has ever recorded a door opened from it, or if a loop has opened a door
+  into it. History matters here. Rerolling the room beyond a committed room
+  closes that room's only door out again, and a rule that only looked at
+  open doors would quietly un-commit it, letting you peel the map back one
+  room at a time. Carving a door with a doorstone doesn't commit until that
+  door is opened. The root room is always committed.
 - **A provisional room never has rooms beyond it.** You can only open a
   room's doors from inside it, and opening one commits it. So a reroll only
   ever touches **one room**, and its price is always the same. There's no
