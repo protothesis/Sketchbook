@@ -16,7 +16,8 @@
     if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
     const k = e.key.toLowerCase();
     if (state.paused) {
-      if (k === 'escape' && state.recordMode === 'checkpoint') W.hideRecord();
+      if (k === 'escape' && state.dialog) W.closeDialog();
+      else if (k === 'escape' && state.recordMode === 'checkpoint') W.hideRecord();
       return;
     }
     if (state.bigmap) {

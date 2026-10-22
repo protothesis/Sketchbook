@@ -14,7 +14,29 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function assert(cond, msg) { if (!cond) throw new Error('FAIL: ' + msg); }
 
+// Claim a hall footprint a few cells out from a random room, as walk mode's
+// waypoints do.
+function tryReserve(exp) {
+  const ids = Object.keys(exp.spaces);
+  const c = DE.parseKey(pick(exp.spaces[pick(ids)].cells));
+  const rng = DE.createRng(DE.randomRootSeed());
+  const h = DE.hallCells(rng, 6, 8);
+  const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * 10;
+  const ox = Math.round(c.x + Math.cos(a) * d), oy = Math.round(c.y + Math.sin(a) * d);
+  const cells = h.cells.map((p) => DE.key(p.x + ox, p.y + oy));
+  if (!DE.canReserve(exp, cells)) return false;
+  DE.reserve(exp, { seed: DE.hash('hall', ox, oy), kind: 'hall', cells });
+  return true;
+}
+
 function checkNoOverlap(exp) {
+  // Nothing grows into a footprint that's still waiting; a reserved space
+  // that was built has exactly its footprint.
+  for (const id in exp.reserves) {
+    const r = exp.reserves[id];
+    if (r.spaceId) assert(exp.spaces[r.spaceId].cells.join(';') === r.cells.join(';'), 'reserved space ' + r.spaceId + ' differs from ' + id);
+    else for (const k of r.cells) assert(exp.registry[k] === undefined, 'cell ' + k + ' of waiting ' + id + ' built on');
+  }
   const seen = {};
   for (const id in exp.spaces) {
     for (const k of exp.spaces[id].cells) {
@@ -32,10 +54,10 @@ function sameMap(a, b) {
 let totalCycles = 0;
 for (let run = 0; run < RUNS; run++) {
   const exp = DE.createExpedition(DE.randomRootSeed());
-  let expansions = 0, loops = 0, reverts = 0;
+  let expansions = 0, loops = 0, reverts = 0, reserves = 0;
   while (expansions < N) {
     const open = [];
-    for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId) open.push([id, e.id]);
+    for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId && e.kind !== 'surface') open.push([id, e.id]);
     if (open.length === 0) break;
     const [sid, eid] = pick(open);
     let cand = DE.expand(exp, sid, eid);
@@ -47,6 +69,7 @@ for (let run = 0; run < RUNS; run++) {
       const leaves = Object.keys(exp.spaces).filter((id) => DE.canRevert(exp, id));
       if (leaves.length) { DE.revert(exp, pick(leaves)); reverts++; }
     }
+    if (expansions % 40 === 0) tryReserve(exp) && reserves++;
     if (expansions % 50 === 0) checkNoOverlap(exp);
   }
   checkNoOverlap(exp);
@@ -55,7 +78,8 @@ for (let run = 0; run < RUNS; run++) {
   assert(DE.exportRecord(res.expedition) === DE.exportRecord(exp), 'replayed record differs');
   const s = DE.stats(exp);
   totalCycles += s.cycles;
-  console.log(`run ${run} seed=${exp.rootSeed}: ${expansions} expansions, ${loops} loops, ${reverts} reverts ->`,
+  const built = Object.values(exp.reserves).filter((r) => r.spaceId).length;
+  console.log(`run ${run} seed=${exp.rootSeed}: ${expansions} expansions, ${loops} loops, ${reverts} reverts, ${reserves} reserves (${built} built) ->`,
     `${s.spaces} spaces, ${s.cells} cells, ${s.cycles} cycles, ${s.openExits} open exits; replay OK`);
 }
 assert(totalCycles > 0, 'no cycles in any run');

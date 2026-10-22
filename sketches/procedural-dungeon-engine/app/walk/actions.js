@@ -7,7 +7,7 @@
   const { DE, DP, RADIUS, USE_RANGE, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
     climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn, toolNear,
-    takeItem, pullNear, pull, sconceNear, lightSconce } = W;
+    takeItem, pullNear, pull, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
 
   // ---------------------------------------------------------------------------
   // Doors: open, unlock, or close + collapse
@@ -29,7 +29,7 @@
       if (d >= bestD) continue;
       let action = null, child = null;
       if (p.z > 0.05) continue; // no doors from on top of a block
-      if (!ex.connectionId) action = isLockedNow(sp, ex) ? 'locked' : 'open';
+      if (!ex.connectionId) action = ex.kind === 'surface' ? 'surface' : isLockedNow(sp, ex) ? 'locked' : 'open';
       else if ((child = DP.rerollThrough(exp, sp.id, ex))) action = 'collapse';
       if (!action) continue;
       bestD = d;
@@ -37,7 +37,7 @@
     }
     if (best && best.action === 'collapse') {
       best.price = DP.collapseCost(DP.branch(exp, best.child.id));
-      best.affordable = best.price.charges <= state.run.charges;
+      best.affordable = best.price.charges <= state.run.fuel + 1e-6;
     }
     return best;
   }
@@ -78,12 +78,15 @@
 
   /** What E would do right now, in priority order (F uses the hotbar item: useNear). */
   const actionNear = (p) =>
-    doorNear(p) || toolNear(p) || jarNear(p) || markNear(p) || pullNear(p) || sconceNear(p) ||
-    blockNear(p);
+    doorNear(p) || waystoneNear(p) || toolNear(p) || jarNear(p) || markNear(p) || pullNear(p) ||
+    sconceNear(p) || blockNear(p);
 
   function act(near) {
     if (!near || state.paused || state.climb) return;
     if (near.action === 'climb') { climb(near.block, near.dir); return; }
+    if (near.action === 'surface') { askSurface(); return; }
+    if (near.action === 'wake') { wakeWaystone(near.stone); return; }
+    if (near.action === 'travel') { travelFrom(near.stone); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
     if (near.action === 'pickjar') { pickUpJar(near.jar); return; }
     if (near.action === 'take') { takeItem(near.key, near.it); return; }
@@ -118,7 +121,7 @@
       W.refreshHud();
     } else if (near.action === 'collapse') {
       if (!near.affordable) {
-        W.showCaption(`not enough entropy to reroll: ${chargeText(near.price.charges)}, you have ${run.charges}`);
+        W.showCaption(`not enough entropy to reroll: ${chargeText(near.price.charges)}, you have ${chargeText(run.fuel)}`);
         return;
       }
       collapseThrough(near);
@@ -165,9 +168,30 @@
       const sp = cand.space;
       if (needKey && DP.loot(sp).some((it) => it.kind === 'key')) state.run.keyRooms.push(sp.id + ':' + sp.seed);
       buildSpace(sp, true);
+      if (sp.archetype === 'hall') W.arrive(sp);
     }
     save();
     W.refreshHud();
+  }
+
+  /** The surface door: a placeholder way out of the game loop. */
+  function askSurface() {
+    const sp = state.exp.spaces.s0, ex = sp && sp.exits.find((e) => e.kind === 'surface');
+    if (!ex) return;
+    W.openDialog({
+      kicker: 'the surface door',
+      title: 'Up to the surface (quit game)?',
+      text: 'Your expedition is saved. The dungeon will be here when you come back down.',
+      buttons: [
+        { label: 'Go up', primary: true, onClick: () => {
+          state.run.surfaced = true;
+          save();
+          savePlayer();
+          W.showRecord(sp.id, ex.id, 'surface');
+        } },
+        { label: 'Stay below', quiet: true },
+      ],
+    });
   }
 
   /** Close an opened door and erase every space beyond it, for entropy. */
@@ -197,7 +221,7 @@
     const shattered = shatterJarsIn(ids);
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
-    run.charges -= near.price.charges;
+    W.spendFuel(near.price.charges);
     run.chargesSpent += near.price.charges;
     run.collapses++;
     run.roomsCollapsed += spaces.length;
@@ -218,5 +242,5 @@
     W.refreshHud();
   }
 
-  Object.assign(W, { doorNear, wallNear, carveDoor, actionNear, act, openDoor });
+  Object.assign(W, { doorNear, wallNear, carveDoor, actionNear, act, openDoor, askSurface });
 })(window);

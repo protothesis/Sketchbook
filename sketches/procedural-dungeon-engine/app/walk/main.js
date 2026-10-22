@@ -97,7 +97,7 @@
         if (s.door && p.z <= 0.05 && !isLockedNow(exp.spaces[s.door.spaceId], s.door.exit)) {
           pushing = s.door; pk = s.door.spaceId + '/' + s.door.exit.id; break;
         }
-        if (s.block && s.block.push && !s.block.done && p.z <= 0.05) {
+        if (s.block && s.block.push && p.z <= 0.05) {
           pushingBlock = s.block; pushDir = { x: -d.x, y: -d.y }; pk = 'push:' + s.block.key; break;
         }
         if (s.block && canClimb(s.block)) {
@@ -109,7 +109,10 @@
     else { state.push.key = pk; state.push.t = 0; }
     if (pk && state.push.t >= PUSH_TIME) {
       state.push.key = null;
-      if (pushing) openDoor(pushing.spaceId, pushing.exit.id);
+      if (pushing) {
+        if (pushing.exit.kind === 'surface') W.askSurface();
+        else openDoor(pushing.spaceId, pushing.exit.id);
+      }
       else if (pushDir) pushBlock(pushingBlock, pushDir);
       else climb(pushingBlock, { x: inp.x, y: inp.y });
     }
@@ -121,7 +124,10 @@
     if (sid !== p.spaceId) {
       p.spaceId = sid;
       const sp = exp.spaces[sid];
-      if (sp) {
+      if (sp && state.arrival && state.arrival.spaceId === sp.id) {
+        showCaption(`${sp.id} · ${state.arrival.text}`);
+        state.arrival = null;
+      } else if (sp) {
         const kind = sp.deadEnd ? 'dead end' : sp.archetype;
         const sealed = DP.pastLock(exp, sp) ? ' · beyond a lock' : '';
         showCaption(`${sp.id} · ${kind}${sealed} · ${sp.meta.mood} · depth ${sp.depth}`);
@@ -161,7 +167,6 @@
       stanceEl.textContent = stance;
       stanceEl.className = 'stance' + (hidden ? ' hidden' : '');
     }
-    lantern.intensity = LANTERN * (0.94 + 0.06 * Math.sin(state.time * 9.3) * Math.sin(state.time * 3.1));
 
     // Camera: fixed angle, smoothed follow.
     tmpV.set(p.x * S, 0.6 + p.z * S * 0.6, p.y * S);
@@ -203,6 +208,17 @@
     updateItems();
     updatePushBlocks(dt);
     updateSconces();
+    W.updateWaystones();
+    W.updateLamp(dt);
+    W.updateLampLook(dt); // the lamp's colour, halo, sparks and light (after placeLamp)
+  }
+
+  /** Jump the camera to the figure (after travelling, or waking). */
+  function snapCamera() {
+    const p = state.player;
+    camTarget.set(p.x * S, 0.6 + p.z * S * 0.6, p.y * S);
+    // Already "in" the room, so its log line doesn't cover the caller's caption.
+    p.spaceId = state.exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))];
   }
 
   function newExpedition() {
@@ -212,6 +228,8 @@
   }
 
   function spawnPoint(exp) {
+    const ws = DP.waystone(exp.spaces.s0); // the starter hall: by its waystone
+    if (ws) return Object.assign({}, ws.wake);
     const cells = exp.spaces.s0.cells.map(DE.parseKey);
     const mx = cells.reduce((a, c) => a + c.x, 0) / cells.length;
     const my = cells.reduce((a, c) => a + c.y, 0) / cells.length;
@@ -245,6 +263,12 @@
       if (exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))] !== undefined) addGhost({ id: g.id, x: g.x, y: g.y, mode: g.mode });
     }
     state.fx.wobble = state.fx.glitch = state.fx.flash = 0;
+    state.gutter = null;
+    state.arrival = null;
+    state.paused = false;
+    const fade = $('fade');
+    if (fade) fade.classList.remove('on');
+    W.ensureWaypoints();
     let sp = spawnPoint(exp);
     if (same && exp.registry[DE.key(Math.floor(savedPlayer.x), Math.floor(savedPlayer.y))] !== undefined) {
       sp = savedPlayer;
@@ -258,6 +282,9 @@
     // A run that left the dungeon reopens on its record.
     const x = state.run.extracted;
     if (x && exp.spaces[x.spaceId]) showRecord(x.spaceId, x.exitId, 'extracted');
+    // So does one that went up to the surface, until you go back down.
+    const up = state.run.surfaced && exp.spaces.s0.exits.find((e) => e.kind === 'surface');
+    if (up) showRecord('s0', up.id, 'surface');
   }
 
   // ---------------------------------------------------------------------------
@@ -313,9 +340,10 @@
   // Stale-file check: play.html, the scripts and the CSS are cached
   // separately, so a browser can end up with a mix of versions. If pieces
   // this play.js expects are missing, say so instead of failing oddly later.
-  const expectIds = ['view', 'stats', 'charges', 'shard-pips', 'hotbar', 'use-btn', 'stance',
-    'prompt', 'caption', 'minimap', 'bigmap', 'bigmap-canvas', 'ghost-edges', 'crouch-btn', 'done'];
-  const expectFns = [DE.carve, DE.imprintAt, DP.props, DP.ghostSpawn, DP.loot];
+  const expectIds = ['view', 'stats', 'lamp', 'lamp-meter', 'lamp-icon', 'popups', 'hotbar', 'use-btn',
+    'prompt', 'caption', 'minimap', 'bigmap', 'bigmap-canvas', 'bigmap-hint', 'ghost-edges', 'crouch-btn', 'done',
+    'dialog', 'fade'];
+  const expectFns = [DE.carve, DE.imprintAt, DE.reserve, DP.props, DP.ghostSpawn, DP.loot, DP.waypointCount, W.updateLampLook];
   const missing = expectIds.filter((id) => !$(id));
   if (missing.length || expectFns.some((f) => typeof f !== 'function')) {
     notice(`This page's files are out of date (cached copies of different versions). ${REFRESH_HINT}`, 'stale');
@@ -325,5 +353,5 @@
   // Handy from the console.
   Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern, renderFrame, fxPerf, post, addJarToWorld });
 
-  Object.assign(W, { newExpedition });
+  Object.assign(W, { newExpedition, snapCamera, spawnPoint });
 })(window);

@@ -17,13 +17,19 @@
   // the light on it and a ring fills around the "?"; a full ring and it
   // follows ("!!"), slowly. Light off and the ring drains. "In your light"
   // is a 3D ray from the lamp, so walls and blocks (crouch behind one) hide it. A follower gives up after a couple of seconds out of your
-  // light, or once a room lies between you. Nearness wobbles the screen;
-  // contact glitches it.
+  // light, or once a room lies between you. Contact glitches the screen.
+  // (Nearness used to wobble it; that's switched off with WOBBLE below.)
   // The only way to be rid of one is to collapse the rooms it's in, which
   // unravels it and leaves you an echo (a resource with no use yet).
 
+  // The proximity wobble: off for now. It cost frames, left artifacts, and
+  // felt ghosts through walls (it went by distance alone). The code stays.
+  const WOBBLE = false;
+
   const GHOST = {
     contact: 0.34,       // cells, figure to ghost
+    markRooms: 1,        // an idle ghost off screen gets a marker this many rooms away or nearer
+    markRange: 14,       // cells: and only within this distance
     wanderSpeed: 0.35,
     chaseSpeed: 0.5,     // slow but relentless: far slower than walking (2.4) or crawling (1.1)
     lightRange: 4.5,     // cells: how far the lantern "touches"
@@ -431,7 +437,7 @@
     // Screen effects: wobble grows with nearness, glitch with contact. Both
     // hold for a moment once you're clear, then wear off.
     const fx = state.fx;
-    const want = THREE.MathUtils.clamp(1 - (nearest - 0.4) / 3.6, 0, 1);
+    const want = WOBBLE ? THREE.MathUtils.clamp(1 - (nearest - 0.4) / 3.6, 0, 1) : 0;
     if (want >= fx.wobble - 0.001) { fx.wobble += (want - fx.wobble) * Math.min(1, dt * 2.5); fx.heldNear = state.time; }
     else if (state.time - fx.heldNear > 1.2) fx.wobble = Math.max(want, fx.wobble - dt * 0.22);
     // Contact: a full-strength flash the moment you collide, settling into a
@@ -443,17 +449,42 @@
     else if (state.time - fx.heldTouch > 1.5) fx.glitch = Math.max(0, fx.glitch - dt * 0.3);
   }
 
+  /** An idle ghost's marker icon: a faint ghost, no status. */
+  function drawIdle(c) {
+    const x = c.getContext('2d'), n = c.width;
+    x.clearRect(0, 0, n, n);
+    x.fillStyle = 'rgba(217, 210, 255, 0.55)';
+    x.beginPath();
+    x.arc(n / 2, n * 0.44, n * 0.17, Math.PI, 0);
+    x.lineTo(n * 0.67, n * 0.66);
+    x.lineTo(n * 0.58, n * 0.6); x.lineTo(n / 2, n * 0.68); x.lineTo(n * 0.42, n * 0.6);
+    x.lineTo(n * 0.33, n * 0.66);
+    x.closePath();
+    x.fill();
+  }
+
   /**
-   * Off-screen ghosts that are watching or following you get a marker on
-   * the screen edge: their status icon, with an arrow pointing toward them.
+   * Off-screen ghosts get a marker on a ring around the figure (not the
+   * screen's edge, so none get lost in a far corner), with an arrow toward
+   * them: any watching or following you, and idle ones in your room or the
+   * next. Watching and following show their status; idle ones a faint ghost.
    */
   const edgeLayer = $('ghost-edges');
   const edgeV = new THREE.Vector3();
   function updateEdgeMarkers() {
-    const w = global.innerWidth, h = global.innerHeight, m = 34;
+    const w = global.innerWidth, h = global.innerHeight, p = state.player;
+    edgeV.set(p.x * S, (p.z + 0.35) * S, p.y * S).project(camera);
+    const ox = (edgeV.x + 1) / 2 * w, oy = (1 - edgeV.y) / 2 * h;
+    const R = Math.min(w, h) * 0.42;
+    const here = p.spaceId;
     for (const g of state.ghosts) {
       let show = false, px = 0, py = 0, ang = 0;
-      if (g.mode !== 'wander' && !state.bigmap && !state.paused) {
+      let wanted = g.mode !== 'wander';
+      if (!wanted && here != null && Math.hypot(g.x - p.x, g.y - p.y) < GHOST.markRange) {
+        const gs = state.exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))];
+        wanted = gs !== undefined && roomGap(gs, here, GHOST.markRooms) <= GHOST.markRooms;
+      }
+      if (wanted && !state.bigmap && !state.paused) {
         edgeV.copy(g.mesh.position);
         edgeV.y += 0.5 * S;
         edgeV.project(camera);
@@ -462,10 +493,8 @@
         if (behind) { sx = w - sx; sy = h - sy; }
         if (behind || sx < 8 || sx > w - 8 || sy < 8 || sy > h - 8) {
           show = true;
-          const dx = sx - w / 2, dy = sy - h / 2;
-          const k = Math.min((w / 2 - m) / Math.max(Math.abs(dx), 1e-6), (h / 2 - m) / Math.max(Math.abs(dy), 1e-6));
-          px = w / 2 + dx * k; py = h / 2 + dy * k;
-          ang = Math.atan2(dy, dx);
+          ang = Math.atan2(sy - oy, sx - ox);
+          px = ox + Math.cos(ang) * R; py = oy + Math.sin(ang) * R;
         }
       }
       if (show && !g.edge) {
@@ -480,7 +509,9 @@
       g.edge.style.left = px + 'px';
       g.edge.style.top = py + 'px';
       g.edge.classList.toggle('chase', g.mode === 'chase');
+      g.edge.classList.toggle('idle', g.mode === 'wander');
       g.edge.querySelector('.arrow').style.transform = `rotate(${ang}rad) translateX(26px)`;
+      if (g.mode === 'wander') { drawIdle(g.edge.firstChild); continue; }
       const cx = g.edge.firstChild.getContext('2d');
       cx.clearRect(0, 0, 96, 96);
       cx.drawImage(g.alertCanvas, 0, 0);

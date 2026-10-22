@@ -82,6 +82,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
   const bandMat = withDither(new THREE.MeshLambertMaterial({ color: 0x5d6670, emissive: 0x0c1218 }), DOOR_DITHER);
   const seamMat = new THREE.MeshBasicMaterial({ color: SEAM, side: THREE.DoubleSide }); // double: the door's point can be mirrored
   const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM, side: THREE.DoubleSide });
+  // The surface door: weathered pale wood, daylight under it.
+  const surfaceMat = withDither(new THREE.MeshLambertMaterial({ color: 0x6f6a62, emissive: 0x15171a }), DOOR_DITHER);
+  const surfaceSeamMat = new THREE.MeshBasicMaterial({ color: 0xdcebff, side: THREE.DoubleSide });
   geo.chalk = new THREE.CylinderGeometry(0.03 * S, 0.03 * S, 0.22 * S, 8);
   geo.doorstone = new THREE.BoxGeometry(0.15 * S, 0.21 * S, 0.05 * S);
   geo.doorstoneInset = new THREE.BoxGeometry(0.07 * S, 0.12 * S, 0.006 * S);
@@ -238,6 +241,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     W.addSigil(space, tileAt);
     W.addPushBlocks(space, rec, tileAt);
     W.addSconces(space, edgeAt);
+    W.addWaystone(space, rec, tileAt);
 
     // Props ride on their cell's tile, so they assemble and dissolve with it.
     const pr = DP.props(space);
@@ -300,9 +304,10 @@ if (vDitherEW > 0.7 && south > 0.2) {
   function addDoor(edgeGroup, space, ex, beyond) {
     const gate = !ex.connectionId && DP.isLocked(space, ex); // keeps its iron bands once unlocked
     const locked = isLockedNow(space, ex);
+    const surface = ex.kind === 'surface';
     const pivot = new THREE.Group();
     pivot.position.set(-DOOR_W / 2 * S, 0, 0);
-    const panel = shadowed(new THREE.Mesh(geo.door, ex.connectionId ? doorOpenMat : locked ? lockMat : doorMat));
+    const panel = shadowed(new THREE.Mesh(geo.door, surface ? surfaceMat : ex.connectionId ? doorOpenMat : locked ? lockMat : doorMat));
     panel.position.set(DOOR_W / 2 * S, DOOR_H * S / 2, 0);
     pivot.add(panel);
     if (gate) {
@@ -312,7 +317,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
         pivot.add(band);
       }
     }
-    const seam = new THREE.Mesh(geo.seam, locked ? lockSeamMat : seamMat);
+    const seam = new THREE.Mesh(geo.seam, surface ? surfaceSeamMat : locked ? lockSeamMat : seamMat);
     seam.position.set(0, 0.02, 0);
     seam.visible = !ex.connectionId;
     // A closed door's point: off the bar's outer edge, toward where it opens.
@@ -345,6 +350,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
 
   function forgetSpace(id) {
     state.sconces = state.sconces.filter((sc) => sc.spaceId !== id);
+    state.waystones = state.waystones.filter((st) => st.spaceId !== id);
     state.pushBlocks = state.pushBlocks.filter((b) => b.spaceId !== id);
     const sg = state.sigils.get(id);
     if (sg && sg.fx) scene.remove(sg.fx.group);

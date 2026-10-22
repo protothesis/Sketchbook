@@ -249,6 +249,6 @@
     $('crouch-btn').classList.toggle('on', state.crouch);
   }
 
-  Object.assign(W, { figure, bodyRig, lantern, fill, edgeEnds, resolveCollisions, placeLamp,
+  Object.assign(W, { figure, bodyRig, lantern, lanternMesh, fill, edgeEnds, resolveCollisions, placeLamp,
     canClimb, blockNear, climb, toggleCrouch });
 })(window);

@@ -42,18 +42,9 @@
     shard: {
       cls: 'pickup',
       take(run) {
-        const per = RULES.shardsPerCharge;
         run.shardsFound++;
-        if (run.charges >= maxCharges()) {
-          run.shards = Math.min(per - 1, run.shards + 1);
-          return 'a shard · your entropy is full';
-        }
-        if (++run.shards >= per) {
-          run.shards -= per;
-          run.charges++;
-          return `${per} shards fuse · a charge of entropy (${run.charges})`;
-        }
-        return `a shard · ${run.shards}/${per}`;
+        // A shard is a third of a charge, poured straight into the lamp.
+        return W.gainFuel(1 / RULES.shardsPerCharge) > 0 ? 'a shard · your lamp takes it' : 'a shard · your entropy is full';
       },
     },
     key: {

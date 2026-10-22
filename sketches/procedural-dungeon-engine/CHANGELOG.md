@@ -266,6 +266,66 @@ All notable changes to this sketch are logged here, per
   restoration, so a thorough player earns a charge every ~2.5 rooms, most
   of it by restoring. Rooms that held a shard may now not, and items that
   came after the shards in a room's loot can sit on a different tile.
+- 2026-10-22: **A goal and a clock** (the second slice of
+  [`GAME-DESIGN.md`](GAME-DESIGN.md), sections 7–10, written up the same
+  day).
+  - **Halls**, a new archetype: big, with notched corners. New expeditions
+    start in one (`params.starter: 'hall'`), with at least two doors, a
+    **surface door** (`Exit.kind: 'surface'`, never expands; walk mode asks
+    "Up to the surface (quit game)?" and shows the expedition record until
+    you go back down) and an awake waystone. Older saves keep their root
+    chamber.
+  - **Reserved footprints** in the engine (`DE.reserve`, a `'reserve'`
+    history event, `exp.reserves`). Ordinary rooms never grow into one; a
+    door into it builds the reserved space from its own seed; any room built
+    against one gets a door into it. Replay, export and the chart view keep
+    them. The stress test now reserves footprints too.
+  - **Waypoints**: sets of three hall footprints (two near, one far,
+    `DP.waypointSet`), shown as a glowing violet "?" on both maps (pinned to
+    the edge when off the map), not at the footprint's exact centre. The
+    first set comes from the starter hall; opening a door into a waypoint's
+    hall reveals the next set, out past it. A setpiece hall is committed on
+    arrival and always holds three push blocks (in different colours), at
+    least one sconce and a waystone.
+  - **Waystones**: small monoliths with seeded glyphs. Wake one for 1
+    charge; E at an awake one travels to another (free). New file
+    `app/walk/waystones.js`, loaded after `restore.js`.
+  - **The lamp burns entropy**: a shard every 12 s in a dark room, nothing
+    in a lit one (a lit sconce or an awake waystone). It dims on the last
+    charge; when it runs out it gutters, the world fades out, and you wake
+    at your last waystone with 2 charges, keeping everything else.
+- 2026-10-22: **Lighting a sconce costs a shard** instead of paying one; in
+  return its room never drains the lamp.
+- 2026-10-22: **Push blocks are solid colour** (the whole block, not a
+  coloured top). Programmer art for now.
+- 2026-10-22: **After the first playtest of waypoints and the lamp** (notes
+  in `PLAY.md`):
+  - Waypoints are much farther apart: near 25–35 cells, far 45–60.
+  - New waypoints come from **waking a waystone**, not arriving: 0–3
+    (`RULES.waypointOdds`, seeded by the hall; never 0 while none wait).
+  - **Unmarked halls**: a rare ordinary room (2.5%, depth 3+) is a hall
+    with a dormant waystone (`params.hallChance`, `DE.hallShape`). Older
+    records don't roll them, so they replay unchanged.
+  - **Travel on the map**: E at an awake waystone opens the big map framed
+    on the awake ones, which pulse; tap one to go.
+  - **Entropy is a fluid fuel** (`run.fuel`, in charges; run save v2
+    migrates). The lamp burns it continuously, except within a tile of a
+    lit sconce; waystones no longer shelter it. Any gain holds the burn
+    for 3 s. New file `app/walk/lamp.js` (after `waystones.js`).
+  - **A HUD of its own for the lamp**, bottom left: a lantern icon in the
+    lamp's colour and a sectioned fluid meter, plus keys. The top-left
+    panel is information and settings only; crouched/hidden is gone.
+  - **The lamp shows its state**: colour from yellow through red to grey,
+    flicker, a dithered halo that shrinks and fades, a trail of sparks, and
+    a light that dims and shortens. A purple +◆ floats over your head when
+    entropy comes in.
+  - **Push blocks move after they're home**; off the mark takes their
+    charge back, home again pays back only that.
+  - Ghosts: the proximity **wobble is switched off** (`WOBBLE`, code kept).
+    Off-screen **markers ride a ring** around the figure, and idle ghosts in
+    your room or the next get one too.
+  - Fixed: waking or travelling showed the room's log line instead of the
+    wake/travel caption.
 
 ### Fixed
 

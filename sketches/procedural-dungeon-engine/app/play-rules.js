@@ -14,14 +14,14 @@
 
   // Tunables. PLAY.md has the reasoning ("moderate" pacing).
   const RULES = {
-    // Entropy comes in whole charges; 3 shards make one. A collapse costs
-    // one charge per room in the branch.
+    // Entropy is measured in charges, as a fluid amount; a shard is a third
+    // of one. Rerolls and waystones cost whole charges.
     shardsPerCharge: 3,
     chargesStart: 2,
     chargesMax: 8,
     // Shards are a supplement: restoration (push blocks, sconces) is the main
     // income (GAME-DESIGN.md). Was 0.75 / 0.4 / 0.5 before restoration.
-    shardChance: { chamber: 0.3, corridor: 0.15, stub: 0.2 },
+    shardChance: { chamber: 0.3, corridor: 0.15, stub: 0.2, hall: 0.3 },
     bigChamberCells: 20,      // chambers this large can hold a second shard
     // Locks come first, keys later: a room's seed only makes it able to
     // hold a key; the walk layer shows that key only while there are more
@@ -58,11 +58,35 @@
     pushMinDepth: 1,
     pushColors: ['#e0a94a', '#57cdbf', '#c47be0', '#e86a6a'],
     restoreCharges: 1,
-    // Sconces: unlit, on a room's walls; lighting one pays shards, once.
+    // Sconces: unlit, on a room's walls. Lighting one costs a shard of your
+    // lamp's entropy, and the room never drains the lamp again.
     sconceChance: 0.35,
     sconceMinDepth: 1,
-    sconceSecond: 0.4,        // chambers: chance of a second sconce
-    sconceShards: 1,
+    sconceSecond: 0.4,        // chambers: chance of a second sconce (halls: hallSconceSecond)
+    sconceCost: 1,            // shards
+    // The lamp burns entropy (GAME-DESIGN.md, section 10), steadily: a
+    // shard's worth every lampSeconds, except within a tile of a lit sconce.
+    // Any gain holds the burn for lampGrace seconds. The lamp looks full at
+    // lampFullCharges or more and is in danger at lampDanger or less.
+    lampSeconds: 12,
+    lampGrace: 3,
+    lampFullCharges: 3,
+    lampDanger: 1,
+    // Halls (setpieces at waypoints): sizes, and what they always hold.
+    hallMin: 7,
+    hallMax: 9,
+    hallPushBlocks: 3,
+    hallSconceSecond: 0.5,
+    // Waypoints: the expedition starts with two near and one far. Waking a
+    // waystone reveals 0-3 more (waypointOdds; never 0 while none are
+    // waiting), alternating near and far, centre to centre from the
+    // waystone, with a free ring around each footprint.
+    waypointNear: [25, 35],
+    waypointFar: [45, 60],
+    waypointOdds: [0.1, 0.45, 0.35, 0.1], // chance of 0, 1, 2, 3
+    waypointPinJitter: 2,     // cells: the pin sits in or around the footprint
+    // Waystones: waking one costs this many charges; travel is free.
+    waystoneCharges: 1,
     detailChance: 0.35,
     // Hash ghosts: about 1 room in 14; rooms on cracked (imprinted) floor
     // get a boost that grows with how much of the room is cracked.
@@ -78,8 +102,9 @@
     const r = DE.deriveRng(space.seed, 'loot');
     const cells = space.cells.map(DE.parseKey);
     const entry = space.exits[0] && space.exits[0].cell;
+    const ws = waystone(space); // halls: nothing lies on the waystone's cell
     const spots = cells.length > 1 && entry
-      ? r.shuffle(cells.filter((c) => c.x !== entry.x || c.y !== entry.y))
+      ? r.shuffle(cells.filter((c) => (c.x !== entry.x || c.y !== entry.y) && (!ws || c.x !== ws.cell.x || c.y !== ws.cell.y)))
       : cells.slice();
     const items = [];
     const chance = space.deadEnd ? RULES.shardChance.stub : RULES.shardChance[space.archetype] || 0;
@@ -115,6 +140,8 @@
     if (!r.chance(RULES.sigilChance)) return null;
     const doors = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
     const items = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
+    const ws = waystone(space);
+    if (ws) items.add(DE.key(ws.cell.x, ws.cell.y));
     const free = space.cells.slice().sort().filter((k) => !doors.has(k) && !items.has(k));
     if (!free.length) return null;
     return { cell: DE.parseKey(free[Math.floor(r.next() * free.length)]), seed: DE.hash(space.seed, 'sigil') };
@@ -148,7 +175,9 @@
     const lootCells = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
     const sg = sigil(space); // keep a sigil tile clear of blocks
     if (sg) lootCells.add(DE.key(sg.cell.x, sg.cell.y));
-    const chamber = space.archetype === 'chamber' && !space.deadEnd;
+    const ws = waystone(space); // and the waystone's cell, where you wake
+    if (ws) lootCells.add(DE.key(ws.cell.x, ws.cell.y));
+    const chamber = (space.archetype === 'chamber' || space.archetype === 'hall') && !space.deadEnd;
     const subs = new Set(), reserved = new Set(), blocked = new Set();
     const sk = (x, y) => x + ',' + y;
     for (const k of space.cells) {
@@ -297,14 +326,19 @@
    * off any part of the floor.
    */
   function pushBlocks(space) {
-    if (!space.parentId || space.deadEnd || space.depth < RULES.pushMinDepth) return [];
+    if (!space.parentId || space.deadEnd) return [];
+    const hall = space.archetype === 'hall';
+    if (!hall && space.depth < RULES.pushMinDepth) return [];
     const r = DE.deriveRng(space.seed, 'push');
-    if (!r.chance(RULES.pushChance)) return [];
+    const want = hall ? RULES.hallPushBlocks : r.chance(RULES.pushChance) ? 1 : 0;
+    if (!want) return [];
     const sk = (x, y) => x + ',' + y;
     const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
     for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     const sg = sigil(space);
     if (sg) avoid.add(DE.key(sg.cell.x, sg.cell.y));
+    const ws = waystone(space);
+    if (ws) avoid.add(DE.key(ws.cell.x, ws.cell.y));
     const blocked = new Set();
     for (const b of props(space).blocks) {
       for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) blocked.add(sk(x, y));
@@ -320,32 +354,44 @@
       }
     }
     free.sort();
-    const freeSet = new Set(free);
+    // Earlier blocks' starts and homes count as solid for later ones, and
+    // their runs stay clear, so no block can get in another's way. (For
+    // the first block both are empty, so single-block rooms are unchanged.)
+    const solid = new Set(), taken = new Set();
     const connectedWithout = (s0) => { // is every floor half-cell still reachable with a block on s0?
-      const start = Array.from(floor).find((s) => s !== s0);
+      const start = Array.from(floor).find((s) => s !== s0 && !solid.has(s));
       const seen = new Set([start]), q = [start];
       while (q.length) {
         const [x, y] = q.pop().split(',').map(Number);
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const n = sk(x + dx, y + dy);
-          if (floor.has(n) && n !== s0 && !seen.has(n)) { seen.add(n); q.push(n); }
+          if (floor.has(n) && n !== s0 && !solid.has(n) && !seen.has(n)) { seen.add(n); q.push(n); }
         }
       }
-      return seen.size === floor.size - 1;
+      return seen.size === floor.size - 1 - solid.size;
     };
     const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    for (let a = 0; a < 30 && free.length; a++) {
-      const [tx, ty] = free[Math.floor(r.next() * free.length)].split(',').map(Number);
-      const [dx, dy] = DIRS4[Math.floor(r.next() * 4)];
-      const dist = r.int(2, 4);
-      const run = []; // target, the half-cells between, the block's start, and where you stand to push
-      for (let i = 0; i <= dist + 1; i++) run.push(sk(tx - dx * i, ty - dy * i));
-      if (!run.every((s, i) => (i <= dist ? freeSet.has(s) : floor.has(s)))) continue;
-      if (!connectedWithout(run[dist]) || !connectedWithout(run[0])) continue;
-      const [fx, fy] = run[dist].split(',').map(Number);
-      return [{ id: 'push0', from: { sx: fx, sy: fy }, to: { sx: tx, sy: ty }, color: r.pick(RULES.pushColors) }];
+    const out = [];
+    for (let n = 0; n < want; n++) {
+      const pool = taken.size ? free.filter((s) => !taken.has(s)) : free;
+      const poolSet = new Set(pool);
+      for (let a = 0; a < 30 && pool.length; a++) {
+        const [tx, ty] = pool[Math.floor(r.next() * pool.length)].split(',').map(Number);
+        const [dx, dy] = DIRS4[Math.floor(r.next() * 4)];
+        const dist = r.int(2, 4);
+        const run = []; // target, the half-cells between, the block's start, and where you stand to push
+        for (let i = 0; i <= dist + 1; i++) run.push(sk(tx - dx * i, ty - dy * i));
+        if (!run.every((s, i) => (i <= dist ? poolSet.has(s) : floor.has(s) && !solid.has(s)))) continue;
+        if (!connectedWithout(run[dist]) || !connectedWithout(run[0])) continue;
+        const [fx, fy] = run[dist].split(',').map(Number);
+        const colors = RULES.pushColors.filter((c) => !out.some((o) => o.color === c)); // a hall's blocks differ
+        out.push({ id: 'push' + n, from: { sx: fx, sy: fy }, to: { sx: tx, sy: ty }, color: r.pick(colors) });
+        solid.add(run[0]); solid.add(run[dist]);
+        run.forEach((s) => taken.add(s));
+        break;
+      }
     }
-    return [];
+    return out;
   }
 
   /**
@@ -356,10 +402,12 @@
    * whose wall has since become a door).
    */
   function sconces(space) {
-    if (!space.parentId || space.deadEnd || space.depth < RULES.sconceMinDepth) return [];
+    if (!space.parentId || space.deadEnd) return [];
     const r = DE.deriveRng(space.seed, 'sconce');
-    if (!r.chance(RULES.sconceChance)) return [];
-    const n = space.archetype === 'chamber' && r.chance(RULES.sconceSecond) ? 2 : 1;
+    let n;
+    if (space.archetype === 'hall') n = r.chance(RULES.hallSconceSecond) ? 2 : 1; // a setpiece always has one
+    else if (space.depth < RULES.sconceMinDepth || !r.chance(RULES.sconceChance)) return [];
+    else n = space.archetype === 'chamber' && r.chance(RULES.sconceSecond) ? 2 : 1;
     const own = new Set(space.cells);
     const later = (e) => e.loopMade || (e.tags && e.tags.includes('carved'));
     const doorEdges = new Set(space.exits.filter((e) => !later(e)).map((e) => e.cell.x + ',' + e.cell.y + ',' + e.facing));
@@ -390,7 +438,7 @@
    */
   const openedFrom = new WeakMap(); // exp -> { n: history length, ids: Set of spaces a door was opened from }
   function committed(exp, space) {
-    if (!space.parentId) return true;
+    if (!space.parentId || space.archetype === 'hall') return true; // halls hold from the moment you arrive
     let c = openedFrom.get(exp);
     if (!c || c.n !== exp.history.length) {
       c = { n: exp.history.length, ids: new Set() };
@@ -433,6 +481,97 @@
     return spaces;
   }
 
+  /**
+   * A hall's waystone: { cell, x0, y0, x1, y1, wake: { x, y, angle } }. A
+   * slab standing in the middle of the floor cell nearest the hall's centre
+   * (never a door's), facing the camera. `wake` is where you stand when you
+   * travel to it or wake there. Halls only.
+   */
+  function waystone(space) {
+    if (space.archetype !== 'hall') return null;
+    const doors = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const c0 = centerOf(space);
+    let best = null, bd = Infinity;
+    for (const k of space.cells) {
+      const c = DE.parseKey(k);
+      if (doors.has(k)) continue;
+      const d = Math.hypot(c.x + 0.5 - c0.x, c.y + 0.5 - c0.y);
+      if (d < bd) { bd = d; best = c; }
+    }
+    if (!best) return null;
+    return {
+      cell: best, x0: best.x + 0.31, y0: best.y + 0.4, x1: best.x + 0.69, y1: best.y + 0.58,
+      wake: { x: best.x + 0.5, y: best.y + 0.88, angle: Math.PI },
+    };
+  }
+
+  /** The middle of a space's cells, as a grid point. */
+  function centerOf(space) {
+    const cells = space.cells.map(DE.parseKey);
+    return {
+      x: cells.reduce((a, c) => a + c.x + 0.5, 0) / cells.length,
+      y: cells.reduce((a, c) => a + c.y + 0.5, 0) / cells.length,
+    };
+  }
+
+  /**
+   * The next set of waypoints, revealed from `from` (a grid point): hall
+   * footprints, each with a free ring around it, ready for DE.reserve().
+   * With no `count`, the starting set (two near, one far, all round the
+   * root). With a `count` (a waystone waking), that many, near and far by
+   * turns, fanned out past `from`. Seeded by the root seed and the number
+   * of reserves so far. The pin (where the "?" goes on the map) sits in or
+   * around the footprint, not at its centre.
+   */
+  function waypointSet(exp, from, count) {
+    const r = DE.deriveRng(exp.rootSeed, 'waypoints|' + (exp.counters.reserve || 0));
+    const deg = Math.PI / 180;
+    let plan;
+    if (count == null) {
+      const base = r.range(0, Math.PI * 2);
+      plan = [['near', base], ['near', base + 120 * deg], ['far', base + 240 * deg]];
+    } else {
+      const outward = Math.hypot(from.x, from.y) > 4 ? Math.atan2(from.y, from.x) : r.range(0, Math.PI * 2);
+      const fan = [0, -1, 1].map((k) => outward + k * r.range(40, 75) * deg);
+      plan = ['near', 'far', 'near'].slice(0, count).map((tier, i) => [tier, fan[i] + r.range(-20, 20) * deg]);
+    }
+    const taken = new Set();
+    const free = (k) => exp.registry[k] === undefined && !DE.reservedAt(exp, k) && !taken.has(k);
+    const set = [];
+    for (const [tier, angle] of plan) {
+      const [lo, hi] = tier === 'near' ? RULES.waypointNear : RULES.waypointFar;
+      for (let a = 0; a < 24; a++) {
+        const h = DE.hallCells(r, RULES.hallMin, RULES.hallMax);
+        const ang = angle + r.range(-25, 25) * deg, dist = r.range(lo, hi);
+        const ox = Math.round(from.x + Math.cos(ang) * dist - h.w / 2), oy = Math.round(from.y + Math.sin(ang) * dist - h.d / 2);
+        const ok = h.cells.every((c) => {
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!free(DE.key(c.x + ox + dx, c.y + oy + dy))) return false;
+          return true;
+        });
+        if (!ok) continue;
+        const cells = h.cells.map((c) => DE.key(c.x + ox, c.y + oy));
+        cells.forEach((k) => taken.add(k));
+        const j = RULES.waypointPinJitter;
+        const pin = { x: +(ox + h.w / 2 + r.range(-j, j)).toFixed(2), y: +(oy + h.d / 2 + r.range(-j, j)).toFixed(2) };
+        set.push({ seed: DE.hash(exp.rootSeed, 'hall', ox, oy), kind: 'hall', tier, cells, pin });
+        break;
+      }
+    }
+    return set;
+  }
+
+  /**
+   * How many waypoints waking this hall's waystone reveals (RULES.waypointOdds),
+   * seeded by the hall. Never 0 while no waypoint is left waiting.
+   */
+  function waypointCount(exp, space) {
+    const roll = DE.deriveRng(space.seed, 'waypoints').next();
+    let n = 0, acc = 0;
+    RULES.waypointOdds.forEach((p, i) => { if (roll >= acc) n = i; acc += p; });
+    const waiting = Object.values(exp.reserves || {}).some((r) => !r.spaceId && r.pin);
+    return n === 0 && !waiting ? 1 : n;
+  }
+
   /** Root-to-space seed chain, for the level-complete screen. */
   function seedChain(exp, spaceId) {
     return DE.pathToRoot(exp, spaceId).reverse().map((id) => {
@@ -447,5 +586,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);
