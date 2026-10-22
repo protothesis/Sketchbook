@@ -195,6 +195,48 @@ All notable changes to this sketch are logged here, per
   replay, export and the chart view keep drawn doors.
 - 2026-10-20: The sustained contact glitch is at a quarter of the flash's
   strength (was half).
+- 2026-10-21: **Walk mode is split into files.** The 3,200-line
+  `app/play.js` is now ten classic scripts in `app/walk/` (core, world,
+  figure, items, actions, input, ghosts, fx, hud, main), loaded in that
+  order by `play.html`. They share one namespace, `DungeonPlay.walk`. Each
+  file destructures what it needs from earlier files and exports what
+  others use, and calls into a later file go through `W.` at call time.
+  It's a mechanical move with no behaviour change: a scripted session
+  (open doors, collapse, reopen) gave identical worlds and runs before and
+  after.
+- 2026-10-21: **The run save has a version.** `savePlayer` writes `v: 1`,
+  and loading runs each migration step from the save's version up
+  (`migrateRun` in `core.js`). Older saves count as version 0, and their
+  step folds in the old patches: door chalk becomes doorstones, and leftover
+  `pins` / `echoes` fields are dropped.
+- 2026-10-21: **Opened doors show which way they go.** A collapse only
+  works away from the root, so an opened door is now a green triangle,
+  with its flat side on the threshold and its point in the room it opened.
+  It shows on the maps and, for now, as a floor arrow in walk mode. Loops
+  stay a plain green line.
+- 2026-10-21: Maps: door marks are one tile wide (they used to overhang),
+  every wall edge is drawn as a light line so rooms built wall to wall
+  read as separate, and chalk marks are always plain, larger dots (no
+  symbols).
+- 2026-10-21: **Items come in three kinds** (`ITEMS` in `app/walk/items.js`):
+  - Pickups (shards, keys) float and are collected by walking into them.
+    Keys are now a ⚷ count beside the entropy meter, not a hotbar slot,
+    since a locked door uses one by itself.
+  - Tools (chalk, doorstones) lie still on the floor, and E takes them.
+  - Objects (jars) stand in the world. A jar in a room's loot is now
+    already standing there when the room appears, like a jar you set
+    down, instead of floating as a pickup.
+- 2026-10-21: **All jars share one hotbar slot**, grouped by fill with a
+  count. Its default, "auto", sets down your fullest jar onto a sigil tile
+  and your emptiest one anywhere else. The picker chooses a group for the
+  next jar only.
+- 2026-10-21: Maps: walls are a solid dark grey. Unopened and locked doors
+  keep their bar and gain a point on the outside, toward where they'd
+  open. The big map opens with **Tab** instead of M, so everything sits
+  under the left hand.
+- 2026-10-21: Map walls are near-black. A closed door's point starts at its
+  bar's outer edge, and it shows in walk mode too, as an orange (or blue,
+  if locked) floor point just past the door.
 
 ### Fixed
 

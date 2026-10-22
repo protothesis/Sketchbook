@@ -35,7 +35,8 @@ open, and the space behind it assembles as the door swings. Spend
 **entropy** to close a door you opened and collapse everything beyond it
 (reopening rerolls). Shards refill entropy, and a rare key opens a locked
 door, which ends the walk on the expedition record. The design and the
-tunables are in [`PLAY.md`](PLAY.md).
+tunables are in [`PLAY.md`](PLAY.md). A look back and some loose thoughts on
+where to go next: [`CLOSING-THOUGHTS.md`](CLOSING-THOUGHTS.md).
 
 **Playtesting over the network:** serve the repo with
 `python tools/serve.py` (from the repo root; port 8791 by default) and open
@@ -59,12 +60,23 @@ app/             clients of the engine
   app.js           controls, inspector, pointer input, autosave
   styles.css
   play-rules.js    walk mode's game rules: seeded loot + locks, collapse cost
-  play.js          walk mode: three.js world, shadows, collision, doors, HUD
+  walk/            walk mode, as classic scripts loaded in this order:
+    core.js          tunables, renderer/scene/camera, run state, saving
+    world.js         dither, materials, building and dissolving spaces
+    figure.js        the figure and lantern, collision, climbing, crouch
+    items.js         hotbar, chalk marks, jars, sigils
+    actions.js       doors: open, unlock, collapse; doorstones
+    input.js         keyboard, touch stick, buttons
+    ghosts.js        hash ghosts
+    fx.js            wobble/glitch post-process, rendering a frame
+    hud.js           prompts, captions, minimap, big map, record screen
+    main.js          per-frame update, expedition setup, boot
   play.css
 vendor/three/    three.js r160 classic build (walk mode only)
 stress-test.js   headless milestone checks (Node)
 DESIGN.md        the design brief
 PLAY.md          walk mode's visual + game design parameters
+CLOSING-THOUGHTS.md  a look back at walk mode, and loose thoughts on next steps (not a plan)
 NOTES.md         implementation decisions
 ```
 

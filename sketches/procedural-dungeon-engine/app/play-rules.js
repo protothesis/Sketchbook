@@ -23,7 +23,7 @@
     bigChamberCells: 20,      // chambers this large can hold a second shard
     // Locks come first, keys later: a room's seed only makes it able to
     // hold a key; the walk layer shows that key only while there are more
-    // unopened locked doors than keys around (see play.js keyNeeded()).
+    // unopened locked doors than keys around (see keyNeeded() in walk/actions.js).
     keyChance: 0.25,
     keyMinDepth: 1,
     lockChance: 0.045,        // at lockMinDepth, rising per level of depth

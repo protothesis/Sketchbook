@@ -94,14 +94,28 @@ Determinism).
   Collapsing a room a ghost is in simply undoes it: nothing is gained, but
   the run keeps a tally and a short log (`run.unmade`) for whatever that
   becomes later.
-- **The hotbar.** Carried things sit in slots at the bottom of the screen:
-  each jar (with its fill), chalk, doorstones, keys. Pick a slot with 1–9,
-  the mouse wheel, or a tap. **E** interacts with the world (doors,
-  climbing, lifting a placed jar, wiping a chalk mark you're standing on).
-  **F** (or "use" on touch) uses the selected item. Some slots are
-  **groups**: one slot, several variants (for now, chalk colours). Click a
-  selected group again (or press and hold it) to open its picker, or press
-  its number again to cycle.
+- **Three kinds of item.** Every item belongs to one class, and the class
+  decides how it behaves (`ITEMS` in `app/walk/items.js`):
+  - **Pickups** (shards, keys) float and turn where they lie. Walk into
+    one to collect it. They're counters on the HUD (entropy, and ⚷ for
+    keys), never hotbar slots: a locked door uses a key by itself.
+  - **Tools** (chalk, doorstones) rest on the floor. E takes one. They
+    live on the hotbar and get used up with F, never put back.
+  - **Objects** (jars) are things in the world as themselves. A jar from a
+    room's loot is already standing there when the room appears. E lifts
+    it, F sets it down again, with whatever's inside.
+- **The hotbar.** Tools and objects sit in slots at the bottom of the
+  screen. Pick a slot with 1–9, the mouse wheel, or a tap. **E** interacts
+  with the world (doors, climbing, taking a tool, lifting a jar, wiping a
+  chalk mark you're standing on). **F** (or "use" on touch) uses the
+  selected item. Some slots are **groups**: one slot, several variants
+  (chalk colours; jars by fill). Click a selected group again (or press and
+  hold it) to open its picker, or press its number again to cycle.
+- **All your jars share one slot.** It's grouped by fill (empty, 1/3, 2/3,
+  full), with a count on each group. Its default, **auto**, sets down your
+  fullest jar when the spot is on a sigil tile (to power it) and your
+  emptiest one anywhere else (a trap). Pick a group in the picker to set
+  down that one instead, just for the next jar.
 - **Chalk marks.** Your own markup, drawn in the world, and it shows up on
   the maps. Chalk comes in five colours, each with its own simple mark:
   silver arrow (it points the way you faced), gold triangle, crimson
@@ -111,7 +125,7 @@ Determinism).
   block). E, standing on a mark, wipes it. You start with one silver stick,
   and more turn up in about 1 room in 13 (seeded colour). Marks persist with
   the run, and vanish with a room you collapse.
-- **Jars.** Found in about 1 room in 15 (depth 1+). F sets one down on the
+- **Jars.** Standing in about 1 room in 15 (depth 1+). F sets one down on the
   nearest free quarter-tile in front of you: on the floor, or on top of a
   one-unit block. It's a small solid thing you can't climb or stand on, and
   ghosts float over it. Nothing prompts you to place one. If there's no
@@ -148,7 +162,7 @@ Determinism).
   on the maps. Nothing more yet: it's a hook. The expedition-record /
   leave-the-dungeon screen (`showRecord`) is still in the code, unused, for
   whatever a lock leads to later.
-- **The big map** (M, or tap the minimap) is a view: it opens zoomed in on
+- **The big map** (Tab, or tap the minimap) is a view: it opens zoomed in on
   you (two wheel steps back from the closest zoom); drag to pan, wheel or
   pinch to zoom.
 
@@ -166,7 +180,7 @@ forward; collapsing is the only thing entropy buys.
 | Closed door | dark panel with a warm orange seam of light under it | the same orange as the chart view's open doorways |
 | Locked door | iron-grey panel with two bands and a cold blue seam | blue on the minimap; once unlocked it keeps its bands and gets an orange seam |
 | Minimap | unopened doors orange, locked doors blue, opened doors green; traces grey; imprinted cells get a violet tick | so overlapping rooms stay readable |
-| Big map | M or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close | walking pauses while it's open |
+| Big map | Tab or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close | walking pauses while it's open |
 | Cracks | canvas-drawn fissures with a violet core on imprinted tiles; more trace layers, more cracks | seeded per cell; glows faintly even in the dark |
 | Blocks | flat-shaded boxes a shade darker than the walls, filling half-cell subgrid squares flush (no gaps between neighbours), 1–3 units of 0.43 cells tall, one seamless box each | cast shadows; never dither. The figure shows through them instead |
 | Silhouette | the parts of the figure hidden behind anything draw as a dithered lantern-orange silhouette | GreaterDepth pass, so it only appears where something is in front |
@@ -176,7 +190,7 @@ forward; collapsing is the only thing entropy buys.
 | Doorstone | a small white slab with a dark doorway in it; a ⌂ slot on the hotbar; a "open a door here" prompt at a bare wall | the door looks like any other |
 | Chalk | sticks in five colours; on the hotbar, one group slot: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
-| Hotbar | bottom-centre slots: ⚱ jar (three fill pips), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
+| Hotbar | bottom-centre slots: ⚱ jars (one group slot: "auto" or a fill's pips, ×n), chalk (a group slot with a colour picker), ⌂ doorstones; the selected slot is outlined in orange. Keys are a ⚷ count beside the entropy meter | a "use" button on touch screens |
 | Jar | a small glass jar with a dark lid; violet wisps bob inside, one per ghost | a solid half-cell |
 | Beyond a lock | a faint gold warmth on the floor, "beyond a lock" in the caption, a gold outline on the maps | |
 | Sigil | a seeded star polygon (pentagram, hexagram, {7/3}, {8/3}) in a double ring with glyph marks, drawn additively | stage 0 a faint violet trace; 1 a dim glow; 2 brighter and flickering; 3 pulsing gold. A +1 max shows as a gold-edged ninth charge slot |
@@ -186,12 +200,13 @@ forward; collapsing is the only thing entropy buys.
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. Door frames cap at 45%, door panels at 60% | side (north–south) walls never dither; doorways in south walls stay readable |
 | Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
 | Pickups | violet octahedron (shard), small gold key | bob and turn; lit by the lantern, so they hide in the dark too |
+| Tools lying | a chalk stick on its side, a doorstone on its back (doorway inset up), at a seeded angle | still; E within 0.55 cells takes one |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
 | Captions | a short typewriter-style log line when you enter a space | e.g. "s7 · chamber · damp · depth 3" (the Navidson Record feel) |
 
 ## Game parameters
 
-All in `RULES` (`app/play-rules.js`) or at the top of `app/play.js`.
+All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost tunables are in `GHOST`, in `app/walk/ghosts.js`).
 
 | Parameter | Value |
 | --- | --- |
