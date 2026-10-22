@@ -6,7 +6,8 @@
   const W = global.DungeonPlay.walk;
   const { DE, DP, RADIUS, USE_RANGE, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, dissolveSpace, edgeEnds, blockNear,
-    climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn } = W;
+    climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn, toolNear,
+    takeItem } = W;
 
   // ---------------------------------------------------------------------------
   // Doors: open, unlock, or close + collapse
@@ -75,13 +76,14 @@
   }
 
   /** What E would do right now, in priority order (F uses the hotbar item: useNear). */
-  const actionNear = (p) => doorNear(p) || jarNear(p) || markNear(p) || blockNear(p);
+  const actionNear = (p) => doorNear(p) || toolNear(p) || jarNear(p) || markNear(p) || blockNear(p);
 
   function act(near) {
     if (!near || state.paused || state.climb) return;
     if (near.action === 'climb') { climb(near.block, near.dir); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
     if (near.action === 'pickjar') { pickUpJar(near.jar); return; }
+    if (near.action === 'take') { takeItem(near.key, near.it); return; }
     if (near.action === 'erase') {
       removeMarkFromWorld(near.mark);
       W.showCaption('you wipe the chalk away');

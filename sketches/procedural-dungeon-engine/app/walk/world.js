@@ -6,7 +6,7 @@
   const W = global.DungeonPlay.walk;
   const { DE, DP, THREE, S, WALL_H, WALL_T, DOOR_W, DOOR_H, JAMB, UNIT, SWING_ANGLE,
     REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_APPROACH, SEAM, LOCK_SEAM, OPEN_SEAM, ekey, scene, state,
-    world, rebuildExitIndex, isLockedNow, ownsDoorPanel, CHALK } = W;
+    world, rebuildExitIndex, isLockedNow, ownsDoorPanel } = W;
 
   // Screen-door dither on wall pixels south of the figure (between it and
   // the camera), discarded in a 4x4 Bayer pattern: fully inside a soft
@@ -82,12 +82,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
   const bandMat = withDither(new THREE.MeshLambertMaterial({ color: 0x5d6670, emissive: 0x0c1218 }), DOOR_DITHER);
   const seamMat = new THREE.MeshBasicMaterial({ color: SEAM });
   const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM });
-  const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
-  const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
   geo.chalk = new THREE.CylinderGeometry(0.03 * S, 0.03 * S, 0.22 * S, 8);
   geo.doorstone = new THREE.BoxGeometry(0.15 * S, 0.21 * S, 0.05 * S);
   geo.doorstoneInset = new THREE.BoxGeometry(0.07 * S, 0.12 * S, 0.006 * S);
-  const chalkMat = new THREE.MeshLambertMaterial({ color: 0xf2efe6, emissive: 0x3a3a3a });
   geo.block = new THREE.BoxGeometry(1, 1, 1); // scaled per prop
   geo.post = new THREE.BoxGeometry(WALL_T * S, WALL_H * S, WALL_T * S); // inside-corner filler
   geo.decal = new THREE.PlaneGeometry(S * 0.94, S * 0.94);
@@ -284,36 +281,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
       const key = itemKey(space, item);
       if (state.run.collected.includes(key)) continue;
       if (item.kind === 'key' && !state.run.keyRooms.includes(spaceKey)) continue;
-      let mesh;
-      if (item.kind === 'shard') {
-        mesh = new THREE.Mesh(geo.shard, shardMat);
-      } else if (item.kind === 'doorstone') {
-        mesh = new THREE.Group();
-        const slab = new THREE.Mesh(geo.doorstone, chalkMat);
-        const inset = new THREE.Mesh(geo.doorstoneInset, doorMat);
-        inset.position.set(0, -0.015 * S, 0.026 * S);
-        mesh.add(slab, inset);
-      } else if (item.kind === 'jar') {
-        mesh = W.makeJarMesh();
-        mesh.scale.setScalar(0.85);
-      } else if (item.kind === 'chalk') {
-        mesh = new THREE.Group();
-        const stick = new THREE.Mesh(geo.chalk, new THREE.MeshLambertMaterial({
-          color: (CHALK[item.color] || CHALK.silver).hex, emissive: 0x2a2a2a,
-        }));
-        stick.rotation.z = 0.6; // a tilted stick of chalk
-        mesh.add(stick);
-      } else {
-        mesh = new THREE.Group();
-        const ring = new THREE.Mesh(geo.keyRing, keyMat);
-        ring.position.x = -0.1 * S;
-        const shaft = new THREE.Mesh(geo.keyShaft, keyMat);
-        shaft.position.x = 0.04 * S;
-        mesh.add(ring, shaft);
-      }
-      mesh.position.set((item.cell.x + 0.5) * S, 0.45 * S, (item.cell.y + 0.5) * S);
+      const tile = tileAt[DE.key(item.cell.x, item.cell.y)];
+      if (W.ITEMS[item.kind].cls === 'object') { W.spawnObject(item, key, tile); continue; }
+      const mesh = W.itemMesh(item, key);
+      mesh.position.set((item.cell.x + 0.5) * S, W.ITEMS[item.kind].cls === 'pickup' ? 0.45 * S : 0, (item.cell.y + 0.5) * S);
       group.add(mesh);
-      state.items.set(key, { mesh, item, spaceId: space.id, tile: tileAt[DE.key(item.cell.x, item.cell.y)] });
+      state.items.set(key, { mesh, item, spaceId: space.id, tile });
     }
 
     world.add(group);

@@ -4,14 +4,14 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, $, STORAGE_KEY, PLAYER_KEY, S, WALL_H, RADIUS, SPEED, RUN,
-    CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, CLIMB_TIME, GRAVITY, PUSH_TIME, PICKUP_RANGE,
-    DOOR_SWING, DITHER_RADIUS, CAM_OFFSET, LANTERN, renderer, scene, camera, state, world,
-    freshRun, isLockedNow, CHALK, save, savePlayer, migrateRun, dither, doorMat, buildWorld, easeOut,
-    easeInOut, applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions,
-    placeLamp, canClimb, climb, STROKES, maxCharges, addMarkToWorld, addJarToWorld, useNear,
+  const { DE, DP, THREE, $, STORAGE_KEY, PLAYER_KEY, S, WALL_H, RADIUS, SPEED, RUN,
+    CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, CLIMB_TIME, GRAVITY, PUSH_TIME, DOOR_SWING,
+    DITHER_RADIUS, CAM_OFFSET, LANTERN, renderer, scene, camera, state, world, freshRun,
+    isLockedNow, save, savePlayer, migrateRun, dither, doorMat, buildWorld, easeOut, easeInOut,
+    applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions, placeLamp,
+    canClimb, climb, addMarkToWorld, addJarToWorld, useNear, collectPickups, updateItems,
     noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
-    addGhost, lightReaches, updateGhosts, tmpV2, post, fxPerf, renderFrame, verbF, updatePrompt,
+    addGhost, lightReaches, updateGhosts, tmpV2, post, fxPerf, renderFrame, updatePrompt,
     showCaption, stanceEl, refreshHud, notice, REFRESH_HINT, drawMinimap, drawBigMap,
     showRecord, hideRecord } = W;
 
@@ -110,49 +110,7 @@
       else climb(pushingBlock, { x: inp.x, y: inp.y });
     }
 
-    // Pick things up.
-    for (const [k, it] of state.items) {
-      const dx = p.x - (it.item.cell.x + 0.5), dy = p.y - (it.item.cell.y + 0.5);
-      if (dx * dx + dy * dy > PICKUP_RANGE * PICKUP_RANGE) continue;
-      run.collected.push(k);
-      it.mesh.parent.remove(it.mesh);
-      state.items.delete(k);
-      if (it.item.kind === 'shard') {
-        run.shardsFound++;
-        const per = RULES.shardsPerCharge;
-        if (run.charges >= maxCharges()) {
-          run.shards = Math.min(per - 1, run.shards + 1);
-          showCaption('a shard · your entropy is full');
-        } else if (++run.shards >= per) {
-          run.shards -= per;
-          run.charges++;
-          showCaption(`${per} shards fuse · a charge of entropy (${run.charges})`);
-        } else {
-          showCaption(`a shard · ${run.shards}/${per}`);
-        }
-      } else if (it.item.kind === 'doorstone') {
-        run.doorstones++;
-        showCaption(`a doorstone · ${verbF} at a bare wall to open a door there`);
-      } else if (it.item.kind === 'jar') {
-        const id = 'j' + (++run.jarSeq);
-        run.jars.push({ id, fill: 0 });
-        state.sel = 'jar:' + id;
-        showCaption(`an empty jar · ${verbF} to set it down; hash ghosts can be caught in it`);
-      } else if (it.item.kind === 'chalk') {
-        const color = it.item.color || 'silver';
-        run.chalks[color] = (run.chalks[color] || 0) + STROKES;
-        run.chalkFound++;
-        state.sel = 'chalk';
-        state.variant.chalk = color;
-        showCaption(`a stick of ${color} chalk · ${verbF} to draw a ${CHALK[color].name}`);
-      } else {
-        run.keys++;
-        run.keysFound++;
-        showCaption('a key. somewhere, a door is locked');
-      }
-      savePlayer();
-      refreshHud();
-    }
+    collectPickups(p);
 
     // Entering a new space shows its log line.
     const sid = exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))];
@@ -238,12 +196,7 @@
       world.remove(rec.group);
       return false;
     });
-    for (const it of state.items.values()) {
-      const r = it.tile ? it.tile.scale.x : 1;
-      it.mesh.scale.setScalar(Math.max(0.001, r));
-      it.mesh.rotation.y = state.time * 1.6;
-      it.mesh.position.y = (0.45 + 0.05 * Math.sin(state.time * 2.4 + it.item.cell.x)) * S;
-    }
+    updateItems();
   }
 
   function newExpedition() {

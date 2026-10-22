@@ -218,6 +218,18 @@ All notable changes to this sketch are logged here, per
   every wall edge is drawn as a light line so rooms built wall to wall
   read as separate, and chalk marks are always plain, larger dots (no
   symbols).
+- 2026-10-21: **Items come in three kinds** (`ITEMS` in `app/walk/items.js`):
+  - Pickups (shards, keys) float and are collected by walking into them.
+    Keys are now a ⚷ count beside the entropy meter, not a hotbar slot,
+    since a locked door uses one by itself.
+  - Tools (chalk, doorstones) lie still on the floor, and E takes them.
+  - Objects (jars) stand in the world. A jar in a room's loot is now
+    already standing there when the room appears, like a jar you set
+    down, instead of floating as a pickup.
+- 2026-10-21: **All jars share one hotbar slot**, grouped by fill with a
+  count. Its default, "auto", sets down your fullest jar onto a sigil tile
+  and your emptiest one anywhere else. The picker chooses a group for the
+  next jar only.
 
 ### Fixed
 

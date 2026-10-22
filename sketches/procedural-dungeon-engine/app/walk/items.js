@@ -4,8 +4,8 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, $, S, RADIUS, scene, state, CHALK, el, savePlayer, geo,
-    passable } = W;
+  const { DE, DP, RULES, THREE, $, S, RADIUS, PICKUP_RANGE, scene, state, CHALK, el, savePlayer,
+    geo, doorMat, passable } = W;
 
   // ---------------------------------------------------------------------------
   // Inventory: the hotbar, chalk marks, jars and sigils
@@ -21,17 +21,191 @@
 
   const JAR_H = 0.38; // cells
   const STROKES = 3;  // chalk marks per stick
+  const TAKE_RANGE = 0.55; // cells, E reach to a tool lying on the floor
 
   function maxCharges() { return RULES.chargesMax + state.buff; }
 
+  // ---------------------------------------------------------------------------
+  // Item kinds. Every item in a room's loot belongs to one of three classes,
+  // and the class decides how it lives in the world and in your hands:
+  //
+  //   pickup  floats and turns where it lies; walk into it to collect it.
+  //           Counted on the HUD, never on the hotbar (a key opens a lock
+  //           by itself).
+  //   tool    rests on the floor; E takes it. Carried on the hotbar and used
+  //           up with F, never put back.
+  //   object  a thing in the world as itself. It stands where it spawned;
+  //           E lifts it and F sets it down again, with whatever's inside.
+  //
+  // `take(run, item)` adds a pickup or tool to the run and returns its caption.
+  const ITEMS = {
+    shard: {
+      cls: 'pickup',
+      take(run) {
+        const per = RULES.shardsPerCharge;
+        run.shardsFound++;
+        if (run.charges >= maxCharges()) {
+          run.shards = Math.min(per - 1, run.shards + 1);
+          return 'a shard · your entropy is full';
+        }
+        if (++run.shards >= per) {
+          run.shards -= per;
+          run.charges++;
+          return `${per} shards fuse · a charge of entropy (${run.charges})`;
+        }
+        return `a shard · ${run.shards}/${per}`;
+      },
+    },
+    key: {
+      cls: 'pickup',
+      take(run) {
+        run.keys++;
+        run.keysFound++;
+        return 'a key. somewhere, a door is locked';
+      },
+    },
+    doorstone: {
+      cls: 'tool',
+      take(run) {
+        run.doorstones++;
+        state.sel = 'doorstone';
+        return `a doorstone · ${W.verbF} at a bare wall to open a door there`;
+      },
+    },
+    chalk: {
+      cls: 'tool',
+      take(run, item) {
+        const color = item.color || 'silver';
+        run.chalks[color] = (run.chalks[color] || 0) + STROKES;
+        run.chalkFound++;
+        state.sel = 'chalk';
+        state.variant.chalk = color;
+        return `a stick of ${color} chalk · ${W.verbF} to draw a ${CHALK[color].name}`;
+      },
+    },
+    jar: { cls: 'object' },
+  };
+
+  const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
+  const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
+  const chalkMat = new THREE.MeshLambertMaterial({ color: 0xf2efe6, emissive: 0x3a3a3a });
+
   /**
-   * The hotbar's slots, built from the run's inventory. A slot with
-   * `variants` is a group (one slot, several kinds); `cur` is the variant
-   * in use, remembered per group in state.variant.
+   * A pickup's or tool's mesh, centred on its spot. Pickups float (see
+   * updateItems); tools lie on the floor at a seeded angle.
+   */
+  function itemMesh(item, key) {
+    const mesh = new THREE.Group();
+    if (item.kind === 'shard') {
+      mesh.add(new THREE.Mesh(geo.shard, shardMat));
+    } else if (item.kind === 'key') {
+      const ring = new THREE.Mesh(geo.keyRing, keyMat);
+      ring.position.x = -0.1 * S;
+      const shaft = new THREE.Mesh(geo.keyShaft, keyMat);
+      shaft.position.x = 0.04 * S;
+      mesh.add(ring, shaft);
+    } else if (item.kind === 'doorstone') {
+      const flat = new THREE.Group(); // the slab laid on its back, inset facing up
+      const slab = new THREE.Mesh(geo.doorstone, chalkMat);
+      const inset = new THREE.Mesh(geo.doorstoneInset, doorMat);
+      inset.position.set(0, -0.015 * S, 0.026 * S);
+      flat.add(slab, inset);
+      flat.rotation.x = -Math.PI / 2;
+      flat.position.y = 0.025 * S;
+      mesh.add(flat);
+    } else if (item.kind === 'chalk') {
+      const stick = new THREE.Mesh(geo.chalk, new THREE.MeshLambertMaterial({
+        color: (CHALK[item.color] || CHALK.silver).hex, emissive: 0x2a2a2a,
+      }));
+      stick.rotation.z = Math.PI / 2; // lying on its side
+      stick.position.y = 0.03 * S;
+      mesh.add(stick);
+    }
+    for (const m of mesh.children) m.castShadow = true;
+    if (ITEMS[item.kind].cls === 'tool') mesh.rotation.y = parseInt(DE.hash(key, 'yaw').slice(-4), 16) / 65536 * Math.PI * 2;
+    return mesh;
+  }
+
+  /** Pickups bob and turn; everything lying in a room grows and shrinks with its tile. */
+  function updateItems() {
+    for (const it of state.items.values()) {
+      const r = it.tile ? it.tile.scale.x : 1;
+      it.mesh.scale.setScalar(Math.max(0.001, r));
+      if (ITEMS[it.item.kind].cls !== 'pickup') continue;
+      it.mesh.rotation.y = state.time * 1.6;
+      it.mesh.position.y = (0.45 + 0.05 * Math.sin(state.time * 2.4 + it.item.cell.x)) * S;
+    }
+    for (const j of state.jars) if (j.tile) j.mesh.scale.setScalar(Math.max(0.001, j.tile.scale.x));
+  }
+
+  /** Walking into a pickup collects it. */
+  function collectPickups(p) {
+    for (const [k, it] of state.items) {
+      if (ITEMS[it.item.kind].cls !== 'pickup') continue;
+      const dx = p.x - (it.item.cell.x + 0.5), dy = p.y - (it.item.cell.y + 0.5);
+      if (dx * dx + dy * dy <= PICKUP_RANGE * PICKUP_RANGE) takeItem(k, it);
+    }
+  }
+
+  /** E at a tool lying within reach: take it. */
+  function toolNear(p) {
+    if (p.z > 0.05) return null;
+    let best = null, bestD = TAKE_RANGE;
+    for (const [k, it] of state.items) {
+      if (ITEMS[it.item.kind].cls !== 'tool') continue;
+      const d = Math.hypot(p.x - (it.item.cell.x + 0.5), p.y - (it.item.cell.y + 0.5));
+      if (d < bestD) { bestD = d; best = { action: 'take', key: k, it }; }
+    }
+    return best;
+  }
+
+  function takeItem(k, it) {
+    state.run.collected.push(k);
+    it.mesh.parent.remove(it.mesh);
+    state.items.delete(k);
+    W.showCaption(ITEMS[it.item.kind].take(state.run, it.item));
+    savePlayer();
+    W.refreshHud();
+  }
+
+  /**
+   * An object from a room's loot is placed in the world once, the first
+   * time its room is built, and from then on it's like any jar you set down
+   * (saved with the run, shattered if its room collapses).
+   */
+  function spawnObject(item, key, tile) {
+    state.run.collected.push(key); // out of the loot, into the world
+    const start = parseInt(DE.hash(key, 'quarter').slice(-2), 16) % 4;
+    let q = null;
+    for (let i = 0; i < 4 && !q; i++) {
+      const n = (start + i) % 4, sx = item.cell.x * 2 + (n & 1), sy = item.cell.y * 2 + (n >> 1);
+      if (!inDoorMouth(sx, sy)) q = { sx, sy };
+    }
+    if (!q) q = { sx: item.cell.x * 2, sy: item.cell.y * 2 };
+    const rec = addJarToWorld({ id: 'j' + (++state.run.jarSeq), sx: q.sx, sy: q.sy, fill: 0 });
+    rec.tile = tile; // rises with the floor as the room assembles
+  }
+
+  /**
+   * The hotbar's slots, built from the run's tools and objects (pickups are
+   * counters on the HUD). A slot with `variants` is a group (one slot,
+   * several kinds); `cur` is the variant in use, remembered per group in
+   * state.variant.
    */
   function slots() {
     const run = state.run, out = [];
-    for (const j of run.jars) out.push({ key: 'jar:' + j.id, kind: 'jar', jar: j });
+    if (run.jars.length) {
+      // One slot for every jar, grouped by fill. "auto" (the default) sets
+      // down the fullest jar onto a sigil and an empty one anywhere else.
+      const groups = [];
+      for (let f = 0; f <= RULES.jarCapacity; f++) {
+        const count = run.jars.filter((j) => j.fill === f).length;
+        if (count) groups.push({ id: 'f' + f, fill: f, count });
+      }
+      const variants = groups.length > 1 ? [{ id: 'auto', auto: true, count: run.jars.length }].concat(groups) : groups;
+      const cur = variants.find((v) => v.id === state.variant.jar) || variants[0];
+      out.push({ key: 'jar', kind: 'jar', variants, cur, count: run.jars.length });
+    }
     const colors = Object.keys(CHALK).filter((c) => run.chalks[c] > 0);
     if (colors.length) {
       const variants = colors.map((c) => ({ id: c, color: c, strokes: run.chalks[c] }));
@@ -40,7 +214,6 @@
       out.push({ key: 'chalk', kind: 'chalk', variants, cur });
     }
     if (run.doorstones > 0) out.push({ key: 'doorstone', kind: 'doorstone', count: run.doorstones });
-    if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
     return out;
   }
   function selectedSlot() {
@@ -60,12 +233,29 @@
     const i = slot.variants.findIndex((v) => v.id === slot.cur.id);
     const v = slot.variants[(i + dir + slot.variants.length) % slot.variants.length];
     state.variant[slot.kind] = v.id;
-    W.showCaption(`${v.color} chalk · ${CHALK[v.color].name}`);
+    W.showCaption(slot.kind === 'jar' ? `jars · ${jarVariantName(v)}` : `${v.color} chalk · ${CHALK[v.color].name}`);
     refreshHotbar();
   }
 
-  const ICON = { jar: '⚱', key: '⚷', doorstone: '⌂' };
-  const NAME = { jar: 'jar', key: 'keys', doorstone: 'doorstone: F at a bare wall opens a door', chalk: 'chalk' };
+  const ICON = { jar: '⚱', doorstone: '⌂' };
+  const NAME = { doorstone: 'doorstone: F at a bare wall opens a door' };
+  const jarVariantName = (v) => (v.auto ? 'auto: the fullest onto a sigil, an empty one elsewhere'
+    : `${v.fill ? v.fill + '/' + RULES.jarCapacity : 'empty'} · ${v.count} jar${v.count === 1 ? '' : 's'}`);
+
+  /** A jar group's icon: its fill (or "auto") and how many. */
+  function jarIcon(v) {
+    const w = el('span', 'jaric');
+    w.append(el('span', 'ic', ICON.jar));
+    if (v.auto) w.append(el('span', 'auto', 'auto'));
+    else {
+      const pips = el('span', 'fill');
+      for (let k = 0; k < RULES.jarCapacity; k++) pips.append(el('i', k < v.fill ? 'on' : ''));
+      w.append(pips);
+    }
+    if (v.count > 1) w.append(el('span', 'ct', '×' + v.count));
+    return w;
+  }
+  const variantIcon = (kind, v) => (kind === 'jar' ? jarIcon(v) : chalkIcon(v));
   function shakeHotbar() {
     const bar = $('hotbar');
     if (!bar) return;
@@ -107,16 +297,17 @@
       b.append(el('span', 'n', String(i + 1)));
       if (slot.kind === 'chalk') {
         b.title = `chalk (${slot.variants.length} colour${slot.variants.length === 1 ? '' : 's'}): F draws a mark, E on one wipes it; click again or hold to pick a colour`;
-        b.append(chalkIcon(slot.cur));
-        if (slot.variants.length > 1) b.append(el('span', 'more', '▴'));
+      } else if (slot.kind === 'jar') {
+        b.title = `jars (${slot.count}): F sets one down, E lifts one; ${jarVariantName(slot.cur)}` +
+          (slot.variants.length > 1 ? '; click again or hold to choose' : '');
       } else {
-        b.title = NAME[slot.kind] + (slot.kind === 'jar' ? ` (${slot.jar.fill}/${RULES.jarCapacity})` : '');
+        b.title = NAME[slot.kind];
         b.append(el('span', 'ic', ICON[slot.kind]));
-        if (slot.kind === 'jar') {
-          const pips = el('span', 'fill');
-          for (let k = 0; k < RULES.jarCapacity; k++) pips.append(el('i', k < slot.jar.fill ? 'on' : ''));
-          b.append(pips);
-        } else b.append(el('span', 'ct', String(slot.count)));
+        b.append(el('span', 'ct', String(slot.count)));
+      }
+      if (slot.variants) {
+        b.append(variantIcon(slot.kind, slot.cur));
+        if (slot.variants.length > 1) b.append(el('span', 'more', '▴'));
       }
       // Click selects; clicking the selected group (or holding it) opens its picker.
       b.addEventListener('pointerdown', () => {
@@ -138,8 +329,9 @@
         for (const v of slot.variants) {
           const vb = el('button', 'pick' + (v.id === slot.cur.id ? ' on' : ''));
           vb.type = 'button';
-          vb.title = `${v.color} chalk · ${CHALK[v.color].name} · ${v.strokes} stroke${v.strokes === 1 ? '' : 's'}`;
-          vb.append(chalkIcon(v));
+          vb.title = slot.kind === 'jar' ? jarVariantName(v)
+            : `${v.color} chalk · ${CHALK[v.color].name} · ${v.strokes} stroke${v.strokes === 1 ? '' : 's'}`;
+          vb.append(variantIcon(slot.kind, v));
           vb.addEventListener('click', (e) => {
             e.stopPropagation();
             state.variant[slot.kind] = v.id;
@@ -362,17 +554,23 @@
 
   function clearJars() { for (const r of state.jars.slice()) removeJarFromWorld(r); }
 
+  /** Is quarter (sx, sy) in a doorway's mouth (one of the two quarters at a door's edge)? */
+  function inDoorMouth(sx, sy) {
+    const cx = Math.floor(sx / 2), cy = Math.floor(sy / 2);
+    const sp = state.exp.spaces[state.exp.registry[DE.key(cx, cy)]];
+    const qx = sx - cx * 2, qy = sy - cy * 2;
+    for (const e of sp ? sp.exits : []) {
+      if (e.cell.x !== cx || e.cell.y !== cy) continue;
+      if ((e.facing === 'N' && qy === 0) || (e.facing === 'S' && qy === 1) ||
+          (e.facing === 'W' && qx === 0) || (e.facing === 'E' && qx === 1)) return true;
+    }
+    return false;
+  }
+
   /** Where F would set a jar down: the nearest free quarter ahead, not in a doorway's mouth or on you. */
   function jarSpot(p) {
     return quarterAhead(p, (sx, sy, base) => {
-      const cx = Math.floor(sx / 2), cy = Math.floor(sy / 2);
-      const sp = state.exp.spaces[state.exp.registry[DE.key(cx, cy)]];
-      const qx = sx - cx * 2, qy = sy - cy * 2;
-      for (const e of sp.exits) { // keep a doorway's mouth (the two quarters at its edge) clear
-        if (e.cell.x !== cx || e.cell.y !== cy) continue;
-        if ((e.facing === 'N' && qy === 0) || (e.facing === 'S' && qy === 1) ||
-            (e.facing === 'W' && qx === 0) || (e.facing === 'E' && qx === 1)) return false;
-      }
+      if (inDoorMouth(sx, sy)) return false;
       const x0 = sx / 2, y0 = sy / 2;
       const ex = Math.max(x0 - p.x, 0, p.x - x0 - 0.5), ey = Math.max(y0 - p.y, 0, p.y - y0 - 0.5);
       return !(Math.hypot(ex, ey) < RADIUS + 0.02 && Math.abs(base - p.z) < JAR_H); // not onto the figure
@@ -405,10 +603,24 @@
   function pickUpJar(rec) {
     removeJarFromWorld(rec);
     state.run.jars.push({ id: rec.id, fill: rec.fill });
-    state.sel = 'jar:' + rec.id;
+    state.sel = 'jar';
     W.showCaption(rec.fill ? `you lift the jar · ${rec.fill} hash ghost${rec.fill === 1 ? '' : 's'} inside` : 'you lift the jar');
     savePlayer();
     W.refreshHud();
+  }
+
+  /**
+   * Which carried jar goes down at `spot`: the chosen group's, or on auto
+   * the fullest onto a sigil tile (to power it) and the emptiest elsewhere
+   * (a trap).
+   */
+  function jarFor(v, spot) {
+    const run = state.run;
+    if (!v.auto) return run.jars.find((j) => j.fill === v.fill);
+    const cx = Math.floor(spot.sx / 2), cy = Math.floor(spot.sy / 2);
+    const sg = state.sigils.get(state.exp.registry[DE.key(cx, cy)]);
+    const byFill = run.jars.slice().sort((a, b) => a.fill - b.fill);
+    return sg && sg.cell.x === cx && sg.cell.y === cy ? byFill[byFill.length - 1] : byFill[0];
   }
 
   /** What F would do right now with the selected item, or null. */
@@ -417,7 +629,7 @@
     if (!slot || state.paused || state.climb) return null;
     if (slot.kind === 'jar') {
       const spot = jarSpot(p);
-      return spot ? { action: 'place', slot, spot } : null;
+      return spot ? { action: 'place', slot, spot, jar: jarFor(slot.cur, spot) } : null;
     }
     if (slot.kind === 'chalk') {
       const spot = markSpot(p);
@@ -435,9 +647,10 @@
     const u = useNear(state.player);
     if (!u) { shakeHotbar(); return; } // "that didn't work"
     if (u.action === 'place') {
-      const j = u.slot.jar;
+      const j = u.jar;
       run.jars = run.jars.filter((o) => o !== j);
       addJarToWorld({ id: j.id, sx: u.spot.sx, sy: u.spot.sy, fill: j.fill });
+      state.variant.jar = 'auto'; // a jar picked by hand is for this one time
     } else if (u.action === 'carve') {
       W.carveDoor(u);
       return;
@@ -720,8 +933,9 @@
     state.buffReady = true;
   }
 
-  Object.assign(W, { STROKES, maxCharges, slots, select, refreshHotbar, addMarkToWorld,
-    removeMarkFromWorld, clearMarks, markNear, wipeMarksIn, makeJarMesh, addJarToWorld,
+  Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups, toolNear,
+    takeItem, spawnObject, slots, select, refreshHotbar, addMarkToWorld,
+    removeMarkFromWorld, clearMarks, markNear, wipeMarksIn, addJarToWorld,
     clearJars, jarNear, pickUpJar, useNear, useSelected, jarCatches, shatterJarsIn, noteUnmade,
     updateJars, addSigil, updateSigils });
 })(window);

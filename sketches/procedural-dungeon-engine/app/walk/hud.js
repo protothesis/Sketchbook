@@ -27,6 +27,10 @@
       } else if (near.action === 'erase') {
         cls = 'chalk';
         text = `a ${near.mark.color} chalk mark · ${verb} to wipe it`;
+      } else if (near.action === 'take') {
+        const it = near.it.item;
+        cls = 'chalk';
+        text = `${it.kind === 'chalk' ? `a stick of ${it.color || 'silver'} chalk` : 'a doorstone'} · ${verb} to take it`;
       } else if (near.action === 'pickjar') {
         cls = 'jar';
         text = `a jar (${near.jar.fill}/${RULES.jarCapacity}) · ${verb} to lift it`;
@@ -84,6 +88,13 @@
     if (shards) {
       shards.innerHTML = '';
       for (let i = 0; i < RULES.shardsPerCharge; i++) shards.append(el('span', i < run.shards ? 'pip on' : 'pip'));
+    }
+    // Keys are counted here, not carried on the hotbar: a locked door takes one by itself.
+    const keyEl = $('keys');
+    if (keyEl) {
+      keyEl.hidden = run.keys <= 0;
+      keyEl.textContent = '⚷ ' + run.keys;
+      keyEl.title = `${run.keys} key${run.keys === 1 ? '' : 's'} · a locked door uses one when you open it`;
     }
     refreshHotbar();
   }
