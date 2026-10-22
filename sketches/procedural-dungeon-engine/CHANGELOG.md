@@ -246,6 +246,13 @@ All notable changes to this sketch are logged here, per
   into provisional rooms; other opened doors show as a plain green bar on
   the maps. Committing is derived from the expedition history
   (`DP.committed`), so old saves need no migration.
+- 2026-10-21: **Push blocks**, the first restoration task (step 2 of
+  [`GAME-DESIGN.md`](GAME-DESIGN.md)). About 1 room in 5 has a block out of
+  place and a matching floor mark in the same row or column (`DP.pushBlocks`,
+  seeded on its own `'push'` stream, so nothing else shifts). Walk into it
+  to push it half a cell; E pulls it back toward you. Home, it locks, lights
+  up and pays 1 charge once. New file `app/walk/restore.js`, loaded after
+  `items.js`; positions are kept in `run.pushed`.
 
 ### Fixed
 

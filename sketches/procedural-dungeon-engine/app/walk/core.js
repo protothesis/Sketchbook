@@ -13,7 +13,7 @@
 // Walk mode is split into classic scripts (no modules: the page has to open
 // from file://), which play.html loads in this order:
 //
-//   core, world, figure, items, actions, input, ghosts, fx, hud, main
+//   core, world, figure, items, restore, actions, input, ghosts, fx, hud, main
 //
 // Each file is its own IIFE sharing one namespace, DungeonPlay.walk ("W").
 // A file takes what it needs from earlier files by destructuring W at the
@@ -113,6 +113,7 @@
     fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9 }, // screen effects, 0..1
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
+    pushBlocks: [],      // push blocks in built rooms (see restore.js)
     time: 0,
     minimap: true,
     bigmap: null,        // { cx, cy, px } while the enlarged map is open
@@ -141,6 +142,7 @@
       chalks: { silver: 3 }, // chalk carried, by colour, in strokes (3 per stick)
       marks: [],             // chalk marks drawn: [{ sx, sy, color, rot, base }] (quarter-tiles)
       doorstones: 0,         // open a door in a bare wall
+      pushed: {},            // push blocks moved: { "spaceId:seed:id": { sx, sy, done } }
     };
   }
 

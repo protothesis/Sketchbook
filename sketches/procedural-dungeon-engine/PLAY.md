@@ -97,6 +97,17 @@ Determinism).
   Collapsing a room a ghost is in simply undoes it: nothing is gained, but
   the run keeps a tally and a short log (`run.unmade`) for whatever that
   becomes later.
+- **Push blocks (restoration).** About 1 room in 5 (depth 1+) has a stone
+  block with a coloured top that's out of place, and a matching coloured
+  square on the floor where it belongs, in the same row or column. Walk into
+  the block for a beat and it slides half a cell. E, facing it, pulls it one
+  half-cell toward you (you step back), which is how a block shoved into a
+  corner comes back out. A block only moves within its room, onto bare
+  floor, never into a doorway's mouth. Home, it locks in place, its top and
+  its mark light up, and it pays **1 charge** of entropy, once. Blocks can't
+  be climbed, and jars and chalk can't go on them. Positions persist with
+  the run; a rerolled room rolls a new one. See
+  [`GAME-DESIGN.md`](GAME-DESIGN.md).
 - **Three kinds of item.** Every item belongs to one class, and the class
   decides how it behaves (`ITEMS` in `app/walk/items.js`):
   - **Pickups** (shards, keys) float and turn where they lie. Walk into

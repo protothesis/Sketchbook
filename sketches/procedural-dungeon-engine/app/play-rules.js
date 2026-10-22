@@ -50,6 +50,12 @@
     blockUnit: 1.3 / 3,       // one stacked unit (cells); a 1-unit block hides a crouched figure
     climbMaxUnits: 1,         // a single step up at a time
     climbMaxTop: 1,           // units: never stand higher than one block (head room)
+    // Restoration (GAME-DESIGN.md): a push block out of place and the floor
+    // mark where it belongs. Putting one home pays entropy once.
+    pushChance: 0.25,
+    pushMinDepth: 1,
+    pushColors: ['#e0a94a', '#57cdbf', '#c47be0', '#e86a6a'],
+    restoreCharges: 1,
     detailChance: 0.35,
     // Hash ghosts: about 1 room in 14; rooms on cracked (imprinted) floor
     // get a boost that grows with how much of the room is cracked.
@@ -275,6 +281,67 @@
   }
 
   /**
+   * A push block out of place in this room, and the floor mark where it
+   * belongs: [{ id, from: { sx, sy }, to: { sx, sy }, color }] in half-cell
+   * units (one block fills one half-cell), or []. The two lie in one row or
+   * column with a clear run between them and room to stand behind the
+   * block, so one straight push puts it home. Seeded on its own stream;
+   * never on a door, item or sigil cell or a prop, and the block never cuts
+   * off any part of the floor.
+   */
+  function pushBlocks(space) {
+    if (!space.parentId || space.deadEnd || space.depth < RULES.pushMinDepth) return [];
+    const r = DE.deriveRng(space.seed, 'push');
+    if (!r.chance(RULES.pushChance)) return [];
+    const sk = (x, y) => x + ',' + y;
+    const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
+    const sg = sigil(space);
+    if (sg) avoid.add(DE.key(sg.cell.x, sg.cell.y));
+    const blocked = new Set();
+    for (const b of props(space).blocks) {
+      for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) blocked.add(sk(x, y));
+    }
+    const floor = new Set(), free = [];
+    for (const k of space.cells) {
+      const c = DE.parseKey(k);
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
+        const s = sk(c.x * 2 + i, c.y * 2 + j);
+        if (blocked.has(s)) continue;
+        floor.add(s);
+        if (!avoid.has(k)) free.push(s);
+      }
+    }
+    free.sort();
+    const freeSet = new Set(free);
+    const connectedWithout = (s0) => { // is every floor half-cell still reachable with a block on s0?
+      const start = Array.from(floor).find((s) => s !== s0);
+      const seen = new Set([start]), q = [start];
+      while (q.length) {
+        const [x, y] = q.pop().split(',').map(Number);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = sk(x + dx, y + dy);
+          if (floor.has(n) && n !== s0 && !seen.has(n)) { seen.add(n); q.push(n); }
+        }
+      }
+      return seen.size === floor.size - 1;
+    };
+    const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let a = 0; a < 30 && free.length; a++) {
+      const [tx, ty] = free[Math.floor(r.next() * free.length)].split(',').map(Number);
+      const [dx, dy] = DIRS4[Math.floor(r.next() * 4)];
+      const dist = r.int(2, 4);
+      const run = []; // target, the half-cells between, the block's start, and where you stand to push
+      for (let i = 0; i <= dist + 1; i++) run.push(sk(tx - dx * i, ty - dy * i));
+      if (!run.every((s, i) => (i <= dist ? freeSet.has(s) : floor.has(s)))) continue;
+      if (!connectedWithout(run[dist]) || !connectedWithout(run[0])) continue;
+      const [fx, fy] = run[dist].split(',').map(Number);
+      return [{ id: 'push0', from: { sx: fx, sy: fy }, to: { sx: tx, sy: ty }, color: r.pick(RULES.pushColors) }];
+    }
+    return [];
+  }
+
+  /**
    * A room is committed (fixed) once a door out of it has ever been opened,
    * or a loop has opened a door into it. Until then it's provisional and can
    * be rerolled. Committing is for good: rerolling the room beyond doesn't
@@ -340,5 +407,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

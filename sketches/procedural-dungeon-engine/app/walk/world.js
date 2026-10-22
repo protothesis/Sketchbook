@@ -235,6 +235,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }
 
     W.addSigil(space, tileAt);
+    W.addPushBlocks(space, rec, tileAt);
 
     // Props ride on their cell's tile, so they assemble and dissolve with it.
     const pr = DP.props(space);
@@ -341,6 +342,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   }
 
   function forgetSpace(id) {
+    state.pushBlocks = state.pushBlocks.filter((b) => b.spaceId !== id);
     const sg = state.sigils.get(id);
     if (sg && sg.fx) scene.remove(sg.fx.group);
     state.sigils.delete(id);

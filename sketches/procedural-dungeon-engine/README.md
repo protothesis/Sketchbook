@@ -67,6 +67,7 @@ app/             clients of the engine
     world.js         dither, materials, building and dissolving spaces
     figure.js        the figure and lantern, collision, climbing, crouch
     items.js         hotbar, chalk marks, jars, sigils
+    restore.js       restoration: push blocks and their floor marks
     actions.js       doors: open, unlock, collapse; doorstones
     input.js         keyboard, touch stick, buttons
     ghosts.js        hash ghosts
