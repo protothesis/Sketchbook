@@ -32,6 +32,8 @@
       e.preventDefault();
     } else if (k === 'f') {
       if (!e.repeat) useSelected();
+    } else if (k === 'r') { // the lamp: cover it, or relight it
+      if (!e.repeat) W.toggleLamp();
     } else if (k >= '1' && k <= '9' && k.length === 1) {
       select(+k - 1);
     } else if (k === ' ') {

@@ -22,6 +22,9 @@
       if (near.action === 'carve') {
         cls = 'chalk';
         text = `a bare wall · ${verbF} to open a door here (${state.run.doorstones} doorstone${state.run.doorstones === 1 ? '' : 's'})`;
+      } else if (near.action === 'catch') {
+        cls = 'jar';
+        text = `a pixie · ${verbF} to catch it in a jar`;
       } else if (near.action === 'place' || near.action === 'mark') {
         text = ''; // setting a jar down or drawing a mark never prompts
       } else if (near.action === 'erase') {
@@ -38,7 +41,7 @@
         text = `a dormant waystone · ${verb} to wake it (${chargeText(RULES.waystoneCharges)})`;
       } else if (near.action === 'travel') {
         cls = 'collapse';
-        text = `a waystone · ${verb} to travel`;
+        text = `a waystone · ${verb} to travel (a shard per ley line)`;
       } else if (near.action === 'surface') {
         cls = 'surface';
         text = `a door up to the surface · ${verb}`;
@@ -47,7 +50,7 @@
         text = `a block out of place · push it home, or ${verb} to pull`;
       } else if (near.action === 'pickjar') {
         cls = 'jar';
-        text = `a jar (${near.jar.fill}/${RULES.jarCapacity}) · ${verb} to lift it`;
+        text = `${near.jar.fill ? 'a pixie jar' : 'an empty jar'} · ${verb} to lift it`;
       } else if (near.action === 'climb') {
         text = state.push.key ? 'climbing…' : `a block · push, or ${verb} to climb`;
       } else if (near.action === 'open') {
@@ -58,8 +61,9 @@
       } else if (near.action === 'collapse') {
         // Only a provisional room (one with no door out opened yet) offers this.
         const pr = near.price;
-        cls = near.affordable ? 'collapse' : 'blocked';
-        text = near.affordable
+        cls = near.affordable && !near.haunted ? 'collapse' : 'blocked';
+        text = near.haunted ? `a hash ghost lingers in ${near.child.id} · no rerolling it while it's there`
+          : near.affordable
           ? `close & reroll ${near.child.id} · ${chargeText(pr.charges)} · ${verb}`
           : `not enough entropy to reroll · ${chargeText(pr.charges)}`;
       }
@@ -254,9 +258,48 @@
       ctx.strokeStyle = 'rgba(10, 8, 14, 0.85)';
       ctx.stroke();
     }
-    // Waystones: a small slab, glowing when awake. On the travel map, the
-    // ones you can go to pulse in a ring, with their room's id.
+    // Entropy wells: a small basin, its colour by kind, filled by its level.
+    for (const w of state.wells) {
+      if (!visible(w.cell)) continue;
+      const mx = ox + (w.cell.x + 0.5) * px, my = oy + (w.cell.y + 0.5) * px, r = Math.max(3, px * 0.3);
+      const k = W.wellLevel(w) / RULES.wellCapacity;
+      const col = w.kind === 'surge' ? '160, 112, 255' : '79, 216, 196';
+      ctx.beginPath();
+      ctx.arc(mx, my, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${col}, ${0.15 + 0.75 * k})`;
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(${col}, 0.9)`;
+      ctx.stroke();
+    }
+    // Ley lines between awake waystones: faint always, bright on the travel
+    // map, where the way to the stone under your finger lights up.
     const travel = cv === bm && state.bigmap && state.bigmap.travel;
+    const ctr = (st) => [ox + (st.ws.x0 + st.ws.x1) / 2 * px, oy + (st.ws.y0 + st.ws.y1) / 2 * px];
+    ctx.save();
+    ctx.lineWidth = travel ? 2 : 1.25;
+    ctx.strokeStyle = travel ? 'rgba(170, 160, 255, 0.55)' : 'rgba(150, 140, 255, 0.3)';
+    ctx.setLineDash(travel ? [] : [4, 4]);
+    ctx.beginPath();
+    for (const [a, b] of W.leyLines()) {
+      const [ax, ay] = ctr(a), [bx, by] = ctr(b);
+      ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    }
+    ctx.stroke();
+    const hover = travel && state.bigmap.hover && W.leyRoute(travel, state.bigmap.hover);
+    if (hover) {
+      ctx.setLineDash([]);
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(220, 210, 255, 0.95)';
+      ctx.shadowColor = 'rgba(165, 140, 255, 0.9)';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      hover.path.forEach((st, i) => { const [x, y] = ctr(st); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.stroke();
+    }
+    ctx.restore();
+    // Waystones: a small slab, glowing when awake. On the travel map, the
+    // ones you can go to pulse in a ring, with their room's id and the fare.
     for (const st of state.waystones) {
       const mx = ox + (st.ws.x0 + st.ws.x1) / 2 * px, my = oy + (st.ws.y0 + st.ws.y1) / 2 * px;
       const sw = Math.max(4, px * 0.32), sh = Math.max(7, px * 0.62);
@@ -274,10 +317,13 @@
         ctx.arc(mx, my, 14 + 3 * pulse, 0, Math.PI * 2);
         ctx.stroke();
         ctx.shadowBlur = 0;
-        ctx.fillStyle = here ? 'rgba(243, 236, 220, 0.75)' : '#e6deff';
+        const route = !here && W.leyRoute(travel, st);
+        const fare = route ? route.shards / RULES.shardsPerCharge : 0;
+        const short = route && fare > state.run.fuel + 1e-6;
+        ctx.fillStyle = here ? 'rgba(243, 236, 220, 0.75)' : short ? '#9a8fae' : '#e6deff';
         ctx.font = '12px system-ui, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(here ? 'you are here' : st.spaceId, mx, my - 22);
+        ctx.fillText(here ? 'you are here' : route ? `${st.spaceId} · ${'◆'.repeat(Math.min(route.shards, 6))}${route.shards > 6 ? '×' + route.shards : ''}` : st.spaceId, mx, my - 22);
       }
       ctx.restore();
     }
@@ -415,6 +461,8 @@
     }
   });
   bm.addEventListener('pointermove', (e) => {
+    // On the travel map, the stone under the pointer shows its route.
+    if (state.bigmap && state.bigmap.travel) state.bigmap.hover = travelPick(e.clientX, e.clientY);
     const prev = bmPointers.get(e.pointerId);
     if (!prev || !state.bigmap) return;
     const cur = { x: e.clientX, y: e.clientY };
@@ -434,7 +482,11 @@
     // A tap on the travel map: go to the waystone under it.
     if (bmTap && e.type === 'pointerup' && state.bigmap && state.bigmap.travel) {
       const st = travelPick(e.clientX, e.clientY);
-      if (st) { closeBigMap(); W.travelTo(st); }
+      if (st) {
+        const from = state.bigmap.travel;
+        closeBigMap();
+        W.travelTo(st, from);
+      }
     }
     bmTap = null;
     bmPointers.delete(e.pointerId);
@@ -509,7 +561,9 @@
       ['entropy left', chargeText(run.fuel)],
       ['waystones awake', state.waystones.filter((o) => o.awake).length],
       ['waypoints reached', Object.values(exp.reserves || {}).filter((r) => r.spaceId).length],
-      ['lamp gutters', run.gutters || 0],
+      ['passed out', run.gutters || 0],
+      ['pixies caught', run.pixiesCaught || 0],
+      ['entropy from wells', chargeText(run.wellDrawn || 0)],
       ['time walked', `${mins}:${String(secs).padStart(2, '0')}`],
     ];
     const dl = $('done-stats');

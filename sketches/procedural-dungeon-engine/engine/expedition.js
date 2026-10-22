@@ -70,7 +70,9 @@
       starter: 'hall',
       // A rare ordinary room is a hall, from this depth on. Records from
       // before random halls have no `hallChance`, so their rooms don't change.
-      hallChance: 0.025,
+      // Rare, so waypoint halls stay special: 1 in 100 (was 1 in 40, which
+      // older records keep).
+      hallChance: 0.01,
       hallMinDepth: 3,
     };
   }

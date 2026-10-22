@@ -15,9 +15,9 @@
   // draw a chalk mark, set a jar down, press a doorstone to a wall. 1-9 or
   // the wheel select. A slot can hold a group of variants (chalk colours):
   // click it again, or press and hold, to open its picker; its number key
-  // again cycles. Jars catch hash ghosts that follow you into them; a jar on
-  // a sigil tile powers it, one stage per ghost; each full jar on a sigil
-  // is +1 entropy max.
+  // again cycles. F with an empty jar near a pixie catches it (pixies.js);
+  // a pixie jar set down draws ghosts to it, and on a sigil tile it powers
+  // the sigil: +1 entropy max per pixie jar on it.
 
   const JAR_H = 0.38; // cells
   const STROKES = 3;  // chalk marks per stick
@@ -186,8 +186,9 @@
   function slots() {
     const run = state.run, out = [];
     if (run.jars.length) {
-      // One slot for every jar, grouped by fill. "auto" (the default) sets
-      // down the fullest jar onto a sigil and an empty one anywhere else.
+      // One slot for every jar, grouped by fill (empty, or a pixie). "auto"
+      // (the default) catches a pixie in an empty jar when one is near, sets
+      // a pixie jar onto a sigil, and an empty one anywhere else.
       const groups = [];
       for (let f = 0; f <= RULES.jarCapacity; f++) {
         const count = run.jars.filter((j) => j.fill === f).length;
@@ -230,8 +231,8 @@
 
   const ICON = { jar: '⚱', doorstone: '⌂' };
   const NAME = { doorstone: 'doorstone: F at a bare wall opens a door' };
-  const jarVariantName = (v) => (v.auto ? 'auto: the fullest onto a sigil, an empty one elsewhere'
-    : `${v.fill ? v.fill + '/' + RULES.jarCapacity : 'empty'} · ${v.count} jar${v.count === 1 ? '' : 's'}`);
+  const jarVariantName = (v) => (v.auto ? 'auto: catch a pixie if one is near; a pixie jar onto a sigil, an empty one elsewhere'
+    : `${v.fill ? 'a pixie' : 'empty'} · ${v.count} jar${v.count === 1 ? '' : 's'}`);
 
   /** A jar group's icon: its fill (or "auto") and how many. */
   function jarIcon(v) {
@@ -493,7 +494,7 @@
   };
   const jarGlassMat = new THREE.MeshLambertMaterial({ color: 0xa9c3d6, emissive: 0x0e1418, transparent: true, opacity: 0.5, depthWrite: false });
   const jarLidMat = new THREE.MeshLambertMaterial({ color: 0x3a2f28 });
-  const jarWispMat = new THREE.MeshBasicMaterial({ color: 0xd2a8ff, transparent: true, opacity: 0.9 });
+  const jarWispMat = new THREE.MeshBasicMaterial({ color: 0xd9b3ff, transparent: true, opacity: 0.95 }); // a pixie inside
 
   function makeJarMesh() {
     const g = new THREE.Group();
@@ -595,15 +596,14 @@
     removeJarFromWorld(rec);
     state.run.jars.push({ id: rec.id, fill: rec.fill });
     state.sel = 'jar';
-    W.showCaption(rec.fill ? `you lift the jar · ${rec.fill} hash ghost${rec.fill === 1 ? '' : 's'} inside` : 'you lift the jar');
+    W.showCaption(rec.fill ? 'you lift the jar · a pixie glows inside' : 'you lift the jar');
     savePlayer();
     W.refreshHud();
   }
 
   /**
    * Which carried jar goes down at `spot`: the chosen group's, or on auto
-   * the fullest onto a sigil tile (to power it) and the emptiest elsewhere
-   * (a trap).
+   * the fullest onto a sigil tile (to power it) and the emptiest elsewhere.
    */
   function jarFor(v, spot) {
     const run = state.run;
@@ -619,6 +619,10 @@
     const slot = selectedSlot();
     if (!slot || state.paused || state.climb) return null;
     if (slot.kind === 'jar') {
+      // An empty jar (auto, or the empty group) near a free pixie catches it.
+      const empty = (slot.cur.auto || slot.cur.fill === 0) && state.run.jars.find((j) => j.fill === 0);
+      const px = empty && W.pixieNear(p);
+      if (px) return { action: 'catch', slot, pixie: px, jar: empty };
       const spot = jarSpot(p);
       return spot ? { action: 'place', slot, spot, jar: jarFor(slot.cur, spot) } : null;
     }
@@ -637,6 +641,10 @@
     const run = state.run;
     const u = useNear(state.player);
     if (!u) { shakeHotbar(); return; } // "that didn't work"
+    if (u.action === 'catch') {
+      W.catchPixie(u.pixie, u.jar);
+      return;
+    }
     if (u.action === 'place') {
       const j = u.jar;
       run.jars = run.jars.filter((o) => o !== j);
@@ -652,31 +660,18 @@
     W.refreshHud();
   }
 
-  /** A following ghost that drifts into a jar with room is caught in it. */
-  function jarCatches(g) {
-    for (const j of state.jars) {
-      if (j.fill >= RULES.jarCapacity) continue;
-      if (Math.hypot(g.x - (j.block.x0 + 0.25), g.y - (j.block.y0 + 0.25)) < 0.38) return j;
-    }
-    return null;
-  }
-
-  /**
-   * Jars in rooms about to collapse shatter; any ghosts inside come undone
-   * with the room (noted in run.unmade, like ghosts caught in a collapse).
-   */
+  /** Jars in rooms about to collapse shatter; a pixie inside is lost with the room. */
   function shatterJarsIn(ids) {
     const reg = state.exp.registry;
-    let ghosts = 0, n = 0;
+    let pixies = 0, n = 0;
     for (const j of state.jars.slice()) {
       const room = reg[DE.key(Math.floor(j.block.x0), Math.floor(j.block.y0))];
       if (!ids.has(room)) continue;
-      ghosts += j.fill;
-      for (let i = 0; i < j.fill; i++) noteUnmade('jar:' + j.id, room);
+      pixies += j.fill;
       n++;
       removeJarFromWorld(j);
     }
-    return { n, ghosts };
+    return { n, pixies };
   }
 
   /** A ghost undone by a collapse. Kept as a tally and a short log; no use yet. */
@@ -687,12 +682,21 @@
     if (u.log.length > 50) u.log.shift();
   }
 
+  /**
+   * A pixie in a jar flits about inside it. With a ghost drawn close (within
+   * JAR_FLARE cells), it flares: bigger, and beating at the glass.
+   */
+  const JAR_FLARE = 2.5;
   function updateJars() {
     for (const j of state.jars) {
+      const jx = j.sx / 2 + 0.25, jy = j.sy / 2 + 0.25;
+      const near = j.fill ? state.ghosts.reduce((m, g) => Math.min(m, Math.hypot(g.x - jx, g.y - jy)), Infinity) : Infinity;
+      const flare = Math.max(0, 1 - near / JAR_FLARE);
       j.mesh.userData.wisps.forEach((w, i) => {
         w.visible = i < j.fill;
-        const a = state.time * 1.3 + i * 2.1;
-        w.position.set(Math.cos(a) * 0.06 * S, (0.09 + i * 0.075 + Math.sin(a * 1.7) * 0.02) * S, Math.sin(a) * 0.06 * S);
+        const a = state.time * (2.6 + 5 * flare) + i * 2.1, r = 0.06 + 0.04 * flare;
+        w.position.set(Math.cos(a) * r * S, (0.15 + Math.sin(a * 1.7) * 0.05) * S, Math.sin(a * 1.3) * r * S);
+        w.scale.setScalar(1 + flare * (0.7 + 0.3 * Math.sin(state.time * 14)));
       });
     }
   }
@@ -877,8 +881,9 @@
   }
 
   /**
-   * A sigil takes up to four jars, one per quarter of its tile. Its stage is
-   * the fullest jar's fill (0-3); every full jar on it is +1 entropy max.
+   * A sigil takes up to four jars, one per quarter of its tile. A pixie jar
+   * on it wakes it fully (stage 3; stages 1-2 were for jars of 1-2 ghosts),
+   * and every pixie jar on it is +1 entropy max.
    */
   function updateSigils(dt) {
     let powered = 0;
@@ -887,7 +892,7 @@
       let stage = 0, full = 0;
       for (const j of state.jars) {
         if (Math.floor(j.sx / 2) !== sg.cell.x || Math.floor(j.sy / 2) !== sg.cell.y) continue;
-        stage = Math.max(stage, Math.min(3, j.fill));
+        if (j.fill >= RULES.jarCapacity) stage = 3;
         if (j.fill >= RULES.jarCapacity) full++;
       }
       if (sg.stage !== -1 && stage > sg.stage && stage < 3) W.showCaption(`the sigil stirs · stage ${stage} of 3`);
@@ -927,6 +932,6 @@
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups, toolNear,
     takeItem, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn, addJarToWorld,
-    clearJars, jarNear, pickUpJar, useNear, useSelected, jarCatches, shatterJarsIn, noteUnmade,
+    clearJars, jarNear, pickUpJar, useNear, useSelected, shatterJarsIn, noteUnmade,
     updateJars, addSigil, updateSigils });
 })(window);

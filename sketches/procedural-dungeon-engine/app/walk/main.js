@@ -182,6 +182,8 @@
     dither.uDitherRadius.value = DITHER_RADIUS * Math.min(tmpV2.x, tmpV2.y);
     dither.uDitherPlayer.value.set(p.x * S, p.y * S);
 
+    W.updateWells(dt);
+    W.updatePixies(dt);
     updateGhosts(dt);
     updateJars();
     updateSigils(dt);
@@ -248,6 +250,7 @@
       ? Object.assign(freshRun(exp.rootSeed), migrateRun(savedPlayer.run, savedPlayer.v))
       : freshRun(exp.rootSeed);
     const savedGhosts = state.run.ghosts || [];
+    const savedPixies = state.run.pixies || [];
     const savedJars = state.run.placedJars || [];
     const savedMarks = state.run.marks || [];
     state.buffReady = false;
@@ -262,7 +265,11 @@
     for (const g of savedGhosts) {
       if (exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))] !== undefined) addGhost({ id: g.id, x: g.x, y: g.y, mode: g.mode });
     }
+    for (const o of savedPixies) {
+      if (exp.registry[DE.key(Math.floor(o.x), Math.floor(o.y))] !== undefined && !state.pixies.some((q) => q.id === o.id)) W.addPixie(o);
+    }
     state.fx.wobble = state.fx.glitch = state.fx.flash = 0;
+    state.ghostTouch = state.wasTouched = false;
     state.gutter = null;
     state.arrival = null;
     state.paused = false;

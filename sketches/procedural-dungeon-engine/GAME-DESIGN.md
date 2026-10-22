@@ -371,8 +371,10 @@ push-your-luck option.
   rare, and never 0 while no pin is left waiting. Arriving at every hall
   and adding three each time filled the map with pins (playtest,
   2026-10-22).
-- **Unmarked halls** also turn up as a rare ordinary room, so a run of
-  0s doesn't strand you, and stumbling on a hub is its own small event.
+- **Unmarked halls** also turn up as a rare ordinary room (1 in 100), so a
+  run of 0s doesn't strand you, and stumbling on a hub is its own small
+  event. Rare, because big rooms that weren't waypoints made the real ones
+  feel less special (playtest, 2026-10-22).
 - Reservations are history events, so replay, export and the chart view all
   keep them.
 
@@ -420,9 +422,26 @@ units tall, covered in arcane markings.
   waypoints (section 8). An awake waystone's markings glow.
 - **Fast travel goes waystone to waystone,** never from anywhere. E at an
   awake waystone opens the map with the others highlighted; pick one.
-  Travel is free for now.
-- The last waystone you woke or travelled through is where you wake if your
-  lamp runs out (section 10).
+- **Ley lines.** Awake waystones form a network. Waking a stone links it
+  to its two nearest awake stones, and links stay once made, so the
+  network grows in the order you woke them (and later you might re-tune
+  it on purpose). You ride the lines,
+  not the air: a trip takes the fewest lines, and **each line costs a
+  shard**, so crossing a big map costs real fuel and nearby hops stay
+  cheap. Free travel let you place yourself anywhere, which skipped over
+  everything (playtest, 2026-10-22).
+- **An awake waystone shows it:** shining glyphs, a faint shaft of light, a
+  violet-blue light on the room.
+- The last waystone you woke or travelled through is where you wake if you
+  pass out (section 12).
+- **Later:** travel as an active act, not a menu: steer along the line, or
+  a small rhythm game of taps at spaced marks you see coming. A bad run
+  costs more (or, at worst, drops you partway along the line); a perfect
+  one refunds some of the fare, so it's a skill reward as much as a
+  penalty. Not hard, just enough to make it deliberate. Re-tuning links;
+  abilities or items that make travel cheaper or reach farther;
+  lines with properties of their own (one-way, free, dormant until
+  something is restored); whether waking should cost more than a charge.
 - A waystone doesn't shelter the lamp. Only sconces do.
 
 **The surface door** is a placeholder exit from the game loop. Opening it
@@ -437,7 +456,7 @@ expeditions.
 "spend to get" the economy was missing: every reroll toward a waypoint burns
 fuel you need to get there.
 
-- **The lamp burns entropy steadily,** a shard's worth every few seconds,
+- **The lamp burns entropy steadily,** a shard's worth every 18 seconds,
   everywhere except right by a lit sconce (its tile and the ones around
   it).
 - **Entropy is fluid.** The meter is a countdown you can watch drain,
@@ -447,21 +466,31 @@ fuel you need to get there.
   instead of paying one. In return there's a spot by it where the lamp
   rests. Restoration becomes an investment in the way back, not a one-time
   payout.
-- **Push blocks still pay a charge,** and can be moved again; moving one
-  off its mark takes the charge back. A setpiece's three blocks make it an
-  oasis.
+- **Push blocks pay two shards,** and can be moved again; moving one off
+  its mark takes them back. A setpiece's three blocks make it an oasis.
+- **A smaller tank** (6 charges). The first lamp made a full meter easy to
+  keep, and the game turned into running for resources. The aim is
+  something between, leaning slow and careful (playtest, 2026-10-22).
 - **You feel it running low** without reading the meter: the lamp's colour
   slides from yellow to red to grey and flickers, its halo shrinks, its
   sparks thin out, and the light gets dimmer and shorter.
-- **Running out:** the lamp gutters, and you wake at your last waystone
-  with the starting entropy. Everything else stays: the map, what you
+- **Three stages you can feel,** tied to the meter: uneasy at 2 charges
+  (a little more flicker and wobble), danger at 1 (a clear flicker),
+  dying at half a charge (the flicker settles into a slow, irregular fade
+  that swells as you move, and the odd red ember). Blended, never stepped.
+  The light reddens and its reach shrinks hard; near the end a faint ring
+  on the floor shows where it ends.
+- **Running out:** the lamp goes out and stays out until you relight it
+  (R, a shard), and the dark drains your psychic stamina (section 12). Find light or entropy in time, or pass out and
+  wake at your last waystone. Everything else stays: the map, what you
   carry, what you restored. **You lose only your position.** Start gentle;
   add bite (dropped items, a corpse run) only if it's too soft.
 
-**Later:** cover the lantern on purpose (to slip past hash ghosts, which are
-drawn to light) at the price of relighting it. That pairs with a second
-kind of threat that lives in the dark (section 6), so light and dark each
-have dangers and which one you want depends on the room.
+**Covering the lamp** (R, built 2026-10-22): no light, no burn, and
+ghosts can't notice you, at the price of the dark wearing on your stamina
+and a shard to relight. **Later:** a second kind of threat that lives in
+the dark (section 6), so light and dark each have dangers and which one
+you want depends on the room.
 
 ## 11. Walked paths stay alive (later)
 
@@ -474,6 +503,102 @@ slowly dim and gather dust. Planners call these desire paths.
   lamp fuel to cross again.
 - Hold it until the lamp, waypoints and waystones have proved themselves.
   Decay is invisible complexity, and a maintenance game isn't the goal.
+
+## 12. Psychic stamina, and ghosts that stay
+
+**Ghosts stay.** Catching them in jars made a stealth threat into an easy
+lure, and they're one of the few things that make you slow down and think
+about where you stand. So nothing removes them, and **a room can't be
+rerolled while a ghost is in it**. You manage ghosts instead: they're drawn
+to pixies (section 14).
+
+**Psychic stamina** is the consequence. A meter that's a health bar in all
+but name:
+
+- **A ghost's touch** knocks a chunk off and drains it for as long as you
+  stay in reach. Once a ghost has hold of you its reach swells a little,
+  so you have to hustle; clear of it, it shrinks back.
+- **The dark** drains it more slowly (about 12 s from full): an empty or
+  covered lamp, away from a lit sconce.
+- **Empty: you pass out** and wake at your last waystone, with only your
+  position lost.
+- **It comes back** in light, once nothing has drained it for a moment.
+
+**Why a meter, not a respawn on contact:** you can push a door open into a
+closet with a ghost in it and have no time to react. A hit you can walk
+away from keeps that fair, without a pile of placement rules.
+
+**Later:** different drain rates for ghosts and the dark; things that
+restore stamina; covering the lantern on purpose (section 10).
+
+## 13. Entropy wells
+
+A basin in the floor that pours entropy into your lamp while you stand in
+it, up to a charge, and then runs dry. A **local, depletable** source:
+something to plan a route around, unlike shards (one-off) or the lamp's
+own drain (everywhere).
+
+- **Surge wells** come back all at once after a long cooldown.
+- **Trickle wells** start refilling soon after you last drew on them, and
+  slowly, so there's always a little to come back for.
+
+Both exist, so a room's well is a small decision: a surge well is a big
+drink later; a trickle well is a reason to pass by often.
+
+**Each shows its clock in the world.** A surge well's rim has notches that
+light one by one through its cooldown, and the pool bursts back when the
+last one lights. A trickle well has a drip: a drop slowly forms while it
+waits, then drops fall and the pool grows. This is the rule for
+everything from here on (section 15).
+
+**Later:** *temporary* entropy with a potency that starts draining at once,
+so you can fill up but can't carry it across the map; wells you have to
+restore before they flow.
+
+## 14. Pixies, jars and the ecology
+
+**Pixies** are a second creature: small winged lights. Catch one in an
+empty jar; a jar holds one. A pixie jar does two things, and you have to
+choose:
+
+- **On a sigil** it powers the sigil (+1 entropy max).
+- **Anywhere else** it draws ghosts. They drift over and circle it, wander
+  off and come back, like moths. It's how you move a ghost out of your
+  way, never how you get rid of one.
+
+**The ecology** is the first step toward emergent behaviour: creatures
+respond to *tags*, through a small table of rules, not to each other by
+name. Ghosts seek pixies, pixies flee ghosts, pixies linger at wells. A
+jarred pixie is still a pixie, so jars draw ghosts with no jar rule; and
+since pixies gather at wells and ghosts at pixies, ghosts come to haunt
+wells, which no rule says.
+
+**Light is in the web too.** Your lamp is a presence (`light`, `lamp`,
+`player`), and so are lit sconces and awake waystones (`light`,
+`steady`). Pixies flee light, so you chase them down, or cover the lamp
+and creep up. Ghosts shy from steady light, so restoring a room pushes
+them back. And a ghost that comes near a pixie is *held* by it, turning
+away even from you: a jar dropped behind you peels a follower off. How to grow this into an ecosystem, and why,
+is in [`EMERGENCE.md`](EMERGENCE.md).
+
+## 15. Tell, don't label
+
+Every behaviour (an item's, an interaction's, a creature's) should
+telegraph itself in the world, not in a meter or an icon. The wells'
+rims and drips are the model; the lamp's stages, the shimmer and stream
+when something feeds it, a ghost leaning toward what draws it, a pixie
+flaring in its jar. The ghosts' "?", "!!" and rings are dev art to
+replace the same way. A general in-world timer (like the surge rim) could
+serve anything with a cooldown.
+
+## 16. Darker the farther out (later)
+
+The farther a path runs from a waystone (or the start), the darker and
+spookier it should get, until you restore it: the dungeon pushing back,
+and restoration as the way you push back. It's the "depth makes it
+stranger" idea measured from your anchors instead of from the root.
+Candidates: fewer sconces and more ghosts by distance from the nearest
+awake waystone; the light shorter; imprints and cracks heavier.
 
 ## First slice (built 2026-10-21)
 
@@ -519,12 +644,30 @@ sconces shelter the lamp, within a tile; travel picked on the map; the lamp
 as a fluid meter with a HUD of its own and a lamp you can read at a
 glance; push blocks movable again. Notes in [`PLAY.md`](PLAY.md).
 
+## Third slice (built 2026-10-22)
+
+From the voice-memo playtest (notes in [`PLAY.md`](PLAY.md)): ghosts stay
+and psychic stamina (section 12); entropy wells (section 13); pixies, jars
+and the ecology (section 14); ley lines and a fare for travel (section 9);
+slower pacing (section 10); rarer unmarked halls (section 8); the lamp's
+halo and embers, and awake waystones that glow.
+
+**Revised after playing it (2026-10-22):** pixies hold ghosts (even off
+a chase) and flee light; ghosts shy from steady light; the lamp in three
+blended stages, with R to cover and relight it; wells that show their
+clocks; ley links that stay once made; a bigger lamp HUD that shows what
+feeds it.
+
 **Next, after playtesting that:** what's at a waypoint varies (false flags,
 threats); setpieces ask for things from elsewhere; a reward for fully
-restoring one; maps as items.
+restoring one; maps as items; more creatures and rules for the ecology.
 
-**Later:** walked paths stay alive (section 11); covering the lantern and a
-threat in the dark; chapters of waypoints; seeds (section 4); secrets.
+**Separately, on its own branch:** an engine pass on room generation and
+archetypes (more irregular shapes, like the halls').
+
+**Later:** walked paths stay alive (section 11); a threat in the dark;
+darker the farther out (section 16); active travel (section 9); chapters
+of waypoints; seeds (section 4); secrets.
 
 ## Open questions
 
@@ -537,4 +680,6 @@ threat in the dark; chapters of waypoints; seeds (section 4); secrets.
   in a hand-made one. Pressed doors, false walls and rules you learn (not
   places you memorise) are candidates.
 - Does the lamp's drain rate feel like tension or like a nag? Tune by
-  playing.
+  playing. (Slowed once, 2026-10-22.)
+- Should the dark and a ghost drain stamina at different rates?
+- Should waking a waystone cost more, given travel now costs too?
