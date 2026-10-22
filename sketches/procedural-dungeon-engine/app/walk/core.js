@@ -114,6 +114,7 @@
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
     pushBlocks: [],      // push blocks in built rooms (see restore.js)
+    sconces: [],         // sconces in built rooms (see restore.js)
     time: 0,
     minimap: true,
     bigmap: null,        // { cx, cy, px } while the enlarged map is open
@@ -143,6 +144,7 @@
       marks: [],             // chalk marks drawn: [{ sx, sy, color, rot, base }] (quarter-tiles)
       doorstones: 0,         // open a door in a bare wall
       pushed: {},            // push blocks moved: { "spaceId:seed:id": { sx, sy, done } }
+      lit: {},               // sconces lit: { "spaceId:seed:id": true }
     };
   }
 

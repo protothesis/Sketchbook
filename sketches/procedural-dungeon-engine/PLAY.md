@@ -108,6 +108,14 @@ Determinism).
   be climbed, and jars and chalk can't go on them. Positions persist with
   the run; a rerolled room rolls a new one. See
   [`GAME-DESIGN.md`](GAME-DESIGN.md).
+- **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
+  sconce on a wall, chambers sometimes two. Never on a south wall: the
+  camera looks north and would only see its back. E, facing one in your
+  room, lights it from your lantern for **1 shard**, once. A lit sconce
+  burns for good (saved with the run) and lights the room around it: the
+  three lit sconces nearest you get real lights (a fixed pool, so lighting
+  more never recompiles materials). Doors carved later through a sconce's
+  wall take the sconce's place.
 - **Three kinds of item.** Every item belongs to one class, and the class
   decides how it behaves (`ITEMS` in `app/walk/items.js`):
   - **Pickups** (shards, keys) float and turn where they lie. Walk into

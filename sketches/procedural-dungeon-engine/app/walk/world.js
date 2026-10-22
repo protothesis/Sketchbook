@@ -171,7 +171,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const group = new THREE.Group();
     const rec = { id: space.id, group, edges: [], tiles: [], revealStart: reveal ? state.time : null };
     const entry = space.exits[0] && space.parentId ? space.exits[0].cell : DE.parseKey(space.cells[0]);
-    const tileAt = {};
+    const tileAt = {}, edgeAt = {}; // edgeAt: "x,y,f" -> { eg, beyond } for every wall or door edge
 
     for (const k of space.cells) {
       const c = DE.parseKey(k);
@@ -231,11 +231,13 @@ if (vDitherEW > 0.7 && south > 0.2) {
         eg.userData = { delay: dist * REVEAL_STEP + 0.12 };
         group.add(eg);
         rec.edges.push(eg);
+        edgeAt[ekey(c.x, c.y, f)] = { eg, beyond: fr.beyond };
       }
     }
 
     W.addSigil(space, tileAt);
     W.addPushBlocks(space, rec, tileAt);
+    W.addSconces(space, edgeAt);
 
     // Props ride on their cell's tile, so they assemble and dissolve with it.
     const pr = DP.props(space);
@@ -342,6 +344,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   }
 
   function forgetSpace(id) {
+    state.sconces = state.sconces.filter((sc) => sc.spaceId !== id);
     state.pushBlocks = state.pushBlocks.filter((b) => b.spaceId !== id);
     const sg = state.sigils.get(id);
     if (sg && sg.fx) scene.remove(sg.fx.group);

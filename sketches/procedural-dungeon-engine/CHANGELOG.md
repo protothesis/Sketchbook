@@ -253,6 +253,12 @@ All notable changes to this sketch are logged here, per
   to push it half a cell; E pulls it back toward you. Home, it locks, lights
   up and pays 1 charge once. New file `app/walk/restore.js`, loaded after
   `items.js`; positions are kept in `run.pushed`.
+- 2026-10-21: **Sconces**, the second restoration task (step 3 of
+  [`GAME-DESIGN.md`](GAME-DESIGN.md)). About 1 room in 3 has an unlit sconce
+  on a wall (`DP.sconces`, own `'sconce'` stream, never on south walls).
+  E lights it from your lantern for 1 shard, once; it stays lit
+  (`run.lit`) and lights the room, through a pool of three real lights
+  given to the nearest lit sconces.
 
 ### Fixed
 

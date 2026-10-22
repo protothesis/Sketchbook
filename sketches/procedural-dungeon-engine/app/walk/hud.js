@@ -31,6 +31,8 @@
         const it = near.it.item;
         cls = 'chalk';
         text = `${it.kind === 'chalk' ? `a stick of ${it.color || 'silver'} chalk` : 'a doorstone'} · ${verb} to take it`;
+      } else if (near.action === 'light') {
+        text = `an unlit sconce · ${verb} to light it from your lantern`;
       } else if (near.action === 'pull') {
         cls = 'jar';
         text = `a block out of place · push it home, or ${verb} to pull`;

@@ -1,12 +1,12 @@
 // Walk mode: restoration (GAME-DESIGN.md). Setting the dungeon right pays
 // entropy, once. For now: push blocks, each with a matching floor mark where
-// it belongs.
+// it belongs, and unlit sconces on the walls.
 (function (global) {
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, S, RADIUS, UNIT, state, savePlayer, easeOut, maxCharges,
-    inDoorMouth } = W;
+  const { DE, DP, RULES, THREE, S, RADIUS, UNIT, WALL_T, ekey, scene, state, savePlayer, easeOut,
+    maxCharges, ITEMS, inDoorMouth } = W;
 
   const SLIDE_TIME = 0.22; // seconds for a push to slide one half-cell
 
@@ -186,5 +186,105 @@
     }
   }
 
-  Object.assign(W, { addPushBlocks, pushBlock, pullNear, pull, updatePushBlocks });
+  // ---------------------------------------------------------------------------
+  // Sconces: unlit on a room's walls. E at one lights it from your lantern,
+  // for a shard of entropy, once. A lit sconce burns for good and lights the
+  // room around it.
+
+  const SCONCE_Y = 0.78;     // cells above the floor
+  const SCONCE_OUT = 0.12;   // cells from the wall's inner face to the flame
+  const SCONCE_REACH = 0.65; // cells, E reach to a sconce
+  const SCONCE_LIGHTS = 3;   // real lights, given to the lit sconces nearest you
+  const sconceGeo = {
+    plate: new THREE.BoxGeometry(0.11 * S, 0.17 * S, 0.02 * S),
+    arm: new THREE.BoxGeometry(0.025 * S, 0.025 * S, SCONCE_OUT * S),
+    cup: new THREE.CylinderGeometry(0.05 * S, 0.032 * S, 0.05 * S, 10),
+    flame: new THREE.ConeGeometry(0.028 * S, 0.1 * S, 8),
+  };
+  const ironMat = new THREE.MeshLambertMaterial({ color: 0x3b3530, emissive: 0x0a0806 });
+  const flameMat = new THREE.MeshBasicMaterial({ color: 0xffb35a });
+  // A fixed pool, always in the scene (intensity 0 when idle): changing the
+  // number of lights would recompile every material.
+  const sconceLights = Array.from({ length: SCONCE_LIGHTS }, () => {
+    const l = new THREE.PointLight(0xffa04f, 0, 4 * S, 1.6);
+    scene.add(l);
+    return l;
+  });
+
+  /** A room's sconces, mounted on their wall edges (riding the walls as they rise). */
+  function addSconces(space, edgeAt) {
+    for (const sd of DP.sconces(space)) {
+      const edge = edgeAt[ekey(sd.cell.x, sd.cell.y, sd.facing)];
+      if (!edge || state.exitAt.has(ekey(sd.cell.x, sd.cell.y, sd.facing))) continue; // that wall is a door now
+      const key = space.id + ':' + space.seed + ':' + sd.id;
+      const mount = new THREE.Group(); // local +z points into the room
+      mount.position.set(0, SCONCE_Y * S, -edge.beyond * WALL_T * S / 2);
+      mount.rotation.y = edge.beyond > 0 ? Math.PI : 0;
+      const plate = new THREE.Mesh(sconceGeo.plate, ironMat);
+      const arm = new THREE.Mesh(sconceGeo.arm, ironMat);
+      arm.position.set(0, -0.03 * S, SCONCE_OUT * S / 2);
+      const cup = new THREE.Mesh(sconceGeo.cup, ironMat);
+      cup.position.set(0, -0.01 * S, SCONCE_OUT * S);
+      const flame = new THREE.Mesh(sconceGeo.flame, flameMat);
+      flame.position.set(0, 0.06 * S, SCONCE_OUT * S);
+      for (const m of [plate, arm, cup]) m.castShadow = true;
+      mount.add(plate, arm, cup, flame);
+      edge.eg.add(mount);
+      const d = DE.DIRS[sd.facing], inset = 0.5 - WALL_T - SCONCE_OUT;
+      const sc = {
+        key, spaceId: space.id, flame, lit: !!state.run.lit[key], phase: sd.cell.x * 1.7 + sd.cell.y,
+        x: sd.cell.x + 0.5 + d.x * inset, y: sd.cell.y + 0.5 + d.y * inset, eg: edge.eg,
+      };
+      flame.visible = sc.lit;
+      state.sconces.push(sc);
+    }
+  }
+
+  /** E at an unlit sconce in your room, within reach and roughly ahead. */
+  function sconceNear(p) {
+    const here = state.exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))];
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    let best = null, bestD = SCONCE_REACH;
+    for (const sc of state.sconces) {
+      if (sc.lit || sc.spaceId !== here) continue;
+      const dx = sc.x - p.x, dy = sc.y - p.y, d = Math.hypot(dx, dy);
+      if (d >= bestD || (dx * fx + dy * fy) / (d || 1) < 0.3) continue;
+      bestD = d;
+      best = { action: 'light', sconce: sc };
+    }
+    return best;
+  }
+
+  function lightSconce(sc) {
+    const run = state.run;
+    sc.lit = true;
+    sc.flame.visible = true;
+    run.lit[sc.key] = true;
+    run.restored = (run.restored || 0) + 1;
+    let caption = '';
+    for (let i = 0; i < RULES.sconceShards; i++) caption = ITEMS.shard.take(run);
+    W.showCaption('the sconce catches · ' + caption);
+    savePlayer();
+    W.refreshHud();
+  }
+
+  /** Flames flicker; the nearest lit sconces get the real lights. */
+  function updateSconces() {
+    const p = state.player, t = state.time;
+    const near = state.sconces.filter((sc) => sc.lit && sc.eg.scale.y > 0.5)
+      .map((sc) => ({ sc, d: Math.hypot(sc.x - p.x, sc.y - p.y) }))
+      .filter((o) => o.d < 12).sort((a, b) => a.d - b.d);
+    for (const sc of state.sconces) {
+      if (sc.lit) sc.flame.scale.set(1, 1 + 0.18 * Math.sin(t * 13 + sc.phase) + 0.08 * Math.sin(t * 29 + sc.phase * 2), 1);
+    }
+    sconceLights.forEach((l, i) => {
+      const o = near[i];
+      if (!o) { l.intensity = 0; return; }
+      l.position.set(o.sc.x * S, (SCONCE_Y + 0.08) * S, o.sc.y * S);
+      l.intensity = 5 * (1 + 0.08 * Math.sin(t * 17 + o.sc.phase));
+    });
+  }
+
+  Object.assign(W, { addPushBlocks, pushBlock, pullNear, pull, updatePushBlocks, addSconces,
+    sconceNear, lightSconce, updateSconces });
 })(window);

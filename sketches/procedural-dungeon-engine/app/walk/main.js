@@ -10,7 +10,7 @@
     isLockedNow, save, savePlayer, migrateRun, dither, doorMat, buildWorld, easeOut, easeInOut,
     applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions, placeLamp,
     canClimb, climb, addMarkToWorld, addJarToWorld, useNear, collectPickups, updateItems,
-    pushBlock, updatePushBlocks, noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
+    pushBlock, updatePushBlocks, updateSconces, noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
     addGhost, lightReaches, updateGhosts, tmpV2, post, fxPerf, renderFrame, updatePrompt,
     showCaption, stanceEl, refreshHud, notice, REFRESH_HINT, drawMinimap, drawBigMap,
     showRecord, hideRecord } = W;
@@ -202,6 +202,7 @@
     });
     updateItems();
     updatePushBlocks(dt);
+    updateSconces();
   }
 
   function newExpedition() {

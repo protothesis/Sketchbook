@@ -56,6 +56,11 @@
     pushMinDepth: 1,
     pushColors: ['#e0a94a', '#57cdbf', '#c47be0', '#e86a6a'],
     restoreCharges: 1,
+    // Sconces: unlit, on a room's walls; lighting one pays shards, once.
+    sconceChance: 0.35,
+    sconceMinDepth: 1,
+    sconceSecond: 0.4,        // chambers: chance of a second sconce
+    sconceShards: 1,
     detailChance: 0.35,
     // Hash ghosts: about 1 room in 14; rooms on cracked (imprinted) floor
     // get a boost that grows with how much of the room is cracked.
@@ -342,6 +347,39 @@
   }
 
   /**
+   * Unlit sconces on this room's walls: [{ id, cell, facing }], the wall
+   * edge of `cell` that faces out of the room. Seeded on its own stream,
+   * from the walls the room was made with (doors added later by loops or
+   * doorstones don't shift the choice; walk mode just leaves out a sconce
+   * whose wall has since become a door).
+   */
+  function sconces(space) {
+    if (!space.parentId || space.deadEnd || space.depth < RULES.sconceMinDepth) return [];
+    const r = DE.deriveRng(space.seed, 'sconce');
+    if (!r.chance(RULES.sconceChance)) return [];
+    const n = space.archetype === 'chamber' && r.chance(RULES.sconceSecond) ? 2 : 1;
+    const own = new Set(space.cells);
+    const later = (e) => e.loopMade || (e.tags && e.tags.includes('carved'));
+    const doorEdges = new Set(space.exits.filter((e) => !later(e)).map((e) => e.cell.x + ',' + e.cell.y + ',' + e.facing));
+    const walls = [];
+    for (const k of space.cells.slice().sort()) {
+      const c = DE.parseKey(k);
+      for (const f of DE.FACINGS) {
+        const nb = DE.step(c, f);
+        // Not on south walls: the camera looks north, so it only ever sees their backs.
+        if (f === 'S' || own.has(DE.key(nb.x, nb.y)) || doorEdges.has(c.x + ',' + c.y + ',' + f)) continue;
+        walls.push({ cell: c, facing: f });
+      }
+    }
+    const out = [];
+    for (let i = 0; i < n && walls.length; i++) {
+      const w = walls.splice(Math.floor(r.next() * walls.length), 1)[0];
+      out.push({ id: 'sconce' + i, cell: w.cell, facing: w.facing });
+    }
+    return out;
+  }
+
+  /**
    * A room is committed (fixed) once a door out of it has ever been opened,
    * or a loop has opened a door into it. Until then it's provisional and can
    * be rerolled. Committing is for good: rerolling the room beyond doesn't
@@ -407,5 +445,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, sigil, props, ghostSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);
