@@ -103,7 +103,7 @@
       if (door) {
         door.locked = false;
         door.panel.material = doorMat;
-        door.seam.material = seamMat;
+        door.seam.material = door.point.material = seamMat;
       }
       // The door just opens now. The record / leave-the-dungeon screen
       // (showRecord) is kept for whatever a lock leads to later.

@@ -234,6 +234,9 @@ All notable changes to this sketch are logged here, per
   keep their bar and gain a point on the outside, toward where they'd
   open. The big map opens with **Tab** instead of M, so everything sits
   under the left hand.
+- 2026-10-21: Map walls are near-black. A closed door's point starts at its
+  bar's outer edge, and it shows in walk mode too, as an orange (or blue,
+  if locked) floor point just past the door.
 
 ### Fixed
 

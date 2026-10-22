@@ -145,7 +145,7 @@
     }
     // Walls: every cell edge that doesn't lead into the same room, so rooms
     // built wall to wall still read as separate.
-    ctx.strokeStyle = '#38363d'; // solid dark grey: apart from both the black and the rooms
+    ctx.strokeStyle = '#18171b'; // near-black, solid: just apart from the background
     ctx.lineWidth = Math.max(1.5, px * 0.1);
     ctx.beginPath();
     for (const id in exp.spaces) {
@@ -226,12 +226,14 @@
         ctx.fillRect(ox + Math.min(ax, bx) * px - (ay === by ? 0 : t), oy + Math.min(ay, by) * px - (ay === by ? t : 0),
           Math.abs(bx - ax) * px + (ay === by ? 0 : 2 * t), Math.abs(by - ay) * px + (ay === by ? 2 * t : 0));
         if (!conn) {
-          const d = DE.DIRS[ex.facing], mx = (ax + bx) / 2, my = (ay + by) / 2;
-          const hx = (bx - ax) * 0.3, hy = (by - ay) * 0.3;
+          // Base on the bar's outer edge, point out from there.
+          const d = DE.DIRS[ex.facing];
+          const mx = ox + (ax + bx) / 2 * px + d.x * t, my = oy + (ay + by) / 2 * px + d.y * t;
+          const hx = (bx - ax) * 0.3 * px, hy = (by - ay) * 0.3 * px;
           ctx.beginPath();
-          ctx.moveTo(ox + (mx - hx) * px, oy + (my - hy) * px);
-          ctx.lineTo(ox + (mx + hx) * px, oy + (my + hy) * px);
-          ctx.lineTo(ox + (mx + d.x * 0.3) * px, oy + (my + d.y * 0.3) * px);
+          ctx.moveTo(mx - hx, my - hy);
+          ctx.lineTo(mx + hx, my + hy);
+          ctx.lineTo(mx + d.x * 0.3 * px, my + d.y * 0.3 * px);
           ctx.closePath();
           ctx.fill();
         }

@@ -80,8 +80,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
   const doorOpenMat = withDither(new THREE.MeshLambertMaterial({ color: 0x2b211b }), DOOR_DITHER);
   const lockMat = withDither(new THREE.MeshLambertMaterial({ color: 0x323941, emissive: 0x08111a }), DOOR_DITHER);
   const bandMat = withDither(new THREE.MeshLambertMaterial({ color: 0x5d6670, emissive: 0x0c1218 }), DOOR_DITHER);
-  const seamMat = new THREE.MeshBasicMaterial({ color: SEAM });
-  const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM });
+  const seamMat = new THREE.MeshBasicMaterial({ color: SEAM, side: THREE.DoubleSide }); // double: the door's point can be mirrored
+  const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM, side: THREE.DoubleSide });
   geo.chalk = new THREE.CylinderGeometry(0.03 * S, 0.03 * S, 0.22 * S, 8);
   geo.doorstone = new THREE.BoxGeometry(0.15 * S, 0.21 * S, 0.05 * S);
   geo.doorstoneInset = new THREE.BoxGeometry(0.07 * S, 0.12 * S, 0.006 * S);
@@ -312,13 +312,19 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const seam = new THREE.Mesh(geo.seam, locked ? lockSeamMat : seamMat);
     seam.position.set(0, 0.02, 0);
     seam.visible = !ex.connectionId;
+    // A closed door's point: off the bar's outer edge, toward where it opens.
+    // A child of the bar, so it shows and hides with it.
+    const point = new THREE.Mesh(geo.arrow, seam.material);
+    point.position.set(0, 0.01, beyond * 0.1 * S);
+    point.scale.z = beyond;
+    seam.add(point);
     const arrow = new THREE.Mesh(geo.arrow, arrowMat);
     arrow.position.y = 0.03;
     arrow.scale.z = beyond; // local +z, flipped to point out of this space
     arrow.visible = !!DP.childThrough(state.exp, space.id, ex);
     edgeGroup.add(pivot, seam, arrow);
     const door = {
-      key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, arrow, locked,
+      key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, point, arrow, locked,
       openAngle: -beyond * SWING_ANGLE, t: ex.connectionId ? 1 : 0, dir: 0,
     };
     pivot.rotation.y = door.openAngle * door.t;
