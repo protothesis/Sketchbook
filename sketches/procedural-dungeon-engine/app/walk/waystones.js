@@ -180,6 +180,7 @@
     run.chargesSpent += cost;
     st.awake = true;
     run.waystones[st.key] = true;
+    linkStone(st);
     run.hearth = st.key;
     const sp = state.exp.spaces[st.spaceId];
     const n = revealWaypoints(DP.centerOf(sp), DP.waypointCount(state.exp, sp));
@@ -191,20 +192,47 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Ley lines: the travel network. Each awake waystone joins its
-  // RULES.leyNeighbours nearest awake ones, and a minimum spanning tree
-  // over them all keeps the network in one piece. Travel rides the lines:
-  // the trip goes by the fewest lines (the shorter way on a tie), and each
-  // line costs RULES.travelShardsPerHop shards.
+  // Ley lines: the travel network. Links are made when you wake a stone:
+  // it joins its RULES.leyNeighbours nearest awake stones, and the links
+  // stay (run.ley), so the network grows in the order you woke them. Every
+  // new stone links to one already in the network, so it's always in one
+  // piece. Travel rides the lines: the trip goes by the fewest lines (the
+  // shorter way on a tie), and each line costs RULES.travelShardsPerHop
+  // shards. (Later: re-tuning links on purpose.)
 
   const centre = (st) => ({ x: (st.ws.x0 + st.ws.x1) / 2, y: (st.ws.y0 + st.ws.y1) / 2 });
   let leyCache = { sig: '', edges: [] };
 
-  /** The network's lines: [[a, b]] (waystone records), recomputed only when the awake set changes. */
+  /** Link a newly woken stone to its nearest awake stones, for good. */
+  function linkStone(st) {
+    const run = state.run;
+    leyLines(); // a save from before stored links builds them first
+    const c = centre(st);
+    const others = state.waystones.filter((o) => o.awake && o !== st)
+      .sort((a, b) => Math.hypot(centre(a).x - c.x, centre(a).y - c.y) - Math.hypot(centre(b).x - c.x, centre(b).y - c.y));
+    for (const o of others.slice(0, RULES.leyNeighbours)) {
+      if (!run.ley.some(([a, b]) => (a === st.key && b === o.key) || (a === o.key && b === st.key))) run.ley.push([o.key, st.key]);
+    }
+  }
+
+  /** The network's lines: [[a, b]] (waystone records), from run.ley. */
   function leyLines() {
-    const awake = state.waystones.filter((o) => o.awake).sort((a, b) => (a.key < b.key ? -1 : 1));
-    const sig = awake.map((o) => o.key).join('|');
+    const run = state.run;
+    if (!run.ley) run.ley = tidyNetwork().map(([a, b]) => [a.key, b.key]);
+    const sig = run.rootSeed + '|' + run.ley.length + '|' + state.waystones.length;
     if (sig === leyCache.sig) return leyCache.edges;
+    const byKey = new Map(state.waystones.map((o) => [o.key, o]));
+    const edges = run.ley.map(([a, b]) => [byKey.get(a), byKey.get(b)]).filter(([a, b]) => a && b && a.awake && b.awake);
+    leyCache = { sig, edges };
+    return edges;
+  }
+
+  /**
+   * For a save from before stored links: the tidiest network over the stones
+   * already awake (each joins its nearest, plus a minimum spanning tree).
+   */
+  function tidyNetwork() {
+    const awake = state.waystones.filter((o) => o.awake).sort((a, b) => (a.key < b.key ? -1 : 1));
     const n = awake.length, pts = awake.map(centre);
     const dist = (i, j) => Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
     const seen = new Set(), edges = [];
@@ -229,7 +257,6 @@
       add(best.i, best.j);
       inTree.add(best.j);
     }
-    leyCache = { sig, edges };
     return edges;
   }
 

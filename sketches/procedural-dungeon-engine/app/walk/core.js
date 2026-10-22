@@ -145,6 +145,8 @@
       ghostSeen: [], // "spaceId:seed:ghost" for rooms whose ghost roll has happened
       ghosts: [],    // saved positions: [{ id, x, y, mode }]
       stamina: 1,    // psychic stamina, 0..1 (see lamp.js)
+      lampOn: true,  // false while covered or out (R relights it)
+      ley: null,     // ley lines made so far: [["spaceId:seed", "spaceId:seed"]] (null: not yet built, see waystones.js)
       pixieSeen: [], // "spaceId:seed:pixie" for rooms whose pixie roll has happened
       pixies: [],    // free pixies' saved positions: [{ id, x, y }]
       wells: {},     // entropy wells drawn on: { "spaceId:seed:well": { level, drawn } } (see wells.js)

@@ -90,14 +90,24 @@
     lampGrace: 3,
     lampFullCharges: 3,
     lampDanger: 1,
+    // The lamp's three stages, by fuel: uneasy (a little more flicker and
+    // wobble) at lampUneasy charges or less, danger (clear flicker) at
+    // lampDanger, dying (the flicker settles into a slow, irregular fade,
+    // swelling as you move) at lampDying. Blended, never stepped.
+    lampUneasy: 2,
+    lampDying: 0.5,
+    // R relights the lamp (out of fuel, or covered) for this many shards;
+    // R while lit covers it, for free. Entropy alone doesn't relight it.
+    relightShards: 1,
     // Psychic stamina (GAME-DESIGN.md, section 12): a meter from 0 to 1. A
     // ghost's touch knocks off staminaHit and drains it for as long as you
-    // stay in the ghost's (swollen) reach; an empty lamp drains it too, at
-    // the same rate, while you're out of a sconce's light. Empty: you pass
+    // stay in the ghost's (swollen) reach; the dark (an empty or covered
+    // lamp, away from a sconce's light) drains it more slowly. Empty: you pass
     // out and wake at your last waystone. It refills once nothing has
     // drained it for staminaRegenDelay seconds and you're in light.
     staminaHit: 0.15,
-    staminaDrain: 0.2,        // per second: a full meter lasts 5 s
+    staminaDrain: 0.2,        // per second in a ghost's reach: a full meter lasts 5 s
+    staminaDarkDrain: 0.08,   // per second in the dark: about 12 s
     staminaRegen: 0.12,       // per second
     staminaRegenDelay: 1.5,
     // Halls (setpieces at waypoints): sizes, and what they always hold.

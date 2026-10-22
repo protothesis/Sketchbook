@@ -19,7 +19,7 @@
   // back up when there's headroom. At full screen on a 2x display this took
   // the effect from ~15 ms a frame to a few.
   const post = (() => {
-    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.UnsignedByteType, samples: 0 });
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.UnsignedByteType, samples: 0, stencilBuffer: true }); // the figure's silhouette uses the stencil
     rt.texture.colorSpace = THREE.SRGBColorSpace;
     const mat = new THREE.ShaderMaterial({
       uniforms: {

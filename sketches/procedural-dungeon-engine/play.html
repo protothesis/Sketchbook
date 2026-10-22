@@ -40,12 +40,12 @@
 
   <!-- The lamp: your entropy, burning down. -->
   <div id="lamp" class="lamp-hud" aria-label="Lamp">
-    <div id="lamp-icon" class="lamp-icon" aria-hidden="true">
-      <svg viewBox="0 0 24 32" width="24" height="32">
+    <div id="lamp-icon" class="lamp-icon" title="Cover or relight the lamp (R)">
+      <svg viewBox="0 0 24 32" width="48" height="64">
         <path d="M8 6 a4 4 0 0 1 8 0" fill="none" stroke="#8d8578" stroke-width="1.6" />
         <rect x="6" y="6" width="12" height="3" rx="1" fill="#8d8578" />
         <rect x="7" y="9" width="10" height="16" rx="2" fill="none" stroke="#8d8578" stroke-width="1.4" />
-        <path class="flame" d="M12 12 C15 16 15 19 12 22 C9 19 9 16 12 12 Z" fill="currentColor" />
+        <g id="lamp-flame" class="flame-h"><path class="flame" d="M12 12 C15 16 15 19 12 22 C9 19 9 16 12 12 Z" fill="currentColor" /></g>
         <rect x="6" y="25" width="12" height="3" rx="1" fill="#8d8578" />
       </svg>
     </div>
@@ -61,7 +61,7 @@
   <p id="caption" class="caption"></p>
 
   <div class="hud bottom-left help">
-    <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> crouch · <kbd>E</kbd> interact · <kbd>F</kbd> use item · <kbd>1</kbd>–<kbd>9</kbd> select ·
+    <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> crouch · <kbd>E</kbd> interact · <kbd>F</kbd> use item · <kbd>R</kbd> lamp · <kbd>1</kbd>–<kbd>9</kbd> select ·
     <kbd>Tab</kbd> map · <kbd>N</kbd> new
   </div>
 

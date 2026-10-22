@@ -32,6 +32,8 @@
     contact: 0.34,       // cells, figure to ghost
     swell: 0.8,          // cells: its reach once it's touching you
     swellShrink: 1,      // s for the reach to shrink back once you're clear
+    shySpeed: 0.6,       // cells/s, backing out of steady light (the ecology's flee rule)
+    lean: 0.35,          // radians: a ghost drawn to something leans toward it
     markRooms: 1,        // an idle ghost off screen gets a marker this many rooms away or nearer
     markRange: 14,       // cells: and only within this distance
     wanderSpeed: 0.35,
@@ -294,7 +296,7 @@
   function wander(g, dt) {
     if (g.pause > 0) { g.pause -= dt; return; }
     if (!g.target) g.target = W.ecology.seek('ghost', g); // drawn to something (a pixie)?
-    if (!g.target) {
+    for (let i = 0; i < 5 && !g.target; i++) {
       const exp = state.exp;
       const here = exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))];
       if (here === undefined) return;
@@ -308,12 +310,15 @@
         }
       }
       const cell = DE.parseKey(sp.cells[Math.floor(Math.random() * sp.cells.length)]);
-      g.target = { x: cell.x + 0.2 + Math.random() * 0.6, y: cell.y + 0.2 + Math.random() * 0.6 };
+      const tx = cell.x + 0.2 + Math.random() * 0.6, ty = cell.y + 0.2 + Math.random() * 0.6;
+      if (!W.ecology.shuns('ghost', tx, ty, g)) g.target = { x: tx, y: ty }; // not into steady light
       g.next = null; g.pathT = 0;
     }
-    if (followPath(g, g.target.x, g.target.y, GHOST.wanderSpeed, dt)) {
+    if (!g.target) return;
+    const rule = g.target.rule; // a goal from the ecology carries its rule
+    if (followPath(g, g.target.x, g.target.y, rule && rule.speed || GHOST.wanderSpeed, dt)) {
       g.target = null;
-      g.pause = 1 + Math.random() * 2.5;
+      g.pause = rule && rule.pause ? rule.pause[0] + Math.random() * (rule.pause[1] - rule.pause[0]) : 1 + Math.random() * 2.5;
     }
   }
 
@@ -323,9 +328,24 @@
     const lamp = { x: lantern.position.x / S, y: lantern.position.z / S, h: lantern.position.y / S };
     let nearest = Infinity, touching = false;
     for (const g of state.ghosts.slice()) {
-      const lit = lightReaches(lamp, { x: g.x, y: g.y, h: g.h });
+      // A covered or empty lamp can't be noticed. A ghost held by something
+      // it's drawn to (a pixie, by the ecology's rules) forgets you.
+      const held = frozen ? g.held : W.ecology.heldBy('ghost', g);
+      g.held = held;
+      const lit = W.lampOn() && lightReaches(lamp, { x: g.x, y: g.y, h: g.h }) && !held;
       g.litNow = lit;
-      if (!frozen) {
+      if (!frozen && held && g.mode !== 'wander' && g.stun <= 0) {
+        g.mode = 'wander'; g.lit = 0; g.ring = 0; g.dark = 0; g.target = null; g.pause = 0;
+        W.showCaption('a hash ghost turns from you to the pixie');
+      }
+      // Steady light (a lit sconce, an awake waystone): it backs away.
+      const shy = !frozen && W.ecology.flee('ghost', g);
+      if (shy) {
+        const d = Math.hypot(shy.x, shy.y) || 1;
+        driftToward(g, g.x + shy.x / d * 0.3, g.y + shy.y / d * 0.3, GHOST.shySpeed, dt);
+        if (g.mode === 'wander') { g.target = null; g.pause = 0; }
+      }
+      if (!frozen && !shy) {
         // Bump into one and it's onto you at once, though it reels for a beat first.
         if (g.mode !== 'chase' && Math.hypot(p.x - g.x, p.y - g.y) < GHOST.contact && p.z < 0.6) {
           g.mode = 'chase'; g.ring = 1; g.dark = 0; g.stun = GHOST.stun; g.next = null; g.pathT = 0; g.target = null;
@@ -390,6 +410,12 @@
         (g.x + (Math.random() - 0.5) * jit) * S,
         (g.h + Math.sin(g.phase * 1.7) * 0.05) * S,
         (g.y + (Math.random() - 0.5) * jit) * S);
+      // Drawn to something: it leans toward it (tilting its wisp), easing in and out.
+      const pull = g.held ? g.held.target : g.target && g.target.target;
+      const lx = pull ? pull.x - g.x : 0, ly = pull ? pull.y - g.y : 0, ld = Math.hypot(lx, ly) || 1;
+      const k = Math.min(1, dt * 3);
+      g.mesh.rotation.z += ((pull ? -lx / ld * GHOST.lean : 0) - g.mesh.rotation.z) * k;
+      g.mesh.rotation.x += ((pull ? ly / ld * GHOST.lean : 0) - g.mesh.rotation.x) * k;
       g.mat.emissive.setHex(chasing ? 0x6a1f7a : 0x24185a);
       g.mat.opacity = chasing ? 0.62 + Math.sin(g.phase * 23) * 0.08 : 0.5;
       // Status icon while it's deciding about you or following you.
@@ -403,7 +429,7 @@
       }
       const watching = g.mode === 'alert';
       g.bits.forEach((b, i) => {
-        const a = g.phase * (g.stun > 0 ? 0.2 : chasing ? 4 : watching ? 0.6 : 1.6) + i * Math.PI / 2;
+        const a = g.phase * (g.stun > 0 ? 0.2 : chasing ? 4 : watching ? 0.6 : g.held ? 3.2 : 1.6) + i * Math.PI / 2;
         b.position.set(Math.cos(a) * 0.24 * S, Math.sin(g.phase * 3 + i) * 0.08 * S, Math.sin(a) * 0.24 * S);
         b.rotation.set(a, a * 1.3, 0);
       });

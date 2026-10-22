@@ -43,8 +43,10 @@ Nearly every emergent system has the same five parts.
 
    | who | responds to | how | detail |
    | --- | --- | --- | --- |
-   | ghost | pixie | seek | 70% of wander goals, circles it, within 12 cells and a room |
+   | ghost | pixie | seek | 90% of wander goals, circles it, within 12 cells and a room; within 2.5 cells it *holds* the ghost, even off a chase |
+   | ghost | steady | flee | within 1.6 cells (lit sconces, awake waystones) |
    | pixie | ghost | flee | within 2.2 cells, harder when closer |
+   | pixie | light | flee | within 2.5 cells (your lamp, while lit) |
    | pixie | well | seek | 50% of goals, its own room |
 
 4. **A shared medium.** Things only affect each other through space: the
@@ -77,7 +79,8 @@ than the rule count.
   Players learn rules by watching, then exploit them, and exploiting a
   system is the fun. One exception ("except in closets") breaks the
   learning.
-- **Make causes visible.** Emergence the player can't read looks like
+- **Make causes visible.** (See also GAME-DESIGN.md, section 15: tell,
+  don't label.) Emergence the player can't read looks like
   randomness. Every creature should show what it's doing and why: the
   ghost's "?" and "!!" do this today. A ghost circling a jar should *look*
   drawn to it. When we add a rule, we add a tell.
@@ -101,12 +104,16 @@ The first pass is a **tag + rule table** with two verbs (seek, flee). It's
 small on purpose. These are the next steps, roughly in order, each one
 playable on its own:
 
-1. **Fold the hard-coded behaviours into the table.** Ghosts noticing your
-   lamp is special-case code today. Make light a presence: the lamp wears
-   `light` (and so do lit sconces and awake waystones), and "ghost notices
-   light" becomes a rule. Then a pixie could seek light too, and follow
-   your lamp, which draws ghosts to *you*. Interesting tension, from one
-   row.
+1. **Put the player and light in the web.** *Done (2026-10-22).* Your
+   lamp is a presence (`light`, `lamp`, `player`), and so are lit sconces
+   and awake waystones (`light`, `steady`). Pixies flee light, so you
+   chase them, or cover the lamp and creep up; ghosts shy from steady
+   light, so restored rooms push them back. A `hold` on a seek rule lets a
+   pixie pull a ghost off you. Still hard-coded: the ghost's own
+   notice-and-follow routine, which reads the lamp directly. It could
+   become rules later (ghost notices `lamp`), but its two-stage noticing
+   is a routine, not a reaction, so it may well stay a small state
+   machine that reads the ecology.
 2. **A debug overlay.** Lines from each creature to what it's seeking or
    fleeing. Emergent systems are hard to tune blind.
 3. **Stimuli with strength and reach,** instead of bare points: light that

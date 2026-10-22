@@ -39,6 +39,17 @@
       '#include <clipping_planes_fragment>\nif (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5) discard;');
   };
   ghostMat.customProgramCacheKey = () => 'ghost';
+  // The figure is one thing: where any part of it is drawn (body, head,
+  // lamp), it marks the stencil, and the silhouette skips those pixels. So
+  // the head in front of the body, or the lamp in front of either, never
+  // dithers the figure itself; only something else in front does.
+  const FIGURE_STENCIL = 1;
+  for (const mat of [bone, lanternMesh.material]) {
+    Object.assign(mat, { stencilWrite: true, stencilRef: FIGURE_STENCIL, stencilFunc: THREE.AlwaysStencilFunc,
+      stencilZPass: THREE.ReplaceStencilOp });
+  }
+  Object.assign(ghostMat, { stencilWrite: true, stencilRef: FIGURE_STENCIL, stencilFunc: THREE.NotEqualStencilFunc,
+    stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp, stencilZPass: THREE.KeepStencilOp });
   for (const m of [body, head]) {
     const g = new THREE.Mesh(m.geometry, ghostMat);
     g.position.copy(m.position);

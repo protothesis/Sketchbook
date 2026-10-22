@@ -682,13 +682,21 @@
     if (u.log.length > 50) u.log.shift();
   }
 
-  /** A pixie in a jar flits about inside it. */
+  /**
+   * A pixie in a jar flits about inside it. With a ghost drawn close (within
+   * JAR_FLARE cells), it flares: bigger, and beating at the glass.
+   */
+  const JAR_FLARE = 2.5;
   function updateJars() {
     for (const j of state.jars) {
+      const jx = j.sx / 2 + 0.25, jy = j.sy / 2 + 0.25;
+      const near = j.fill ? state.ghosts.reduce((m, g) => Math.min(m, Math.hypot(g.x - jx, g.y - jy)), Infinity) : Infinity;
+      const flare = Math.max(0, 1 - near / JAR_FLARE);
       j.mesh.userData.wisps.forEach((w, i) => {
         w.visible = i < j.fill;
-        const a = state.time * 2.6 + i * 2.1;
-        w.position.set(Math.cos(a) * 0.06 * S, (0.15 + Math.sin(a * 1.7) * 0.05) * S, Math.sin(a * 1.3) * 0.06 * S);
+        const a = state.time * (2.6 + 5 * flare) + i * 2.1, r = 0.06 + 0.04 * flare;
+        w.position.set(Math.cos(a) * r * S, (0.15 + Math.sin(a * 1.7) * 0.05) * S, Math.sin(a * 1.3) * r * S);
+        w.scale.setScalar(1 + flare * (0.7 + 0.3 * Math.sin(state.time * 14)));
       });
     }
   }

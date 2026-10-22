@@ -3,17 +3,25 @@
 // (`run.fuel`): a shard adds a third of a charge, rerolls and waystones
 // spend whole charges, and the lamp burns it steadily, except within a tile
 // of a lit sconce. A gain holds the burn for a moment (RULES.lampGrace), so
-// a charge you just earned doesn't start draining that instant. When it
-// runs out the lamp goes dark, and the dark wears on your psychic stamina.
+// a charge you just earned doesn't start draining that instant.
+//
+// When the fuel runs out the lamp goes out, and stays out until you relight
+// it with R (a shard). R while it's lit covers it: no light, no burn, and
+// ghosts can't notice you, but the dark wears on your psychic stamina.
 //
 // Psychic stamina is your other meter (GAME-DESIGN.md, section 12). A
-// ghost's touch drains it, and so does the dark. Empty, you pass out and
-// wake at your last waystone. It refills in light once nothing drains it.
+// ghost's touch drains it, and so does the dark, more slowly. Empty, you
+// pass out and wake at your last waystone. It refills in light once
+// nothing drains it.
 //
-// You should feel the lamp without looking at the meter: as the fuel falls,
-// its colour goes from yellow through orange and red to grey and starts to
-// flicker, its halo shrinks and fades, its embers thin out, and the light
-// itself gets dimmer and shorter.
+// You should feel the lamp without looking at the meter. It has three
+// stages, blended (RULES.lampUneasy, lampDanger, lampDying): uneasy, a
+// little more flicker and wobble; danger, a clear flicker; dying, the
+// flicker settles into a slow irregular fade that swells as you move, and
+// the odd red ember. Through all of it the colour slides from yellow to
+// red, the halo shrinks (but can still wobble out past its average), the
+// light gets dimmer, redder and shorter, and near the end a faint ring on
+// the floor shows how far it still reaches.
 (function (global) {
   'use strict';
 
@@ -23,6 +31,7 @@
 
   const PER_SHARD = 1 / RULES.shardsPerCharge;
   const DRAIN = PER_SHARD / RULES.lampSeconds; // charges per second
+  const RELIGHT = RULES.relightShards * PER_SHARD;
 
   // ---------------------------------------------------------------------------
   // Fuel
@@ -36,11 +45,11 @@
   function gainFuel(amount, quiet) {
     const run = state.run, max = maxCharges();
     const add = Math.max(0, Math.min(amount, max - run.fuel));
-    const wasOut = run.fuel <= 0;
+    const couldnt = run.fuel < RELIGHT - 1e-6;
     run.fuel += add;
     state.lampGrace = RULES.lampGrace;
     if (add > 1e-6 && !quiet) popEntropy(add);
-    if (wasOut && add > 1e-6) W.showCaption('your lamp catches again');
+    if (!run.lampOn && couldnt && run.fuel >= RELIGHT - 1e-6) W.showCaption(`enough entropy to relight your lamp · ${relightKey()}`);
     return add;
   }
 
@@ -49,6 +58,7 @@
     const run = state.run;
     if (run.fuel < amount - 1e-6) return false;
     run.fuel = Math.max(0, run.fuel - amount);
+    if (run.fuel <= 0 && run.lampOn) putOut();
     return true;
   }
 
@@ -67,9 +77,44 @@
 
   /** Is this spot sheltered by a lit sconce (its tile, or one of the 8 around it, same room)? */
   function litAt(p) {
+    return !!shelterAt(p);
+  }
+  function shelterAt(p) {
     const cx = Math.floor(p.x), cy = Math.floor(p.y);
-    return state.sconces.some((sc) => sc.lit && sc.spaceId === p.spaceId &&
-      Math.abs(sc.cell.x - cx) <= 1 && Math.abs(sc.cell.y - cy) <= 1);
+    return state.sconces.find((sc) => sc.lit && sc.spaceId === p.spaceId &&
+      Math.abs(sc.cell.x - cx) <= 1 && Math.abs(sc.cell.y - cy) <= 1) || null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lit, covered, out: R relights or covers
+
+  const lampOn = () => !!state.run.lampOn && state.run.fuel > 0;
+  const relightKey = () => (W.verbF === 'tap' ? 'tap the lamp' : 'R');
+
+  function putOut() {
+    state.run.lampOn = false;
+    W.showCaption(`your lamp goes out · find entropy, then ${relightKey()} to relight it`);
+  }
+
+  /** R (or tapping the lamp): relight it for a shard, or cover it. */
+  function toggleLamp() {
+    const run = state.run;
+    if (state.paused || state.gutter) return;
+    if (run.lampOn) {
+      run.lampOn = false;
+      run.covers = (run.covers || 0) + 1;
+      W.showCaption(`you cover your lamp · ghosts can't see you, but the dark wears on you · ${relightKey()} to relight`);
+    } else if (!spendFuel(RELIGHT)) {
+      W.showCaption(`not enough entropy to relight: ${RULES.relightShards} shard`);
+      return;
+    } else {
+      run.lampOn = true;
+      run.relights = (run.relights || 0) + 1;
+      state.lampGrace = RULES.lampGrace;
+      W.showCaption(`your lamp catches · −${RULES.relightShards} shard`);
+    }
+    savePlayer();
+    updateLampHud(true);
   }
 
   // ---------------------------------------------------------------------------
@@ -89,7 +134,7 @@
     let mode = 'burning';
     if (state.paused || state.bigmap) mode = 'paused';
     else if (litAt(p)) mode = 'sheltered';
-    else if (run.fuel <= 0) mode = 'dark';
+    else if (!lampOn()) mode = 'dark';
     else if (state.lampGrace > 0) mode = 'held';
     state.lampGrace = Math.max(0, (state.lampGrace || 0) - (mode === 'paused' ? 0 : dt));
     lampMode = mode;
@@ -98,7 +143,7 @@
       const before = run.fuel;
       run.fuel = Math.max(0, run.fuel - DRAIN * dt);
       run.lampBurned = (run.lampBurned || 0) + (before - run.fuel);
-      if (run.fuel <= 0) W.showCaption('your lamp goes out · the dark presses in · find light');
+      if (run.fuel <= 0) putOut();
       else if (before > RULES.lampDanger && run.fuel <= RULES.lampDanger) W.showCaption('your lamp is running low');
     }
     updateStamina(dt, mode);
@@ -107,7 +152,7 @@
   /**
    * Psychic stamina: a ghost's touch (state.ghostTouch, from ghosts.js)
    * knocks a chunk off once and drains it while you stay in its reach; the
-   * dark drains it at the same rate. In light, with nothing draining it for
+   * dark drains it too, more slowly. In light, with nothing draining it for
    * a moment, it refills.
    */
   function updateStamina(dt, mode) {
@@ -116,7 +161,7 @@
     if (touch && !state.wasTouched) run.stamina -= RULES.staminaHit;
     state.wasTouched = touch;
     if (touch || dark) {
-      run.stamina -= RULES.staminaDrain * dt;
+      run.stamina -= ((touch ? RULES.staminaDrain : 0) + (dark ? RULES.staminaDarkDrain : 0)) * dt;
       staminaIdle = 0;
     } else {
       staminaIdle += dt;
@@ -141,6 +186,7 @@
     state.gutter = null;
     state.paused = false;
     run.fuel = Math.max(run.fuel, RULES.chargesStart);
+    run.lampOn = true;
     run.stamina = 1;
     run.gutters = (run.gutters || 0) + 1;
     state.lampGrace = RULES.lampGrace;
@@ -155,17 +201,49 @@
   }
 
   // ---------------------------------------------------------------------------
-  // How the lamp looks: colour, halo, embers, light
+  // How the lamp looks: colour, halo, light, floor ring, embers, streams
 
   /** 0..1: full at RULES.lampFullCharges or more, 0 when empty. */
   function lampLevel() {
     return THREE.MathUtils.clamp(state.run.fuel / RULES.lampFullCharges, 0, 1);
   }
 
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const smooth = (a, b, x) => { const k = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
+  const between = (r) => r[0] + Math.random() * (r[1] - r[0]);
+
+  /**
+   * How unsettled the flame is, by fuel: `flick` is the fast flicker's
+   * depth, `fade` the slow irregular fade's. Points in between blend, so
+   * the stages never pop. Fuel: full ... uneasy (2) ... danger (1) ...
+   * dying (0.5) ... empty.
+   */
+  const UNREST = [ // [fuel, flick, fade]
+    [0, 0.02, 0.5],
+    [RULES.lampDying / 2, 0.06, 0.4],
+    [RULES.lampDying, 0.28, 0.2],
+    [RULES.lampDanger, 0.38, 0.05],
+    [(RULES.lampDanger + RULES.lampUneasy) / 2, 0.2, 0],
+    [RULES.lampUneasy, 0.08, 0],
+    [RULES.lampFullCharges, 0.03, 0],
+  ];
+  function unrest(fuel) {
+    for (let i = 1; i < UNREST.length; i++) {
+      const [f1, k1, d1] = UNREST[i];
+      if (fuel <= f1) {
+        const [f0, k0, d0] = UNREST[i - 1], k = (fuel - f0) / (f1 - f0);
+        return { flick: lerp(k0, k1, k), fade: lerp(d0, d1, k) };
+      }
+    }
+    const last = UNREST[UNREST.length - 1];
+    return { flick: last[1], fade: last[2] };
+  }
+
   // Colour by level, from empty to full.
   const STOPS = [[0, new THREE.Color(0x4a4446)], [0.33, new THREE.Color(0xe0402a)],
     [0.66, new THREE.Color(0xff9a3c)], [1, new THREE.Color(0xffd27a)]];
-  const lampColor = new THREE.Color();
+  const lampColor = new THREE.Color(), lightTint = new THREE.Color();
+  const WARM = new THREE.Color(0xffb36b), EMBER_RED = new THREE.Color(0xff3a1a);
   function colorAt(level, out) {
     for (let i = 1; i < STOPS.length; i++) {
       if (level <= STOPS[i][0]) {
@@ -177,12 +255,15 @@
   }
 
   // The halo: a flat, see-through disc with a hard edge, in the lamp's
-  // colour. HALO.full across at full, shrinking and fading as the fuel goes.
+  // colour. HALO.full across at full; it shrinks with the fuel and wobbles
+  // with the flame, more as it fails, and can wobble out past its average.
+  // It lasts until the lamp is out.
   const HALO = {
     full: 0.34 * S,   // diameter at full (the lamp itself is 0.08 S)
     minScale: 0.4,    // of full, as the lamp empties
     opacity: 0.3,     // at full
-    lowOpacity: 0.1,  // at the danger line, falling to almost nothing below
+    lowOpacity: 0.12, // at the very end
+    wobble: 0.6,      // how far the flicker pushes its size around
   };
   function hardDisc() {
     const n = 128, cv = document.createElement('canvas');
@@ -197,13 +278,32 @@
   halo.renderOrder = 5;
   scene.add(halo); // follows the lamp in world space (the figure's rig squashes when crouched)
 
+  // The light's reach and colour. Dimming, it goes redder and much shorter
+  // (LIGHT.minRange of full when empty), and from LIGHT.ringBelow charges a
+  // faint ring on the floor fakes the edge of what it still lights.
+  const LIGHT = {
+    minIntensity: 0.25, // of full, when empty
+    minRange: 0.18,     // of full, when empty
+    redden: 0.5,        // how far the light's colour follows the lamp's toward red
+    ringBelow: 1,       // charges
+    ringRadius: [1.1, 3.2], // cells, at empty and at ringBelow
+    ringOpacity: 0.22,
+    swell: 0.35,        // dying: brightness swell while you move
+  };
+  const ringMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 64), ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  scene.add(ring);
+
   // Embers: points rising off the lamp. Walking, they spray and trail
   // behind you; standing still, they rise in a slow, swaying column, like
-  // embers off a flame. Additive, so a dead one is just black.
+  // embers off a flame. Dying, only the odd red one. Additive, so a dead
+  // one is just black.
   const EMBER = {
     still: 0.25,  // cells/s: below this you count as standing
     walk: { rate: 22, life: [0.35, 0.75], spread: 0.25, rise: [0.25, 0.6], sway: 0 },
     idle: { rate: 9, life: [0.9, 1.6], spread: 0.05, rise: [0.12, 0.22], sway: 0.12 },
+    dyingRate: 0.7,     // per second, in the dying stage
     swayHz: [1.2, 2.2], // how fast an idle ember weaves
     drag: 2.5,          // of its sideways speed, lost per second
   };
@@ -217,60 +317,128 @@
   }));
   sparks.frustumCulled = false;
   scene.add(sparks);
-  const spark = Array.from({ length: SPARKS }, () => ({ life: 0, max: 1, vx: 0, vy: 0, vz: 0, sway: 0, hz: 1, ph: 0 }));
+  const spark = Array.from({ length: SPARKS }, () => ({ life: 0, max: 1, vx: 0, vy: 0, vz: 0, sway: 0, hz: 1, ph: 0, red: false }));
   let sparkClock = 0, sparkNext = 0, stillness = 0;
   const lampWorld = new THREE.Vector3();
   const lastPos = { x: 0, y: 0 };
-  const lerp = (a, b, k) => a + (b - a) * k;
-  const between = (r) => r[0] + Math.random() * (r[1] - r[0]);
 
+  // Streams: motes flowing into the lamp from whatever is feeding it (a lit
+  // sconce sheltering it, a well you're drinking from). A source calls
+  // feedFrom(worldPos, colour) every frame it's feeding.
+  const STREAM = { rate: 16, travel: 0.6, arc: 0.25 * S, count: 40 };
+  const streamPos = new Float32Array(STREAM.count * 3), streamCol = new Float32Array(STREAM.count * 3);
+  const streamGeo = new THREE.BufferGeometry();
+  streamGeo.setAttribute('position', new THREE.BufferAttribute(streamPos, 3));
+  streamGeo.setAttribute('color', new THREE.BufferAttribute(streamCol, 3));
+  const streamPts = new THREE.Points(streamGeo, new THREE.PointsMaterial({
+    size: 0.05 * S, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+  }));
+  streamPts.frustumCulled = false;
+  scene.add(streamPts);
+  const motes = Array.from({ length: STREAM.count }, () => ({ t: 1, from: new THREE.Vector3(), col: new THREE.Color(), off: 0 }));
+  const feeds = [];
+  let streamClock = 0;
+  function feedFrom(pos, color) { feeds.push({ pos: pos.clone(), color: new THREE.Color(color) }); }
+  const scPos = new THREE.Vector3();
+
+  function updateStreams(dt) {
+    if (state.paused) feeds.length = 0;
+    if (lampMode === 'sheltered' && !state.paused) {
+      const sc = shelterAt(state.player);
+      if (sc) { sc.flame.getWorldPosition(scPos); feedFrom(scPos, 0xffc06a); }
+    }
+    streamClock += dt;
+    while (feeds.length && streamClock >= 1 / STREAM.rate) {
+      streamClock -= 1 / STREAM.rate;
+      const m = motes.find((o) => o.t >= 1);
+      if (!m) break;
+      const f = feeds[Math.floor(Math.random() * feeds.length)];
+      m.t = 0; m.from.copy(f.pos); m.col.copy(f.color); m.off = (Math.random() - 0.5) * 0.3;
+    }
+    if (!feeds.length) streamClock = 0;
+    feeds.length = 0;
+    motes.forEach((m, i) => {
+      if (m.t < 1) m.t = Math.min(1, m.t + dt / STREAM.travel);
+      const k = m.t * m.t * (3 - 2 * m.t), up = Math.sin(Math.PI * m.t) * (STREAM.arc + m.off);
+      streamPos[i * 3] = lerp(m.from.x, lampWorld.x, k);
+      streamPos[i * 3 + 1] = lerp(m.from.y, lampWorld.y, k) + up;
+      streamPos[i * 3 + 2] = lerp(m.from.z, lampWorld.z, k);
+      const a = m.t < 1 ? Math.sin(Math.PI * m.t) : 0;
+      streamCol[i * 3] = m.col.r * a; streamCol[i * 3 + 1] = m.col.g * a; streamCol[i * 3 + 2] = m.col.b * a;
+    });
+    streamGeo.attributes.position.needsUpdate = true;
+    streamGeo.attributes.color.needsUpdate = true;
+  }
+
+  let onAmt = 1; // the light easing on and off (covering, relighting, going out)
   function updateLampLook(dt) {
-    const t = state.time;
+    const t = state.time, run = state.run, p = state.player;
     const g = state.gutter ? Math.max(0, 1 - state.gutter.t / GUTTER_FADE) : 1;
-    // An empty lamp is out: only a faint glow, as if from the wick.
-    const out = state.run.fuel <= 0 ? 0.12 : 1;
-    const level = lampLevel() * g;
-    // Flicker grows as the level falls below half.
-    const shake = Math.max(0, 0.5 - level) * 2;
-    const flick = 1 - shake * 0.55 * Math.abs(Math.sin(t * 17.3) * Math.sin(t * 6.1 + 1.3));
-    colorAt(level * flick, lampColor);
-    lanternMesh.material.color.copy(lampColor);
+    onAmt += ((lampOn() ? 1 : 0) - onAmt) * Math.min(1, dt * 6);
+    const on = onAmt * g;
+    const fuel = run.fuel, level = lampLevel();
+    const u = unrest(fuel);
+    const dying = 1 - smooth(RULES.lampDying / 2, RULES.lampDying, fuel); // 0 above the dying stage, 1 near empty
 
-    lantern.color.setHex(0xffb36b).lerp(lampColor, 0.5);
-    lantern.intensity = LANTERN * (0.3 + 0.7 * level) * out * flick * g * (0.94 + 0.06 * Math.sin(t * 9.3) * Math.sin(t * 3.1));
-    lantern.distance = LANTERN_RANGE * (0.4 + 0.6 * level) * (out < 1 ? 0.5 : 1);
+    // Standing or moving, for the embers and the dying swell.
+    const speed = dt > 0 ? Math.hypot(p.x - lastPos.x, p.y - lastPos.y) / dt : 0;
+    lastPos.x = p.x; lastPos.y = p.y;
+    stillness += ((speed < EMBER.still ? 1 : 0) - stillness) * Math.min(1, dt * 3);
+
+    // Fast flicker (jitter), a slow irregular fade, and a swell when you move while it's dying.
+    const jitter = Math.sin(t * 17.3) * Math.sin(t * 6.1 + 1.3);
+    const jitter2 = Math.sin(t * 13.7 + 0.7) * Math.sin(t * 4.3 + 2.1);
+    const slow = (Math.sin(t * 0.9) + Math.sin(t * 1.7 + 2) + Math.sin(t * 0.37 + 4)) / 3;
+    const swell = dying * (1 - stillness) * LIGHT.swell;
+    const bright = (1 - u.flick * Math.abs(jitter)) * (1 - u.fade * (0.5 + 0.5 * slow)) * (1 + swell);
+
+    colorAt(level * (0.85 + 0.15 * Math.min(1, bright)), lampColor);
+    lanternMesh.material.color.copy(lampColor).multiplyScalar(lerp(0.25, 1, on));
+
+    colorAt(Math.max(level, 0.3), lightTint);
+    lantern.color.copy(WARM).lerp(lightTint, LIGHT.redden * (1 - level) + 0.3);
+    lantern.intensity = LANTERN * lerp(LIGHT.minIntensity, 1, level) * bright * on * (0.96 + 0.04 * Math.sin(t * 9.3));
+    const reach = lerp(LIGHT.minRange, 1, smooth(0, 1, level)) * (0.92 + 0.08 * bright);
+    lantern.distance = LANTERN_RANGE * reach;
 
     lanternMesh.getWorldPosition(lampWorld);
     haloMat.color.copy(lampColor);
     halo.position.copy(lampWorld);
-    halo.scale.setScalar(HALO.full * (HALO.minScale + (1 - HALO.minScale) * level));
-    const danger = RULES.lampDanger / RULES.lampFullCharges;
-    haloMat.opacity = (level > 0.66 ? HALO.opacity
-      : level > danger ? lerp(HALO.lowOpacity, HALO.opacity, (level - danger) / (0.66 - danger))
-        : HALO.lowOpacity * 0.3 * level / danger) * (out < 1 ? 0 : 1) * flick;
+    const wob = 1 + HALO.wobble * (u.flick * jitter2 + u.fade * 0.6 * slow) + swell * 0.6;
+    halo.scale.setScalar(HALO.full * (HALO.minScale + (1 - HALO.minScale) * level) * Math.max(0.3, wob));
+    haloMat.opacity = lerp(HALO.lowOpacity, HALO.opacity, smooth(0, 0.66, level)) * Math.min(1.2, bright) * on;
 
-    // Embers: fewer, dimmer and shorter-lived as the lamp fails. How still
-    // you are (eased) blends the walking spray into the idle column.
-    const p = state.player;
-    const speed = dt > 0 ? Math.hypot(p.x - lastPos.x, p.y - lastPos.y) / dt : 0;
-    lastPos.x = p.x; lastPos.y = p.y;
-    stillness += ((speed < EMBER.still ? 1 : 0) - stillness) * Math.min(1, dt * 3);
+    // The floor ring: the edge of the light, once it's low.
+    const ringOn = (1 - smooth(LIGHT.ringBelow * 0.6, LIGHT.ringBelow, fuel)) * on * (fuel > 0 ? 1 : 0);
+    ring.visible = ringOn > 0.01;
+    if (ring.visible) {
+      const r = lerp(LIGHT.ringRadius[0], LIGHT.ringRadius[1], Math.min(1, fuel / LIGHT.ringBelow)) * (0.95 + 0.05 * bright);
+      ring.scale.setScalar(r * S);
+      ring.position.set(p.x * S, (p.z + 0.012) * S, p.y * S);
+      ringMat.color.copy(lampColor);
+      ringMat.opacity = LIGHT.ringOpacity * ringOn * Math.min(1, bright);
+    }
+
+    // Embers: fewer, dimmer and shorter-lived as the lamp fails; how still
+    // you are (eased) blends the walking spray into the idle column; dying,
+    // only the odd red one.
     const mix = (k) => lerp(EMBER.walk[k], EMBER.idle[k], stillness);
-    const mixR = (k) => [mix0(k, 0), mix0(k, 1)];
-    const mix0 = (k, i) => lerp(EMBER.walk[k][i], EMBER.idle[k][i], stillness);
+    const mixR = (k) => [lerp(EMBER.walk[k][0], EMBER.idle[k][0], stillness), lerp(EMBER.walk[k][1], EMBER.idle[k][1], stillness)];
     sparkClock += dt;
-    const rate = level > 0.01 && out === 1 && !state.paused ? mix('rate') * (0.2 + 0.8 * level) : 0;
+    const rate = fuel <= 0 || on < 0.5 || state.paused ? 0
+      : lerp(mix('rate') * (0.2 + 0.8 * level), EMBER.dyingRate, dying);
     while (rate && sparkClock >= sparkNext) {
       sparkClock -= sparkNext;
       sparkNext = 1 / rate * (0.6 + Math.random() * 0.8);
       const s = spark.find((o) => o.life <= 0);
       if (!s) break;
       const i = spark.indexOf(s);
-      s.max = s.life = between(mixR('life')) * (0.6 + 0.4 * level);
+      s.red = dying > 0.5;
+      s.max = s.life = between(mixR('life')) * (0.6 + 0.4 * level) * (s.red ? 1.6 : 1);
       const spread = mix('spread');
       s.vx = (Math.random() - 0.5) * spread * S; s.vz = (Math.random() - 0.5) * spread * S;
       s.vy = between(mixR('rise')) * S;
-      s.sway = mix('sway') * S; s.hz = between(EMBER.swayHz); s.ph = Math.random() * Math.PI * 2;
+      s.sway = Math.max(mix('sway'), s.red ? 0.08 : 0) * S; s.hz = between(EMBER.swayHz); s.ph = Math.random() * Math.PI * 2;
       sparkPos[i * 3] = lampWorld.x + (Math.random() - 0.5) * 0.04 * S;
       sparkPos[i * 3 + 1] = lampWorld.y;
       sparkPos[i * 3 + 2] = lampWorld.z + (Math.random() - 0.5) * 0.04 * S;
@@ -286,25 +454,30 @@
         const w = Math.cos(age * s.hz * Math.PI * 2 + s.ph) * s.sway * Math.min(1, age * 2);
         sparkPos[i * 3] += (s.vx + w) * dt; sparkPos[i * 3 + 1] += s.vy * dt; sparkPos[i * 3 + 2] += (s.vz + w * 0.4) * dt;
       }
-      const k = Math.max(0, s.life / s.max) * (0.5 + 0.5 * level);
-      sparkCol[i * 3] = lampColor.r * k; sparkCol[i * 3 + 1] = lampColor.g * k; sparkCol[i * 3 + 2] = lampColor.b * k;
+      const k = Math.max(0, s.life / s.max) * (s.red ? 1 : 0.5 + 0.5 * level);
+      const c = s.red ? EMBER_RED : lampColor;
+      sparkCol[i * 3] = c.r * k; sparkCol[i * 3 + 1] = c.g * k; sparkCol[i * 3 + 2] = c.b * k;
     });
     sparkGeo.attributes.position.needsUpdate = true;
     sparkGeo.attributes.color.needsUpdate = true;
 
+    updateStreams(dt);
     updateLampHud();
   }
 
   // ---------------------------------------------------------------------------
-  // The lamp on the HUD: an icon in the lamp's colour, and a fluid meter cut
-  // into one section per charge. The section that's burning shows dimmer.
-  // Under it, psychic stamina: a thin bar, and the screen's edges closing in
-  // as it falls.
+  // The lamp on the HUD: an icon in the lamp's colour, whose flame stands
+  // lower at each stage, and a fluid meter cut into one section per charge
+  // (the one that's burning shows dimmer). By a sconce the icon shimmers
+  // gold; drinking from a well, violet. Under the meter, psychic stamina: a
+  // thin bar, and the screen's edges closing in as it falls. Words only
+  // when the lamp is off, to say how to relight it.
 
+  const FLAME_H = [[RULES.lampUneasy, 1], [RULES.lampDanger, 0.8], [RULES.lampDying, 0.62], [0, 0.45]];
   const meterEl = $('lamp-meter'), iconEl = $('lamp-icon'), stateEl = $('lamp-state');
-  const staminaEl = $('stamina'), vignetteEl = $('vignette');
+  const flameEl = $('lamp-flame'), staminaEl = $('stamina'), vignetteEl = $('vignette');
+  if (iconEl) iconEl.addEventListener('click', toggleLamp);
   let built = -1, lastSig = '';
-  const STATE_TEXT = { burning: 'burning', sheltered: 'by a sconce · not burning', held: 'held', dark: 'out · find light', paused: '' };
   function updateLampHud(force) {
     if (!meterEl) return;
     const run = state.run, max = maxCharges();
@@ -326,8 +499,9 @@
       built = n;
       lastSig = '';
     }
+    const off = !state.gutter && !lampOn();
     const mode = state.gutter ? 'out' : lampMode;
-    const sig = run.fuel.toFixed(3) + mode + W.drinking();
+    const sig = run.fuel.toFixed(3) + mode + W.drinking() + off + run.lampOn;
     if (sig === lastSig) return;
     lastSig = sig;
     Array.from(meterEl.children).forEach((sec, i) => {
@@ -336,11 +510,19 @@
       sec.className = 'sec' + (i >= RULES.chargesMax ? ' buff' : '') + (f >= 1 ? ' full' : f > 0 ? ' part' : '');
     });
     iconEl.style.color = '#' + lampColor.getHexString();
-    iconEl.classList.toggle('burning', mode === 'burning');
-    iconEl.classList.toggle('danger', run.fuel <= RULES.lampDanger);
-    if (stateEl) stateEl.textContent = mode === 'out' ? 'passed out' : W.drinking() ? 'drinking from a well' : STATE_TEXT[mode] || '';
+    iconEl.classList.toggle('burning', mode === 'burning' || mode === 'held');
+    iconEl.classList.toggle('danger', !off && run.fuel <= RULES.lampDanger);
+    iconEl.classList.toggle('sheltered', mode === 'sheltered' && !off);
+    iconEl.classList.toggle('drinking', W.drinking());
+    iconEl.classList.toggle('off', off);
+    if (flameEl) flameEl.style.transform = `scaleY(${(FLAME_H.find(([f]) => run.fuel > f) || [0, 0.45])[1]})`;
+    if (stateEl) {
+      stateEl.textContent = !off ? ''
+        : run.fuel < RELIGHT - 1e-6 ? `out · find entropy, then ${relightKey()}`
+          : `${relightKey()} to relight (${RULES.relightShards} shard)`;
+    }
     meterEl.parentElement.parentElement.title =
-      `entropy ${run.fuel.toFixed(2)} of ${max} charges · the lamp burns a charge every ${RULES.lampSeconds * RULES.shardsPerCharge} s in the dark`;
+      `entropy ${run.fuel.toFixed(2)} of ${max} charges · the lamp burns a charge every ${RULES.lampSeconds * RULES.shardsPerCharge} s · ${relightKey()} covers or relights it`;
   }
 
   // ---------------------------------------------------------------------------
@@ -360,6 +542,6 @@
     popLayer.append(d);
   }
 
-  Object.assign(W, { gainFuel, spendFuel, takeFuel, litAt, updateLamp, updateLampLook, updateLampHud,
-    lampLevel, popEntropy });
+  Object.assign(W, { gainFuel, spendFuel, takeFuel, litAt, lampOn, toggleLamp, feedFrom, updateLamp,
+    updateLampLook, updateLampHud, lampLevel, popEntropy });
 })(window);
