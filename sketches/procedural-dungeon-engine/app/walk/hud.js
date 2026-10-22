@@ -4,7 +4,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, $, state, isLockedNow, CHALK, chargeText, el, savePlayer,
+  const { DE, DP, RULES, THREE, $, ekey, state, isLockedNow, CHALK, chargeText, el, savePlayer,
     edgeEnds, maxCharges, refreshHotbar, openDoor, keys, promptEl } = W;
 
   // ---------------------------------------------------------------------------
@@ -132,6 +132,27 @@
       ctx.fillStyle = `hsla(${sp.meta.hue}, 18%, ${id === p.spaceId ? 46 : 30}%, 0.95)`;
       for (const k of sp.cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
     }
+    // Walls: every cell edge that doesn't lead into the same room, so rooms
+    // built wall to wall still read as separate.
+    ctx.strokeStyle = 'rgba(226, 218, 198, 0.6)';
+    ctx.lineWidth = Math.max(1, px * 0.09);
+    ctx.lineCap = 'square';
+    ctx.beginPath();
+    for (const id in exp.spaces) {
+      for (const k of exp.spaces[id].cells) {
+        const c = DE.parseKey(k);
+        if (!visible(c)) continue;
+        for (const f of DE.FACINGS) {
+          const n = DE.step(c, f);
+          if (exp.registry[DE.key(n.x, n.y)] === id || state.exitAt.has(ekey(c.x, c.y, f))) continue; // doors draw below
+          const [ax, ay, bx, by] = edgeEnds(c.x, c.y, f);
+          ctx.moveTo(ox + ax * px, oy + ay * px);
+          ctx.lineTo(ox + bx * px, oy + by * px);
+        }
+      }
+    }
+    ctx.stroke();
+    ctx.lineCap = 'butt';
     // Rooms past a locked door: a gold outline.
     ctx.strokeStyle = 'rgba(232, 193, 90, 0.9)';
     ctx.lineWidth = Math.max(1, px * 0.1);
@@ -167,37 +188,45 @@
       }
       ctx.stroke();
     }
-    // Doors: unopened orange, locked blue, opened green.
-    const t = Math.max(1.5, px * 0.12);
+    // Doors, one tile wide: unopened orange, locked blue. An opened door is a
+    // green arrow pointing the way it was opened (the only way it can be
+    // collapsed); the far side of that doorway draws nothing, and a loop is
+    // a plain green line.
+    const t = Math.max(1, px * 0.08); // half the line's thickness
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
       for (const ex of sp.exits) {
-        ctx.fillStyle = ex.connectionId ? '#5fbf7a' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
         const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);
-        ctx.fillRect(ox + Math.min(ax, bx) * px - t, oy + Math.min(ay, by) * px - t,
-          Math.abs(bx - ax) * px + 2 * t, Math.abs(by - ay) * px + 2 * t);
+        if (!visible(ex.cell)) continue;
+        const conn = ex.connectionId && exp.connections[ex.connectionId];
+        if (conn && DP.childThrough(exp, id, ex)) {
+          const d = DE.DIRS[ex.facing], mx = (ax + bx) / 2, my = (ay + by) / 2;
+          const hx = (bx - ax) * 0.4, hy = (by - ay) * 0.4; // half the base
+          ctx.fillStyle = '#5fbf7a';
+          ctx.beginPath();
+          ctx.moveTo(ox + (mx - hx) * px, oy + (my - hy) * px);
+          ctx.lineTo(ox + (mx + hx) * px, oy + (my + hy) * px);
+          ctx.lineTo(ox + (mx + d.x * 0.35) * px, oy + (my + d.y * 0.35) * px);
+          ctx.closePath();
+          ctx.fill();
+          continue;
+        }
+        if (conn && !conn.loop) continue; // the opened side draws the arrow
+        ctx.fillStyle = conn ? '#5fbf7a' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
+        ctx.fillRect(ox + Math.min(ax, bx) * px - (ay === by ? 0 : t), oy + Math.min(ay, by) * px - (ay === by ? t : 0),
+          Math.abs(bx - ax) * px + (ay === by ? 0 : 2 * t), Math.abs(by - ay) * px + (ay === by ? 2 * t : 0));
       }
     }
-    // Chalk marks: a dot in the chalk's colour (its symbol when zoomed in).
+    // Chalk marks: a dot in the chalk's colour, big enough to read at any zoom.
     for (const m of state.marks) {
       const mx = ox + (m.sx / 2 + 0.25) * px, my = oy + (m.sy / 2 + 0.25) * px;
-      if (px >= 22) {
-        ctx.font = `bold ${Math.round(px * 0.34)}px system-ui, sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(10, 8, 14, 0.8)';
-        ctx.fillText(CHALK[m.color].sym, mx + 1, my + 1);
-        ctx.fillStyle = CHALK[m.color].css;
-        ctx.fillText(CHALK[m.color].sym, mx, my);
-      } else {
-        const r = Math.max(2, px * 0.13);
-        ctx.beginPath();
-        ctx.arc(mx, my, r, 0, Math.PI * 2);
-        ctx.fillStyle = CHALK[m.color].css;
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(10, 8, 14, 0.85)';
-        ctx.stroke();
-      }
+      ctx.beginPath();
+      ctx.arc(mx, my, Math.max(3.5, px * 0.24), 0, Math.PI * 2);
+      ctx.fillStyle = CHALK[m.color].css;
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, px * 0.05);
+      ctx.strokeStyle = 'rgba(10, 8, 14, 0.85)';
+      ctx.stroke();
     }
     // Hash ghosts watching you (amber) or following you (magenta).
     for (const g of state.ghosts) {

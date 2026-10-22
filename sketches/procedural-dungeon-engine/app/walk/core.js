@@ -65,6 +65,7 @@
   const CAM_OFFSET = new THREE.Vector3(0, 10.5, 7.5);
   const SEAM = 0xc4502a;    // the map view's open-doorway orange
   const LOCK_SEAM = 0x6fa8d8;
+  const OPEN_SEAM = 0x5fbf7a; // opened doorways (the arrow), as on the maps
   const BG = 0x07060a;
   const LANTERN = 16;       // point-light intensity (three.js physical units)
   const LANTERN_RANGE = 13 * S;
@@ -220,7 +221,7 @@
     DOOR_W, DOOR_H, JAMB, RADIUS, SPEED, RUN, CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, UNIT,
     CLIMB_TIME, GRAVITY, PUSH_TIME, USE_RANGE, PICKUP_RANGE, DOOR_SWING, SWING_ANGLE,
     REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_RADIUS, DITHER_APPROACH, CAM_OFFSET, SEAM,
-    LOCK_SEAM, LANTERN, LANTERN_RANGE, OPP, ekey, canvas, renderer, scene, camera, state, world,
+    LOCK_SEAM, OPEN_SEAM, LANTERN, LANTERN_RANGE, OPP, ekey, canvas, renderer, scene, camera, state, world,
     freshRun, rebuildExitIndex, isLockedNow, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,
     savePlayer });
 })(window);

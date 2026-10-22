@@ -146,6 +146,7 @@
     if (door) {
       door.dir = 1;
       door.seam.visible = false;
+      door.arrow.visible = cand.type !== 'loop';
       door.panel.material = doorOpenMat;
     }
     if (cand.type === 'loop') {
@@ -197,7 +198,7 @@
     spaces.forEach((s) => dissolveSpace(s.id, maxDepth - s.depth));
     for (const id of touched) if (exp.spaces[id]) buildSpace(exp.spaces[id], false);
     const door = state.doors.get(near.space.id + '/' + near.exit.id);
-    if (door) door.dir = -1;
+    if (door) { door.dir = -1; door.arrow.visible = false; }
 
     W.showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}` +
       (unravelled ? ` · ${unravelled === 1 ? 'a hash ghost comes undone' : unravelled + ' hash ghosts come undone'}` : '') +

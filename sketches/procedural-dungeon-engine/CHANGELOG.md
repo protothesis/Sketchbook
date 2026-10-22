@@ -209,6 +209,15 @@ All notable changes to this sketch are logged here, per
   (`migrateRun` in `core.js`). Older saves count as version 0, and their
   step folds in the old patches: door chalk becomes doorstones, and leftover
   `pins` / `echoes` fields are dropped.
+- 2026-10-21: **Opened doors show which way they go.** A collapse only
+  works away from the root, so an opened door is now a green triangle,
+  with its flat side on the threshold and its point in the room it opened.
+  It shows on the maps and, for now, as a floor arrow in walk mode. Loops
+  stay a plain green line.
+- 2026-10-21: Maps: door marks are one tile wide (they used to overhang),
+  every wall edge is drawn as a light line so rooms built wall to wall
+  read as separate, and chalk marks are always plain, larger dots (no
+  symbols).
 
 ### Fixed
 

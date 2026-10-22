@@ -5,7 +5,7 @@
 
   const W = global.DungeonPlay.walk;
   const { DE, DP, THREE, S, WALL_H, WALL_T, DOOR_W, DOOR_H, JAMB, UNIT, SWING_ANGLE,
-    REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_APPROACH, SEAM, LOCK_SEAM, ekey, scene, state,
+    REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_APPROACH, SEAM, LOCK_SEAM, OPEN_SEAM, ekey, scene, state,
     world, rebuildExitIndex, isLockedNow, ownsDoorPanel, CHALK } = W;
 
   // Screen-door dither on wall pixels south of the figure (between it and
@@ -91,6 +91,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
   geo.block = new THREE.BoxGeometry(1, 1, 1); // scaled per prop
   geo.post = new THREE.BoxGeometry(WALL_T * S, WALL_H * S, WALL_T * S); // inside-corner filler
   geo.decal = new THREE.PlaneGeometry(S * 0.94, S * 0.94);
+  // An opened door's floor arrow: the flat side on the threshold, the point
+  // into the room it opened. Collapsing only works that way.
+  geo.arrow = new THREE.ShapeGeometry(new THREE.Shape([
+    new THREE.Vector2(-DOOR_W * 0.35 * S, 0), new THREE.Vector2(DOOR_W * 0.35 * S, 0), new THREE.Vector2(0, -0.28 * S),
+  ])).rotateX(-Math.PI / 2); // flat on the floor, point toward +z
+  const arrowMat = new THREE.MeshBasicMaterial({ color: OPEN_SEAM, side: THREE.DoubleSide });
 
   // Cracks: tiles standing on the trace of a collapsed room. A few canvas
   // variants of dark fissures with a faint violet core (the imprint shows
@@ -333,9 +339,13 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const seam = new THREE.Mesh(geo.seam, locked ? lockSeamMat : seamMat);
     seam.position.set(0, 0.02, 0);
     seam.visible = !ex.connectionId;
-    edgeGroup.add(pivot, seam);
+    const arrow = new THREE.Mesh(geo.arrow, arrowMat);
+    arrow.position.y = 0.03;
+    arrow.scale.z = beyond; // local +z, flipped to point out of this space
+    arrow.visible = !!DP.childThrough(state.exp, space.id, ex);
+    edgeGroup.add(pivot, seam, arrow);
     const door = {
-      key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, locked,
+      key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, arrow, locked,
       openAngle: -beyond * SWING_ANGLE, t: ex.connectionId ? 1 : 0, dir: 0,
     };
     pivot.rotation.y = door.openAngle * door.t;
