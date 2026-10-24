@@ -248,9 +248,10 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Sconces: unlit on a room's walls. E at one lights it from your lantern,
-  // which costs a shard of entropy. A lit sconce burns for good, lights the
-  // room around it, and within a tile of it your lamp doesn't burn.
+  // Sconces: unlit on a room's walls. E (held) at one lights it from your
+  // lantern, which costs a shard of entropy; held at a lit one, snuffs it
+  // and gives the shard back. A lit sconce lights the room around it, and
+  // within a tile of it your lamp doesn't burn.
 
   const SCONCE_Y = 0.78;     // cells above the floor
   const SCONCE_OUT = 0.12;   // cells from the wall's inner face to the flame
@@ -301,17 +302,17 @@
     }
   }
 
-  /** E at an unlit sconce in your room, within reach and roughly ahead. */
+  /** E at a sconce in your room, within reach and roughly ahead: light it, or snuff it. */
   function sconceNear(p) {
     const here = state.exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))];
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     let best = null, bestD = SCONCE_REACH;
     for (const sc of state.sconces) {
-      if (sc.lit || sc.spaceId !== here) continue;
+      if (sc.spaceId !== here) continue;
       const dx = sc.x - p.x, dy = sc.y - p.y, d = Math.hypot(dx, dy);
       if (d >= bestD || (dx * fx + dy * fy) / (d || 1) < 0.3) continue;
       bestD = d;
-      best = { action: 'light', sconce: sc };
+      best = { action: sc.lit ? 'snuff' : 'light', sconce: sc };
     }
     return best;
   }
@@ -325,6 +326,19 @@
     run.lit[sc.key] = true;
     run.restored = (run.restored || 0) + 1;
     W.showCaption(`the sconce catches · −${RULES.sconceCost} shard · your lamp rests near it`);
+    savePlayer();
+    W.refreshHud();
+  }
+
+  /** Snuff a sconce: its shard goes back into your lamp, and off the restored tally. */
+  function snuffSconce(sc) {
+    const run = state.run;
+    sc.lit = false;
+    sc.flame.visible = false;
+    delete run.lit[sc.key];
+    run.restored = Math.max(0, (run.restored || 0) - 1);
+    const back = W.gainFuel(RULES.sconceCost / RULES.shardsPerCharge);
+    W.showCaption(back > 0 ? 'you snuff the sconce · its shard comes back to your lamp' : 'you snuff the sconce · your entropy is full');
     savePlayer();
     W.refreshHud();
   }
@@ -347,5 +361,5 @@
   }
 
   Object.assign(W, { SCONCE_Y, addPushBlocks, pushBlock, pullNear, pull, updatePushBlocks, addSconces,
-    sconceNear, lightSconce, updateSconces });
+    sconceNear, lightSconce, snuffSconce, updateSconces });
 })(window);

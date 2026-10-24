@@ -433,6 +433,19 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **Hold to act** (interaction cleanup, step 3). Anything
+  that changes the world takes E held while a ring (like a ghost's) fills
+  over the target with the action's icon: doors 0.35 s (as long as a
+  push, which fills the same ring), wiping chalk 0.4 s, sconces 0.5 s,
+  waking a waystone 0.7 s, rerolling or retracing 1 s. Taking, lifting,
+  climbing, pulling and travelling stay a tap; a tap at something you
+  can't do says why. On touch, press and hold the E prompt.
+- 2026-10-24: **Any opened door closes** (hold E, from either side),
+  except into a provisional room, where closing is the reroll. A closed
+  door is a wall to you, ghosts and light until you open it again (push or
+  hold E). Saved in `run.closed`; orange on the maps.
+- 2026-10-24: **Snuff a sconce** (hold E at a lit one): its shard goes back
+  to your lamp and off the restored tally.
 - 2026-10-24: **E acts on what you face** (interaction cleanup, step 2).
   The fixed priority order (doors first, then waystones, tools, jars,
   marks, push blocks, sconces, blocks) is gone: of everything in reach,

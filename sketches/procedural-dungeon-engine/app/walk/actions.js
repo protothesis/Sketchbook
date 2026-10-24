@@ -5,7 +5,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, state, rebuildExitIndex, isLockedNow, chargeText, save,
+  const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, PUSH_TIME, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
     climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn, toolNear,
     takeItem, pullNear, pull, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
@@ -15,11 +15,12 @@
 
   /**
    * The door in the player's own room within reach, and what can be done
-   * with it: 'open' | 'retrace' | 'locked' | 'collapse'. Collapse (a
-   * reroll) is only offered into a room that's still provisional; retrace,
-   * at the door to a path lost to a faint (pushing it open lets the path
-   * go instead). Loop doors,
-   * the way back into a room, and doors into committed rooms have no action.
+   * with it: 'open' | 'retrace' | 'locked' | 'collapse' | 'close' |
+   * 'reopen'. Collapse (a reroll) is what closing a door into a room
+   * that's still provisional does; retrace, at the door to a path lost to a
+   * faint (pushing it open lets the path go instead). Any other opened
+   * door just closes ('close'), and a door you closed opens again
+   * ('reopen'), from either side.
    */
   function doorNear(p) {
     const exp = state.exp;
@@ -33,7 +34,9 @@
       let action = null, child = null;
       if (p.z > 0.05) continue; // no doors from on top of a block
       if (!ex.connectionId) action = ex.kind === 'surface' ? 'surface' : isLockedNow(sp, ex) ? 'locked' : 'open';
+      else if (W.isClosed(ex.connectionId)) action = 'reopen';
       else if ((child = DP.rerollThrough(exp, sp.id, ex))) action = 'collapse';
+      else action = 'close';
       if (!action) continue;
       bestD = d;
       best = { space: sp, exit: ex, action, child };
@@ -107,7 +110,7 @@
         return { x0: m.sx / 2, y0: m.sy / 2, x1: m.sx / 2 + 0.5, y1: m.sy / 2 + 0.5, z0: z, z1: z + 0.02 };
       }
       case 'pull': return blk(near.block, 0, near.block.top);
-      case 'light': return pad(near.sconce.x, near.sconce.y, 0.08, W.SCONCE_Y - 0.1, W.SCONCE_Y + 0.12);
+      case 'light': case 'snuff': return pad(near.sconce.x, near.sconce.y, 0.08, W.SCONCE_Y - 0.1, W.SCONCE_Y + 0.12);
       case 'climb': return blk(near.block, near.block.base || 0, near.block.top);
       default: { // a door
         const [ax, ay, bx, by] = edgeEnds(near.exit.cell.x, near.exit.cell.y, near.exit.facing);
@@ -138,8 +141,100 @@
     return best;
   }
 
+  // ---------------------------------------------------------------------------
+  // Hold to act: anything that changes the world needs E held (or the E
+  // prompt pressed and held on touch) while a ring fills; the rest is a tap.
+  // Opening and closing a door take as long as pushing into one.
+
+  const HOLD = {
+    open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME, locked: PUSH_TIME,
+    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7,
+    collapse: 1.0, retrace: 1.0, // they cost entropy and can't be undone
+  };
+  // The ring's icon, per action.
+  const HOLD_ICON = {
+    open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
+    wake: '◆', collapse: '↻', retrace: '↺',
+  };
+
+  /** Can't be done right now: a tap says why instead of filling a ring. */
+  function blockedNow(near) {
+    const a = near.action;
+    return (a === 'locked' && state.run.keys <= 0) || (a === 'collapse' && (near.haunted || !near.affordable)) ||
+      (a === 'retrace' && (!near.thread || !near.affordable));
+  }
+  /** Seconds E must be held for this action, or 0 for a tap. */
+  const holdTime = (near) => (blockedNow(near) ? 0 : HOLD[near.action] || 0);
+
+  // What's being held: the action and its box, so a different target restarts the ring.
+  const holdSig = (near) => near.action + ':' + Object.values(near.box).map((v) => v.toFixed(2)).join(',');
+
+  /** E pressed (key down or the prompt pressed): taps act now; holds start the ring. */
+  function pressE() {
+    const near = actionNear(state.player);
+    const h = state.hold;
+    h.sig = null; h.t = 0; h.spent = false; h.down = true;
+    if (near && !holdTime(near)) { h.spent = true; act(near); }
+  }
+  function releaseE() {
+    const h = state.hold;
+    h.down = false; h.sig = null; h.t = 0; h.spent = false;
+  }
+
+  /**
+   * Each frame: fill the ring while E is held on the same target, and act
+   * when it's full. One hold, one action; release to go again. Returns the
+   * ring's progress (0-1) and icon, for the HUD. Pushing into a door or
+   * block fills the same ring.
+   */
+  function tickHold(near, dt) {
+    const h = state.hold;
+    h.ring = null;
+    if (h.down && !h.spent && near && holdTime(near)) {
+      const sig = holdSig(near);
+      if (sig !== h.sig) { h.sig = sig; h.t = 0; }
+      h.t += dt;
+      const need = holdTime(near);
+      h.ring = { v: Math.min(1, h.t / need), icon: HOLD_ICON[near.action] || '' };
+      if (h.t >= need) { h.spent = true; act(near); }
+    } else if (state.push.key && state.push.t > 0) {
+      const door = near && /^(open|reopen|surface|retrace)$/.test(near.action);
+      h.ring = { v: Math.min(1, state.push.t / PUSH_TIME), icon: door ? HOLD_ICON.open : '' };
+    }
+    return h.ring;
+  }
+
+  /** Shut an opened door: it's a wall again (to you, ghosts and light) until you open it. */
+  function closeDoor(cid) {
+    const run = state.run;
+    if (!run.closed) run.closed = [];
+    if (!run.closed.includes(cid)) run.closed.push(cid);
+    const c = state.exp.connections[cid];
+    const door = c && state.doors.get(c.a.spaceId + '/' + c.a.exitId);
+    if (door) door.dir = -1;
+    W.showCaption('you close the door');
+    savePlayer();
+    W.refreshHud();
+  }
+  function reopenDoor(cid) {
+    const run = state.run;
+    run.closed = (run.closed || []).filter((id) => id !== cid);
+    const c = state.exp.connections[cid];
+    const door = c && state.doors.get(c.a.spaceId + '/' + c.a.exitId);
+    if (door) {
+      door.dir = 1;
+      door.seam.visible = false;
+      door.panel.material = doorOpenMat;
+    }
+    savePlayer();
+    W.refreshHud();
+  }
+
   function act(near) {
     if (!near || state.paused || state.climb) return;
+    if (near.action === 'close') { closeDoor(near.exit.connectionId); return; }
+    if (near.action === 'reopen') { reopenDoor(near.exit.connectionId); return; }
+    if (near.action === 'snuff') { W.snuffSconce(near.sconce); return; }
     if (near.action === 'climb') { climb(near.block, near.dir); return; }
     if (near.action === 'surface') { askSurface(); return; }
     if (near.action === 'wake') { wakeWaystone(near.stone); return; }
@@ -310,6 +405,7 @@
     W.dropPixiesIn(ids);
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
+    if (run.closed) run.closed = run.closed.filter((id) => exp.connections[id]);
     W.spendFuel(near.price.charges);
     run.chargesSpent += near.price.charges;
     run.collapses++;
@@ -331,5 +427,6 @@
     W.refreshHud();
   }
 
-  Object.assign(W, { doorNear, wallNear, carveDoor, focusBox, actionNear, act, openDoor, askSurface });
+  Object.assign(W, { doorNear, wallNear, carveDoor, focusBox, actionNear, holdTime, pressE, releaseE, tickHold,
+    closeDoor, reopenDoor, act, openDoor, askSurface });
 })(window);

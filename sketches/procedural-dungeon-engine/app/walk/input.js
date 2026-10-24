@@ -29,7 +29,7 @@
     if (k === 'escape') { W.openPause(); return; }
     keys.add(k);
     if (k === 'e') {
-      if (!e.repeat) act(actionNear(state.player));
+      if (!e.repeat) W.pressE();
       e.preventDefault();
     } else if (k === 'f') {
       if (!e.repeat) useSelected();
@@ -46,15 +46,18 @@
     }
     if (k.startsWith('arrow')) e.preventDefault();
   });
-  global.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
-  global.addEventListener('blur', () => keys.clear());
+  global.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    keys.delete(k);
+    if (k === 'e') W.releaseE();
+  });
+  global.addEventListener('blur', () => { keys.clear(); W.releaseE(); });
 
   const promptEl = $('prompt');
-  promptEl.addEventListener('click', (e) => { // tapping a prompt line is its key
-    act(actionNear(state.player));
-    promptEl.blur();
-    e.preventDefault();
-  });
+  // Pressing the E prompt is E: held down, it fills a hold action's ring.
+  promptEl.addEventListener('pointerdown', (e) => { W.pressE(); e.preventDefault(); });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) promptEl.addEventListener(ev, () => W.releaseE());
+  promptEl.addEventListener('click', (e) => { promptEl.blur(); e.preventDefault(); });
   const promptF = $('prompt-f');
   if (promptF) promptF.addEventListener('click', (e) => { useSelected(); promptF.blur(); e.preventDefault(); });
   canvas.addEventListener('wheel', (e) => {

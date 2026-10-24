@@ -28,6 +28,9 @@
         return { cls: 'chalk', text: `take the ${it.kind === 'chalk' ? `stick of ${it.color || 'silver'} chalk` : 'doorstone'}` };
       }
       case 'light': return { text: `light the sconce from your lantern · ${RULES.sconceCost} shard` };
+      case 'snuff': return { text: `snuff the sconce · its shard back to your lamp` };
+      case 'close': return { text: 'close the door' };
+      case 'reopen': return { text: state.push.key ? 'opening…' : 'open the door (or push)' };
       case 'wake': return { cls: 'collapse', text: `wake the waystone · ${chargeText(RULES.waystoneCharges)}` };
       case 'travel': return { cls: 'collapse', text: 'travel from the waystone · a shard per ley line' };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
@@ -80,10 +83,33 @@
 
   function updatePrompt(nearE, nearF) {
     const e = nearE && eLine(nearE), f = nearF && fLine(nearF);
+    if (e && nearE && W.holdTime(nearE)) e.text += ' · hold';
     showLine(promptEl, 'E', e);
     showLine(promptF, 'F', f);
     promptF.classList.toggle('alone', !e);
     updateFocus(nearE);
+    updateRing(state.hold.ring);
+  }
+
+  // The hold ring: like a ghost's, a circle that fills clockwise with the
+  // action's icon inside, just above what you're acting on. The E prompt's
+  // key fills with it.
+  const RING_R = 15, RING_C = 2 * Math.PI * RING_R;
+  const ringEl = el('div', 'holdring');
+  ringEl.innerHTML = `<svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="${RING_R}"/>` +
+    `<circle class="fg" cx="18" cy="18" r="${RING_R}" stroke-dasharray="${RING_C}" stroke-dashoffset="${RING_C}"/></svg><span></span>`;
+  ringEl.hidden = true;
+  document.body.append(ringEl);
+  const ringFg = ringEl.querySelector('.fg'), ringIcon = ringEl.querySelector('span');
+  function updateRing(ring) {
+    const on = !!(ring && ring.v > 0.02 && !focusEl.hidden);
+    ringEl.hidden = !on;
+    promptEl.style.setProperty('--p', on ? ring.v.toFixed(3) : 0);
+    if (!on) return;
+    ringFg.setAttribute('stroke-dashoffset', (RING_C * (1 - ring.v)).toFixed(2));
+    if (ringIcon.textContent !== ring.icon) ringIcon.textContent = ring.icon;
+    ringEl.style.left = (parseFloat(focusEl.style.left) + parseFloat(focusEl.style.width) / 2) + 'px';
+    ringEl.style.top = parseFloat(focusEl.style.top) + 'px';
   }
 
   // The focus outline: corner brackets around the box of what E would act
@@ -273,7 +299,7 @@
           continue;
         }
         if (conn && !conn.loop && !DP.childThrough(exp, id, ex)) continue; // the side that opened it draws it
-        ctx.fillStyle = conn ? '#5fbf7a' : ex.kind === 'surface' ? '#dcebff' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
+        ctx.fillStyle = conn ? (W.isClosed(ex.connectionId) ? '#c4502a' : '#5fbf7a') : ex.kind === 'surface' ? '#dcebff' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
         ctx.fillRect(ox + Math.min(ax, bx) * px - (ay === by ? 0 : t), oy + Math.min(ay, by) * px - (ay === by ? t : 0),
           Math.abs(bx - ax) * px + (ay === by ? 0 : 2 * t), Math.abs(by - ay) * px + (ay === by ? 2 * t : 0));
         if (!conn) {

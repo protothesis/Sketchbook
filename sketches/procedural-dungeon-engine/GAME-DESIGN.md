@@ -26,7 +26,7 @@ decisions, see [`NOTES.md`](NOTES.md).
    draw from, so every reroll shortens how far you can go.
 6. **Restore** the dungeon on the way: put things back where they belong,
    light what was dark. Push blocks pay entropy; a lit sconce gives the
-   lamp a place to rest.
+   lamp a place to rest (snuff it and its shard comes back).
 7. **Arrive.** The waypoint is a setpiece, a big hall. Wake its waystone
    and it joins your fast-travel network, and new waypoints may appear.
 8. **Using a waystone is a checkpoint.** If you faint (your psychic

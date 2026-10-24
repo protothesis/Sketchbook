@@ -48,7 +48,7 @@ Determinism).
 - **Rerolling (collapse).** A new room is **provisional** until you open a
   door out of it (or a loop opens one into it); from then on it's
   **committed** for good (`DP.committed`, derived from history). Stand at
-  the door into a provisional room and press E (or tap the prompt): the
+  the door into a provisional room and hold E (1 s): the
   door shuts and that one room dissolves, for **1 charge**. Reopening the
   door draws fresh entropy: that's the reroll. A provisional room never has
   rooms beyond it, so a reroll is always one room. Doors into committed
@@ -248,8 +248,11 @@ Determinism).
 - **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
   sconce on a wall, chambers sometimes two. Never on a south wall: the
   camera looks north and would only see its back. E, facing one in your
-  room, lights it from your lantern, which **costs 1 shard**. A lit sconce
-  burns for good (saved with the run); within a tile of it your lamp
+  room, held for half a second, lights it from your lantern, which **costs
+  1 shard**. Hold E at a lit one to snuff it: the shard goes back into
+  your lamp and it comes off the restored tally, so lighting and snuffing
+  net to nothing. A lit sconce burns until you snuff it (saved with the
+  run); within a tile of it your lamp
   doesn't burn; and it lights the room around it: the
   three lit sconces nearest you get real lights (a fixed pool, so lighting
   more never recompiles materials). Doors carved later through a sconce's
@@ -270,7 +273,9 @@ Determinism).
   screen. Pick a slot with 1–9, the mouse wheel, or a tap. **E** interacts
   with the world (doors, climbing, taking a tool, lifting a jar, wiping a
   chalk mark you're facing). **F** (or "use" on touch) uses the
-  selected item.
+  selected item. Some slots are **groups**: one slot, several variants
+  (chalk colours; jars by contents). Click a selected group again (or press and
+  hold it) to open its picker, or press its number again to cycle.
 - **Focus and prompts.** E acts on one thing at a time: of everything in
   reach, the one you're most squarely facing (nearer breaks a tie; the
   score is distance + 0.6 × (1 − cos of the angle to it)). Faint corner
@@ -278,10 +283,26 @@ Determinism).
   (what the focused thing would do) and one for F (what the item in hand
   would do: open a door with a doorstone, catch a pixie). Each starts with
   its key; one that can't be done right now has no key and reads muted. On
-  touch, tap a line to do it. Setting a jar down or drawing a mark still
-  never prompts. Some slots are **groups**: one slot, several variants
-  (chalk colours; jars by contents). Click a selected group again (or press and
-  hold it) to open its picker, or press its number again to cycle.
+  touch, press a line to do it. Setting a jar down or drawing a mark still
+  never prompts.
+- **Hold to act.** Anything that changes the world takes E held (or the E
+  prompt pressed and held on touch) while a ring fills over the target,
+  with the action's icon in it; the key on the prompt fills too, and the
+  line ends "· hold". Let go early and nothing happens; one hold, one
+  action. Opening, closing and unlocking a door take 0.35 s (as long as
+  pushing into one, which fills the same ring), wiping chalk 0.4 s,
+  lighting or snuffing a sconce 0.5 s, waking a waystone 0.7 s, and the
+  ones that cost entropy and can't be undone, rerolling a room or
+  retracing a lost path, 1 s. Taking a tool, lifting a jar, climbing,
+  pulling a block, travelling and the surface door are a tap. Something
+  you can't do right now (a lock with no key, a reroll you can't afford)
+  is a tap that says why.
+- **Closing doors.** Any opened door closes (hold E at it, from either
+  side), for free, except a door into a provisional room: closing that one
+  is the reroll. A closed door is a wall to you, to ghosts and to light
+  until you open it again (push or hold E, from either side). Closed doors
+  are kept with the run (`run.closed`, by connection) and show on the maps
+  as an orange bar.
 - **All your jars share one slot.** It's grouped by contents (empty, or a
   pixie), with a count on each group. Its default, **auto**, catches a
   pixie in an empty jar when one is within reach, sets down a pixie jar
@@ -423,12 +444,13 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Parameter | Value |
 | --- | --- |
 | Move | WASD / arrows (Shift runs at 4 cells/s instead of 2.4); touch: drag for a stick |
-| Open a door | walk into it for 0.35 s, or press E / tap the prompt |
+| Open a door | walk into it for 0.35 s, or hold E (or the E prompt) for 0.35 s; the same for a door you closed, from either side |
+| Hold to act | `HOLD` in `actions.js`: open / close / unlock 0.35 s, wipe 0.4, light / snuff 0.5, wake 0.7, reroll / retrace 1.0; anything else on E is a tap |
 | Entropy | a fluid amount in charges (`run.fuel`): start with 2, hold up to 6 (`chargesMax`, was 8); a shard is a third of a charge |
 | Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
 | Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 2 shards (`restoreCharges`, was 1 charge); off its mark takes back what it paid (never below 0.05) |
 | Crate | each single, one-unit prop block: 40% (`crateChance`, its own `'crate'` stream, one draw per such block); about 0.27 per room |
-| Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second; halls: always one, 50% a second), never on south walls; lighting one costs 1 shard; the lamp doesn't burn within one tile of it (3x3, same room) |
+| Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second; halls: always one, 50% a second), never on south walls; lighting one costs 1 shard, snuffing it gives the shard back; the lamp doesn't burn within one tile of it (3x3, same room) |
 | Lamp | burns a shard's worth every 18 s (`lampSeconds`, was 12), continuously, except by a lit sconce; any gain holds it 3 s (`lampGrace`); looks full at 3 charges (`lampFullCharges`), danger at 1 (`lampDanger`); out: dark, and stamina drains |
 | Lamp stages | uneasy at 2 charges (`lampUneasy`), danger at 1 (`lampDanger`), dying at 0.5 (`lampDying`) |
 | Relight / cover | R or tapping the lamp icon; relight costs 1 shard (`relightShards`); covering is free; out of fuel, the lamp stays out until relit; covered, it doesn't burn |
@@ -442,7 +464,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
-| Climb | push into a block for 0.35 s or press E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
+| Climb | push into a block for 0.35 s or tap E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells, swelling to 0.8 while it touches you and shrinking back over 1 s (`swell`, `swellShrink`). No catching; a room with a ghost in it can't be rerolled |

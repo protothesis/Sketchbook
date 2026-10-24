@@ -313,7 +313,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const surface = ex.kind === 'surface';
     const pivot = new THREE.Group();
     pivot.position.set(-DOOR_W / 2 * S, 0, 0);
-    const panel = shadowed(new THREE.Mesh(geo.door, surface ? surfaceMat : ex.connectionId ? doorOpenMat : locked ? lockMat : doorMat));
+    const shut = W.isClosed(ex.connectionId);
+    const panel = shadowed(new THREE.Mesh(geo.door, surface ? surfaceMat : ex.connectionId && !shut ? doorOpenMat : locked ? lockMat : doorMat));
     panel.position.set(DOOR_W / 2 * S, DOOR_H * S / 2, 0);
     pivot.add(panel);
     if (gate) {
@@ -325,7 +326,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }
     const seam = new THREE.Mesh(geo.seam, surface ? surfaceSeamMat : locked ? lockSeamMat : !ex.connectionId && W.lostPathAt(space.id, ex.id) ? lostSeamMat : seamMat);
     seam.position.set(0, 0.02, 0);
-    seam.visible = !ex.connectionId;
+    seam.visible = !ex.connectionId || shut;
     // A closed door's point: off the bar's outer edge, toward where it opens.
     // A child of the bar, so it shows and hides with it.
     const point = new THREE.Mesh(geo.arrow, seam.material);
@@ -339,7 +340,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     edgeGroup.add(pivot, seam, arrow);
     const door = {
       key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, point, arrow, locked,
-      openAngle: -beyond * SWING_ANGLE, t: ex.connectionId ? 1 : 0, dir: 0,
+      openAngle: -beyond * SWING_ANGLE, t: ex.connectionId && !shut ? 1 : 0, dir: 0,
     };
     pivot.rotation.y = door.openAngle * door.t;
     state.doors.set(door.key, door);
@@ -435,7 +436,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     if (sa === undefined || sb === undefined) return false;
     if (sa === sb) return true;
     const hit = state.exitAt.get(ekey(ax, ay, FACE[(bx - ax) + ',' + (by - ay)]));
-    return !!(hit && hit.exit.connectionId);
+    return !!(hit && hit.exit.connectionId && !W.isClosed(hit.exit.connectionId));
   }
 
   Object.assign(W, { dither, geo, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows,

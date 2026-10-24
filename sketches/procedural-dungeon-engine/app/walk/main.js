@@ -111,6 +111,7 @@
       state.push.key = null;
       if (pushing) {
         if (pushing.exit.kind === 'surface') W.askSurface();
+        else if (pushing.exit.connectionId) W.reopenDoor(pushing.exit.connectionId);
         else openDoor(pushing.spaceId, pushing.exit.id);
       }
       else if (pushDir) pushBlock(pushingBlock, pushDir);
@@ -140,7 +141,9 @@
     }
 
     const idle = state.paused || state.climb;
-    updatePrompt(idle ? null : actionNear(p), idle ? null : useNear(p));
+    const nearE = idle ? null : actionNear(p);
+    W.tickHold(nearE, dt);
+    updatePrompt(nearE, idle ? null : useNear(p));
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;

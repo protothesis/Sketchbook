@@ -121,6 +121,7 @@
     fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9 }, // screen effects, 0..1
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
+    hold: { sig: null, t: 0, spent: false }, // holding E on a hold action (actions.js)
     pushBlocks: [],      // push blocks in built rooms (see restore.js)
     sconces: [],         // sconces in built rooms (see restore.js)
     waystones: [],       // waystones in built halls (see waystones.js)
@@ -145,6 +146,7 @@
       shardsFound: 0, keysFound: 0, keysUsed: 0, chalk: 0, chalkFound: 0, chalkUsed: 0,
       collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
       walked: 0, collected: [], unlocked: [], extracted: null,
+      closed: [],    // connection ids of opened doors you've shut again
       keyRooms: [],  // "spaceId:seed" of rooms whose key showed up (locks first, keys later)
       unmade: { count: 0, log: [] }, // hash ghosts undone by a collapse (or in a jar that shattered); no use yet
       ghostSeen: [], // "spaceId:seed:ghost" for rooms whose ghost roll has happened
@@ -186,6 +188,11 @@
   /** Locked and not yet unlocked by this run (unlocked doors are checkpoints). */
   function isLockedNow(space, ex) {
     return !ex.connectionId && DP.isLocked(space, ex) && !state.run.unlocked.includes(space.id + '/' + ex.id);
+  }
+
+  /** An opened door (a connection) you've shut again: solid until you open it. */
+  function isClosed(connectionId) {
+    return !!connectionId && !!state.run.closed && state.run.closed.includes(connectionId);
   }
 
   function ownsDoorPanel(spaceId, ex) {
@@ -279,6 +286,6 @@
     CLIMB_TIME, GRAVITY, PUSH_TIME, USE_RANGE, PICKUP_RANGE, DOOR_SWING, SWING_ANGLE,
     REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_RADIUS, DITHER_APPROACH, CAM_OFFSET, SEAM,
     LOCK_SEAM, OPEN_SEAM, LANTERN, LANTERN_RANGE, OPP, ekey, canvas, renderer, scene, camera, state, world,
-    freshRun, rebuildExitIndex, isLockedNow, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,
+    freshRun, rebuildExitIndex, isLockedNow, isClosed, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,
     savePlayer, saveCheckpoint, snapshot, SAVES, RUN_VERSION });
 })(window);

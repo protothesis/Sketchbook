@@ -69,7 +69,7 @@
       const nxt = [];
       for (const id of frontier) {
         for (const ex of exp.spaces[id].exits) {
-          if (!ex.connectionId) continue;
+          if (!ex.connectionId || W.isClosed(ex.connectionId)) continue;
           const c = exp.connections[ex.connectionId];
           const o = c.a.spaceId === id ? c.b.spaceId : c.a.spaceId;
           if (o === b) return d;
