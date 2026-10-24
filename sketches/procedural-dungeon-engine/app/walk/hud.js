@@ -55,11 +55,13 @@
         text = state.push.key ? 'climbing…' : `a block · push, or ${verb} to climb`;
       } else if (near.action === 'open') {
         text = state.push.key ? 'opening…' : `a closed door · push, or ${verb}`;
-      } else if (near.action === 'rechart') {
-        cls = near.affordable ? 'collapse' : 'blocked';
-        text = state.push.key ? 'opening something new…'
-          : near.affordable ? `${near.lost.id} was lost here · ${verb} to chart it again (${chargeText(near.price)}) · push for something new`
-          : `${near.lost.id} was lost here · ${chargeText(near.price)} to chart it again · push for something new`;
+      } else if (near.action === 'retrace') {
+        const n = near.path.traces.length, rooms = `${n} room${n === 1 ? '' : 's'}`;
+        cls = near.thread && near.affordable ? 'collapse' : 'blocked';
+        text = state.push.key ? 'letting it go…'
+          : !near.thread ? `your lost path · ${rooms} · no thread to retrace it · push to let it go`
+          : near.affordable ? `your lost path · ${rooms} · ${verb} to retrace (${chargeText(near.price)}) · push to let it go`
+          : `your lost path · ${rooms} · ${chargeText(near.price)} to retrace · push to let it go`;
       } else if (near.action === 'locked') {
         cls = 'lock';
         text = run.keys > 0 ? `a locked door · ${verb} to unlock (1 key)` : 'a locked door · you need a key';
@@ -107,6 +109,8 @@
     if (keyEl) {
       keyEl.hidden = run.keys <= 0;
       keyEl.textContent = '⚷ ' + run.keys;
+      const threadEl = $('thread');
+      if (threadEl) threadEl.hidden = !run.thread;
       keyEl.title = `${run.keys} key${run.keys === 1 ? '' : 's'} · a locked door uses one when you open it`;
     }
     refreshHotbar();
@@ -146,10 +150,15 @@
     const visible = (c) => ox + (c.x + 1) * px > 0 && ox + c.x * px < w && oy + (c.y + 1) * px > 0 && oy + c.y * px < h;
     const gap = px > 4 ? 1 : 0;
     const cell = (c) => ctx.fillRect(ox + c.x * px + gap / 2, oy + c.y * px + gap / 2, px - gap, px - gap);
-    // Traces of collapsed rooms: greyed, under everything live.
-    ctx.fillStyle = 'rgba(150, 146, 160, 0.22)';
+    // Traces of collapsed rooms: greyed, under everything live. Lost paths
+    // (a faint's, waiting for a choice) in violet, dimmer once dimmed;
+    // faded ones not at all.
     for (const id in exp.traces || {}) {
-      for (const k of exp.traces[id].cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
+      const t = exp.traces[id];
+      if (t.cause === 'faded') continue;
+      ctx.fillStyle = t.cause === 'lost' ? 'rgba(165, 140, 255, 0.3)'
+        : t.cause === 'lost-dim' ? 'rgba(165, 140, 255, 0.14)' : 'rgba(150, 146, 160, 0.22)';
+      for (const k of t.cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
     }
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
@@ -568,7 +577,8 @@
       ['waypoints reached', Object.values(exp.reserves || {}).filter((r) => r.spaceId).length],
       ['passed out', run.gutters || 0],
       ['rooms lost to faints', run.roomsLost || 0],
-      ['rooms re-charted', run.recharts || 0],
+      ['paths retraced', run.retraces || 0],
+      ['paths let go', run.pathsLetGo || 0],
       ['pixies caught', run.pixiesCaught || 0],
       ['entropy from wells', chargeText(run.wellDrawn || 0)],
       ['time walked', `${mins}:${String(secs).padStart(2, '0')}`],

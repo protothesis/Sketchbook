@@ -168,7 +168,9 @@
       surfaced: false,       // went up the surface door (the record shows until you go back down)
       faints: 0,             // faints that cost rooms (see game.js)
       roomsLost: 0,          // rooms lost to them
-      recharts: 0,           // lost rooms charted again
+      retraces: 0,           // lost paths retraced
+      pathsLetGo: 0,         // lost paths let go
+      thread: false,         // found the thread: lost paths can be retraced (kept through faints)
     };
   }
 

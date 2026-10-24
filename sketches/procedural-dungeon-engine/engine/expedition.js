@@ -13,8 +13,9 @@
 //                nextExitIndex, reserveId? }
 //   Connection { id, a:{spaceId,exitId}, b:{spaceId,exitId}, loop }
 //   Trace      { id, seed, parentId, viaExitId, entropy, archetype, cells,
-//                depth, deadEnd, meta, revertedAt, cause?, reserveId? }
-//                (a reverted space; cause is the application's tag)
+//                depth, deadEnd, meta, revertedAt, cause?, quiet?, reserveId? }
+//                (a reverted space; cause is the application's tag, and a
+//                quiet trace leaves no imprint)
 //   Reserve    { id, seed, kind, cells: "x,y"[], spaceId|null, ...data }
 //                (cells claimed ahead of time for a space that isn't there
 //                yet; extra fields are the application's, kept as-is)
@@ -22,7 +23,8 @@
 //                registry: { "x,y": spaceId }, history: Event[], counters,
 //                traces: { spaceId: Trace }, reserves: { id: Reserve } }
 //   Event      { type:'commit', parentId, viaExitId, entropy, loop?, restore? }
-//            | { type:'revert', spaceId, cause? }
+//            | { type:'revert', spaceId, cause?, quiet? }
+//            | { type:'tag', ids, cause, quiet }   (traces re-tagged)
 //            | { type:'caps', caps }
 //            | { type:'carve', spaceId, cell:{x,y}, facing }   (an exit cut into a wall)
 //            | { type:'uncarve', spaceId, exitId }   (a carved exit walled up again)
@@ -44,11 +46,13 @@
 // Traces never block placement; clients read them per cell via imprintAt()
 // to show cracks, corruption, ghosts. Replay rebuilds them from history.
 //
-// Re-charting: a trace can be built again, as the same space (same id,
-// seed and cells), through its parent's exit with its recorded entropy,
-// while its footprint is free. The commit records `restore: id`, and the
-// trace is used up (removed from `traces`), so it no longer cracks its own
-// floor. Reverting the space again leaves a fresh trace.
+// Restoring: a trace can be built again, as the same space (same id, seed
+// and cells), through its parent's exit with its recorded entropy, while
+// its footprint is free (restorable / restore). The commit records
+// `restore: id`, and the trace is used up (removed from `traces`), so it no
+// longer cracks its own floor. Reverting the space again leaves a fresh
+// trace. Traces carry an application's tag (`cause`), and a `quiet` trace
+// leaves no imprint; tagTraces changes both, in history.
 (function (global) {
   'use strict';
 
@@ -358,17 +362,21 @@
     const bk = key(beyond.x, beyond.y);
     const facingBack = OPPOSITE[exit.facing];
 
-    // Into a reserved footprint: the reserved space itself, from its own seed.
+    // Into a reserved footprint: the reserved space itself, from its own seed
+    // (restoring one built there: the same space, under its old id).
     const res = reservedAt(exp, bk);
-    if (restore && (res || exp.registry[bk] !== undefined)) return null;
+    if (restore && (exp.registry[bk] !== undefined || (res && res.id !== restore.reserveId))) return null;
+    if (restore && restore.reserveId && !res) return null;
     if (res) {
       const space = buildSpace(exp, createRng(res.seed), {
-        id: 's' + exp.counters.space, seed: res.seed, parentId: spaceId, viaExitId: exitId,
+        id: restore ? restore.id : 's' + exp.counters.space, seed: res.seed, parentId: spaceId, viaExitId: exitId,
         entropy: null, depth: parent.depth + 1, deadEnd: false, reserveId: res.id,
         placed: { archetype: res.kind, cells: res.cells.map(parseKey), end: null },
         entry: { cell: beyond, facing: facingBack },
       });
-      return { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: null, space, reserveId: res.id };
+      const rc = { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: null, space, reserveId: res.id };
+      if (restore) rc.restore = restore.id;
+      return rc;
     }
 
     const occupant = exp.registry[bk];
@@ -385,7 +393,7 @@
 
     const ent = restore ? restore.entropy : entropy || drawEntropy();
     const seed = hash(parent.seed, exit.index, ent);
-    // Re-charting (`restore`, a trace): only the trace's own footprint will
+    // Restoring (`restore`, a trace): only the trace's own footprint will
     // do. The rng draws the same either way, so its doors come out the same
     // when its neighbours are.
     const want = restore && restore.cells.slice().sort().join(';');
@@ -478,7 +486,7 @@
 
     const space = cand.space;
     if (cand.restore) {
-      if (!exp.traces[cand.restore] || exp.spaces[space.id]) throw new Error('Stale candidate: nothing to re-chart');
+      if (!exp.traces[cand.restore] || exp.spaces[space.id]) throw new Error('Stale candidate: nothing to restore');
     } else if (space.id !== 's' + exp.counters.space) throw new Error('Stale candidate: expedition changed');
     for (const k of space.cells) {
       if (exp.registry[k] !== undefined) throw new Error('Stale candidate: cell ' + k + ' now occupied');
@@ -508,9 +516,9 @@
   /**
    * Remove a leaf space: frees its cells and reopens the parent exit.
    * `cause` is an optional tag kept on the event and the trace (walk mode
-   * marks rooms lost to a faint, which can be re-charted).
+   * marks rooms lost to a faint), and a `quiet` trace leaves no imprint.
    */
-  function revert(exp, spaceId, cause) {
+  function revert(exp, spaceId, cause, quiet) {
     if (!canRevert(exp, spaceId)) throw new Error('Cannot revert ' + spaceId);
     const space = exp.spaces[spaceId];
     for (const ex of space.exits) {
@@ -529,7 +537,10 @@
     delete exp.spaces[spaceId];
     // A reserved space goes back to waiting (its door would rebuild it as is).
     if (space.reserveId && exp.reserves[space.reserveId]) { exp.reserves[space.reserveId].spaceId = null; clearReserved(exp); }
-    exp.history.push(cause ? { type: 'revert', spaceId, cause } : { type: 'revert', spaceId });
+    const ev = { type: 'revert', spaceId };
+    if (cause) ev.cause = cause;
+    if (quiet) ev.quiet = true;
+    exp.history.push(ev);
     if (!exp.traces) exp.traces = {};
     const trace = {
       id: space.id, seed: space.seed, parentId: space.parentId, viaExitId: space.viaExitId,
@@ -537,6 +548,7 @@
       depth: space.depth, deadEnd: space.deadEnd, meta: space.meta, revertedAt: exp.history.length - 1,
     };
     if (cause) trace.cause = cause;
+    if (quiet) trace.quiet = true;
     if (space.reserveId) trace.reserveId = space.reserveId;
     exp.traces[spaceId] = trace;
     if (exp._imprints) exp._imprints = null; // keeps it non-enumerable (not exported)
@@ -605,31 +617,37 @@
   }
 
   /**
-   * What re-charting this unopened exit would build: the latest trace opened
-   * through it (with this `cause`, if given), when the same space can stand
-   * there again. Reserved spaces never need it (their door rebuilds them).
-   * Returns { trace, cand } (cand is ready for commit) or null.
+   * Could this trace stand again as the same space? Its parent must stand,
+   * with the exit it was opened through still unopened, and its footprint
+   * must be free. Returns a candidate ready for commit(), or null.
    */
-  function rechartable(exp, spaceId, exitId, cause) {
-    const ex = getExit(exp, spaceId, exitId);
+  function restorable(exp, traceId) {
+    const t = exp.traces && exp.traces[traceId];
+    if (!t || exp.spaces[t.id] || !exp.spaces[t.parentId]) return null;
+    if (!t.entropy && !t.reserveId) return null;
+    const ex = getExit(exp, t.parentId, t.viaExitId);
     if (!ex || ex.connectionId || ex.kind === 'surface') return null;
-    let best = null;
-    for (const id in exp.traces || {}) {
-      const t = exp.traces[id];
-      if (t.parentId !== spaceId || t.viaExitId !== exitId || t.reserveId || !t.entropy) continue;
-      if (cause && t.cause !== cause) continue;
-      if (!best || t.revertedAt > best.revertedAt) best = t;
-    }
-    if (!best || exp.spaces[best.id]) return null;
-    const cand = expand(exp, spaceId, exitId, null, best);
-    return cand ? { trace: best, cand } : null;
+    return expand(exp, t.parentId, t.viaExitId, null, t);
   }
 
-  /** Build a trace again through its exit (see rechartable). Returns the space id. */
-  function rechart(exp, spaceId, exitId, cause) {
-    const r = rechartable(exp, spaceId, exitId, cause);
-    if (!r) throw new Error('Nothing to re-chart through ' + spaceId + '/' + exitId);
-    return commit(exp, r.cand);
+  /** Build a trace again (see restorable). Returns the space id. */
+  function restore(exp, traceId) {
+    const cand = restorable(exp, traceId);
+    if (!cand) throw new Error('Cannot restore ' + traceId);
+    return commit(exp, cand);
+  }
+
+  /** Re-tag traces (cause, quiet). Recorded in history. */
+  function tagTraces(exp, ids, cause, quiet) {
+    const list = ids.filter((id) => exp.traces && exp.traces[id]);
+    if (!list.length) return;
+    for (const id of list) {
+      const t = exp.traces[id];
+      if (cause) t.cause = cause; else delete t.cause;
+      if (quiet) t.quiet = true; else delete t.quiet;
+    }
+    exp.history.push({ type: 'tag', ids: list, cause: cause || null, quiet: !!quiet });
+    if (exp._imprints) exp._imprints = null;
   }
 
   function setCaps(exp, caps) {
@@ -666,7 +684,9 @@
         if (!cand || !!ev.loop !== (cand.type === 'loop')) throw new Error('Replay diverged at ' + ev.parentId + '/' + ev.viaExitId);
         commit(exp, cand);
       } else if (ev.type === 'revert') {
-        revert(exp, ev.spaceId, ev.cause);
+        revert(exp, ev.spaceId, ev.cause, ev.quiet);
+      } else if (ev.type === 'tag') {
+        tagTraces(exp, ev.ids, ev.cause, ev.quiet);
       } else if (ev.type === 'carve') {
         carve(exp, ev.spaceId, ev.cell, ev.facing);
       } else if (ev.type === 'uncarve') {
@@ -709,12 +729,13 @@
 
   /**
    * Every trace lying under a cell, oldest first: [{ id, seed, depth, ... }].
-   * Cached per expedition; any revert clears the cache.
+   * Quiet traces leave no imprint. Cached per expedition; any revert,
+   * restore or re-tag clears the cache.
    */
   function imprintAt(exp, cellKey) {
     if (!exp._imprints) {
       const idx = {};
-      const traces = Object.values(exp.traces || {}).sort((a, b) => a.revertedAt - b.revertedAt);
+      const traces = Object.values(exp.traces || {}).filter((t) => !t.quiet).sort((a, b) => a.revertedAt - b.revertedAt);
       for (const t of traces) for (const k of t.cells) (idx[k] = idx[k] || []).push(t);
       Object.defineProperty(exp, '_imprints', { value: idx, writable: true, configurable: true, enumerable: false });
     }
@@ -757,7 +778,7 @@
 
   Object.assign(DE, {
     deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
-    canCarve, carve, uncarve, rechartable, rechart, replay, exportRecord, importRecord, rebuildRegistry,
+    canCarve, carve, uncarve, restorable, restore, tagTraces, replay, exportRecord, importRecord, rebuildRegistry,
     pathToRoot, cycleCount, stats, parseKey, imprintAt, reservedAt, canReserve, reserve,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

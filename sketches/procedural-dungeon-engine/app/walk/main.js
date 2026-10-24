@@ -130,7 +130,12 @@
       } else if (sp) {
         const kind = sp.deadEnd ? 'dead end' : sp.archetype;
         const sealed = DP.pastLock(exp, sp) ? ' · beyond a lock' : '';
-        showCaption(`${sp.id} · ${kind}${sealed} · ${sp.meta.mood} · depth ${sp.depth}`);
+        // A hall with an awake waystone that isn't your hearth: passing
+        // through doesn't move where you wake; touching the stone does.
+        const st = state.waystones.find((o) => o.spaceId === sp.id && o.awake);
+        const home = W.hearth();
+        const hint = st && home && st !== home ? ` · you'd still wake in ${home.spaceId} · touch the waystone to wake here` : '';
+        showCaption(`${sp.id} · ${kind}${sealed} · ${sp.meta.mood} · depth ${sp.depth}${hint}`);
       }
     }
 
@@ -349,7 +354,7 @@
   const expectIds = ['view', 'stats', 'lamp', 'lamp-meter', 'lamp-icon', 'popups', 'hotbar', 'use-btn',
     'prompt', 'caption', 'minimap', 'bigmap', 'bigmap-canvas', 'bigmap-hint', 'ghost-edges', 'crouch-btn', 'done',
     'dialog', 'fade', 'title', 'menu-btn'];
-  const expectFns = [DE.carve, DE.imprintAt, DE.reserve, DE.rechart, DP.saves && DP.saves.write, W.faint, DP.props, DP.ghostSpawn, DP.loot, DP.waypointCount, W.updateLampLook];
+  const expectFns = [DE.carve, DE.imprintAt, DE.reserve, DE.restore, DE.tagTraces, DP.saves && DP.saves.write, W.faint, W.lostPathAt, DP.props, DP.ghostSpawn, DP.loot, DP.waypointCount, W.updateLampLook];
   const missing = expectIds.filter((id) => !$(id));
   if (missing.length || expectFns.some((f) => typeof f !== 'function')) {
     notice(`This page's files are out of date (cached copies of different versions). ${REFRESH_HINT}`, 'stale');

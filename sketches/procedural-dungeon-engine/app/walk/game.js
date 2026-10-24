@@ -1,34 +1,122 @@
 // Walk mode: the loop around a run (GAME-DESIGN.md, section 17). The title
 // screen, the pause menu, and what a faint costs: every room opened since
-// your last waystone checkpoint collapses into traces, and the run rolls
-// back to that checkpoint. A lost room can be charted again at its door
-// (actions.js). The save slots themselves are in saves.js.
+// your last waystone checkpoint becomes a lost path, and the run rolls back
+// to that checkpoint. At a lost path's door you choose once: retrace it (with
+// the thread, for entropy) or let it go (open the door on something new,
+// and the path turns to corruption). The save slots are in saves.js.
 (function (global) {
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, $, STORAGE_KEY, PLAYER_KEY, SAVES, state, freshRun, migrateRun, savePlayer, saveCheckpoint,
-    el } = W;
+  const { DE, RULES, $, STORAGE_KEY, PLAYER_KEY, SAVES, state, freshRun, migrateRun, save, savePlayer,
+    saveCheckpoint, rebuildExitIndex, el } = W;
+
+  // ---------------------------------------------------------------------------
+  // Lost paths
+  //
+  // A room lost to a faint is a trace tagged 'lost': quiet (no cracks, no
+  // ghosts), waiting for your choice. Each later faint dims a path you
+  // haven't chosen for ('lost-dim'), and the next fades it ('faded': gone,
+  // no choice, no corruption). Letting a path go tags it 'corrupt', a loud
+  // trace like a reroll's. Retracing restores its rooms (DE.restore).
+
+  const PENDING = new Set(['lost', 'lost-dim']);
+  const idNum = (id) => +id.slice(1);
+
+  /**
+   * The lost paths waiting for a choice: [{ root, traces (parents first),
+   * door: { spaceId, exitId } | null, dim }]. A path is a lost room whose
+   * parent wasn't lost with it, plus everything lost beyond it. Cached
+   * until the history moves on.
+   */
+  let pathCache = { exp: null, n: -1, paths: [] };
+  function lostPaths() {
+    const exp = state.exp;
+    if (pathCache.exp === exp && pathCache.n === exp.history.length) return pathCache.paths;
+    const pending = Object.values(exp.traces || {}).filter((t) => PENDING.has(t.cause) && !exp.spaces[t.id]);
+    const byId = new Map(pending.map((t) => [t.id, t]));
+    const kids = new Map();
+    for (const t of pending) if (byId.has(t.parentId)) kids.set(t.parentId, (kids.get(t.parentId) || []).concat(t));
+    const paths = [];
+    for (const root of pending) {
+      if (byId.has(root.parentId)) continue;
+      const traces = [];
+      const walk = (t) => { traces.push(t); (kids.get(t.id) || []).forEach(walk); };
+      walk(root);
+      traces.sort((a, b) => a.depth - b.depth || b.revertedAt - a.revertedAt); // parents first
+      const sp = exp.spaces[root.parentId];
+      const ex = sp && sp.exits.find((e) => e.id === root.viaExitId);
+      const door = ex && !ex.connectionId ? { spaceId: sp.id, exitId: ex.id } : null;
+      paths.push({ root, traces, door, dim: root.cause === 'lost-dim' });
+    }
+    pathCache = { exp, n: exp.history.length, paths };
+    return paths;
+  }
+
+  /** The lost path waiting behind this unopened door, or null. */
+  function lostPathAt(spaceId, exitId) {
+    return lostPaths().find((p) => p.door && p.door.spaceId === spaceId && p.door.exitId === exitId) || null;
+  }
+
+  /** What retracing a path costs: a shard per room, at least a charge. */
+  function retracePrice(path) {
+    return Math.max(RULES.retraceMin, path.traces.length * RULES.retracePerRoom);
+  }
+
+  /**
+   * Retrace a lost path: every room comes back as it was, parents first. A
+   * room whose footprint is taken can't, and neither can anything beyond
+   * it: those turn to corruption. Returns { back, gone } (room counts).
+   */
+  function retrace(path) {
+    const exp = state.exp;
+    const back = [], gone = [];
+    for (const t of path.traces) {
+      if (DE.restorable(exp, t.id)) { DE.restore(exp, t.id); back.push(t.id); } else gone.push(t.id);
+    }
+    DE.tagTraces(exp, gone, 'corrupt', false);
+    rebuildExitIndex();
+    for (const id of back) W.buildSpace(exp.spaces[id], true);
+    const door = path.door && state.doors.get(path.door.spaceId + '/' + path.door.exitId);
+    if (door && back.length) {
+      door.dir = 1;
+      door.seam.visible = false;
+      door.panel.material = W.doorOpenMat;
+    }
+    W.refreshArrows();
+    save();
+    return { back: back.length, gone: gone.length };
+  }
+
+  /** Open a lost path's door on something new: the whole path turns to corruption. */
+  function letGo(path) {
+    DE.tagTraces(state.exp, path.traces.map((t) => t.id), 'corrupt', false);
+    state.run.pathsLetGo = (state.run.pathsLetGo || 0) + 1;
+  }
 
   // ---------------------------------------------------------------------------
   // Faints
 
-  // Tallies that a faint doesn't roll back (the rest of the run does).
-  const TALLIES = ['walked', 'gutters', 'collapses', 'roomsCollapsed', 'chargesSpent', 'travels', 'relights',
-    'covers', 'lampBurned', 'unmade', 'faints', 'roomsLost', 'recharts', 'pixiesCaught', 'wellDrawn'];
-  const idNum = (id) => +id.slice(1);
+  // What a faint doesn't roll back: tallies, and the thread (an ability,
+  // once found). The rest of the run goes back to the checkpoint.
+  const KEEP = ['walked', 'gutters', 'collapses', 'roomsCollapsed', 'chargesSpent', 'travels', 'relights',
+    'covers', 'lampBurned', 'unmade', 'faints', 'roomsLost', 'retraces', 'pathsLetGo', 'pixiesCaught',
+    'wellDrawn', 'thread'];
 
   /**
-   * Pass out for good: every room that wasn't standing at the checkpoint
-   * collapses (deepest and latest first, each a trace marked 'faint'),
-   * doors carved since are walled up, and the run and the figure go back
-   * to the checkpoint's. Returns how many
-   * rooms were lost. Without a checkpoint for this expedition, nothing is.
+   * Pass out for good. Lost paths you never chose for dim, or fade. Every
+   * room that wasn't standing at the checkpoint becomes part of a lost path
+   * (deepest and latest first), doors carved since are walled up, and the
+   * run and the figure go back to the checkpoint's. Returns how many rooms
+   * were lost. Without a checkpoint for this expedition, nothing is.
    */
   function faint() {
     const exp = state.exp, live = state.run;
     const cp = SAVES.read('checkpoint');
     if (cp.status !== 'ok' || cp.snap.rootSeed !== exp.rootSeed) return 0;
+    const pending = Object.values(exp.traces || {}).filter((t) => PENDING.has(t.cause) && !exp.spaces[t.id]);
+    DE.tagTraces(exp, pending.filter((t) => t.cause === 'lost-dim').map((t) => t.id), 'faded', true);
+    DE.tagTraces(exp, pending.filter((t) => t.cause === 'lost').map((t) => t.id), 'lost-dim', true);
     const keep = new Set(Object.keys(cp.snap.record.spaces));
     const left = new Set(Object.keys(exp.spaces).filter((id) => !keep.has(id)));
     let lost = 0;
@@ -36,7 +124,7 @@
       const leaf = Array.from(left).filter((id) => DE.canRevert(exp, id)).map((id) => exp.spaces[id])
         .sort((a, b) => b.depth - a.depth || idNum(b.id) - idNum(a.id))[0];
       if (!leaf) break; // can't happen: a lost room's children were all opened after it
-      DE.revert(exp, leaf.id, 'faint');
+      DE.revert(exp, leaf.id, 'lost', true);
       left.delete(leaf.id);
       lost++;
     }
@@ -50,7 +138,7 @@
       if (ex) DE.uncarve(exp, sp.id, ex.id);
     }
     const run = Object.assign(freshRun(exp.rootSeed), cp.snap.run);
-    for (const k of TALLIES) if (live[k] !== undefined) run[k] = live[k];
+    for (const k of KEEP) if (live[k] !== undefined) run[k] = live[k];
     if (lost) { run.faints = (run.faints || 0) + 1; run.roomsLost = (run.roomsLost || 0) + lost; }
     W.setExpedition(exp, { run, player: cp.snap.player });
     return lost;
@@ -240,5 +328,5 @@
     showTitle();
   }
 
-  Object.assign(W, { faint, showTitle, hideTitle, loadSnapshot, newRun, openPause, quitToMenu, bootGame: boot });
+  Object.assign(W, { faint, lostPaths, lostPathAt, retracePrice, retrace, letGo, showTitle, hideTitle, loadSnapshot, newRun, openPause, quitToMenu, bootGame: boot });
 })(window);

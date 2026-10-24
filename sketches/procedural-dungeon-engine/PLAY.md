@@ -59,12 +59,16 @@ Determinism).
   Continue, New run, Import / Export save. Esc (or the Menu button) pauses:
   Resume, or Quit to main menu. The run saves itself every second; using a
   waystone (waking it, travelling, or touching an awake one) is a
-  **checkpoint**. Faint (stamina out) and you wake at your last waystone
-  with every room opened since collapsed into traces and your run rolled
-  back to the checkpoint. A door to a lost room has a **violet seam**: E
-  there charts the room again, exactly as it was, for 1 charge, while
-  nothing stands in its place. Pushing it opens something new instead. See
-  [`GAME-DESIGN.md`](GAME-DESIGN.md), section 17.
+  **checkpoint** (walking through a waystone hall isn't: the room's line
+  says where you'd wake). Faint (stamina out) and you wake at your last
+  waystone: every room opened since becomes a **lost path** (violet on the
+  map, quiet: no cracks, no ghosts), doors carved since are walled up, and
+  your run rolls back to the checkpoint. The door to a lost path has a
+  **violet seam**. E there retraces it, every room as you left it, for a
+  shard per room (at least a charge), if you've found **the thread**.
+  Pushing it lets the path go: something new opens and the whole path turns
+  to corruption. A path you leave alone dims at your next faint and fades
+  at the one after. See [`GAME-DESIGN.md`](GAME-DESIGN.md), section 17.
 - **Traces.** A collapsed room isn't deleted. The engine keeps its seed and
   cells as a **trace** (a branch that existed but wasn't kept), shown
   greyed on the minimap, the big map and the chart view. A new room that
@@ -357,7 +361,7 @@ you pass out and wake at your last waystone.
 | Doorways | 0.6 cells wide, 1.0 tall, with a lintel above | |
 | Closed door | dark panel with a warm orange seam of light under it | the same orange as the chart view's open doorways |
 | Locked door | iron-grey panel with two bands and a cold blue seam | blue on the minimap; once unlocked it keeps its bands and gets an orange seam |
-| Minimap | unopened doors orange, locked doors blue, opened doors green; traces grey; imprinted cells get a violet tick | so overlapping rooms stay readable |
+| Minimap | unopened doors orange, locked doors blue, opened doors green; traces grey; lost paths violet (dimmer once dimmed; faded ones not drawn); imprinted cells get a violet tick | so overlapping rooms stay readable |
 | Big map | Tab or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close | walking pauses while it's open |
 | Cracks | canvas-drawn fissures with a violet core on imprinted tiles; more trace layers, more cracks | seeded per cell; glows faintly even in the dark |
 | Blocks | flat-shaded boxes a shade darker than the walls, filling half-cell subgrid squares flush (no gaps between neighbours), 1–3 units of 0.43 cells tall, one seamless box each | cast shadows; never dither. The figure shows through them instead |
@@ -425,8 +429,9 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells, swelling to 0.8 while it touches you and shrinking back over 1 s (`swell`, `swellShrink`). No catching; a room with a ghost in it can't be rerolled |
 | Reroll price | 1 charge; only a provisional room (no door out of it ever opened) |
-| Re-chart | 1 charge (`rechartCharges`): E at a violet-seamed door rebuilds the room lost there to a faint (same id, seed, cells), while its footprint is free |
-| Checkpoint | written on waking a waystone, travelling, or E at an awake one; a faint loses every room not standing then, and rolls the run back to it |
+| Checkpoint | written on waking a waystone, travelling, or E at an awake one; a faint loses every room not standing then (and every door carved since), and rolls the run back to it, keeping tallies and the thread |
+| Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), needs the thread; let go: push the door (the path turns to corruption); unchosen: dim at the next faint, fade at the one after |
+| Thread | 1 room in 20 at depth 3+ (`threadChance`, `threadMinDepth`, last on the loot stream); a pickup; kept for the rest of the run, through faints; 🧵 by the keys |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); one pixie each (`jarCapacity`); F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall |
 | Chalk | start with one silver stick (3 strokes); 1/12 of rooms at depth 1+ hold a stick (seeded on the loot stream, after jars; colour from silver/gold/crimson/teal/violet); F draws on the nearest free quarter ahead (floor or a one-unit block's top, not under a jar, not on another mark); E on a mark wipes it |
@@ -461,7 +466,7 @@ loop, or one drawn with chalk) just clears any block on its own cell, so it
 can never reshuffle the room or drop a block onto the figure. As a
 safety net, a figure found inside a block steps out of its nearest side.
 
-A re-charted room is the same room (same id and seed), so its loot is the
+A retraced room is the same room (same id and seed), so its loot is the
 same, and anything the run keyed to it (`spaceId:seed`) still applies. After
 a faint the run has rolled back, so its items lie there again.
 

@@ -408,16 +408,24 @@ All notable changes to this sketch are logged here, per
     file holding both slots) and **a pause menu** (Esc, or the Menu button
     that replaces New map; Resume, Quit to main menu). The N key is gone.
   - **Fainting costs progress.** Every room opened since your last
-    checkpoint collapses into traces (tagged `'faint'`), and the run rolls
-    back to the checkpoint (inventory, entropy, keys, lit sconces, pushed
-    blocks...); tallies carry on.
-  - **Re-charting.** A door whose room was lost to a faint has a violet
-    seam; E there rebuilds the room exactly (same id, seed and cells) for a
-    charge (`rechartCharges`), uncracked by its own trace, while its
-    footprint is free.
-  - Engine: `revert(exp, id, cause)` tags traces; `rechartable` / `rechart`
-    and `expand(..., restore)` build a trace again; commits record
-    `restore`, and replay is exact (`stress-test.js` checks it).
+    checkpoint becomes a **lost path**, every door carved since is walled
+    up, and the run rolls back to the checkpoint (inventory, entropy,
+    keys, lit sconces, pushed blocks...); tallies and the thread carry on.
+  - **Lost paths, apart from rerolls.** Quiet (violet on the map, no cracks
+    or ghosts) until you choose at its door: **retrace** it (E: every room
+    as you left it, a shard per room, at least a charge; needs **the
+    thread**, a rare find at depth 3+, kept for the run) or **let it go**
+    (push: something new opens, and the whole path turns to corruption).
+    Left alone, a path dims at the next faint and fades at the one after.
+  - New run asks first (one run at a time: it replaces yours; export
+    offered), and its confirm now shows over the title screen (it opened
+    behind it, so the menu seemed stuck).
+  - A waystone hall that isn't where you'd wake says so as you enter
+    ("touch the waystone to wake here").
+  - Engine: `revert(exp, id, cause, quiet)`, `tagTraces` (quiet traces
+    leave no imprint), `restorable` / `restore` (a trace built again, same
+    id, seed and cells, via `expand(..., restore)`), `uncarve`. Replay is
+    exact (`stress-test.js` checks restores, tags and uncarves).
   - The chart view still reads walk mode's record, but its own edits no
     longer flow into walk mode.
 

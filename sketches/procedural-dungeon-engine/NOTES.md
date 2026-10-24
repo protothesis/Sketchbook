@@ -77,25 +77,33 @@ Each one is a default that can change.
   block placement. `imprintAt(exp, key)` indexes them per cell (cached
   outside the export and cleared on every revert). An application decides
   what an imprint means; the engine only remembers.
-- **Cause.** `revert(exp, id, cause)` takes an optional tag, kept on the
-  event and the trace (`trace.cause`). Walk mode tags rooms lost to a
-  faint `'faint'`. A reverted reserved space also keeps `trace.reserveId`.
+- **Cause and quiet.** `revert(exp, id, cause, quiet)` takes an optional
+  tag, kept on the event and the trace (`trace.cause`), and a `quiet` flag:
+  a quiet trace leaves no imprint (`imprintAt` skips it). `tagTraces(exp,
+  ids, cause, quiet)` changes both later, as a `tag` event. A reverted
+  reserved space also keeps `trace.reserveId`. Walk mode's causes: `lost`
+  and `lost-dim` (quiet, a faint's path waiting for a choice), `faded`
+  (quiet, gone; not drawn), `corrupt` (loud, a path let go). Rerolls have
+  no cause.
 
-## Re-charting
+## Restoring a trace
 
-- `rechartable(exp, spaceId, exitId, cause?)` finds the latest trace opened
-  through that unopened exit (with that cause, if given; never a reserved
-  space's, since its door rebuilds it anyway) and asks `expand` to build it
-  again: `expand(exp, spaceId, exitId, null, trace)` uses the trace's
-  entropy (so the same seed) and its id, and accepts only a placement whose
-  cells equal the trace's. The rng draws the same shapes whether or not they
-  fit, so the doors come out the same when the neighbours are. Returns
-  `{ trace, cand }`, or null if the beyond cell or the footprint is taken.
-- `rechart(...)` commits it. The commit event carries `restore: id`; the
-  counter doesn't move (the id is reused), and the trace is removed from
-  `traces` (its floor isn't cracked by itself). Reverting the space again
-  leaves a new trace with the same id. Replay passes the trace back in, so
-  it's exact. `stress-test.js` covers it.
+- `restorable(exp, traceId)` asks `expand` to build a trace again through
+  its parent's exit (the parent must stand, the exit be unopened):
+  `expand(exp, parentId, exitId, null, trace)` uses the trace's entropy (so
+  the same seed) and its id, and accepts only a placement whose cells equal
+  the trace's. The rng draws the same shapes whether or not they fit, so
+  the doors come out the same when the neighbours are. A reserved space
+  comes back through its waiting reserve, under its old id. Returns a
+  candidate, or null if the beyond cell or the footprint is taken.
+- `restore(exp, traceId)` commits it. The commit event carries `restore:
+  id`; the counter doesn't move (the id is reused), and the trace is
+  removed from `traces` (its floor isn't cracked by itself). Reverting the
+  space again leaves a new trace with the same id. Replay passes the trace
+  back in, so it's exact. `stress-test.js` covers it.
+- `uncarve(exp, spaceId, exitId)` walls a carved exit up again (an
+  `uncarve` event), dropping a loop through it; a space opened through it
+  must be reverted first.
 - Reusing the id and seed keeps everything keyed by `spaceId:seed` in walk
   mode (loot taken, ghosts rolled, sconces lit) pointing at the same room.
 
@@ -122,12 +130,20 @@ Each one is a default that can change.
   old `RUN_MIGRATIONS` in `core.js`, into both slots.
 - A record's JSON is cached per slot by history length, so the
   every-second resume write doesn't re-serialize a big record.
-- **Faint** (`faint()` in `game.js`): every space not in the checkpoint
-  record's `spaces` is reverted with cause `'faint'`, deepest (then latest
-  id) first, so each is a leaf when its turn comes (a lost room's children
-  were all opened after it). Then the run and the figure load from the
-  checkpoint, keeping tallies (`walked`, `gutters`, `collapses`, ...). The
-  checkpoint itself doesn't move.
+- **Faint** (`faint()` in `game.js`): pending lost paths age first
+  (`lost` to `lost-dim`, `lost-dim` to `faded`). Then every space not in
+  the checkpoint record's `spaces` is reverted, quiet, with cause `lost`,
+  deepest (then latest id) first, so each is a leaf when its turn comes (a
+  lost room's children were all opened after it). Carve events since the
+  checkpoint are undone (`uncarve`), latest first. Then the run and the
+  figure load from the checkpoint, keeping tallies (`walked`, `gutters`,
+  `collapses`, ...) and `thread`. The checkpoint itself doesn't move.
+- **Lost paths** (`lostPaths()` in `game.js`, cached by history length):
+  pending traces grouped by root, a pending trace whose parent isn't
+  pending, so its door is the parent's exit. Retracing restores the path
+  parents first; one that can't come back is tagged `corrupt`, and so is
+  everything beyond it (their parent isn't standing). Opening the door
+  fresh (`openDoor`) tags the whole path `corrupt` before expanding.
 
 ## Carving exits
 
