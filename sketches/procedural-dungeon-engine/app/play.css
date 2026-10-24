@@ -266,7 +266,7 @@ kbd {
 .title .done-buttons .btn { text-align: center; padding: 10px 14px; font-size: 15px; }
 .title-warn { color: #e8b35f; }
 .title-note { color: var(--muted); }
-.dialog { z-index: 11; }
+.dialog { z-index: 13; } /* above the title screen (12): its confirm opens over it */
 .dialog .done-card { width: min(420px, 100%); }
 .dialog .done-buttons { flex-direction: column; align-items: stretch; }
 

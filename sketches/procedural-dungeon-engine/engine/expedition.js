@@ -25,6 +25,7 @@
 //            | { type:'revert', spaceId, cause? }
 //            | { type:'caps', caps }
 //            | { type:'carve', spaceId, cell:{x,y}, facing }   (an exit cut into a wall)
+//            | { type:'uncarve', spaceId, exitId }   (a carved exit walled up again)
 //            | { type:'reserve', reserve }   (a footprint claimed ahead of time)
 //
 // Reserves: an application can claim a footprint before anything stands
@@ -579,6 +580,31 @@
   }
 
   /**
+   * Wall a carved exit up again (walk mode: a faint takes back doors cut
+   * since the checkpoint). If it opened onto a space (a loop), that
+   * connection goes too: a door the loop made on the far side is removed,
+   * any other far door becomes unresolved again. A space opened through it
+   * must be reverted first. Recorded in history.
+   */
+  function uncarve(exp, spaceId, exitId) {
+    const sp = exp.spaces[spaceId];
+    const ex = sp && sp.exits.find((e) => e.id === exitId);
+    if (!ex || !(ex.tags || []).includes('carved')) throw new Error('No carved exit ' + spaceId + '/' + exitId);
+    if (ex.connectionId) {
+      const conn = exp.connections[ex.connectionId];
+      if (!conn.loop) throw new Error('Revert the space beyond ' + spaceId + '/' + exitId + ' first');
+      const other = conn.a.spaceId === spaceId && conn.a.exitId === exitId ? conn.b : conn.a;
+      const os = exp.spaces[other.spaceId];
+      const oe = os && os.exits.find((e) => e.id === other.exitId);
+      if (oe && oe.loopMade) os.exits = os.exits.filter((e) => e !== oe);
+      else if (oe) oe.connectionId = null;
+      delete exp.connections[conn.id];
+    }
+    sp.exits = sp.exits.filter((e) => e !== ex);
+    exp.history.push({ type: 'uncarve', spaceId, exitId });
+  }
+
+  /**
    * What re-charting this unopened exit would build: the latest trace opened
    * through it (with this `cause`, if given), when the same space can stand
    * there again. Reserved spaces never need it (their door rebuilds them).
@@ -643,6 +669,8 @@
         revert(exp, ev.spaceId, ev.cause);
       } else if (ev.type === 'carve') {
         carve(exp, ev.spaceId, ev.cell, ev.facing);
+      } else if (ev.type === 'uncarve') {
+        uncarve(exp, ev.spaceId, ev.exitId);
       } else if (ev.type === 'caps') {
         setCaps(exp, ev.caps);
       } else if (ev.type === 'reserve') {
@@ -729,7 +757,7 @@
 
   Object.assign(DE, {
     deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
-    canCarve, carve, rechartable, rechart, replay, exportRecord, importRecord, rebuildRegistry,
+    canCarve, carve, uncarve, rechartable, rechart, replay, exportRecord, importRecord, rebuildRegistry,
     pathToRoot, cycleCount, stats, parseKey, imprintAt, reservedAt, canReserve, reserve,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

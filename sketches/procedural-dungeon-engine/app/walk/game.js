@@ -20,8 +20,9 @@
 
   /**
    * Pass out for good: every room that wasn't standing at the checkpoint
-   * collapses (deepest and latest first, each a trace marked 'faint'), and
-   * the run and the figure go back to the checkpoint's. Returns how many
+   * collapses (deepest and latest first, each a trace marked 'faint'),
+   * doors carved since are walled up, and the run and the figure go back
+   * to the checkpoint's. Returns how many
    * rooms were lost. Without a checkpoint for this expedition, nothing is.
    */
   function faint() {
@@ -38,6 +39,15 @@
       DE.revert(exp, leaf.id, 'faint');
       left.delete(leaf.id);
       lost++;
+    }
+    // Doors cut since the checkpoint are walled up again (the doorstones
+    // come back with the run), latest first.
+    const since = exp.history.slice(cp.snap.record.history.length);
+    for (const ev of since.filter((e) => e.type === 'carve').reverse()) {
+      const sp = exp.spaces[ev.spaceId];
+      const ex = sp && sp.exits.find((e) => e.cell.x === ev.cell.x && e.cell.y === ev.cell.y &&
+        e.facing === ev.facing && (e.tags || []).includes('carved'));
+      if (ex) DE.uncarve(exp, sp.id, ex.id);
     }
     const run = Object.assign(freshRun(exp.rootSeed), cp.snap.run);
     for (const k of TALLIES) if (live[k] !== undefined) run[k] = live[k];
@@ -152,9 +162,11 @@
     W.openDialog({
       kicker: 'new run',
       title: 'Start a new run?',
-      text: 'Your run in progress will be replaced (export it first to keep it).',
+      text: 'There is one run at a time: a new run replaces the one in progress, its map and its ' +
+        'checkpoint, for good. Export it first if you want to keep it.',
       buttons: [
-        { label: 'New run', primary: true, onClick: () => newRun() },
+        { label: 'Replace it with a new run', primary: true, onClick: () => newRun() },
+        { label: 'Export it first', onClick: () => exportBtn.click() },
         { label: 'Keep my run', quiet: true },
       ],
     });

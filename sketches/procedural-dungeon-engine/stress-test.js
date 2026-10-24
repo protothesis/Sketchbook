@@ -56,7 +56,7 @@ function sameMap(a, b) {
 let totalCycles = 0;
 for (let run = 0; run < RUNS; run++) {
   const exp = DE.createExpedition(DE.randomRootSeed());
-  let expansions = 0, loops = 0, reverts = 0, reserves = 0, recharts = 0;
+  let expansions = 0, loops = 0, reverts = 0, reserves = 0, recharts = 0, uncarves = 0;
   while (expansions < N) {
     const open = [];
     for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId && e.kind !== 'surface') open.push([id, e.id]);
@@ -85,6 +85,20 @@ for (let run = 0; run < RUNS; run++) {
       }
     }
     if (expansions % 40 === 0) tryReserve(exp) && reserves++;
+    // Carve a door now and then, and sometimes wall it up again (loops too).
+    if (Math.random() < 0.04) {
+      const sp = exp.spaces[pick(Object.keys(exp.spaces))];
+      const c = DE.parseKey(pick(sp.cells)), f = pick(DE.FACINGS);
+      if (DE.canCarve(exp, sp.id, c, f)) {
+        const ex = DE.carve(exp, sp.id, c, f);
+        if (Math.random() < 0.5) {
+          if (Math.random() < 0.5) { const cand = DE.expand(exp, sp.id, ex.id); if (cand.type === 'loop') DE.commit(exp, cand); }
+          DE.uncarve(exp, sp.id, ex.id);
+          assert(!sp.exits.includes(ex), 'uncarved exit still there');
+          uncarves++;
+        }
+      }
+    }
     if (expansions % 50 === 0) checkNoOverlap(exp);
   }
   checkNoOverlap(exp);
@@ -94,7 +108,7 @@ for (let run = 0; run < RUNS; run++) {
   const s = DE.stats(exp);
   totalCycles += s.cycles;
   const built = Object.values(exp.reserves).filter((r) => r.spaceId).length;
-  console.log(`run ${run} seed=${exp.rootSeed}: ${expansions} expansions, ${loops} loops, ${reverts} reverts, ${reserves} reserves (${built} built), ${recharts} re-charts ->`,
+  console.log(`run ${run} seed=${exp.rootSeed}: ${expansions} expansions, ${loops} loops, ${reverts} reverts, ${reserves} reserves (${built} built), ${recharts} re-charts, ${uncarves} uncarves ->`,
     `${s.spaces} spaces, ${s.cells} cells, ${s.cycles} cycles, ${s.openExits} open exits; replay OK`);
 }
 assert(totalCycles > 0, 'no cycles in any run');
