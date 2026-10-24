@@ -49,15 +49,18 @@ Each one is a default that can change.
 
 ## History / replay
 
-- `history` holds `commit` (parentId, viaExitId, entropy, loop?), `revert`
-  (spaceId) and `caps` events. **Rerolls are not recorded.** Rejected
+- `history` holds `commit` (parentId, viaExitId, entropy, loop?,
+  restore?), `revert` (spaceId, cause?), `carve`, `reserve` and `caps`
+  events. **Rerolls are not recorded.** Rejected
   candidates leave no trace.
 - Replay starts from `rootSeed` plus the stored params (with caps cleared), then
   re-applies history in order. Space and connection ids come from counters,
   so they replay identically. `importRecord` diffs the replay against the
   file's stored spaces and reports any mismatch.
-- The UI autosaves the record to `localStorage` and restores it on load by
-  replaying it. If storage is unavailable it just starts fresh.
+- The chart view autosaves the record to `localStorage` and restores it on
+  load by replaying it. If storage is unavailable it just starts fresh. Walk
+  mode has its own save slots (see "Saves" below) and only mirrors its
+  record there for the chart view to read.
 
 ## Revert
 
@@ -74,6 +77,73 @@ Each one is a default that can change.
   block placement. `imprintAt(exp, key)` indexes them per cell (cached
   outside the export and cleared on every revert). An application decides
   what an imprint means; the engine only remembers.
+- **Cause and quiet.** `revert(exp, id, cause, quiet)` takes an optional
+  tag, kept on the event and the trace (`trace.cause`), and a `quiet` flag:
+  a quiet trace leaves no imprint (`imprintAt` skips it). `tagTraces(exp,
+  ids, cause, quiet)` changes both later, as a `tag` event. A reverted
+  reserved space also keeps `trace.reserveId`. Walk mode's causes: `lost`
+  and `lost-dim` (quiet, a faint's path waiting for a choice), `faded`
+  (quiet, gone; not drawn), `corrupt` (loud, a path let go). Rerolls have
+  no cause.
+
+## Restoring a trace
+
+- `restorable(exp, traceId)` asks `expand` to build a trace again through
+  its parent's exit (the parent must stand, the exit be unopened):
+  `expand(exp, parentId, exitId, null, trace)` uses the trace's entropy (so
+  the same seed) and its id, and accepts only a placement whose cells equal
+  the trace's. The rng draws the same shapes whether or not they fit, so
+  the doors come out the same when the neighbours are. A reserved space
+  comes back through its waiting reserve, under its old id. Returns a
+  candidate, or null if the beyond cell or the footprint is taken.
+- `restore(exp, traceId)` commits it. The commit event carries `restore:
+  id`; the counter doesn't move (the id is reused), and the trace is
+  removed from `traces` (its floor isn't cracked by itself). Reverting the
+  space again leaves a new trace with the same id. Replay passes the trace
+  back in, so it's exact. `stress-test.js` covers it.
+- `uncarve(exp, spaceId, exitId)` walls a carved exit up again (an
+  `uncarve` event), dropping a loop through it; a space opened through it
+  must be reverted first.
+- Reusing the id and seed keeps everything keyed by `spaceId:seed` in walk
+  mode (loot taken, ghosts rolled, sconces lit) pointing at the same room.
+
+## Saves (walk mode)
+
+- `app/walk/saves.js` (on `DungeonPlay.saves`, independent of the rest of
+  walk mode) holds two slots: `resume` (`dungeon-engine:save:resume`) and
+  `checkpoint` (`dungeon-engine:save:checkpoint`). A snapshot is
+  `{ format: 'dungeon-walk-save', build, savedAt, rootSeed, record, run,
+  player: { x, y, angle } }`; `record` is the expedition as plain data
+  (replayed on load, and checked with `importRecord`'s `verified`). A save
+  file is `{ format: 'dungeon-walk-savefile', build, savedAt, resume,
+  checkpoint }`; importing also accepts a single snapshot or a bare record.
+  The backend is swappable (`setBackend({ get, set, remove })`).
+- **Versioning.** `BUILD` in `saves.js` stamps every snapshot. A save with
+  another build isn't loaded (title screen: "from an older build"). Bump it
+  whenever a change alters what a history builds (generator, placement,
+  anything replay touches) or the shape of `run`. That replaces the old
+  habit of gating generator changes behind params for old records (the
+  existing gates, like `params.starter` and `params.hallChance`, stay but
+  needn't grow). Within one build, replay is exact.
+- Build 1 brings a save from before slots over once: the shared record
+  (`dungeon-engine:expedition`) plus `dungeon-engine:player`, through the
+  old `RUN_MIGRATIONS` in `core.js`, into both slots.
+- A record's JSON is cached per slot by history length, so the
+  every-second resume write doesn't re-serialize a big record.
+- **Faint** (`faint()` in `game.js`): pending lost paths age first
+  (`lost` to `lost-dim`, `lost-dim` to `faded`). Then every space not in
+  the checkpoint record's `spaces` is reverted, quiet, with cause `lost`,
+  deepest (then latest id) first, so each is a leaf when its turn comes (a
+  lost room's children were all opened after it). Carve events since the
+  checkpoint are undone (`uncarve`), latest first. Then the run and the
+  figure load from the checkpoint, keeping tallies (`walked`, `gutters`,
+  `collapses`, ...) and `thread`. The checkpoint itself doesn't move.
+- **Lost paths** (`lostPaths()` in `game.js`, cached by history length):
+  pending traces grouped by root, a pending trace whose parent isn't
+  pending, so its door is the parent's exit. Retracing restores the path
+  parents first; one that can't come back is tagged `corrupt`, and so is
+  everything beyond it (their parent isn't standing). Opening the door
+  fresh (`openDoor`) tags the whole path `corrupt` before expanding.
 
 ## Carving exits
 

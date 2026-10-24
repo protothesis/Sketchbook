@@ -15,7 +15,7 @@
     <p id="stats"></p>
     <div class="hud-buttons">
       <a class="btn" href="index.html">Chart view</a>
-      <button class="btn" id="new-btn" type="button">New map</button>
+      <button class="btn" id="menu-btn" type="button" title="Pause (Esc)">Menu</button>
     </div>
   </div>
 
@@ -52,7 +52,7 @@
     <div class="lamp-body">
       <div id="lamp-meter" class="lamp-meter"></div>
       <div id="stamina" class="stamina" title="psychic stamina"><i></i></div>
-      <div class="lamp-row"><span id="lamp-state" class="lamp-state"></span><span id="keys" class="keys" hidden></span></div>
+      <div class="lamp-row"><span id="lamp-state" class="lamp-state"></span><span id="keys" class="keys" hidden></span><span id="thread" class="thread" hidden title="the thread: retrace a lost path at its door">🧵</span></div>
     </div>
   </div>
   <div id="popups" class="popups" aria-hidden="true"></div>
@@ -62,7 +62,7 @@
 
   <div class="hud bottom-left help">
     <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> crouch · <kbd>E</kbd> interact · <kbd>F</kbd> use item · <kbd>R</kbd> lamp · <kbd>1</kbd>–<kbd>9</kbd> select ·
-    <kbd>Tab</kbd> map · <kbd>N</kbd> new
+    <kbd>Tab</kbd> map · <kbd>Esc</kbd> menu
   </div>
 
   <div id="stick" class="stick" hidden><div class="knob"></div></div>
@@ -76,6 +76,22 @@
       <h2 id="dialog-title"></h2>
       <p class="done-lede" id="dialog-text"></p>
       <div class="done-buttons" id="dialog-buttons"></div>
+    </div>
+  </div>
+
+  <div id="title" class="done title" hidden>
+    <div class="done-card title-card">
+      <p class="done-kicker">the procedural dungeon</p>
+      <h2>Dungeon Walk</h2>
+      <p class="done-lede" id="title-status"></p>
+      <div class="done-buttons">
+        <button class="btn primary" id="title-continue" type="button">Continue</button>
+        <button class="btn" id="title-new" type="button">New run</button>
+        <button class="btn" id="title-import" type="button">Import save</button>
+        <button class="btn" id="title-export" type="button">Export save</button>
+        <a class="btn quiet" href="index.html">Chart view</a>
+      </div>
+      <input type="file" id="title-file" accept=".json,application/json" hidden />
     </div>
   </div>
 
@@ -105,6 +121,7 @@
   <script src="engine/expedition.js"></script>
   <script src="app/play-rules.js"></script>
   <!-- Walk mode, in load order (see the top of app/walk/core.js). -->
+  <script src="app/walk/saves.js"></script>
   <script src="app/walk/core.js"></script>
   <script src="app/walk/world.js"></script>
   <script src="app/walk/figure.js"></script>
@@ -120,6 +137,7 @@
   <script src="app/walk/ghosts.js"></script>
   <script src="app/walk/fx.js"></script>
   <script src="app/walk/hud.js"></script>
+  <script src="app/walk/game.js"></script>
   <script src="app/walk/main.js"></script>
 </body>
 </html>

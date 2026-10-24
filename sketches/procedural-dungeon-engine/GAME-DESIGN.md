@@ -29,8 +29,12 @@ decisions, see [`NOTES.md`](NOTES.md).
    lamp a place to rest.
 7. **Arrive.** The waypoint is a setpiece, a big hall. Wake its waystone
    and it joins your fast-travel network, and new waypoints may appear.
-8. **If the lamp runs out,** you wake at the last waystone you used.
-   Everything you did stays done.
+8. **Using a waystone is a checkpoint.** If you faint (your psychic
+   stamina runs out, in the dark or in a ghost's reach), you wake at the
+   last waystone you used, and everything opened since becomes a **lost
+   path**. Your run (what you carry, what you lit and pushed) goes back
+   to how it was there. At a lost path's door you choose once: retrace it
+   (if you've found the thread, for entropy) or let it go (section 17).
 9. **Harvest and plant seeds** (later) to shape the map with a scarcer
    resource than entropy.
 
@@ -600,6 +604,68 @@ stranger" idea measured from your anchors instead of from the root.
 Candidates: fewer sconces and more ghosts by distance from the nearest
 awake waystone; the light shorter; imprints and cracks heavier.
 
+## 17. Saves, checkpoints and fainting
+
+A proper game loop around the run (built 2026-10-24).
+
+**Two save slots.** *Resume* is written all the time (every second, when
+the page is hidden, when you quit to the menu): it's how closing the
+laptop and coming back works. *Checkpoint* is progress: a full snapshot
+written when you use a waystone (wake it, travel from it, or just touch an
+awake one). Quitting writes only the resume slot.
+
+The two are different things on purpose: the resume slot is an autosave
+(where you are), the checkpoint is your respawn (where you wake). Walking
+through a waystone hall doesn't move your respawn; touching the stone
+does. The game teaches it in passing: entering a hall with an awake
+waystone that isn't your respawn adds "you'd still wake in s3 · touch the
+waystone to wake here" to the room's line.
+
+There is one run at a time. New run replaces it (the title warns first,
+and offers an export). A picker over several runs can come later.
+
+**A title screen** on load: Continue (the resume slot), New run, and
+import / export of a save file (both slots in one file). A **pause menu**
+(Esc, or the Menu button for touch): Resume, Quit to main menu.
+
+**A version stamp on every save.** A save from another build isn't
+loaded; the title screen says so and offers a new run (and an export, to
+keep it). Strict backwards compatibility is no longer a goal: a change to
+what a history builds bumps the stamp instead of hiding behind params for
+old records. Within one build, replay is still exact.
+
+**Fainting costs progress.** Waking at your last waystone used to be free.
+Now every room that wasn't standing at your checkpoint is lost, and so is
+every door carved since (the doorstones come back with the run). The run
+rolls back to the checkpoint too: inventory, entropy, keys, lit sconces,
+pushed blocks, wells, ghosts. Tallies (time walked, faints, collapses)
+carry on, and so does the thread.
+
+**Two kinds of trace.** A reroll is a choice, one room at a time, and its
+trace cracks the floor and draws ghosts. A faint is a failure, and loses a
+whole path at once. Treating those the same made big dungeons noisy, so
+they're apart now:
+
+- **A lost path** is quiet: drawn in violet on the map, no cracks, no
+  ghosts. Its door has a violet seam. It waits for your choice.
+- **Retrace it** (E at the door): the whole path comes back as you left it
+  (same rooms, same ids and seeds), for **a shard per room, at least a
+  charge**. Rooms whose footprint has since been taken can't come back,
+  and neither can anything beyond them: those turn to corruption. Only
+  with **the thread**, a rare find (1 room in 20, depth 3+) that's yours
+  for the rest of the run. Without it, a lost path can only be let go.
+- **Let it go** (push the door): something new opens, and the whole path
+  turns to corruption, loud traces like a reroll's, so the new room grows
+  over cracked, haunted ground.
+- **Ignore it**, and each later faint dims it; the second one fades it:
+  gone, footprint free, no corruption, no choice.
+
+You might not afford a retrace when you wake. That's fine: go and find
+the entropy, then come back.
+
+Waypoint distance stays as is (it played well). The thread is the first
+version of "retracing is earned"; it may become a proper ability later.
+
 ## First slice (built 2026-10-21)
 
 Built as planned; kept for the record.
@@ -669,6 +735,13 @@ archetypes (more irregular shapes, like the halls').
 darker the farther out (section 16); active travel (section 9); chapters
 of waypoints; seeds (section 4); secrets.
 
+## Fourth slice (built 2026-10-24)
+
+The game loop (section 17): save slots with a build stamp, a title screen,
+a pause menu, waystones as checkpoints, faints that cost every room and
+carved door since the checkpoint (and roll the run back), and lost paths
+you retrace (with the thread) or let go.
+
 ## Open questions
 
 - How is the power for bigger rerolls earned: a level, an ability, a relic?
@@ -683,3 +756,10 @@ of waypoints; seeds (section 4); secrets.
   playing. (Slowed once, 2026-10-22.)
 - Should the dark and a ghost drain stamina at different rates?
 - Should waking a waystone cost more, given travel now costs too?
+- With faints costing rooms: does the lamp drain too fast, should sconces
+  shelter more? (Waypoint distance felt right, 2026-10-24.) Tune by
+  playing.
+- Is a shard per room the right retrace price? Is the thread too rare, or
+  should retracing become an earned ability instead?
+- Should touching a waystone stay the only way to move your respawn, or
+  should something else (resting? lighting a sconce?) set it too?

@@ -11,8 +11,8 @@
 //
 // Psychic stamina is your other meter (GAME-DESIGN.md, section 12). A
 // ghost's touch drains it, and so does the dark, more slowly. Empty, you
-// pass out and wake at your last waystone. It refills in light once
-// nothing drains it.
+// pass out and wake at your last waystone, and lose everything opened since
+// you last used one (game.js). It refills in light once nothing drains it.
 //
 // You should feel the lamp without looking at the meter. It has three
 // stages, blended (RULES.lampUneasy, lampDanger, lampDying): uneasy, a
@@ -182,9 +182,10 @@
   }
 
   function wake() {
-    const run = state.run;
     state.gutter = null;
     state.paused = false;
+    const lost = W.faint(); // the rooms since your last checkpoint, and the run back to it
+    const run = state.run;
     run.fuel = Math.max(run.fuel, RULES.chargesStart);
     run.lampOn = true;
     run.stamina = 1;
@@ -195,7 +196,8 @@
     else { Object.assign(state.player, W.spawnPoint(state.exp), { z: 0, vz: 0 }); W.snapCamera(); }
     const f = $('fade');
     if (f) f.classList.remove('on');
-    W.showCaption(`you wake by the waystone in ${st ? st.spaceId : 's0'} · ${chargeText(run.fuel)} of entropy`);
+    W.showCaption(`you wake by the waystone in ${st ? st.spaceId : 's0'}` +
+      (lost ? ` · ${lost} room${lost === 1 ? '' : 's'} lost to the dark` : '') + ` · ${chargeText(run.fuel)} of entropy`);
     savePlayer();
     W.refreshHud();
   }

@@ -82,6 +82,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
   const bandMat = withDither(new THREE.MeshLambertMaterial({ color: 0x5d6670, emissive: 0x0c1218 }), DOOR_DITHER);
   const seamMat = new THREE.MeshBasicMaterial({ color: SEAM, side: THREE.DoubleSide }); // double: the door's point can be mirrored
   const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM, side: THREE.DoubleSide });
+  // A door to a lost path (a faint's), waiting for your choice: a waystone's violet.
+  const lostSeamMat = new THREE.MeshBasicMaterial({ color: 0xa58cff, side: THREE.DoubleSide });
   // The surface door: weathered pale wood, daylight under it.
   const surfaceMat = withDither(new THREE.MeshLambertMaterial({ color: 0x6f6a62, emissive: 0x15171a }), DOOR_DITHER);
   const surfaceSeamMat = new THREE.MeshBasicMaterial({ color: 0xdcebff, side: THREE.DoubleSide });
@@ -290,6 +292,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       const key = itemKey(space, item);
       if (state.run.collected.includes(key)) continue;
       if (item.kind === 'key' && !state.run.keyRooms.includes(spaceKey)) continue;
+      if (item.kind === 'thread' && state.run.thread) continue; // found once, kept for good
       const tile = tileAt[DE.key(item.cell.x, item.cell.y)];
       if (W.ITEMS[item.kind].cls === 'object') { W.spawnObject(item, key, tile); continue; }
       const mesh = W.itemMesh(item, key);
@@ -319,7 +322,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
         pivot.add(band);
       }
     }
-    const seam = new THREE.Mesh(geo.seam, surface ? surfaceSeamMat : locked ? lockSeamMat : seamMat);
+    const seam = new THREE.Mesh(geo.seam, surface ? surfaceSeamMat : locked ? lockSeamMat : !ex.connectionId && W.lostPathAt(space.id, ex.id) ? lostSeamMat : seamMat);
     seam.position.set(0, 0.02, 0);
     seam.visible = !ex.connectionId;
     // A closed door's point: off the bar's outer edge, toward where it opens.
@@ -341,12 +344,18 @@ if (vDitherEW > 0.7 && south > 0.2) {
     state.doors.set(door.key, door);
   }
 
-  /** Green arrows mark only doors whose room beyond is still provisional (rerollable). */
+  /**
+   * Green arrows mark only doors whose room beyond is still provisional
+   * (rerollable). Violet seams mark doors to a lost path (game.js).
+   */
   function refreshArrows() {
     const exp = state.exp;
     for (const d of state.doors.values()) {
       const sp = exp.spaces[d.spaceId], ex = sp && sp.exits.find((e) => e.id === d.exitId);
       d.arrow.visible = !!(ex && DP.rerollThrough(exp, d.spaceId, ex));
+      if (ex && !ex.connectionId && ex.kind !== 'surface' && !d.locked) {
+        d.seam.material = d.point.material = W.lostPathAt(d.spaceId, d.exitId) ? lostSeamMat : seamMat;
+      }
     }
   }
 

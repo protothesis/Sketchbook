@@ -1,10 +1,11 @@
 // Walk mode: what E does at a door or wall. Open, unlock, collapse a branch
-// for entropy, or press a doorstone to a wall.
+// for entropy, retrace a path lost to a faint (or let it go), or press a
+// doorstone to a wall.
 (function (global) {
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RADIUS, USE_RANGE, state, rebuildExitIndex, isLockedNow, chargeText, save,
+  const { DE, DP, RULES, RADIUS, USE_RANGE, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
     climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn, toolNear,
     takeItem, pullNear, pull, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
@@ -14,9 +15,11 @@
 
   /**
    * The door in the player's own room within reach, and what can be done
-   * with it: 'open' | 'locked' | 'collapse'. Collapse (a reroll) is only
-   * offered into a room that's still provisional. Loop doors, the way back
-   * into a room, and doors into committed rooms have no action.
+   * with it: 'open' | 'retrace' | 'locked' | 'collapse'. Collapse (a
+   * reroll) is only offered into a room that's still provisional; retrace,
+   * at the door to a path lost to a faint (pushing it open lets the path
+   * go instead). Loop doors,
+   * the way back into a room, and doors into committed rooms have no action.
    */
   function doorNear(p) {
     const exp = state.exp;
@@ -34,6 +37,14 @@
       if (!action) continue;
       bestD = d;
       best = { space: sp, exit: ex, action, child };
+    }
+    const path = best && best.action === 'open' && W.lostPathAt(sp.id, best.exit.id);
+    if (path) {
+      best.action = 'retrace';
+      best.path = path;
+      best.price = W.retracePrice(path);
+      best.thread = !!state.run.thread;
+      best.affordable = best.price <= state.run.fuel + 1e-6;
     }
     if (best && best.action === 'collapse') {
       const branch = DP.branch(exp, best.child.id);
@@ -105,6 +116,24 @@
     const doorKey = near.space.id + '/' + near.exit.id;
     if (near.action === 'open') {
       openDoor(near.space.id, near.exit.id);
+    } else if (near.action === 'retrace') {
+      const n = near.path.traces.length;
+      if (!near.thread) {
+        W.showCaption(`your lost path (${n} room${n === 1 ? '' : 's'}) · without a thread you can't find the way back · push to let it go`);
+        return;
+      }
+      if (!near.affordable) {
+        W.showCaption(`not enough entropy to retrace ${n} room${n === 1 ? '' : 's'}: ${chargeText(near.price)}, you have ${chargeText(run.fuel)}`);
+        return;
+      }
+      W.spendFuel(near.price);
+      run.chargesSpent += near.price;
+      run.retraces = (run.retraces || 0) + 1;
+      const r = W.retrace(near.path);
+      W.showCaption(`the thread pulls taut · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
+        (r.gone ? ` · ${r.gone} couldn't come back` : '') + ` · −${chargeText(near.price)}`);
+      savePlayer();
+      W.refreshHud();
     } else if (near.action === 'locked') {
       if (run.keys <= 0) { W.showCaption('locked. you need a key'); return; }
       run.keys--;
@@ -147,17 +176,24 @@
     return locks > state.run.keys + lying;
   }
 
+  /**
+   * Open a door on something new. At a lost path's door, that lets the path
+   * go: it turns to corruption first, so the new room grows over it.
+   * Returns true if it opened.
+   */
   function openDoor(spaceId, exitId) {
     const exp = state.exp;
     const needKey = keyNeeded();
     const settling = !DP.committed(exp, exp.spaces[spaceId]); // opening a door out commits this room
+    const path = W.lostPathAt(spaceId, exitId);
+    if (path) W.letGo(path);
     let cand;
     try {
       cand = DE.expand(exp, spaceId, exitId);
       DE.commit(exp, cand);
     } catch (e) {
       W.showCaption(e.message);
-      return;
+      return false;
     }
     rebuildExitIndex();
     const door = state.doors.get(spaceId + '/' + exitId);
@@ -166,19 +202,21 @@
       door.seam.visible = false;
       door.panel.material = doorOpenMat;
     }
-    refreshArrows();
+    refreshArrows(); // also: a new room can take a lost room's place
     if (cand.type === 'loop') {
       buildSpace(exp.spaces[cand.targetId], false);
       W.showCaption('this door opens onto ' + cand.targetId + '. you have been here' + (settling ? ` · ${spaceId} holds now` : ''));
     } else {
-      if (settling) W.showCaption(`${spaceId} holds now · no rerolling it`);
       const sp = cand.space;
+      if (path) W.showCaption(`you let the lost path go · it sours into the stone` + (settling ? ` · ${spaceId} holds now` : ''));
+      else if (settling) W.showCaption(`${spaceId} holds now · no rerolling it`);
       if (needKey && DP.loot(sp).some((it) => it.kind === 'key')) state.run.keyRooms.push(sp.id + ':' + sp.seed);
       buildSpace(sp, true);
       if (sp.archetype === 'hall') W.arrive(sp);
     }
     save();
     W.refreshHud();
+    return true;
   }
 
   /** The surface door: a placeholder way out of the game loop. */

@@ -140,7 +140,7 @@
       };
 
       // Traces of reverted spaces: greyed and dashed, under everything live.
-      const traces = Object.values(exp.traces || {});
+      const traces = Object.values(exp.traces || {}).filter((t) => t.cause !== 'faded');
       if (traces.length) {
         ctx.globalAlpha = 0.28;
         ctx.fillStyle = colors.ghost;

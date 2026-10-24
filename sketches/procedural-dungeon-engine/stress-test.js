@@ -1,7 +1,9 @@
 // Headless engine check (milestone acceptance criteria), run with:
 //   node stress-test.js [expansions=500] [runs=5]
-// Random expansions, rerolls and reverts; asserts no overlaps, a registry that
-// rebuilds identically, exact replay from history, and at least one cycle.
+// Random expansions, rerolls, reverts (some tagged, quiet, and restored or
+// re-tagged later) and carved doors (some walled up again); asserts no
+// overlaps, a registry that rebuilds identically, exact replay from history,
+// that a restored space is the one that was lost, and at least one cycle.
 'use strict';
 require('./engine/rng.js');
 require('./engine/shapes.js');
@@ -54,7 +56,7 @@ function sameMap(a, b) {
 let totalCycles = 0;
 for (let run = 0; run < RUNS; run++) {
   const exp = DE.createExpedition(DE.randomRootSeed());
-  let expansions = 0, loops = 0, reverts = 0, reserves = 0;
+  let expansions = 0, loops = 0, reverts = 0, reserves = 0, restores = 0, uncarves = 0;
   while (expansions < N) {
     const open = [];
     for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId && e.kind !== 'surface') open.push([id, e.id]);
@@ -67,9 +69,39 @@ for (let run = 0; run < RUNS; run++) {
     expansions++;
     if (Math.random() < 0.05) {
       const leaves = Object.keys(exp.spaces).filter((id) => DE.canRevert(exp, id));
-      if (leaves.length) { DE.revert(exp, pick(leaves)); reverts++; }
+      if (leaves.length) { DE.revert(exp, pick(leaves), Math.random() < 0.5 ? 'lost' : undefined, Math.random() < 0.5); reverts++; }
+    }
+    // Restore a lost space now and then: same id, seed and cells. Re-tag
+    // some (quiet traces leave no imprint).
+    if (Math.random() < 0.05) {
+      const t = pick(Object.values(exp.traces).filter((t) => t.cause === 'lost').concat([null]));
+      if (t && DE.restorable(exp, t.id)) {
+        const want = t;
+        const id = DE.restore(exp, t.id);
+        const sp = exp.spaces[id];
+        assert(id === want.id && sp.seed === want.seed && sp.cells.join(';') === want.cells.join(';'), 'restore of ' + want.id + ' differs');
+        assert(!exp.traces[want.id], 'restored trace ' + want.id + ' still there');
+        restores++;
+      } else if (t) {
+        DE.tagTraces(exp, [t.id], pick(['corrupt', 'faded']), Math.random() < 0.5);
+        for (const k of t.cells) assert(DE.imprintAt(exp, k).every((x) => !x.quiet), 'quiet trace leaves an imprint');
+      }
     }
     if (expansions % 40 === 0) tryReserve(exp) && reserves++;
+    // Carve a door now and then, and sometimes wall it up again (loops too).
+    if (Math.random() < 0.04) {
+      const sp = exp.spaces[pick(Object.keys(exp.spaces))];
+      const c = DE.parseKey(pick(sp.cells)), f = pick(DE.FACINGS);
+      if (DE.canCarve(exp, sp.id, c, f)) {
+        const ex = DE.carve(exp, sp.id, c, f);
+        if (Math.random() < 0.5) {
+          if (Math.random() < 0.5) { const cand = DE.expand(exp, sp.id, ex.id); if (cand.type === 'loop') DE.commit(exp, cand); }
+          DE.uncarve(exp, sp.id, ex.id);
+          assert(!sp.exits.includes(ex), 'uncarved exit still there');
+          uncarves++;
+        }
+      }
+    }
     if (expansions % 50 === 0) checkNoOverlap(exp);
   }
   checkNoOverlap(exp);
@@ -79,7 +111,7 @@ for (let run = 0; run < RUNS; run++) {
   const s = DE.stats(exp);
   totalCycles += s.cycles;
   const built = Object.values(exp.reserves).filter((r) => r.spaceId).length;
-  console.log(`run ${run} seed=${exp.rootSeed}: ${expansions} expansions, ${loops} loops, ${reverts} reverts, ${reserves} reserves (${built} built) ->`,
+  console.log(`run ${run} seed=${exp.rootSeed}: ${expansions} expansions, ${loops} loops, ${reverts} reverts, ${reserves} reserves (${built} built), ${restores} restores, ${uncarves} uncarves ->`,
     `${s.spaces} spaces, ${s.cells} cells, ${s.cycles} cycles, ${s.openExits} open exits; replay OK`);
 }
 assert(totalCycles > 0, 'no cycles in any run');

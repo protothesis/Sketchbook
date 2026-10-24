@@ -74,12 +74,21 @@
         return `a stick of ${color} chalk · ${W.verbF} to draw a ${CHALK[color].name}`;
       },
     },
+    thread: {
+      cls: 'pickup',
+      take(run) {
+        run.thread = true;
+        return 'a spool of thread · now a path lost to a faint can be retraced, at its door';
+      },
+    },
     jar: { cls: 'object' },
   };
 
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
   const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
   const chalkMat = new THREE.MeshLambertMaterial({ color: 0xf2efe6, emissive: 0x3a3a3a });
+  const threadMat = new THREE.MeshLambertMaterial({ color: 0xcdbcff, emissive: 0x3a2a7a });
+  const threadGeo = new THREE.TorusGeometry(0.07 * S, 0.035 * S, 8, 16);
 
   /**
    * A pickup's or tool's mesh, centred on its spot. Pickups float (see
@@ -104,6 +113,9 @@
       flat.rotation.x = -Math.PI / 2;
       flat.position.y = 0.025 * S;
       mesh.add(flat);
+    } else if (item.kind === 'thread') {
+      const spool = new THREE.Mesh(threadGeo, threadMat); // a coil, standing on its edge
+      mesh.add(spool);
     } else if (item.kind === 'chalk') {
       const stick = new THREE.Mesh(geo.chalk, new THREE.MeshLambertMaterial({
         color: (CHALK[item.color] || CHALK.silver).hex, emissive: 0x2a2a2a,

@@ -7,7 +7,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, S, UNIT, scene, state, save, savePlayer, chargeText } = W;
+  const { DE, DP, RULES, THREE, S, UNIT, scene, state, save, chargeText } = W;
 
   // ---------------------------------------------------------------------------
   // Waypoints
@@ -186,8 +186,8 @@
     const n = revealWaypoints(DP.centerOf(sp), DP.waypointCount(state.exp, sp));
     save();
     W.showCaption(`the waystone wakes · −${chargeText(cost)} · ` +
-      (n ? `${n} new waypoint${n === 1 ? '' : 's'} on your map` : 'nothing new stirs'));
-    savePlayer();
+      (n ? `${n} new waypoint${n === 1 ? '' : 's'} on your map` : 'nothing new stirs') + ' · checkpoint');
+    W.saveCheckpoint();
     W.refreshHud();
   }
 
@@ -295,7 +295,7 @@
   /** E at an awake waystone: the map opens on the others; pick one to go there. */
   function travelFrom(st) {
     state.run.hearth = st.key;
-    savePlayer();
+    W.saveCheckpoint(); // using a waystone is a checkpoint, even if you stay
     if (!state.waystones.some((o) => o.awake && o !== st)) {
       W.showCaption('the waystone hums · no other waystone is awake yet');
       return;
@@ -324,8 +324,8 @@
     state.run.travels = (state.run.travels || 0) + 1;
     state.run.chargesSpent += cost;
     W.showCaption(`you step out by the waystone in ${st.spaceId}` +
-      (route ? ` · ${route.hops} line${route.hops === 1 ? '' : 's'} · −${route.shards} shard${route.shards === 1 ? '' : 's'}` : ''));
-    savePlayer();
+      (route ? ` · ${route.hops} line${route.hops === 1 ? '' : 's'} · −${route.shards} shard${route.shards === 1 ? '' : 's'}` : '') + ' · checkpoint');
+    W.saveCheckpoint();
     W.refreshHud();
     return true;
   }

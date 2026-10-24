@@ -397,6 +397,37 @@ All notable changes to this sketch are logged here, per
     two nearest awake stones. Older saves get the tidy network once.
   - Fixed: the figure dithered itself where its head or lamp overlapped
     its body. Its parts now mark the stencil and the silhouette skips them.
+- 2026-10-24: **A game loop** (`GAME-DESIGN.md`, section 17):
+  - **Save slots** (`app/walk/saves.js`, standalone on `DungeonPlay.saves`,
+    with a swappable backend): *resume*, written every second, on pagehide
+    and on quitting to the menu; *checkpoint*, written when you use a
+    waystone. Every save is stamped with a build (`BUILD`); one from
+    another build isn't loaded. That replaces gating generator changes
+    behind params for old records. Saves from before slots come over once.
+  - **A title screen** (Continue, New run, Import / Export save, as one
+    file holding both slots) and **a pause menu** (Esc, or the Menu button
+    that replaces New map; Resume, Quit to main menu). The N key is gone.
+  - **Fainting costs progress.** Every room opened since your last
+    checkpoint becomes a **lost path**, every door carved since is walled
+    up, and the run rolls back to the checkpoint (inventory, entropy,
+    keys, lit sconces, pushed blocks...); tallies and the thread carry on.
+  - **Lost paths, apart from rerolls.** Quiet (violet on the map, no cracks
+    or ghosts) until you choose at its door: **retrace** it (E: every room
+    as you left it, a shard per room, at least a charge; needs **the
+    thread**, a rare find at depth 3+, kept for the run) or **let it go**
+    (push: something new opens, and the whole path turns to corruption).
+    Left alone, a path dims at the next faint and fades at the one after.
+  - New run asks first (one run at a time: it replaces yours; export
+    offered), and its confirm now shows over the title screen (it opened
+    behind it, so the menu seemed stuck).
+  - A waystone hall that isn't where you'd wake says so as you enter
+    ("touch the waystone to wake here").
+  - Engine: `revert(exp, id, cause, quiet)`, `tagTraces` (quiet traces
+    leave no imprint), `restorable` / `restore` (a trace built again, same
+    id, seed and cells, via `expand(..., restore)`), `uncarve`. Replay is
+    exact (`stress-test.js` checks restores, tags and uncarves).
+  - The chart view still reads walk mode's record, but its own edits no
+    longer flow into walk mode.
 
 ### Fixed
 
