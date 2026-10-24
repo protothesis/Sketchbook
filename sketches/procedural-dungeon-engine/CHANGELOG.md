@@ -433,6 +433,15 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **E acts on what you face** (interaction cleanup, step 2).
+  The fixed priority order (doors first, then waystones, tools, jars,
+  marks, push blocks, sconces, blocks) is gone: of everything in reach,
+  the thing you're most squarely facing wins, nearer breaking ties, so a
+  sconce beside a door no longer opens the door. Faint corner brackets
+  frame the focused thing. The prompt is two lines, E's and F's, each
+  starting with its key (tap a line on touch), so a doorstone's or a
+  pixie's prompt no longer hides behind E's. Wiping a chalk mark now means
+  facing it (within 0.7 cells), not standing on it.
 - 2026-10-24: `INTERACTION-PLAN.md`: the agreed plan for E/F, hold-to-act,
   hands and carrying, jars, sconces and keys.
 

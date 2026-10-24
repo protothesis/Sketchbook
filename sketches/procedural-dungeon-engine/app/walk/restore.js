@@ -346,6 +346,6 @@
     });
   }
 
-  Object.assign(W, { addPushBlocks, pushBlock, pullNear, pull, updatePushBlocks, addSconces,
+  Object.assign(W, { SCONCE_Y, addPushBlocks, pushBlock, pullNear, pull, updatePushBlocks, addSconces,
     sconceNear, lightSconce, updateSconces });
 })(window);

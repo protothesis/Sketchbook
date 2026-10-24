@@ -4,84 +4,112 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, $, ekey, state, isLockedNow, CHALK, chargeText, el, savePlayer,
+  const { DE, DP, RULES, THREE, $, S, ekey, state, isLockedNow, CHALK, chargeText, el, savePlayer,
     edgeEnds, maxCharges, refreshHotbar, openDoor, keys, promptEl } = W;
 
   // ---------------------------------------------------------------------------
   // HUD
 
   const touchUi = global.matchMedia && global.matchMedia('(hover: none)').matches;
-  const verb = touchUi ? 'tap' : 'E';
   const verbF = touchUi ? 'tap' : 'F';
 
-  let lastPrompt = '';
-  function updatePrompt(near) {
-    let text = '', cls = '';
-    if (near) {
-      const run = state.run;
-      if (near.action === 'carve') {
-        cls = 'chalk';
-        text = `a bare wall · ${verbF} to open a door here (${state.run.doorstones} doorstone${state.run.doorstones === 1 ? '' : 's'})`;
-      } else if (near.action === 'catch') {
-        cls = 'jar';
-        text = `a pixie · ${verbF} to catch it in a jar`;
-      } else if (near.action === 'place' || near.action === 'mark') {
-        text = ''; // setting a jar down or drawing a mark never prompts
-      } else if (near.action === 'erase') {
-        cls = 'chalk';
-        text = `a ${near.mark.color} chalk mark · ${verb} to wipe it`;
-      } else if (near.action === 'take') {
+  // Two prompt lines: what E would do (the focused thing) and what F would
+  // do with the item in hand. Each starts with its key (on touch, tap the
+  // line). A line that can't be done right now has no key and reads muted.
+  const promptF = $('prompt-f') || document.createElement('button');
+
+  /** E's line for the focused thing: { text, cls }. */
+  function eLine(near) {
+    const run = state.run;
+    switch (near.action) {
+      case 'erase': return { cls: 'chalk', text: `wipe the ${near.mark.color} chalk mark` };
+      case 'take': {
         const it = near.it.item;
-        cls = 'chalk';
-        text = `${it.kind === 'chalk' ? `a stick of ${it.color || 'silver'} chalk` : 'a doorstone'} · ${verb} to take it`;
-      } else if (near.action === 'light') {
-        text = `an unlit sconce · ${verb} to light it from your lantern (${RULES.sconceCost} shard)`;
-      } else if (near.action === 'wake') {
-        cls = 'collapse';
-        text = `a dormant waystone · ${verb} to wake it (${chargeText(RULES.waystoneCharges)})`;
-      } else if (near.action === 'travel') {
-        cls = 'collapse';
-        text = `a waystone · ${verb} to travel (a shard per ley line)`;
-      } else if (near.action === 'surface') {
-        cls = 'surface';
-        text = `a door up to the surface · ${verb}`;
-      } else if (near.action === 'pull') {
-        cls = 'jar';
-        text = near.block.crate ? `a crate · push it, or ${verb} to pull`
-          : `a block out of place · push it home, or ${verb} to pull`;
-      } else if (near.action === 'pickjar') {
-        cls = 'jar';
-        text = `${near.jar.fill ? 'a pixie jar' : 'an empty jar'} · ${verb} to lift it`;
-      } else if (near.action === 'climb') {
-        text = state.push.key ? 'climbing…' : `a block · push, or ${verb} to climb`;
-      } else if (near.action === 'open') {
-        text = state.push.key ? 'opening…' : `a closed door · push, or ${verb}`;
-      } else if (near.action === 'retrace') {
+        return { cls: 'chalk', text: `take the ${it.kind === 'chalk' ? `stick of ${it.color || 'silver'} chalk` : 'doorstone'}` };
+      }
+      case 'light': return { text: `light the sconce from your lantern · ${RULES.sconceCost} shard` };
+      case 'wake': return { cls: 'collapse', text: `wake the waystone · ${chargeText(RULES.waystoneCharges)}` };
+      case 'travel': return { cls: 'collapse', text: 'travel from the waystone · a shard per ley line' };
+      case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
+      case 'pull': return { cls: 'jar', text: near.block.crate ? 'pull the crate (or push it)' : 'pull the block (push it home)' };
+      case 'pickjar': return { cls: 'jar', text: `lift the ${near.jar.fill ? 'pixie jar' : 'empty jar'}` };
+      case 'climb': return { text: state.push.key ? 'climbing…' : 'climb (or push into it)' };
+      case 'open': return { text: state.push.key ? 'opening…' : 'open the door (or push)' };
+      case 'retrace': {
         const n = near.path.traces.length, rooms = `${n} room${n === 1 ? '' : 's'}`;
-        cls = near.thread && near.affordable ? 'collapse' : 'blocked';
-        text = state.push.key ? 'letting it go…'
-          : !near.thread ? `your lost path · ${rooms} · no thread to retrace it · push to let it go`
-          : near.affordable ? `your lost path · ${rooms} · ${verb} to retrace (${chargeText(near.price)}) · push to let it go`
-          : `your lost path · ${rooms} · ${chargeText(near.price)} to retrace · push to let it go`;
-      } else if (near.action === 'locked') {
-        cls = 'lock';
-        text = run.keys > 0 ? `a locked door · ${verb} to unlock (1 key)` : 'a locked door · you need a key';
-      } else if (near.action === 'collapse') {
+        if (state.push.key) return { text: 'letting it go…' };
+        return !near.thread ? { cls: 'blocked', text: `your lost path · ${rooms} · no thread to retrace it · push to let it go` }
+          : near.affordable ? { cls: 'collapse', text: `retrace your lost path · ${rooms} · ${chargeText(near.price)} · push to let it go` }
+          : { cls: 'blocked', text: `your lost path · ${rooms} · ${chargeText(near.price)} to retrace · push to let it go` };
+      }
+      case 'locked':
+        return run.keys > 0 ? { cls: 'lock', text: 'unlock the door · 1 key' } : { cls: 'blocked', text: 'a locked door · you need a key' };
+      case 'collapse': {
         // Only a provisional room (one with no door out opened yet) offers this.
         const pr = near.price;
-        cls = near.affordable && !near.haunted ? 'collapse' : 'blocked';
-        text = near.haunted ? `a hash ghost lingers in ${near.child.id} · no rerolling it while it's there`
-          : near.affordable
-          ? `close & reroll ${near.child.id} · ${chargeText(pr.charges)} · ${verb}`
-          : `not enough entropy to reroll · ${chargeText(pr.charges)}`;
+        return near.haunted ? { cls: 'blocked', text: `a hash ghost lingers in ${near.child.id} · no rerolling it while it's there` }
+          : near.affordable ? { cls: 'collapse', text: `close & reroll ${near.child.id} · ${chargeText(pr.charges)}` }
+          : { cls: 'blocked', text: `not enough entropy to reroll · ${chargeText(pr.charges)}` };
       }
     }
-    const sig = text + '|' + cls;
-    if (sig === lastPrompt) return;
-    lastPrompt = sig;
-    promptEl.hidden = !text;
-    promptEl.textContent = text;
-    promptEl.className = 'prompt ' + cls;
+    return null;
+  }
+
+  /** F's line for the item in hand; setting a jar down or drawing a mark never prompts. */
+  function fLine(near) {
+    if (near.action === 'carve') {
+      const n = state.run.doorstones;
+      return { cls: 'chalk', text: `open a door in this wall · ${n} doorstone${n === 1 ? '' : 's'}` };
+    }
+    if (near.action === 'catch') return { cls: 'jar', text: 'catch the pixie in a jar' };
+    return null;
+  }
+
+  const lastLine = new Map();
+  function showLine(btn, key, line) {
+    const sig = line ? line.text + '|' + (line.cls || '') : '';
+    if (lastLine.get(btn) === sig) return;
+    lastLine.set(btn, sig);
+    btn.hidden = !line;
+    btn.textContent = '';
+    if (!line) return;
+    if (!touchUi && line.cls !== 'blocked') btn.append(el('kbd', 'key', key));
+    btn.append(line.text);
+    btn.className = 'prompt ' + (key === 'F' ? 'f ' : '') + (line.cls || '');
+  }
+
+  function updatePrompt(nearE, nearF) {
+    const e = nearE && eLine(nearE), f = nearF && fLine(nearF);
+    showLine(promptEl, 'E', e);
+    showLine(promptF, 'F', f);
+    promptF.classList.toggle('alone', !e);
+    updateFocus(nearE);
+  }
+
+  // The focus outline: corner brackets around the box of what E would act
+  // on (focusBox in actions.js), projected to the screen every frame.
+  const focusEl = el('div', 'focus');
+  for (let i = 0; i < 4; i++) focusEl.append(el('i'));
+  focusEl.hidden = true;
+  document.body.append(focusEl);
+  const corner = new THREE.Vector3();
+  function updateFocus(near) {
+    const b = near && near.box;
+    if (!b) { focusEl.hidden = true; return; }
+    const rect = W.canvas.getBoundingClientRect();
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      corner.set((i & 1 ? b.x1 : b.x0) * S, (i & 2 ? b.z1 : b.z0) * S, (i & 4 ? b.y1 : b.y0) * S).project(W.camera);
+      if (corner.z > 1) { focusEl.hidden = true; return; } // behind the camera
+      const sx = rect.left + (corner.x + 1) / 2 * rect.width, sy = rect.top + (1 - corner.y) / 2 * rect.height;
+      x0 = Math.min(x0, sx); y0 = Math.min(y0, sy); x1 = Math.max(x1, sx); y1 = Math.max(y1, sy);
+    }
+    const m = 6; // px of breathing room around the box
+    focusEl.hidden = false;
+    focusEl.style.left = (x0 - m) + 'px';
+    focusEl.style.top = (y0 - m) + 'px';
+    focusEl.style.width = (x1 - x0 + 2 * m) + 'px';
+    focusEl.style.height = (y1 - y0 + 2 * m) + 'px';
   }
 
   let captionTimer = null;

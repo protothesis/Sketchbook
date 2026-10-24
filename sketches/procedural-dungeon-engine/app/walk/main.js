@@ -139,7 +139,8 @@
       }
     }
 
-    updatePrompt(state.paused || state.climb ? null : actionNear(p) || useNear(p));
+    const idle = state.paused || state.climb;
+    updatePrompt(idle ? null : actionNear(p), idle ? null : useNear(p));
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;

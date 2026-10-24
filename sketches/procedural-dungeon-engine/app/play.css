@@ -186,6 +186,28 @@ kbd {
   cursor: pointer;
 }
 .prompt[hidden] { display: none; }
+.prompt.f { top: calc(60% + 34px); }
+.prompt.f.alone { top: 60%; }
+.prompt .key {
+  display: inline-block;
+  min-width: 1.4em;
+  margin: 0 8px 0 -6px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+  opacity: 0.85;
+}
+/* The focus outline: corner brackets around what E would act on. */
+.focus { position: fixed; z-index: 2; pointer-events: none; }
+.focus[hidden] { display: none; }
+.focus i { position: absolute; width: 9px; height: 9px; border: 0 solid rgba(255, 236, 214, 0.55); }
+.focus i:nth-child(1) { left: 0; top: 0; border-left-width: 2px; border-top-width: 2px; }
+.focus i:nth-child(2) { right: 0; top: 0; border-right-width: 2px; border-top-width: 2px; }
+.focus i:nth-child(3) { left: 0; bottom: 0; border-left-width: 2px; border-bottom-width: 2px; }
+.focus i:nth-child(4) { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; }
 .prompt.lock { color: #9cc6ea; border-color: rgba(111, 168, 216, 0.6); }
 .prompt.collapse { color: var(--entropy); border-color: rgba(181, 156, 255, 0.6); }
 .prompt.surface { color: #dcebff; border-color: rgba(220, 235, 255, 0.55); }

@@ -269,8 +269,17 @@ Determinism).
 - **The hotbar.** Tools and objects sit in slots at the bottom of the
   screen. Pick a slot with 1–9, the mouse wheel, or a tap. **E** interacts
   with the world (doors, climbing, taking a tool, lifting a jar, wiping a
-  chalk mark you're standing on). **F** (or "use" on touch) uses the
-  selected item. Some slots are **groups**: one slot, several variants
+  chalk mark you're facing). **F** (or "use" on touch) uses the
+  selected item.
+- **Focus and prompts.** E acts on one thing at a time: of everything in
+  reach, the one you're most squarely facing (nearer breaks a tie; the
+  score is distance + 0.6 × (1 − cos of the angle to it)). Faint corner
+  brackets frame it. Below the figure, up to two prompt lines: one for E
+  (what the focused thing would do) and one for F (what the item in hand
+  would do: open a door with a doorstone, catch a pixie). Each starts with
+  its key; one that can't be done right now has no key and reads muted. On
+  touch, tap a line to do it. Setting a jar down or drawing a mark still
+  never prompts. Some slots are **groups**: one slot, several variants
   (chalk colours; jars by contents). Click a selected group again (or press and
   hold it) to open its picker, or press its number again to cycle.
 - **All your jars share one slot.** It's grouped by contents (empty, or a
@@ -285,7 +294,8 @@ Determinism).
   cross, teal waves, violet crescent. A stick is good for **3 strokes**,
   and its hotbar icon loses a third per stroke. F draws a mark on the
   nearest free quarter-tile ahead (the floor, or the top of a one-unit
-  block). E, standing on a mark, wipes it. You start with one silver stick,
+  block). E, facing a mark within 0.7 cells (or standing on it, facing
+  ahead), wipes it. You start with one silver stick,
   and more turn up in about 1 room in 13 (seeded colour). Marks persist with
   the run, and vanish with a room you collapse.
 - **Jars.** Standing in about 1 room in 15 (depth 1+). F sets one down on the
@@ -442,7 +452,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Thread | 1 room in 20 at depth 3+ (`threadChance`, `threadMinDepth`, last on the loot stream); a pickup; kept for the rest of the run, through faints; 🧵 by the keys |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); one pixie each (`jarCapacity`); F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall |
-| Chalk | start with one silver stick (3 strokes); 1/12 of rooms at depth 1+ hold a stick (seeded on the loot stream, after jars; colour from silver/gold/crimson/teal/violet); F draws on the nearest free quarter ahead (floor or a one-unit block's top, not under a jar, not on another mark); E on a mark wipes it |
+| Chalk | start with one silver stick (3 strokes); 1/12 of rooms at depth 1+ hold a stick (seeded on the loot stream, after jars; colour from silver/gold/crimson/teal/violet); F draws on the nearest free quarter ahead (floor or a one-unit block's top, not under a jar, not on another mark); E facing a mark within 0.7 cells wipes it |
 | Beyond a lock | `DP.pastLock(exp, space)`: the room's entry door was generated locked (`lockedBySeed`, ignoring that it's since been opened) |
 | Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 jars (one per quarter); a pixie jar wakes it fully; each pixie jar on it = entropy max +1 (up to +4), stacking across sigils |
 | Persistence | two slots (`saves.js`): resume (every 1 s, on pagehide, on quitting to the menu) and checkpoint (waystones); each stamped with the build, and a save from another build isn't loaded; the record is mirrored to the chart view's key, but the chart view's edits don't flow back |

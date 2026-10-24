@@ -81,7 +81,8 @@ built; this file is the plan until it's all in.
 ## Build order
 
 1. [x] Crates.
-2. [ ] Focus target + outline + two prompt lines.
+2. [x] Focus target + outline + two prompt lines. (The outline is corner
+       brackets around the target's box, not a silhouette.)
 3. [ ] Hold-to-act ring: doors (open/close/reroll), chalk wipe, sconces
        (light/snuff), waystones.
 4. [ ] Hands: lantern slot, one held thing shown on the figure, touch

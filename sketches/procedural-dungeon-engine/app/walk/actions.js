@@ -5,7 +5,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, RADIUS, USE_RANGE, state, rebuildExitIndex, isLockedNow, chargeText, save,
+  const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
     climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn, toolNear,
     takeItem, pullNear, pull, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
@@ -90,10 +90,53 @@
     W.refreshHud();
   }
 
-  /** What E would do right now, in priority order (F uses the hotbar item: useNear). */
-  const actionNear = (p) =>
-    doorNear(p) || waystoneNear(p) || toolNear(p) || jarNear(p) || markNear(p) || pullNear(p) ||
-    sconceNear(p) || blockNear(p);
+  /**
+   * The box around what E would act on, in cells: { x0, y0, x1, y1, z0, z1 }
+   * (z up from the floor). It's the focus outline, and its middle is the
+   * point the focus scorer aims at.
+   */
+  function focusBox(near) {
+    const pad = (x, y, r, z0, z1) => ({ x0: x - r, y0: y - r, x1: x + r, y1: y + r, z0, z1 });
+    const blk = (b, z0, z1) => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, z0, z1 });
+    switch (near.action) {
+      case 'wake': case 'travel': return blk(near.stone.ws, 0, near.stone.ws.top || 2.5 * UNIT);
+      case 'take': return pad(near.it.item.cell.x + 0.5, near.it.item.cell.y + 0.5, 0.16, 0, 0.08);
+      case 'pickjar': return blk(near.jar.block, near.jar.block.base, near.jar.block.top);
+      case 'erase': {
+        const m = near.mark, z = m.base || 0;
+        return { x0: m.sx / 2, y0: m.sy / 2, x1: m.sx / 2 + 0.5, y1: m.sy / 2 + 0.5, z0: z, z1: z + 0.02 };
+      }
+      case 'pull': return blk(near.block, 0, near.block.top);
+      case 'light': return pad(near.sconce.x, near.sconce.y, 0.08, W.SCONCE_Y - 0.1, W.SCONCE_Y + 0.12);
+      case 'climb': return blk(near.block, near.block.base || 0, near.block.top);
+      default: { // a door
+        const [ax, ay, bx, by] = edgeEnds(near.exit.cell.x, near.exit.cell.y, near.exit.facing);
+        const mx = (ax + bx) / 2, my = (ay + by) / 2, h = ax === bx ? 0 : DOOR_W / 2, v = ax === bx ? DOOR_W / 2 : 0;
+        return { x0: mx - h - 0.04, y0: my - v - 0.04, x1: mx + h + 0.04, y1: my + v + 0.04, z0: 0, z1: DOOR_H };
+      }
+    }
+  }
+
+  /**
+   * What E would do right now: one focused thing. Each kind offers its best
+   * candidate within its own reach, and the one you're most squarely facing
+   * wins, nearer breaking ties (F uses the hotbar item: useNear).
+   */
+  const FACING_WEIGHT = 0.6; // cells of distance one unit of (1 - cos) is worth
+  function actionNear(p) {
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    let best = null, bestScore = Infinity;
+    for (const find of [doorNear, waystoneNear, toolNear, jarNear, markNear, pullNear, sconceNear, blockNear]) {
+      const near = find(p);
+      if (!near) continue;
+      const b = near.box = focusBox(near);
+      const dx = (b.x0 + b.x1) / 2 - p.x, dy = (b.y0 + b.y1) / 2 - p.y, d = Math.hypot(dx, dy);
+      const cos = d < 0.05 ? 1 : (dx * fx + dy * fy) / d;
+      const score = d + FACING_WEIGHT * (1 - cos);
+      if (score < bestScore) { bestScore = score; best = near; }
+    }
+    return best;
+  }
 
   function act(near) {
     if (!near || state.paused || state.climb) return;
@@ -288,5 +331,5 @@
     W.refreshHud();
   }
 
-  Object.assign(W, { doorNear, wallNear, carveDoor, actionNear, act, openDoor, askSurface });
+  Object.assign(W, { doorNear, wallNear, carveDoor, focusBox, actionNear, act, openDoor, askSurface });
 })(window);

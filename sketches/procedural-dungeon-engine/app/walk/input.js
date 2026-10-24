@@ -50,12 +50,13 @@
   global.addEventListener('blur', () => keys.clear());
 
   const promptEl = $('prompt');
-  promptEl.addEventListener('click', (e) => {
-    const near = actionNear(state.player);
-    if (near) act(near); else useSelected();
+  promptEl.addEventListener('click', (e) => { // tapping a prompt line is its key
+    act(actionNear(state.player));
     promptEl.blur();
     e.preventDefault();
   });
+  const promptF = $('prompt-f');
+  if (promptF) promptF.addEventListener('click', (e) => { useSelected(); promptF.blur(); e.preventDefault(); });
   canvas.addEventListener('wheel', (e) => {
     if (state.bigmap || state.paused) return;
     const s = slots(), i = s.findIndex((x) => x.key === state.sel);

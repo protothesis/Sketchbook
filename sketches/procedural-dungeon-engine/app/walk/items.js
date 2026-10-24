@@ -10,8 +10,9 @@
   // ---------------------------------------------------------------------------
   // Inventory: the hotbar, chalk marks, jars and sigils
   //
-  // E interacts with the world (doors, climbing, lifting a jar, wiping the
-  // chalk mark you're standing on). F uses the item selected on the hotbar:
+  // E interacts with the world (doors, climbing, lifting a jar, wiping a
+  // chalk mark you face): one focused thing (actionNear in actions.js).
+  // F uses the item selected on the hotbar:
   // draw a chalk mark, set a jar down, press a doorstone to a wall. 1-9 or
   // the wheel select. A slot can hold a group of variants (chalk colours):
   // click it again, or press and hold, to open its picker; its number key
@@ -473,11 +474,19 @@
     return quarterAhead(p, (sx, sy) => !state.marks.some((m) => m.sx === sx && m.sy === sy));
   }
 
-  /** E while standing on a mark: wipe it. */
+  /** E at a mark you're facing, close by (or underfoot and ahead): wipe it. */
+  const MARK_REACH = 0.7; // cells, to the mark's centre
   function markNear(p) {
-    const sx = Math.floor(p.x * 2), sy = Math.floor(p.y * 2);
-    const m = state.marks.find((k) => k.sx === sx && k.sy === sy && Math.abs((k.base || 0) - p.z) < 0.2);
-    return m ? { action: 'erase', mark: m } : null;
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    let best = null, bestD = MARK_REACH;
+    for (const m of state.marks) {
+      if (Math.abs((m.base || 0) - p.z) > 0.2 || !quarterReachable(m.sx, m.sy, p)) continue;
+      const dx = m.sx / 2 + 0.25 - p.x, dy = m.sy / 2 + 0.25 - p.y, d = Math.hypot(dx, dy);
+      if (d >= bestD || (d > 0.1 && (dx * fx + dy * fy) / d < 0.3)) continue;
+      bestD = d;
+      best = { action: 'erase', mark: m };
+    }
+    return best;
   }
 
   function drawMark(u) {
