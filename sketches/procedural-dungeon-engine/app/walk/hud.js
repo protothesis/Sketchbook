@@ -55,6 +55,11 @@
         text = state.push.key ? 'climbing…' : `a block · push, or ${verb} to climb`;
       } else if (near.action === 'open') {
         text = state.push.key ? 'opening…' : `a closed door · push, or ${verb}`;
+      } else if (near.action === 'rechart') {
+        cls = near.affordable ? 'collapse' : 'blocked';
+        text = state.push.key ? 'opening something new…'
+          : near.affordable ? `${near.lost.id} was lost here · ${verb} to chart it again (${chargeText(near.price)}) · push for something new`
+          : `${near.lost.id} was lost here · ${chargeText(near.price)} to chart it again · push for something new`;
       } else if (near.action === 'locked') {
         cls = 'lock';
         text = run.keys > 0 ? `a locked door · ${verb} to unlock (1 key)` : 'a locked door · you need a key';
@@ -562,6 +567,8 @@
       ['waystones awake', state.waystones.filter((o) => o.awake).length],
       ['waypoints reached', Object.values(exp.reserves || {}).filter((r) => r.spaceId).length],
       ['passed out', run.gutters || 0],
+      ['rooms lost to faints', run.roomsLost || 0],
+      ['rooms re-charted', run.recharts || 0],
       ['pixies caught', run.pixiesCaught || 0],
       ['entropy from wells', chargeText(run.wellDrawn || 0)],
       ['time walked', `${mins}:${String(secs).padStart(2, '0')}`],
@@ -627,7 +634,7 @@
   function closeDialog() {
     if (!state.dialog) return;
     state.dialog = false;
-    state.paused = false;
+    state.paused = state.menu === 'title'; // a dialog over the title screen leaves it up
     $('dialog').hidden = true;
   }
   $('done-leave').addEventListener('click', () => {
@@ -635,7 +642,7 @@
     savePlayer();
     showRecord(recordDoor.spaceId, recordDoor.exitId, 'extracted');
   });
-  $('done-new').addEventListener('click', () => W.newExpedition());
+  $('done-new').addEventListener('click', () => W.newRun());
   $('done-export').addEventListener('click', () => {
     const blob = new Blob([DE.exportRecord(state.exp)], { type: 'application/json' });
     const a = document.createElement('a');

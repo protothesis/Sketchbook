@@ -397,6 +397,29 @@ All notable changes to this sketch are logged here, per
     two nearest awake stones. Older saves get the tidy network once.
   - Fixed: the figure dithered itself where its head or lamp overlapped
     its body. Its parts now mark the stencil and the silhouette skips them.
+- 2026-10-24: **A game loop** (`GAME-DESIGN.md`, section 17):
+  - **Save slots** (`app/walk/saves.js`, standalone on `DungeonPlay.saves`,
+    with a swappable backend): *resume*, written every second, on pagehide
+    and on quitting to the menu; *checkpoint*, written when you use a
+    waystone. Every save is stamped with a build (`BUILD`); one from
+    another build isn't loaded. That replaces gating generator changes
+    behind params for old records. Saves from before slots come over once.
+  - **A title screen** (Continue, New run, Import / Export save, as one
+    file holding both slots) and **a pause menu** (Esc, or the Menu button
+    that replaces New map; Resume, Quit to main menu). The N key is gone.
+  - **Fainting costs progress.** Every room opened since your last
+    checkpoint collapses into traces (tagged `'faint'`), and the run rolls
+    back to the checkpoint (inventory, entropy, keys, lit sconces, pushed
+    blocks...); tallies carry on.
+  - **Re-charting.** A door whose room was lost to a faint has a violet
+    seam; E there rebuilds the room exactly (same id, seed and cells) for a
+    charge (`rechartCharges`), uncracked by its own trace, while its
+    footprint is free.
+  - Engine: `revert(exp, id, cause)` tags traces; `rechartable` / `rechart`
+    and `expand(..., restore)` build a trace again; commits record
+    `restore`, and replay is exact (`stress-test.js` checks it).
+  - The chart view still reads walk mode's record, but its own edits no
+    longer flow into walk mode.
 
 ### Fixed
 

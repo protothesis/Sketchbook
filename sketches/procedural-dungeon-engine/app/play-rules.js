@@ -63,6 +63,9 @@
     wellTrickleDelay: 10,
     wellTrickleTime: 120,
     chargesPerRoom: 1,        // collapse price: a flat charge per room in the branch
+    // Re-charting (GAME-DESIGN.md, section 17): build a room lost to a faint
+    // again, as it was, at its door.
+    rechartCharges: 1,
     // Props: blocks on a half-cell subgrid, stacked in half-cell-ish units
     // (3 units = floor to ceiling), plus flat floor detail.
     propAttempts: 0.32,       // placement attempts per chamber cell

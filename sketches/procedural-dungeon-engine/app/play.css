@@ -259,6 +259,13 @@ kbd {
 .done-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .btn.primary { background: var(--accent); color: #140c06; }
 .btn.quiet { background: transparent; }
+.title { z-index: 12; background: rgba(4, 3, 6, 0.94); }
+.title-card { width: min(440px, 100%); text-align: center; }
+.title h2 { font-size: 34px; margin: 6px 0 12px; }
+.title .done-buttons { flex-direction: column; align-items: stretch; }
+.title .done-buttons .btn { text-align: center; padding: 10px 14px; font-size: 15px; }
+.title-warn { color: #e8b35f; }
+.title-note { color: var(--muted); }
 .dialog { z-index: 11; }
 .dialog .done-card { width: min(420px, 100%); }
 .dialog .done-buttons { flex-direction: column; align-items: stretch; }

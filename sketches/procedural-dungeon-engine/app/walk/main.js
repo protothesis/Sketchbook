@@ -4,10 +4,10 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, THREE, $, STORAGE_KEY, PLAYER_KEY, S, WALL_H, RADIUS, SPEED, RUN,
+  const { DE, DP, THREE, $, S, WALL_H, RADIUS, SPEED, RUN,
     CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, CLIMB_TIME, GRAVITY, PUSH_TIME, DOOR_SWING,
     DITHER_RADIUS, CAM_OFFSET, LANTERN, renderer, scene, camera, state, world, freshRun,
-    isLockedNow, save, savePlayer, migrateRun, dither, doorMat, buildWorld, easeOut, easeInOut,
+    isLockedNow, save, savePlayer, dither, doorMat, buildWorld, easeOut, easeInOut,
     applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions, placeLamp,
     canClimb, climb, addMarkToWorld, addJarToWorld, useNear, collectPickups, updateItems,
     pushBlock, updatePushBlocks, updateSconces, noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
@@ -243,12 +243,15 @@
     return { x: best.x + 0.5, y: best.y + 0.5, angle: Math.PI };
   }
 
-  function setExpedition(exp, savedPlayer) {
+  /**
+   * Start playing an expedition. `saved` is { run, player } from a save
+   * snapshot (saves.js), or null for a fresh run at the start.
+   */
+  function setExpedition(exp, saved) {
     state.exp = exp;
-    const same = savedPlayer && savedPlayer.rootSeed === exp.rootSeed;
-    state.run = same && savedPlayer.run
-      ? Object.assign(freshRun(exp.rootSeed), migrateRun(savedPlayer.run, savedPlayer.v))
-      : freshRun(exp.rootSeed);
+    const same = !!(saved && saved.run && saved.run.rootSeed === exp.rootSeed);
+    state.run = same ? Object.assign(freshRun(exp.rootSeed), saved.run) : freshRun(exp.rootSeed);
+    const savedPlayer = same ? saved.player : null;
     const savedGhosts = state.run.ghosts || [];
     const savedPixies = state.run.pixies || [];
     const savedJars = state.run.placedJars || [];
@@ -277,7 +280,7 @@
     if (fade) fade.classList.remove('on');
     W.ensureWaypoints();
     let sp = spawnPoint(exp);
-    if (same && exp.registry[DE.key(Math.floor(savedPlayer.x), Math.floor(savedPlayer.y))] !== undefined) {
+    if (savedPlayer && exp.registry[DE.key(Math.floor(savedPlayer.x), Math.floor(savedPlayer.y))] !== undefined) {
       sp = savedPlayer;
     }
     Object.assign(state.player, { x: sp.x, y: sp.y, z: 0, vz: 0, angle: sp.angle || 0, spaceId: null });
@@ -308,13 +311,8 @@
   global.addEventListener('resize', resize);
   resize();
 
-  let restored = null, savedPlayer = null;
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) restored = DE.importRecord(saved).expedition;
-    savedPlayer = JSON.parse(localStorage.getItem(PLAYER_KEY) || 'null');
-  } catch (e) { restored = null; }
-  setExpedition(restored || DE.createExpedition(DE.randomRootSeed()), savedPlayer);
+  // Nothing is loaded until the title screen says so (game.js).
+  W.bootGame();
 
   let last = performance.now();
   let saveClock = 0;
@@ -326,6 +324,7 @@
     requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    if (!state.exp) { renderer.clear(); return; } // the title screen, before any run is loaded
     try {
       state.time += dt;
       update(dt);
@@ -349,8 +348,8 @@
   // this play.js expects are missing, say so instead of failing oddly later.
   const expectIds = ['view', 'stats', 'lamp', 'lamp-meter', 'lamp-icon', 'popups', 'hotbar', 'use-btn',
     'prompt', 'caption', 'minimap', 'bigmap', 'bigmap-canvas', 'bigmap-hint', 'ghost-edges', 'crouch-btn', 'done',
-    'dialog', 'fade'];
-  const expectFns = [DE.carve, DE.imprintAt, DE.reserve, DP.props, DP.ghostSpawn, DP.loot, DP.waypointCount, W.updateLampLook];
+    'dialog', 'fade', 'title', 'menu-btn'];
+  const expectFns = [DE.carve, DE.imprintAt, DE.reserve, DE.rechart, DP.saves && DP.saves.write, W.faint, DP.props, DP.ghostSpawn, DP.loot, DP.waypointCount, W.updateLampLook];
   const missing = expectIds.filter((id) => !$(id));
   if (missing.length || expectFns.some((f) => typeof f !== 'function')) {
     notice(`This page's files are out of date (cached copies of different versions). ${REFRESH_HINT}`, 'stale');
@@ -360,5 +359,5 @@
   // Handy from the console.
   Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern, renderFrame, fxPerf, post, addJarToWorld });
 
-  Object.assign(W, { newExpedition, snapCamera, spawnPoint });
+  Object.assign(W, { newExpedition, setExpedition, snapCamera, spawnPoint });
 })(window);

@@ -26,6 +26,7 @@
       return;
     }
     if (k === 'escape' && state.expanded) { state.expanded = null; refreshHotbar(); return; }
+    if (k === 'escape') { W.openPause(); return; }
     keys.add(k);
     if (k === 'e') {
       if (!e.repeat) act(actionNear(state.player));
@@ -42,8 +43,6 @@
     } else if (k === 'tab') { // the map, under the left hand with WASD
       if (!e.repeat) W.openBigMap();
       e.preventDefault(); // not a focus change
-    } else if (k === 'n') {
-      requestNewMap();
     }
     if (k.startsWith('arrow')) e.preventDefault();
   });
@@ -63,30 +62,6 @@
     select(i + (e.deltaY > 0 ? 1 : -1));
   }, { passive: true });
 
-  // New map needs a second tap/press within a few seconds; window.confirm()
-  // is unreliable (some embedded and in-app viewers block it silently).
-  const newBtn = $('new-btn');
-  let newArmedUntil = 0;
-  function requestNewMap() {
-    if (performance.now() < newArmedUntil) {
-      newArmedUntil = 0;
-      newBtn.classList.remove('armed');
-      newBtn.textContent = 'New map';
-      W.newExpedition();
-      return;
-    }
-    newArmedUntil = performance.now() + 3000;
-    newBtn.classList.add('armed');
-    newBtn.textContent = 'Replace this map?';
-    W.showCaption('press again to replace this expedition in both views');
-    setTimeout(() => {
-      if (performance.now() >= newArmedUntil) {
-        newBtn.classList.remove('armed');
-        newBtn.textContent = 'New map';
-      }
-    }, 3100);
-  }
-  newBtn.addEventListener('click', (e) => { requestNewMap(); newBtn.blur(); e.preventDefault(); });
 
   const stickEl = $('stick');
   const knob = stickEl.querySelector('.knob');

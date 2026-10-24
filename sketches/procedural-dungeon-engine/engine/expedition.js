@@ -13,15 +13,16 @@
 //                nextExitIndex, reserveId? }
 //   Connection { id, a:{spaceId,exitId}, b:{spaceId,exitId}, loop }
 //   Trace      { id, seed, parentId, viaExitId, entropy, archetype, cells,
-//                depth, deadEnd, meta, revertedAt }   (a reverted space)
+//                depth, deadEnd, meta, revertedAt, cause?, reserveId? }
+//                (a reverted space; cause is the application's tag)
 //   Reserve    { id, seed, kind, cells: "x,y"[], spaceId|null, ...data }
 //                (cells claimed ahead of time for a space that isn't there
 //                yet; extra fields are the application's, kept as-is)
 //   Expedition { version:1, rootSeed, params, spaces, connections,
 //                registry: { "x,y": spaceId }, history: Event[], counters,
 //                traces: { spaceId: Trace }, reserves: { id: Reserve } }
-//   Event      { type:'commit', parentId, viaExitId, entropy, loop? }
-//            | { type:'revert', spaceId }
+//   Event      { type:'commit', parentId, viaExitId, entropy, loop?, restore? }
+//            | { type:'revert', spaceId, cause? }
 //            | { type:'caps', caps }
 //            | { type:'carve', spaceId, cell:{x,y}, facing }   (an exit cut into a wall)
 //            | { type:'reserve', reserve }   (a footprint claimed ahead of time)
@@ -41,6 +42,12 @@
 // seed and cells stay in `traces` (a branch that existed but wasn't kept).
 // Traces never block placement; clients read them per cell via imprintAt()
 // to show cracks, corruption, ghosts. Replay rebuilds them from history.
+//
+// Re-charting: a trace can be built again, as the same space (same id,
+// seed and cells), through its parent's exit with its recorded entropy,
+// while its footprint is free. The commit records `restore: id`, and the
+// trace is used up (removed from `traces`), so it no longer cracks its own
+// floor. Reverting the space again leaves a fresh trace.
 (function (global) {
   'use strict';
 
@@ -338,7 +345,7 @@
    * Returns { type:'space', ... } or, when the exit opens straight onto an
    * existing space, { type:'loop', ... }.
    */
-  function expand(exp, spaceId, exitId, entropy) {
+  function expand(exp, spaceId, exitId, entropy, restore) {
     const parent = exp.spaces[spaceId];
     if (!parent) throw new Error('No space ' + spaceId);
     const exit = parent.exits.find((e) => e.id === exitId);
@@ -352,6 +359,7 @@
 
     // Into a reserved footprint: the reserved space itself, from its own seed.
     const res = reservedAt(exp, bk);
+    if (restore && (res || exp.registry[bk] !== undefined)) return null;
     if (res) {
       const space = buildSpace(exp, createRng(res.seed), {
         id: 's' + exp.counters.space, seed: res.seed, parentId: spaceId, viaExitId: exitId,
@@ -374,15 +382,25 @@
       };
     }
 
-    const ent = entropy || drawEntropy();
+    const ent = restore ? restore.entropy : entropy || drawEntropy();
     const seed = hash(parent.seed, exit.index, ent);
+    // Re-charting (`restore`, a trace): only the trace's own footprint will
+    // do. The rng draws the same either way, so its doors come out the same
+    // when its neighbours are.
+    const want = restore && restore.cells.slice().sort().join(';');
+    const ok = (candidate) => fits(exp, candidate) &&
+      (!want || candidate.cells.map((c) => key(c.x, c.y)).sort().join(';') === want);
     const rng = createRng(seed);
     const depth = parent.depth + 1;
     const p = exp.params;
 
     let placed = null;
     let deadEnd = false;
-    if (capsReached(exp, depth)) {
+    if (restore && restore.deadEnd) {
+      placed = DE.placeShape(DE.stubShape(), beyond, exit.facing);
+      deadEnd = true;
+      if (!ok(placed)) return null;
+    } else if (!restore && capsReached(exp, depth)) {
       placed = DE.placeShape(DE.stubShape(), beyond, exit.facing);
       deadEnd = true;
     } else {
@@ -393,15 +411,16 @@
         if (hr.chance(p.hallChance)) {
           for (let i = 0; i < 3 && !placed; i++) {
             const candidate = DE.placeShape(DE.hallShape(hr, 6, 8), beyond, exit.facing);
-            if (fits(exp, candidate)) placed = candidate;
+            if (ok(candidate)) placed = candidate;
           }
         }
       }
       const archetype = rng.chance(p.corridorWeight) ? 'corridor' : 'chamber';
       for (const shape of placed ? [] : attemptShapes(rng, p, archetype)) {
         const candidate = DE.placeShape(shape, beyond, exit.facing);
-        if (fits(exp, candidate)) { placed = candidate; break; }
+        if (ok(candidate)) { placed = candidate; break; }
       }
+      if (!placed && restore) return null; // its footprint is taken: it can't come back
       if (!placed) {
         // Nothing fits: a one-cell dead end (the beyond cell is known free).
         placed = DE.placeShape(DE.stubShape(), beyond, exit.facing);
@@ -410,11 +429,13 @@
     }
 
     const space = buildSpace(exp, rng, {
-      id: 's' + exp.counters.space, seed, parentId: spaceId, viaExitId: exitId,
+      id: restore ? restore.id : 's' + exp.counters.space, seed, parentId: spaceId, viaExitId: exitId,
       entropy: ent, depth, placed, deadEnd,
       entry: { cell: beyond, facing: facingBack },
     });
-    return { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: ent, space };
+    const cand = { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: ent, space };
+    if (restore) cand.restore = restore.id;
+    return cand;
   }
 
   function connect(exp, a, b, loop) {
@@ -455,19 +476,24 @@
     }
 
     const space = cand.space;
-    if (space.id !== 's' + exp.counters.space) throw new Error('Stale candidate: expedition changed');
+    if (cand.restore) {
+      if (!exp.traces[cand.restore] || exp.spaces[space.id]) throw new Error('Stale candidate: nothing to re-chart');
+    } else if (space.id !== 's' + exp.counters.space) throw new Error('Stale candidate: expedition changed');
     for (const k of space.cells) {
       if (exp.registry[k] !== undefined) throw new Error('Stale candidate: cell ' + k + ' now occupied');
     }
     writeSpace(exp, space);
-    exp.counters.space++;
+    if (cand.restore) { delete exp.traces[cand.restore]; if (exp._imprints) exp._imprints = null; }
+    else exp.counters.space++;
     if (space.reserveId) { exp.reserves[space.reserveId].spaceId = space.id; clearReserved(exp); }
     const cid = connect(exp,
       { spaceId: cand.parentId, exitId: cand.viaExitId },
       { spaceId: space.id, exitId: space.exits[0].id }, false);
     parentExit.connectionId = cid;
     space.exits[0].connectionId = cid;
-    exp.history.push({ type: 'commit', parentId: cand.parentId, viaExitId: cand.viaExitId, entropy: cand.entropy });
+    const ev = { type: 'commit', parentId: cand.parentId, viaExitId: cand.viaExitId, entropy: cand.entropy };
+    if (cand.restore) ev.restore = cand.restore;
+    exp.history.push(ev);
     return space.id;
   }
 
@@ -478,8 +504,12 @@
     return true;
   }
 
-  /** Remove a leaf space: frees its cells and reopens the parent exit. */
-  function revert(exp, spaceId) {
+  /**
+   * Remove a leaf space: frees its cells and reopens the parent exit.
+   * `cause` is an optional tag kept on the event and the trace (walk mode
+   * marks rooms lost to a faint, which can be re-charted).
+   */
+  function revert(exp, spaceId, cause) {
     if (!canRevert(exp, spaceId)) throw new Error('Cannot revert ' + spaceId);
     const space = exp.spaces[spaceId];
     for (const ex of space.exits) {
@@ -498,13 +528,16 @@
     delete exp.spaces[spaceId];
     // A reserved space goes back to waiting (its door would rebuild it as is).
     if (space.reserveId && exp.reserves[space.reserveId]) { exp.reserves[space.reserveId].spaceId = null; clearReserved(exp); }
-    exp.history.push({ type: 'revert', spaceId });
+    exp.history.push(cause ? { type: 'revert', spaceId, cause } : { type: 'revert', spaceId });
     if (!exp.traces) exp.traces = {};
-    exp.traces[spaceId] = {
+    const trace = {
       id: space.id, seed: space.seed, parentId: space.parentId, viaExitId: space.viaExitId,
       entropy: space.entropy, archetype: space.archetype, cells: space.cells.slice(),
       depth: space.depth, deadEnd: space.deadEnd, meta: space.meta, revertedAt: exp.history.length - 1,
     };
+    if (cause) trace.cause = cause;
+    if (space.reserveId) trace.reserveId = space.reserveId;
+    exp.traces[spaceId] = trace;
     if (exp._imprints) exp._imprints = null; // keeps it non-enumerable (not exported)
   }
 
@@ -545,6 +578,34 @@
     return ex;
   }
 
+  /**
+   * What re-charting this unopened exit would build: the latest trace opened
+   * through it (with this `cause`, if given), when the same space can stand
+   * there again. Reserved spaces never need it (their door rebuilds them).
+   * Returns { trace, cand } (cand is ready for commit) or null.
+   */
+  function rechartable(exp, spaceId, exitId, cause) {
+    const ex = getExit(exp, spaceId, exitId);
+    if (!ex || ex.connectionId || ex.kind === 'surface') return null;
+    let best = null;
+    for (const id in exp.traces || {}) {
+      const t = exp.traces[id];
+      if (t.parentId !== spaceId || t.viaExitId !== exitId || t.reserveId || !t.entropy) continue;
+      if (cause && t.cause !== cause) continue;
+      if (!best || t.revertedAt > best.revertedAt) best = t;
+    }
+    if (!best || exp.spaces[best.id]) return null;
+    const cand = expand(exp, spaceId, exitId, null, best);
+    return cand ? { trace: best, cand } : null;
+  }
+
+  /** Build a trace again through its exit (see rechartable). Returns the space id. */
+  function rechart(exp, spaceId, exitId, cause) {
+    const r = rechartable(exp, spaceId, exitId, cause);
+    if (!r) throw new Error('Nothing to re-chart through ' + spaceId + '/' + exitId);
+    return commit(exp, r.cand);
+  }
+
   function setCaps(exp, caps) {
     exp.params.maxSpaces = caps.maxSpaces || null;
     exp.params.maxArea = caps.maxArea || null;
@@ -573,11 +634,13 @@
     const exp = createExpedition(record.rootSeed, null, initialParams(record));
     for (const ev of record.history) {
       if (ev.type === 'commit') {
-        const cand = expand(exp, ev.parentId, ev.viaExitId, ev.entropy || undefined);
-        if (!!ev.loop !== (cand.type === 'loop')) throw new Error('Replay diverged at ' + ev.parentId + '/' + ev.viaExitId);
+        const trace = ev.restore ? exp.traces[ev.restore] : undefined;
+        if (ev.restore && !trace) throw new Error('Replay diverged: no trace ' + ev.restore);
+        const cand = expand(exp, ev.parentId, ev.viaExitId, ev.entropy || undefined, trace);
+        if (!cand || !!ev.loop !== (cand.type === 'loop')) throw new Error('Replay diverged at ' + ev.parentId + '/' + ev.viaExitId);
         commit(exp, cand);
       } else if (ev.type === 'revert') {
-        revert(exp, ev.spaceId);
+        revert(exp, ev.spaceId, ev.cause);
       } else if (ev.type === 'carve') {
         carve(exp, ev.spaceId, ev.cell, ev.facing);
       } else if (ev.type === 'caps') {
@@ -666,7 +729,7 @@
 
   Object.assign(DE, {
     deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
-    canCarve, carve, replay, exportRecord, importRecord, rebuildRegistry,
+    canCarve, carve, rechartable, rechart, replay, exportRecord, importRecord, rebuildRegistry,
     pathToRoot, cycleCount, stats, parseKey, imprintAt, reservedAt, canReserve, reserve,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

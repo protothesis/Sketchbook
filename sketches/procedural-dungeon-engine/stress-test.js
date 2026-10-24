@@ -1,7 +1,9 @@
 // Headless engine check (milestone acceptance criteria), run with:
 //   node stress-test.js [expansions=500] [runs=5]
-// Random expansions, rerolls and reverts; asserts no overlaps, a registry that
-// rebuilds identically, exact replay from history, and at least one cycle.
+// Random expansions, rerolls and reverts (some tagged 'faint' and re-charted
+// later); asserts no overlaps, a registry that rebuilds identically, exact
+// replay from history, that a re-charted space is the one that was lost, and
+// at least one cycle.
 'use strict';
 require('./engine/rng.js');
 require('./engine/shapes.js');
@@ -54,7 +56,7 @@ function sameMap(a, b) {
 let totalCycles = 0;
 for (let run = 0; run < RUNS; run++) {
   const exp = DE.createExpedition(DE.randomRootSeed());
-  let expansions = 0, loops = 0, reverts = 0, reserves = 0;
+  let expansions = 0, loops = 0, reverts = 0, reserves = 0, recharts = 0;
   while (expansions < N) {
     const open = [];
     for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId && e.kind !== 'surface') open.push([id, e.id]);
@@ -67,7 +69,20 @@ for (let run = 0; run < RUNS; run++) {
     expansions++;
     if (Math.random() < 0.05) {
       const leaves = Object.keys(exp.spaces).filter((id) => DE.canRevert(exp, id));
-      if (leaves.length) { DE.revert(exp, pick(leaves)); reverts++; }
+      if (leaves.length) { DE.revert(exp, pick(leaves), Math.random() < 0.5 ? 'faint' : undefined); reverts++; }
+    }
+    // Re-chart a lost space now and then: same id, seed and cells.
+    if (Math.random() < 0.05) {
+      const t = pick(Object.values(exp.traces).filter((t) => t.cause === 'faint').concat([null]));
+      const r = t && exp.spaces[t.parentId] && DE.rechartable(exp, t.parentId, t.viaExitId, 'faint');
+      if (r) {
+        const want = r.trace;
+        const id = DE.rechart(exp, t.parentId, t.viaExitId, 'faint');
+        const sp = exp.spaces[id];
+        assert(id === want.id && sp.seed === want.seed && sp.cells.join(';') === want.cells.join(';'), 're-chart of ' + want.id + ' differs');
+        assert(!exp.traces[want.id], 're-charted trace ' + want.id + ' still there');
+        recharts++;
+      }
     }
     if (expansions % 40 === 0) tryReserve(exp) && reserves++;
     if (expansions % 50 === 0) checkNoOverlap(exp);
@@ -79,7 +94,7 @@ for (let run = 0; run < RUNS; run++) {
   const s = DE.stats(exp);
   totalCycles += s.cycles;
   const built = Object.values(exp.reserves).filter((r) => r.spaceId).length;
-  console.log(`run ${run} seed=${exp.rootSeed}: ${expansions} expansions, ${loops} loops, ${reverts} reverts, ${reserves} reserves (${built} built) ->`,
+  console.log(`run ${run} seed=${exp.rootSeed}: ${expansions} expansions, ${loops} loops, ${reverts} reverts, ${reserves} reserves (${built} built), ${recharts} re-charts ->`,
     `${s.spaces} spaces, ${s.cells} cells, ${s.cycles} cycles, ${s.openExits} open exits; replay OK`);
 }
 assert(totalCycles > 0, 'no cycles in any run');

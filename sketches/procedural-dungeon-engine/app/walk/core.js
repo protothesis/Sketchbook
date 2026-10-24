@@ -13,8 +13,11 @@
 // Walk mode is split into classic scripts (no modules: the page has to open
 // from file://), which play.html loads in this order:
 //
-//   core, world, figure, items, restore, waystones, lamp, actions, input,
-//   ecology, wells, pixies, ghosts, fx, hud, main
+//   saves, core, world, figure, items, restore, waystones, lamp, actions,
+//   input, ecology, wells, pixies, ghosts, fx, hud, game, main
+//
+// (saves.js is the odd one out: it knows nothing of W, and hangs its save
+// slots on DungeonPlay.saves, so it can move to another client.)
 //
 // Each file is its own IIFE sharing one namespace, DungeonPlay.walk ("W").
 // A file takes what it needs from earlier files by destructuring W at the
@@ -23,7 +26,7 @@
 // file hasn't loaded yet when this one runs.
 //
 // This file: tunables, the three.js renderer, scene and camera, the run
-// state, and saving.
+// state, and saving (the slots themselves are in saves.js).
 (function (global) {
   'use strict';
 
@@ -34,8 +37,9 @@
   const RULES = DP.RULES;
   const THREE = global.THREE;
   const $ = (id) => document.getElementById(id);
-  const STORAGE_KEY = 'dungeon-engine:expedition';
-  const PLAYER_KEY = 'dungeon-engine:player';
+  const STORAGE_KEY = 'dungeon-engine:expedition'; // the record, for the chart view
+  const PLAYER_KEY = 'dungeon-engine:player';       // the run, before save slots (read once, see game.js)
+  const SAVES = DP.saves;
 
   // Tunables, in cells unless noted. PLAY.md has the reasoning.
   const S = 2;              // world units per cell
@@ -129,6 +133,7 @@
     crouchAmt: 0,        // 0 standing .. 1 crouched, eased
     hidden: false,
     paused: false,
+    menu: null,          // 'title' | 'pause' while a menu is up (see game.js)
     recordMode: null,    // 'checkpoint' | 'extracted' while the record screen is up
   };
   const world = new THREE.Group();
@@ -161,6 +166,9 @@
       waystones: {},         // waystones woken: { "spaceId:seed": true } (the starter's is always awake)
       hearth: null,          // "spaceId:seed" of the waystone you last woke or used: where you wake
       surfaced: false,       // went up the surface door (the record shows until you go back down)
+      faints: 0,             // faints that cost rooms (see game.js)
+      roomsLost: 0,          // rooms lost to them
+      recharts: 0,           // lost rooms charted again
     };
   }
 
@@ -205,26 +213,38 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Persistence (shared with the map view)
+  // Persistence: the record for the chart view, and the save slots (saves.js)
 
+  /** The record for the chart view (it only reads it now; walk mode's saves are the slots). */
   function save() {
+    if (!state.exp) return;
     try { localStorage.setItem(STORAGE_KEY, DE.exportRecord(state.exp)); } catch (e) { /* storage unavailable */ }
   }
-  function savePlayer() {
+  /** A snapshot of the game as it stands (live objects: write it straight away). */
+  function snapshot() {
     const p = state.player;
     state.run.marks = state.marks.map((m) => ({ sx: m.sx, sy: m.sy, color: m.color, rot: m.rot, base: m.base }));
     state.run.placedJars = state.jars.map((j) => ({ id: j.id, sx: j.sx, sy: j.sy, fill: j.fill }));
     state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
     state.run.pixies = state.pixies.map((o) => ({ id: o.id, x: +o.x.toFixed(3), y: +o.y.toFixed(3) }));
-    try {
-      localStorage.setItem(PLAYER_KEY, JSON.stringify({
-        v: RUN_VERSION, rootSeed: state.exp.rootSeed, x: p.x, y: p.y, angle: p.angle, run: state.run,
-      }));
-    } catch (e) { /* storage unavailable */ }
+    return SAVES.make({ record: state.exp, run: state.run, player: { x: p.x, y: p.y, angle: p.angle } });
+  }
+  /** The resume slot (every second, on pagehide, on quitting to the menu). */
+  function savePlayer() {
+    if (!state.exp || state.menu === 'title') return;
+    SAVES.write('resume', snapshot());
+  }
+  /** The checkpoint slot: progress, written when you use a waystone. */
+  function saveCheckpoint() {
+    if (!state.exp) return;
+    const snap = snapshot();
+    SAVES.write('checkpoint', snap);
+    SAVES.write('resume', snap);
   }
 
-  // The run save's format version. When the shape of `run` changes, bump it
-  // and add a step to RUN_MIGRATIONS: step i takes a version-i run to i + 1.
+  // The old run save's format versions, for bringing a save from before
+  // save slots over (game.js). Saves are stamped with DP.saves.BUILD now:
+  // when `run` changes shape, bump that instead of adding a step here.
   // Saves from before versioning count as version 0.
   const RUN_VERSION = 3;
   const RUN_MIGRATIONS = [
@@ -258,5 +278,5 @@
     REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_RADIUS, DITHER_APPROACH, CAM_OFFSET, SEAM,
     LOCK_SEAM, OPEN_SEAM, LANTERN, LANTERN_RANGE, OPP, ekey, canvas, renderer, scene, camera, state, world,
     freshRun, rebuildExitIndex, isLockedNow, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,
-    savePlayer });
+    savePlayer, saveCheckpoint, snapshot, SAVES, RUN_VERSION });
 })(window);

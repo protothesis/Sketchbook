@@ -29,8 +29,12 @@ decisions, see [`NOTES.md`](NOTES.md).
    lamp a place to rest.
 7. **Arrive.** The waypoint is a setpiece, a big hall. Wake its waystone
    and it joins your fast-travel network, and new waypoints may appear.
-8. **If the lamp runs out,** you wake at the last waystone you used.
-   Everything you did stays done.
+8. **Using a waystone is a checkpoint.** If you faint (your psychic
+   stamina runs out, in the dark or in a ghost's reach), you wake at the
+   last waystone you used, and everything opened since collapses into
+   traces. Your run (what you carry, what you lit and pushed) goes back
+   to how it was there. A lost room can be charted again at its door, for
+   entropy, while nothing stands in its place (section 17).
 9. **Harvest and plant seeds** (later) to shape the map with a scarcer
    resource than entropy.
 
@@ -600,6 +604,45 @@ stranger" idea measured from your anchors instead of from the root.
 Candidates: fewer sconces and more ghosts by distance from the nearest
 awake waystone; the light shorter; imprints and cracks heavier.
 
+## 17. Saves, checkpoints and fainting
+
+A proper game loop around the run (built 2026-10-24).
+
+**Two save slots.** *Resume* is written all the time (every second, when
+the page is hidden, when you quit to the menu): it's how closing the
+laptop and coming back works. *Checkpoint* is progress: a full snapshot
+written when you use a waystone (wake it, travel from it, or just touch an
+awake one). Quitting writes only the resume slot.
+
+**A title screen** on load: Continue (the resume slot), New run, and
+import / export of a save file (both slots in one file). A **pause menu**
+(Esc, or the Menu button for touch): Resume, Quit to main menu.
+
+**A version stamp on every save.** A save from another build isn't
+loaded; the title screen says so and offers a new run (and an export, to
+keep it). Strict backwards compatibility is no longer a goal: a change to
+what a history builds bumps the stamp instead of hiding behind params for
+old records. Within one build, replay is still exact.
+
+**Fainting costs progress.** Waking at your last waystone used to be free.
+Now every room that wasn't standing at your checkpoint collapses, deepest
+and latest first, into traces (marked as lost to a faint), and those
+footprints grow cracked, haunted rooms like any reroll's. The run rolls
+back to the checkpoint too: inventory, entropy, keys, lit sconces, pushed
+blocks, wells, ghosts. Tallies (time walked, faints, collapses) carry on.
+Losses get much bigger, so waypoint distance, lamp drain and sconce shelter
+may need retuning after playing it (not changed yet).
+
+**Re-charting.** A door whose room was lost to a faint shows a violet
+seam. E there charts the room again for a charge (`rechartCharges`): the
+same room, same id, seed and cells, built from the trace's recorded
+entropy, and it isn't cracked by its own trace. Its loot comes back with
+it (the run rolled back, so those items were never picked up). If
+something now overlaps its footprint, it can't come back: the seam goes
+back to orange. Pushing the door still opens something new, and that new
+room may take the lost one's place for good. A found item that re-charts
+(a "chart fragment") is a later option.
+
 ## First slice (built 2026-10-21)
 
 Built as planned; kept for the record.
@@ -669,6 +712,12 @@ archetypes (more irregular shapes, like the halls').
 darker the farther out (section 16); active travel (section 9); chapters
 of waypoints; seeds (section 4); secrets.
 
+## Fourth slice (built 2026-10-24)
+
+The game loop (section 17): save slots with a build stamp, a title screen,
+a pause menu, waystones as checkpoints, faints that cost every room since
+the checkpoint (and roll the run back), and re-charting lost rooms.
+
 ## Open questions
 
 - How is the power for bigger rerolls earned: a level, an ability, a relic?
@@ -683,3 +732,10 @@ of waypoints; seeds (section 4); secrets.
   playing. (Slowed once, 2026-10-22.)
 - Should the dark and a ghost drain stamina at different rates?
 - Should waking a waystone cost more, given travel now costs too?
+- With faints costing rooms: are waypoints (25–60 cells) too far apart,
+  does the lamp drain too fast, should sconces shelter more? Tune by
+  playing.
+- Should re-charting also be possible with an item, and should it cost more
+  for bigger rooms?
+- A doorstone spent on a carved door after the checkpoint comes back on a
+  faint, while the door stays carved. Fine, or should carving roll back?
