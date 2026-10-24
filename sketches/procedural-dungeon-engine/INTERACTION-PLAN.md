@@ -86,7 +86,8 @@ built; this file is the plan until it's all in.
 3. [x] Hold-to-act ring: doors (open/close/reroll), chalk wipe, sconces
        (light/snuff), waystones. (Unlocking is a hold for now; it moves to
        F with the key in hand in step 4.)
-4. [ ] Hands: lantern slot, one held thing shown on the figure, touch
-       collect for tools, keys as a tool (F to unlock).
+4. [x] Hands: lantern slot, one held thing shown on the figure, touch
+       collect for tools, keys as a tool (F to unlock). (F unlocking is a
+       tap, like every F. The thread stays a pickup for now.)
 5. [ ] Carrying blocks and jars; pull removed; run save v4.
 6. [ ] Jar swipe: pixies, well entropy, pouring.

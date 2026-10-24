@@ -23,10 +23,6 @@
     const run = state.run;
     switch (near.action) {
       case 'erase': return { cls: 'chalk', text: `wipe the ${near.mark.color} chalk mark` };
-      case 'take': {
-        const it = near.it.item;
-        return { cls: 'chalk', text: `take the ${it.kind === 'chalk' ? `stick of ${it.color || 'silver'} chalk` : 'doorstone'}` };
-      }
       case 'light': return { text: `light the sconce from your lantern · ${RULES.sconceCost} shard` };
       case 'snuff': return { text: `snuff the sconce · its shard back to your lamp` };
       case 'close': return { text: 'close the door' };
@@ -46,7 +42,7 @@
           : { cls: 'blocked', text: `your lost path · ${rooms} · ${chargeText(near.price)} to retrace · push to let it go` };
       }
       case 'locked':
-        return run.keys > 0 ? { cls: 'lock', text: 'unlock the door · 1 key' } : { cls: 'blocked', text: 'a locked door · you need a key' };
+        return { cls: 'blocked', text: run.keys > 0 ? 'a locked door · a key in hand unlocks it' : 'a locked door · you need a key' };
       case 'collapse': {
         // Only a provisional room (one with no door out opened yet) offers this.
         const pr = near.price;
@@ -65,6 +61,7 @@
       return { cls: 'chalk', text: `open a door in this wall · ${n} doorstone${n === 1 ? '' : 's'}` };
     }
     if (near.action === 'catch') return { cls: 'jar', text: 'catch the pixie in a jar' };
+    if (near.action === 'unlock') return { cls: 'lock', text: `unlock the door · 1 of ${state.run.keys} key${state.run.keys === 1 ? '' : 's'}` };
     return null;
   }
 
@@ -159,15 +156,11 @@
     // in its own elements (the lamp, the hotbar).
     setText('stats', `seed ${state.exp.rootSeed} · ${s.spaces} rooms · ${s.openExits} closed doors`);
     W.updateLampHud(true);
-    // Keys are counted by the lamp, not carried on the hotbar: a locked door takes one by itself.
+    // Keys are a tool on the hotbar now; the thread is still shown by the lamp.
     const keyEl = $('keys');
-    if (keyEl) {
-      keyEl.hidden = run.keys <= 0;
-      keyEl.textContent = '⚷ ' + run.keys;
-      const threadEl = $('thread');
-      if (threadEl) threadEl.hidden = !run.thread;
-      keyEl.title = `${run.keys} key${run.keys === 1 ? '' : 's'} · a locked door uses one when you open it`;
-    }
+    if (keyEl) keyEl.hidden = true;
+    const threadEl = $('thread');
+    if (threadEl) threadEl.hidden = !run.thread;
     refreshHotbar();
   }
 

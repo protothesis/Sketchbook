@@ -202,7 +202,7 @@ Determinism).
   lit sconce the icon shimmers gold, and a stream of warm motes flows from
   the sconce's flame into your lamp; drinking from a well, it shimmers
   violet. No words, except when the lamp is off: how to relight it. Under
-  the meter, the stamina bar and your keys. The top-left panel is
+  the meter, the stamina bar (and the thread, once you have it). The top-left panel is
   information and settings only.
 - **You can feel the lamp.** Three stages, blended so none of them pops:
   - **Uneasy** (2 charges and below): a little more flicker, and the halo
@@ -259,11 +259,14 @@ Determinism).
   wall take the sconce's place.
 - **Three kinds of item.** Every item belongs to one class, and the class
   decides how it behaves (`ITEMS` in `app/walk/items.js`):
-  - **Pickups** (shards, keys) float and turn where they lie. Walk into
-    one to collect it. They're counters on the HUD (entropy, and ⚷ for
-    keys), never hotbar slots: a locked door uses a key by itself.
-  - **Tools** (chalk, doorstones) rest on the floor. E takes one. They
-    live on the hotbar and get used up with F, never put back.
+  - **Pickups** (shards, the thread) float and turn where they lie. Walk
+    into one to collect it. They're on the HUD (entropy, 🧵), never hotbar
+    slots.
+  - **Tools** (chalk, doorstones, keys) lie flat on the floor. Walk over
+    one to collect it. They live on the hotbar and work only in your hand,
+    with F, used up and never put back. Collected with empty hands (the
+    lantern slot), a tool goes straight into them; holding something
+    else, it goes in the bag.
   - **Objects** (jars) are things in the world as themselves. A jar from a
     room's loot is already standing there when the room appears. E lifts
     it, F sets it down again, with whatever's inside.
@@ -271,9 +274,14 @@ Determinism).
     by the ecology's rules.
 - **The hotbar.** Tools and objects sit in slots at the bottom of the
   screen. Pick a slot with 1–9, the mouse wheel, or a tap. **E** interacts
-  with the world (doors, climbing, taking a tool, lifting a jar, wiping a
-  chalk mark you're facing). **F** (or "use" on touch) uses the
-  selected item. Some slots are **groups**: one slot, several variants
+  with the world (doors, climbing, lifting a jar, wiping a chalk mark
+  you're facing). **F** (or "use" on touch) uses the selected item: the
+  one in your hand.
+- **One thing in your hand.** The selected slot is what you're holding,
+  and the figure shows it: a tool in its left hand (the lantern is in the
+  right), a jar held over its head. **Slot 1 is always the lantern**:
+  empty hands. F with it covers or relights the lamp (R still does too,
+  from any slot). Some slots are **groups**: one slot, several variants
   (chalk colours; jars by contents). Click a selected group again (or press and
   hold it) to open its picker, or press its number again to cycle.
 - **Focus and prompts.** E acts on one thing at a time: of everything in
@@ -371,8 +379,9 @@ Determinism).
   is one. You can collapse through it like any other. Such doors are never
   locked. The engine records the door (a `carve` event), so replay, export
   and the chart view all keep it.
-- **Locked doors.** Rare, and they appear past depth 3. A key opens one and
-  the walk simply goes on. The **first room past a locked door** is special:
+- **Locked doors.** Rare, and they appear past depth 3. Select a key (it's
+  a tool on the hotbar) and press F at the door: the key turns. Then open
+  it as usual (push, or hold E). E alone at a locked door only says so. The **first room past a locked door** is special:
   it's worked out from seeds (the door it was opened through was generated
   locked), so every client and every replay agrees. It has a faint gold
   warmth on its floor, "beyond a lock" in its caption, and a gold outline
@@ -409,7 +418,8 @@ you pass out and wake at your last waystone.
 | Doorstone | a small white slab with a dark doorway in it; a ⌂ slot on the hotbar; a "open a door here" prompt at a bare wall | the door looks like any other |
 | Chalk | sticks in five colours; on the hotbar, one group slot: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
-| Hotbar | bottom-centre slots: ⚱ jars (one group slot: "auto" or a fill's pips, ×n), chalk (a group slot with a colour picker), ⌂ doorstones; the selected slot is outlined in orange. Keys are a ⚷ count beside the entropy meter | a "use" button on touch screens |
+| Hotbar | bottom-centre slots: the lantern (always slot 1: empty hands), ⚱ jars (one group slot: "auto" or a fill's pips, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
+| Held item | the selected tool in the figure's left hand, tilted up, 1.5× size; a jar over its head (0.8×); nothing for the lantern slot | |
 | Jar | a small glass jar with a dark lid; a pixie flits inside when it holds one | a solid half-cell |
 | Pixie | a small pale-violet sphere with two fluttering translucent wings and a soft additive glow, bobbing about 0.6 cells up | no light of its own (cost) |
 | Entropy well | a dark stone ring on the floor around an additive pool, violet (surge) or teal (trickle); the pool's size and brightness are its level; motes rise slowly, and fast while you drink. Surge: 8 notches in the rim, lit by level (drinking) or by cooldown progress (recharging, the next one pulsing), and a burst (pool overshoot, motes thrown high, a big ripple) when it comes back. Trickle: a small stone spout 1.1 cells up; a drop forms under it over the 10 s wait, then falls every 0.7 s while refilling (every 4 s when full), each with a ripple (`WELL` in `wells.js`) | on the maps a small circle, filled by its level |
@@ -417,7 +427,7 @@ you pass out and wake at your last waystone.
 | Beyond a lock | a faint gold warmth on the floor, "beyond a lock" in the caption, a gold outline on the maps | |
 | Sigil | a seeded star polygon (pentagram, hexagram, {7/3}, {8/3}) in a double ring with glyph marks, drawn additively | stage 0 a faint violet trace; 1 a dim glow; 2 brighter and flickering; 3 pulsing gold. A +1 max shows as a gold-edged ninth charge slot |
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
-| Lamp HUD | bottom left: a lantern icon (92 px; 64 on phones) in the lamp's colour, its flame scaled to 100 / 80 / 62 / 45% by stage; a fluid meter of 6 sections (32 × 20 px; more with sigils), the burning one dimmer; the stamina bar, then keys (and relight words when the lamp is off). The icon shimmers gold by a sconce, violet at a well; tap it to cover or relight | violet liquid, gold for a sigil's extra sections |
+| Lamp HUD | bottom left: a lantern icon (92 px; 64 on phones) in the lamp's colour, its flame scaled to 100 / 80 / 62 / 45% by stage; a fluid meter of 6 sections (32 × 20 px; more with sigils), the burning one dimmer; the stamina bar, then the thread (and relight words when the lamp is off). The icon shimmers gold by a sconce, violet at a well; tap it to cover or relight | violet liquid, gold for a sigil's extra sections |
 | Lamp streams | motes flowing in an arc into the lamp from what feeds it: a lit sconce's flame (warm) while it shelters you, a well's pool (its colour) while you drink (`STREAM` in `lamp.js`, 16/s, 0.6 s each) | |
 | Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges). Unrest by fuel (`UNREST` in `lamp.js`, blended): flicker depth 0.03 at full, 0.08 at 2, 0.38 at 1, then settling to 0.02 at empty while a slow irregular fade grows to 0.5; dying, a brightness swell of up to 35% while you move. Halo (`HALO`): flat, hard-edged, see-through, about 4x the lamp across at full, shrinking to 40%, wobbling with the flicker and fade (it can exceed its average), opacity 0.3 down to 0.12, until the lamp is out. Light (`LIGHT`): intensity 25%–100%, reach 18%–100%, colour following the lamp toward red; below 1 charge a faint additive ring on the floor at 1.1–3.2 cells. Embers (`EMBER`): walking, up to 22/s spraying (0.35–0.75 s); standing, 9/s in a swaying column (0.9–1.6 s); dying, 0.7/s, red. Covered or out: the light eases to nothing, no halo or embers | |
 | Entropy popup | "+◆" (one diamond per shard's worth, up to three) floats up over the head in violet; "−◆" greyer when a block takes its charge back | |
@@ -425,8 +435,8 @@ you pass out and wake at your last waystone.
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. Door frames cap at 45%, door panels at 60% | side (north–south) walls never dither; doorways in south walls stay readable |
 | Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
-| Pickups | violet octahedron (shard), small gold key | bob and turn; lit by the lantern, so they hide in the dark too |
-| Tools lying | a chalk stick on its side, a doorstone on its back (doorway inset up), at a seeded angle | still; E within 0.55 cells takes one |
+| Pickups | violet octahedron (shard), a spool (thread) | bob and turn; lit by the lantern, so they hide in the dark too |
+| Tools lying | a chalk stick on its side, a doorstone on its back (doorway inset up), a gold key flat, at a seeded angle | still; walking within pickup range collects one (on the floor, not from a block) |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
 | Captions | a short typewriter-style log line when you enter a space | e.g. "s7 · chamber · damp · depth 3" (the Navidson Record feel) |
 | Waypoint pin | a violet square with a "?" and a glow, on both maps; off the map, a smaller one on the edge in its direction | |
@@ -471,7 +481,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Reroll price | 1 charge; only a provisional room (no door out of it ever opened) |
 | Checkpoint | written on waking a waystone, travelling, or E at an awake one; a faint loses every room not standing then (and every door carved since), and rolls the run back to it, keeping tallies and the thread |
 | Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), needs the thread; let go: push the door (the path turns to corruption); unchosen: dim at the next faint, fade at the one after |
-| Thread | 1 room in 20 at depth 3+ (`threadChance`, `threadMinDepth`, last on the loot stream); a pickup; kept for the rest of the run, through faints; 🧵 by the keys |
+| Thread | 1 room in 20 at depth 3+ (`threadChance`, `threadMinDepth`, last on the loot stream); a pickup; kept for the rest of the run, through faints; 🧵 under the lamp meter |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); one pixie each (`jarCapacity`); F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall |
 | Chalk | start with one silver stick (3 strokes); 1/12 of rooms at depth 1+ hold a stick (seeded on the loot stream, after jars; colour from silver/gold/crimson/teal/violet); F draws on the nearest free quarter ahead (floor or a one-unit block's top, not under a jar, not on another mark); E facing a mark within 0.7 cells wipes it |

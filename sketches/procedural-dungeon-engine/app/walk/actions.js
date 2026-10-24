@@ -7,8 +7,8 @@
   const W = global.DungeonPlay.walk;
   const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, PUSH_TIME, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
-    climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn, toolNear,
-    takeItem, pullNear, pull, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
+    climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn,
+    pullNear, pull, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
 
   // ---------------------------------------------------------------------------
   // Doors: open, unlock, or close + collapse
@@ -103,7 +103,6 @@
     const blk = (b, z0, z1) => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, z0, z1 });
     switch (near.action) {
       case 'wake': case 'travel': return blk(near.stone.ws, 0, near.stone.ws.top || 2.5 * UNIT);
-      case 'take': return pad(near.it.item.cell.x + 0.5, near.it.item.cell.y + 0.5, 0.16, 0, 0.08);
       case 'pickjar': return blk(near.jar.block, near.jar.block.base, near.jar.block.top);
       case 'erase': {
         const m = near.mark, z = m.base || 0;
@@ -129,7 +128,7 @@
   function actionNear(p) {
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     let best = null, bestScore = Infinity;
-    for (const find of [doorNear, waystoneNear, toolNear, jarNear, markNear, pullNear, sconceNear, blockNear]) {
+    for (const find of [doorNear, waystoneNear, jarNear, markNear, pullNear, sconceNear, blockNear]) {
       const near = find(p);
       if (!near) continue;
       const b = near.box = focusBox(near);
@@ -147,7 +146,7 @@
   // Opening and closing a door take as long as pushing into one.
 
   const HOLD = {
-    open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME, locked: PUSH_TIME,
+    open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME,
     erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7,
     collapse: 1.0, retrace: 1.0, // they cost entropy and can't be undone
   };
@@ -160,7 +159,7 @@
   /** Can't be done right now: a tap says why instead of filling a ring. */
   function blockedNow(near) {
     const a = near.action;
-    return (a === 'locked' && state.run.keys <= 0) || (a === 'collapse' && (near.haunted || !near.affordable)) ||
+    return a === 'locked' || (a === 'collapse' && (near.haunted || !near.affordable)) ||
       (a === 'retrace' && (!near.thread || !near.affordable));
   }
   /** Seconds E must be held for this action, or 0 for a tap. */
@@ -241,7 +240,6 @@
     if (near.action === 'travel') { travelFrom(near.stone); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
     if (near.action === 'pickjar') { pickUpJar(near.jar); return; }
-    if (near.action === 'take') { takeItem(near.key, near.it); return; }
     if (near.action === 'pull') { pull(near); return; }
     if (near.action === 'light') { lightSconce(near.sconce); return; }
     if (near.action === 'erase') {
@@ -273,22 +271,8 @@
       savePlayer();
       W.refreshHud();
     } else if (near.action === 'locked') {
-      if (run.keys <= 0) { W.showCaption('locked. you need a key'); return; }
-      run.keys--;
-      run.keysUsed++;
-      run.unlocked.push(doorKey);
-      const door = state.doors.get(doorKey);
-      if (door) {
-        door.locked = false;
-        door.panel.material = doorMat;
-        door.seam.material = door.point.material = seamMat;
-      }
-      // The door just opens now. The record / leave-the-dungeon screen
-      // (showRecord) is kept for whatever a lock leads to later.
-      W.showCaption('the key turns');
-      openDoor(near.space.id, near.exit.id);
-      savePlayer();
-      W.refreshHud();
+      // A key in hand unlocks it (F); E can't.
+      W.showCaption(run.keys > 0 ? `locked · ${W.verbF} with your key in hand to unlock it` : 'locked. you need a key');
     } else if (near.action === 'collapse') {
       if (near.haunted) {
         W.showCaption(`a hash ghost lingers in ${near.child.id} · it won't let the room unmake`);
@@ -300,6 +284,24 @@
       }
       collapseThrough(near);
     }
+  }
+
+  /** F with a key in hand at a locked door: the key turns. Open it as usual after. */
+  function unlockDoor(near) {
+    const run = state.run;
+    const doorKey = near.space.id + '/' + near.exit.id;
+    run.keys--;
+    run.keysUsed++;
+    run.unlocked.push(doorKey);
+    const door = state.doors.get(doorKey);
+    if (door) {
+      door.locked = false;
+      door.panel.material = doorMat;
+      door.seam.material = door.point.material = seamMat;
+    }
+    W.showCaption('the key turns · the door is unlocked');
+    savePlayer();
+    W.refreshHud();
   }
 
   /**
@@ -427,6 +429,6 @@
     W.refreshHud();
   }
 
-  Object.assign(W, { doorNear, wallNear, carveDoor, focusBox, actionNear, holdTime, pressE, releaseE, tickHold,
+  Object.assign(W, { doorNear, wallNear, carveDoor, unlockDoor, focusBox, actionNear, holdTime, pressE, releaseE, tickHold,
     closeDoor, reopenDoor, act, openDoor, askSurface });
 })(window);

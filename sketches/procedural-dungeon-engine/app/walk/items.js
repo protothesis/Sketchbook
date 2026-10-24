@@ -12,7 +12,8 @@
   //
   // E interacts with the world (doors, climbing, lifting a jar, wiping a
   // chalk mark you face): one focused thing (actionNear in actions.js).
-  // F uses the item selected on the hotbar:
+  // F uses what's in your hand, the item selected on the hotbar. Slot 1 is
+  // always the lantern (empty hands): F covers or relights it. Otherwise:
   // draw a chalk mark, set a jar down, press a doorstone to a wall. 1-9 or
   // the wheel select. A slot can hold a group of variants (chalk colours):
   // click it again, or press and hold, to open its picker; its number key
@@ -22,7 +23,6 @@
 
   const JAR_H = 0.38; // cells
   const STROKES = 3;  // chalk marks per stick
-  const TAKE_RANGE = 0.55; // cells, E reach to a tool lying on the floor
 
   function maxCharges() { return RULES.chargesMax + state.buff; }
 
@@ -31,10 +31,10 @@
   // and the class decides how it lives in the world and in your hands:
   //
   //   pickup  floats and turns where it lies; walk into it to collect it.
-  //           Counted on the HUD, never on the hotbar (a key opens a lock
-  //           by itself).
-  //   tool    rests on the floor; E takes it. Carried on the hotbar and used
-  //           up with F, never put back.
+  //           Counted on the HUD, never on the hotbar.
+  //   tool    lies flat on the floor; walk over it to collect it. Carried on
+  //           the hotbar and used up with F (a key too: F at a locked door),
+  //           never put back. Collected with empty hands, it's in them.
   //   object  a thing in the world as itself. It stands where it spawned;
   //           E lifts it and F sets it down again, with whatever's inside.
   //
@@ -49,18 +49,19 @@
       },
     },
     key: {
-      cls: 'pickup',
+      cls: 'tool',
       take(run) {
         run.keys++;
         run.keysFound++;
-        return 'a key. somewhere, a door is locked';
+        equipIfEmpty('key');
+        return `a key · ${W.verbF} with it in hand at a locked door unlocks it`;
       },
     },
     doorstone: {
       cls: 'tool',
       take(run) {
         run.doorstones++;
-        state.sel = 'doorstone';
+        equipIfEmpty('doorstone');
         return `a doorstone · ${W.verbF} at a bare wall to open a door there`;
       },
     },
@@ -70,8 +71,7 @@
         const color = item.color || 'silver';
         run.chalks[color] = (run.chalks[color] || 0) + STROKES;
         run.chalkFound++;
-        state.sel = 'chalk';
-        state.variant.chalk = color;
+        if (equipIfEmpty('chalk')) state.variant.chalk = color;
         return `a stick of ${color} chalk · ${W.verbF} to draw a ${CHALK[color].name}`;
       },
     },
@@ -84,6 +84,14 @@
     },
     jar: { cls: 'object' },
   };
+
+  /** A tool just collected goes into your hands if they're empty (the lantern slot), else the bag. */
+  function equipIfEmpty(key) {
+    const cur = selectedSlot();
+    if (cur && cur.key !== 'lantern') return false;
+    state.sel = key;
+    return true;
+  }
 
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
   const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
@@ -100,11 +108,15 @@
     if (item.kind === 'shard') {
       mesh.add(new THREE.Mesh(geo.shard, shardMat));
     } else if (item.kind === 'key') {
+      const flat = new THREE.Group(); // lying on its side
       const ring = new THREE.Mesh(geo.keyRing, keyMat);
       ring.position.x = -0.1 * S;
       const shaft = new THREE.Mesh(geo.keyShaft, keyMat);
       shaft.position.x = 0.04 * S;
-      mesh.add(ring, shaft);
+      flat.add(ring, shaft);
+      flat.rotation.x = -Math.PI / 2;
+      flat.position.y = 0.02 * S;
+      mesh.add(flat);
     } else if (item.kind === 'doorstone') {
       const flat = new THREE.Group(); // the slab laid on its back, inset facing up
       const slab = new THREE.Mesh(geo.doorstone, chalkMat);
@@ -142,25 +154,14 @@
     for (const j of state.jars) if (j.tile) j.mesh.scale.setScalar(Math.max(0.001, j.tile.scale.x));
   }
 
-  /** Walking into a pickup collects it. */
+  /** Walking into a pickup or over a tool collects it. */
   function collectPickups(p) {
+    if (p.z > 0.05) return;
     for (const [k, it] of state.items) {
-      if (ITEMS[it.item.kind].cls !== 'pickup') continue;
+      if (ITEMS[it.item.kind].cls === 'object') continue;
       const dx = p.x - (it.item.cell.x + 0.5), dy = p.y - (it.item.cell.y + 0.5);
       if (dx * dx + dy * dy <= PICKUP_RANGE * PICKUP_RANGE) takeItem(k, it);
     }
-  }
-
-  /** E at a tool lying within reach: take it. */
-  function toolNear(p) {
-    if (p.z > 0.05) return null;
-    let best = null, bestD = TAKE_RANGE;
-    for (const [k, it] of state.items) {
-      if (ITEMS[it.item.kind].cls !== 'tool') continue;
-      const d = Math.hypot(p.x - (it.item.cell.x + 0.5), p.y - (it.item.cell.y + 0.5));
-      if (d < bestD) { bestD = d; best = { action: 'take', key: k, it }; }
-    }
-    return best;
   }
 
   function takeItem(k, it) {
@@ -197,7 +198,7 @@
    * state.variant.
    */
   function slots() {
-    const run = state.run, out = [];
+    const run = state.run, out = [{ key: 'lantern', kind: 'lantern' }]; // empty hands
     if (run.jars.length) {
       // One slot for every jar, grouped by fill (empty, or a pixie). "auto"
       // (the default) catches a pixie in an empty jar when one is near, sets
@@ -219,6 +220,7 @@
       out.push({ key: 'chalk', kind: 'chalk', variants, cur });
     }
     if (run.doorstones > 0) out.push({ key: 'doorstone', kind: 'doorstone', count: run.doorstones });
+    if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
     return out;
   }
   function selectedSlot() {
@@ -242,8 +244,16 @@
     refreshHotbar();
   }
 
-  const ICON = { jar: '⚱', doorstone: '⌂' };
-  const NAME = { doorstone: 'doorstone: F at a bare wall opens a door' };
+  const ICON = { jar: '⚱', doorstone: '⌂', key: '⚷' };
+  const NAME = {
+    lantern: 'your lantern (empty hands): F covers or relights it',
+    doorstone: 'doorstone: F at a bare wall opens a door',
+    key: 'key: F at a locked door unlocks it',
+  };
+  // The lantern slot's icon: a small copy of the lamp HUD's lantern.
+  const LANTERN_SVG = '<svg viewBox="0 0 24 32" width="15" height="20"><path d="M8 6 a4 4 0 0 1 8 0" fill="none" stroke="currentColor" stroke-width="1.8"/>' +
+    '<rect x="6" y="6" width="12" height="3" rx="1" fill="currentColor"/><rect x="7" y="9" width="10" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+    '<path d="M12 12 C15 16 15 19 12 22 C9 19 9 16 12 12 Z" fill="#ffc27a"/><rect x="6" y="25" width="12" height="3" rx="1" fill="currentColor"/></svg>';
   const jarVariantName = (v) => (v.auto ? 'auto: catch a pixie if one is near; a pixie jar onto a sigil, an empty one elsewhere'
     : `${v.fill ? 'a pixie' : 'empty'} · ${v.count} jar${v.count === 1 ? '' : 's'}`);
 
@@ -296,6 +306,7 @@
     if (cur) state.sel = cur.key;
     bar.innerHTML = '';
     bar.hidden = !s.length;
+    updateHeld(cur);
     s.forEach((slot, i) => {
       const b = el('button', 'slot' + (cur && slot.key === cur.key ? ' on' : '') + ' ' + slot.kind);
       b.type = 'button';
@@ -305,6 +316,11 @@
       } else if (slot.kind === 'jar') {
         b.title = `jars (${slot.count}): F sets one down, E lifts one; ${jarVariantName(slot.cur)}` +
           (slot.variants.length > 1 ? '; click again or hold to choose' : '');
+      } else if (slot.kind === 'lantern') {
+        b.title = NAME.lantern;
+        const ic = el('span', 'ic');
+        ic.innerHTML = LANTERN_SVG;
+        b.append(ic);
       } else {
         b.title = NAME[slot.kind];
         b.append(el('span', 'ic', ICON[slot.kind]));
@@ -639,6 +655,11 @@
   function useNear(p) {
     const slot = selectedSlot();
     if (!slot || state.paused || state.climb) return null;
+    if (slot.kind === 'lantern') return { action: 'lamp', slot };
+    if (slot.kind === 'key') {
+      const door = W.doorNear(p);
+      return door && door.action === 'locked' ? { action: 'unlock', slot, door } : null;
+    }
     if (slot.kind === 'jar') {
       // An empty jar (auto, or the empty group) near a free pixie catches it.
       const empty = (slot.cur.auto || slot.cur.fill === 0) && state.run.jars.find((j) => j.fill === 0);
@@ -662,6 +683,8 @@
     const run = state.run;
     const u = useNear(state.player);
     if (!u) { shakeHotbar(); return; } // "that didn't work"
+    if (u.action === 'lamp') { W.toggleLamp(); return; }
+    if (u.action === 'unlock') { W.unlockDoor(u.door); return; }
     if (u.action === 'catch') {
       W.catchPixie(u.pixie, u.jar);
       return;
@@ -679,6 +702,35 @@
     }
     savePlayer();
     W.refreshHud();
+  }
+
+  // --- what's in your hand, shown on the figure: a tool at its left side
+  // (the lantern is in the right), an object (a jar) held over its head.
+
+  const heldRig = new THREE.Group();
+  W.bodyRig.add(heldRig);
+  let heldSig = null;
+  function updateHeld(slot) {
+    const sig = !slot || slot.kind === 'lantern' ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : '');
+    if (sig === heldSig) return;
+    heldSig = sig;
+    heldRig.clear();
+    if (!sig) return;
+    let m;
+    if (slot.kind === 'jar') {
+      m = makeJarMesh();
+      const fill = slot.cur.auto ? Math.max(...state.run.jars.map((j) => j.fill)) : slot.cur.fill;
+      m.userData.wisps.forEach((w, i) => { w.visible = i < fill; w.position.y = 0.15 * S; });
+      m.scale.setScalar(0.8);
+      m.position.set(0, 0.64 * S, 0);
+    } else {
+      const item = slot.kind === 'chalk' ? { kind: 'chalk', color: slot.cur.color } : { kind: slot.kind };
+      m = itemMesh(item, 'held');
+      m.rotation.set(-0.5, 0, 0.35); // tilted up in the hand
+      m.scale.setScalar(1.5); // a little larger than life, so it reads at the camera's distance
+      m.position.set(-0.15 * S, 0.27 * S, 0.1 * S);
+    }
+    heldRig.add(m);
   }
 
   /** Jars in rooms about to collapse shatter; a pixie inside is lost with the room. */
@@ -950,8 +1002,8 @@
     state.buffReady = true;
   }
 
-  Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups, toolNear,
-    takeItem, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+  Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
+    takeItem, selectedSlot, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn, addJarToWorld,
     clearJars, jarNear, pickUpJar, useNear, useSelected, shatterJarsIn, noteUnmade,
     updateJars, addSigil, updateSigils });

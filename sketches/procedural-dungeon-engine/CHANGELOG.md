@@ -433,6 +433,15 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **Hands** (interaction cleanup, step 4). What's selected
+  on the hotbar is what you hold, and the figure shows it: a tool in its
+  left hand, a jar over its head. Slot 1 is always the lantern (empty
+  hands); F with it covers or relights the lamp (R still works). Tools
+  (chalk, doorstones, and now keys) lie flat and are collected by walking
+  over them; with empty hands a new tool goes into them, otherwise into
+  the bag. **Keys are a tool**: F with one in hand unlocks a door, then you
+  open it as usual; E at a lock only says so. The key count by the lamp
+  is gone (the thread is still shown there).
 - 2026-10-24: **Hold to act** (interaction cleanup, step 3). Anything
   that changes the world takes E held while a ring (like a ghost's) fills
   over the target with the action's icon: doors 0.35 s (as long as a
