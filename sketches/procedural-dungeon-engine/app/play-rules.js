@@ -83,6 +83,9 @@
     pushMinDepth: 1,
     pushColors: ['#e0a94a', '#57cdbf', '#c47be0', '#e86a6a'],
     restoreCharges: 2 / 3,    // two shards (was a whole charge)
+    // Crates: some single one-unit blocks are loose, a plain push block with
+    // no home and no reward (seeded on their own stream, per block).
+    crateChance: 0.4,
     // Sconces: unlit, on a room's walls. Lighting one costs a shard of your
     // lamp's entropy, and the room never drains the lamp again.
     sconceChance: 0.35,
@@ -225,7 +228,9 @@
    * absolute grid units:
    *   blocks:  [{ x0, y0, x1, y1, units }]   solid; `units` stacked half-cell
    *            cubes tall (3 = floor to ceiling, a column). Collide, cast
-   *            shadows, and (below a column) can be climbed.
+   *            shadows, and (below a column) can be climbed. A block with
+   *            `crate: { id, sx, sy }` is loose: walk mode makes it a push
+   *            block (no home), starting on half-cell (sx, sy).
    *   details: [{ x0, y0, x1, y1, h, shade }]   flat floor dressing only
    *
    * Shapes: single (1 sub), double (2x1), big (2x2), and in chambers short
@@ -310,13 +315,21 @@
       };
       // Rows stay modular (one cube per sub) so they read as built pieces.
       if (kind === 'row') cells.forEach((s) => blocks.push(rect([s])));
-      else blocks.push(rect(cells));
+      else blocks.push(Object.assign(rect(cells), kind === 'single' && units === 1 ? { single: true } : {}));
     }
 
     // Clear blocks off cells that gained a door after the room was made.
     for (let i = blocks.length - 1; i >= 0; i--) {
       const b = blocks[i];
       if (laterCells.some((c) => b.x0 < c.x + 1 && b.x1 > c.x && b.y0 < c.y + 1 && b.y1 > c.y)) blocks.splice(i, 1);
+    }
+
+    // Some single one-unit blocks are crates (loose; walk mode makes them
+    // push blocks). One draw per single block, on its own stream.
+    const cr = DE.deriveRng(space.seed, 'crate');
+    for (const b of blocks) {
+      if (b.single && cr.chance(RULES.crateChance)) b.crate = { id: 'crate' + b.x0 * 2 + ',' + b.y0 * 2, sx: b.x0 * 2, sy: b.y0 * 2 };
+      delete b.single;
     }
 
     // Floor detail on its own stream, skipping blocked sub-cells.

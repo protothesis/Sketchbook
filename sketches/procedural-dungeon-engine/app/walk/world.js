@@ -259,6 +259,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     };
     for (const d of pr.details) onTile(d, d.h, mats.detail[d.shade < 0.5 ? 0 : 1], false);
     for (const b of pr.blocks) {
+      if (b.crate) continue; // a push block (restore.js)
       // One seamless box per block, however many units tall.
       const t = tileAt[DE.key(Math.floor((b.x0 + b.x1) / 2), Math.floor((b.y0 + b.y1) / 2))];
       const m = shadowed(new THREE.Mesh(geo.block, mats.block));

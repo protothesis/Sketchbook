@@ -119,7 +119,8 @@ for some kinds, the **thing** that goes in it.
 - **Push blocks.** A variant of the 1x1 block, styled differently, that
   slides across the floor when you push it. A floor tile in a matching
   colour marks where it belongs. Self-contained in one room, and familiar
-  from adventure games.
+  from adventure games. Crates are the plain version: loose, no home, no
+  reward, just something to move.
 - **Sconces.** Mounted on walls, unlit. Light one with your lantern for
   entropy. The lantern's light ray already exists.
 - **Candles.** Carried and placed anywhere in a room. They pay while lit,

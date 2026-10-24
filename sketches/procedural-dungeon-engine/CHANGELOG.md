@@ -428,6 +428,13 @@ All notable changes to this sketch are logged here, per
     exact (`stress-test.js` checks restores, tags and uncarves).
   - The chart view still reads walk mode's record, but its own edits no
     longer flow into walk mode.
+- 2026-10-24: **Crates**, the first step of the interaction cleanup
+  (`INTERACTION-PLAN.md`): about 2 in 5 single one-unit prop blocks are
+  loose wooden crates, pushed and pulled like push blocks but with no home
+  and no reward (`crateChance`, its own `'crate'` stream). Moved crates
+  persist in `run.pushed`.
+- 2026-10-24: `INTERACTION-PLAN.md`: the agreed plan for E/F, hold-to-act,
+  hands and carrying, jars, sconces and keys.
 
 ### Fixed
 

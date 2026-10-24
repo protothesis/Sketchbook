@@ -225,6 +225,12 @@ Determinism).
   the surface (quit game)?" Going up saves and shows the expedition record
   (it stays up across reloads) until you choose to go back down. A
   placeholder for whatever lies above the dungeon.
+- **Crates.** About 2 in 5 of the single, one-unit blocks a room's props
+  lay out are loose wooden crates instead (boards in a frame, crossed by a
+  brace). They move exactly like push blocks (walk into one to shove it,
+  E to pull it), but they have no home and pay nothing: just something to
+  rearrange. Like push blocks, they can't be climbed. Where you've moved
+  one is kept with the run (`run.pushed`, by room seed).
 - **Push blocks (restoration).** About 1 room in 5 (depth 1+) has a stone
   block in a solid colour that's out of place, and a matching coloured
   square on the floor where it belongs, in the same row or column. Walk into
@@ -397,6 +403,7 @@ you pass out and wake at your last waystone.
 | Ley lines | between awake waystones on both maps: dashed and faint, solid and brighter on the travel map; the route to the stone under the pointer glows; fares in ◆ by each stone's id | |
 | Surface door | weathered pale panel with a daylight-white seam | white on the maps |
 | Push block | the whole block in its colour; home, it glows | |
+| Crate | a wooden crate, a half-cell cube one unit tall: boards in a lighter frame, a diagonal brace | |
 | Passing out | the lamp fades out and the world goes black over ~1 s; HUD and captions stay | |
 
 ## Game parameters
@@ -410,6 +417,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Entropy | a fluid amount in charges (`run.fuel`): start with 2, hold up to 6 (`chargesMax`, was 8); a shard is a third of a charge |
 | Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
 | Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 2 shards (`restoreCharges`, was 1 charge); off its mark takes back what it paid (never below 0.05) |
+| Crate | each single, one-unit prop block: 40% (`crateChance`, its own `'crate'` stream, one draw per such block); about 0.27 per room |
 | Sconce | 35% of rooms at depth 1+ (chambers: 40% chance of a second; halls: always one, 50% a second), never on south walls; lighting one costs 1 shard; the lamp doesn't burn within one tile of it (3x3, same room) |
 | Lamp | burns a shard's worth every 18 s (`lampSeconds`, was 12), continuously, except by a lit sconce; any gain holds it 3 s (`lampGrace`); looks full at 3 charges (`lampFullCharges`), danger at 1 (`lampDanger`); out: dark, and stamina drains |
 | Lamp stages | uneasy at 2 charges (`lampUneasy`), danger at 1 (`lampDanger`), dying at 0.5 (`lampDying`) |
@@ -461,7 +469,8 @@ item is remembered as `spaceId:seed:itemId`.
 
 Props use `deriveRng(space.seed, 'props')` (floor detail uses `'detail'`),
 and each placement attempt draws a fixed run of numbers whether or not it
-lands. The layout only sees a room's original doors. A door added later (a
+lands. Which single blocks are crates comes from `'crate'`, one draw per
+single block, so the layout itself never shifts. The layout only sees a room's original doors. A door added later (a
 loop, or one drawn with chalk) just clears any block on its own cell, so it
 can never reshuffle the room or drop a block onto the figure. As a
 safety net, a figure found inside a block steps out of its nearest side.

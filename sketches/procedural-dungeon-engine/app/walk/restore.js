@@ -1,6 +1,7 @@
 // Walk mode: restoration (GAME-DESIGN.md). Setting the dungeon right pays
 // entropy, once. For now: push blocks, each with a matching floor mark where
-// it belongs, and unlit sconces on the walls.
+// it belongs, and unlit sconces on the walls. Crates (loose props) move the
+// same way as push blocks but have no home and pay nothing.
 (function (global) {
   'use strict';
 
@@ -31,6 +32,31 @@
     t.colorSpace = THREE.SRGBColorSpace;
     return (markTex[color] = t);
   }
+
+  // A crate's faces: boards in a frame, crossed by a brace (programmer art).
+  const crateMat = (() => {
+    const n = 64, cv = document.createElement('canvas');
+    cv.width = cv.height = n;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#8a6239';
+    g.fillRect(0, 0, n, n);
+    g.strokeStyle = '#5e3f22';
+    g.lineWidth = 2;
+    for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(0, i * n / 4); g.lineTo(n, i * n / 4); g.stroke(); }
+    g.fillStyle = '#a77a49';
+    const f = n * 0.14;
+    g.fillRect(0, 0, n, f); g.fillRect(0, n - f, n, f); g.fillRect(0, 0, f, n); g.fillRect(n - f, 0, f, n);
+    g.strokeStyle = '#a77a49';
+    g.lineWidth = f * 0.9;
+    g.beginPath(); g.moveTo(f, n - f); g.lineTo(n - f, f); g.stroke();
+    g.strokeStyle = '#4a311a';
+    g.lineWidth = 1.5;
+    g.strokeRect(0.75, 0.75, n - 1.5, n - 1.5);
+    g.strokeRect(f, f, n - 2 * f, n - 2 * f);
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshLambertMaterial({ map: t });
+  })();
 
   const sub = (sx, sy) => ({ x0: sx / 2, y0: sy / 2, x1: sx / 2 + 0.5, y1: sy / 2 + 0.5 });
   const cellOf = (sx, sy) => DE.key(Math.floor(sx / 2), Math.floor(sy / 2));
@@ -88,6 +114,27 @@
       indexBlock(b, true);
       state.pushBlocks.push(b);
     }
+    // Crates: no mark and no reward; only where they've been pushed is kept.
+    for (const pr of DP.props(space).blocks) {
+      if (!pr.crate) continue;
+      const key = space.id + ':' + space.seed + ':' + pr.crate.id;
+      const saved = state.run.pushed[key];
+      const mesh = new THREE.Group();
+      const body = new THREE.Mesh(pushGeo.block, crateMat);
+      body.castShadow = body.receiveShadow = true;
+      body.position.y = UNIT * S / 2;
+      mesh.add(body);
+      rec.group.add(mesh);
+      const b = {
+        key, spaceId: space.id, push: true, crate: true, units: 1, top: UNIT, to: null, done: false, paid: 0,
+        mesh, tile: tileAt[cellOf(pr.crate.sx, pr.crate.sy)], slide: null,
+      };
+      const at = saved || pr.crate;
+      place(b, at.sx, at.sy);
+      mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
+      indexBlock(b, true);
+      state.pushBlocks.push(b);
+    }
   }
 
   /** Can a push block move onto half-cell (sx, sy)? Same room, bare floor, clear of doorways and the figure. */
@@ -110,6 +157,11 @@
     place(b, sx, sy);
     indexBlock(b, true);
     b.slide = { from, t: 0 };
+    if (b.crate) {
+      state.run.pushed[b.key] = { sx, sy };
+      savePlayer();
+      return true;
+    }
     if (sx === b.to.sx && sy === b.to.sy) settle(b, true);
     else if (b.done) unsettle(b);
     state.run.pushed[b.key] = { sx, sy, done: b.done, paid: +b.paid.toFixed(4) };

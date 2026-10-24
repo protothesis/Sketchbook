@@ -47,7 +47,8 @@
         text = `a door up to the surface · ${verb}`;
       } else if (near.action === 'pull') {
         cls = 'jar';
-        text = `a block out of place · push it home, or ${verb} to pull`;
+        text = near.block.crate ? `a crate · push it, or ${verb} to pull`
+          : `a block out of place · push it home, or ${verb} to pull`;
       } else if (near.action === 'pickjar') {
         cls = 'jar';
         text = `${near.jar.fill ? 'a pixie jar' : 'an empty jar'} · ${verb} to lift it`;
