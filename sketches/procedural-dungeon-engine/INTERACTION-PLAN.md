@@ -146,5 +146,5 @@ unit up.
 1. [x] Quick fixes.
 2. [x] Grab / push / pull / climb, the lift hold and its animation.
 3. [x] Objects across rooms (run save v5).
-4. [ ] Stacking.
+4. [x] Stacking.
 5. [ ] Jars and vessels.

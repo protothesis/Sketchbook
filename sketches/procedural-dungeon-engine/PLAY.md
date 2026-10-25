@@ -249,9 +249,18 @@ Determinism).
   - move while holding E and you **push** it (toward it) or **pull** it
     (away, if there's room behind you), half a cell at a time, and you
     move with it. Sideways does nothing. Let go of E and you let go of it.
-  Pushed or pulled, a block stays in its room; carried, it goes anywhere:
-  set it down on bare floor in any room, never in a doorway's mouth. Set
+  Pushed or pulled, a block stays in its room, on the floor; carried, it
+  goes anywhere: set it down in any room, never in a doorway's mouth. Set
   down or pushed onto its mark (in its home room), it's home.
+- **Stacking.** A carried block can be set down at the level you stand on
+  or one level up: on the floor, or on top of anything that covers the
+  whole half-cell (a fixed block, another crate). From the floor that's
+  the floor or a one-unit top; standing on a block, a one- or two-unit
+  top. A stack reaches 3 units, the ceiling. You still only stand one unit
+  up (you climb a one-unit stack, not a taller one). You can lift a block
+  at your level or one up, but not one with something resting on it, and
+  you push or pull only on the floor (a block up a stack, or you on one:
+  let go of E to lift it instead).
 - **Blocks travel.** Crates and push blocks live in one run-wide list
   (`run.objects`), not with their room: a room adds its own the first time
   it's built, and builds whatever sits in its cells now. What happens to
@@ -469,7 +478,7 @@ you pass out and wake at your last waystone.
 | Waystone | a grey slab, 0.38 × 0.18 cells, 2.5 units tall, with five seeded glyphs on its north and south faces; awake, the glyphs glow violet, pulse slowly and shine (an additive copy over each face, so light and shadow don't touch them), a faint additive shaft rises 3.2 cells, and the two awake stones nearest you get a violet-blue point light (`GLOW` in `waystones.js`, pooled, no shadows) | on the maps, a small slab, glowing when awake |
 | Ley lines | between awake waystones on both maps: dashed and faint, solid and brighter on the travel map; the route to the stone under the pointer glows; fares in ◆ by each stone's id | |
 | Surface door | weathered pale panel with a daylight-white seam | white on the maps |
-| Push block | the whole block in its colour; home, it glows; lifted, it arcs up over the head in 0.38 s (eased, rising a little above the straight line) and back down the same way | |
+| Push block | the whole block in its colour; home, it glows; stacked, it rests at 1 or 2 units (`lv` in `run.objects`); lifted, it arcs up over the head in 0.38 s (eased, rising a little above the straight line) and back down the same way | |
 | Crate | a wooden crate, a half-cell cube one unit tall: boards in a lighter frame, a diagonal brace | |
 | Passing out | the lamp fades out and the world goes black over ~1 s; HUD and captions stay | |
 

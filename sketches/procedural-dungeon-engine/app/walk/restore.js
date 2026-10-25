@@ -80,7 +80,8 @@
   // ---------------------------------------------------------------------------
   // Loose objects (crates and push blocks) live in one run-wide list,
   // run.objects, by key ("spaceId:seed:id" of the room they came from) ->
-  // { kind: 'crate' | 'block', sx, sy, and for a block color, to, done,
+  // { kind: 'crate' | 'block', sx, sy, lv (how many units up it rests:
+  // 0 on the floor, up to 2 stacked), and for a block color, to, done,
   // paid }. A room adds its own the first time it's built, and builds
   // whichever objects sit in its cells now, wherever they came from. An
   // object sitting in a room that's rerolled is despawned (run.despawned);
@@ -127,7 +128,7 @@
   function saveObject(b) {
     const o = state.run.objects[b.key];
     if (!o) return;
-    o.sx = b.sx; o.sy = b.sy;
+    o.sx = b.sx; o.sy = b.sy; o.lv = Math.round(b.base / UNIT);
     if (!b.crate) { o.done = b.done; o.paid = +b.paid.toFixed(4); }
   }
 
@@ -157,7 +158,7 @@
       if (!o.kind || key === state.run.carry || state.exp.registry[cellOf(o.sx, o.sy)] !== space.id) continue;
       const b = makeObject(key, o);
       inRoom(b, space.id, rec);
-      b.mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
+      b.mesh.position.set((b.x0 + 0.25) * S, b.base * S, (b.y0 + 0.25) * S);
       state.pushBlocks.push(b);
       indexBlock(b, true);
     }
@@ -179,8 +180,9 @@
     mesh.add(body);
     // `paid`: how much of its charge the block has paid and you still
     // hold. Moving it off its mark takes that back; home again pays the rest.
+    const base = (o.lv || 0) * UNIT;
     const b = {
-      key, push: true, crate: o.kind === 'crate', units: 1, top: UNIT, color: col, bodyMat,
+      key, push: true, crate: o.kind === 'crate', units: 1, base, top: base + UNIT, color: col, bodyMat,
       to: o.to || null, done: !!o.done, paid: o.paid || 0, mesh, slide: null,
     };
     place(b, o.sx, o.sy);
@@ -265,6 +267,11 @@
     const g = state.grab, b = g.block, p = state.player;
     if (b.slide || inp.mag < 0.5) return;
     const along = inp.x * g.dir.x + inp.y * g.dir.y;
+    if (Math.abs(along) > 0.6 && (p.z > 0.05 || b.base > 0.01)) { // pushing and pulling: on the floor only
+      if (!g.warned) W.showCaption('you can only push or pull on the floor · let go of E to lift it instead');
+      g.warned = true;
+      return;
+    }
     if (along > 0.6) {
       if (move(b, g.dir)) g.moved = true;
       else W.showCaption('it won\'t budge that way');
@@ -295,10 +302,42 @@
     savePlayer();
   }
 
-  /** Where E would set the carried block down: a free half-cell of floor ahead, in any room. */
+  /**
+   * What a block would rest on at half-cell (sx, sy): the floor (0), or
+   * the top of whatever's highest there, if that one thing covers the whole
+   * half-cell (a one-unit block, a taller block, another crate). Null if
+   * there's no flat place (a jar, a partial cover, something too tall).
+   */
+  function restHeight(sx, sy, except) {
+    const r = sub(sx, sy);
+    let top = 0, cover = null;
+    for (const o of state.blockAt.get(cellOf(sx, sy)) || []) {
+      if (o === except || !(o.x0 < r.x1 && o.x1 > r.x0 && o.y0 < r.y1 && o.y1 > r.y0)) continue;
+      if (o.top > top + 1e-6) { top = o.top; cover = o; }
+    }
+    if (!cover) return 0;
+    if (cover.jar || !(cover.x0 <= r.x0 && cover.x1 >= r.x1 && cover.y0 <= r.y0 && cover.y1 >= r.y1)) return null;
+    // Anything else reaching that high there must be under the cover, not beside it.
+    return top;
+  }
+
+  const STACK_MAX = 3; // units: a stack reaches the ceiling at most
+  const levelOf = (z) => Math.round(z / UNIT);
+
+  /**
+   * Where E would set the carried block down: the free half-cell ahead,
+   * in any room, resting at your level or one up (on the floor, a block's
+   * top, another crate), and never higher than STACK_MAX units.
+   */
   function blockSpot(p) {
     const b = state.carry;
-    return b ? W.quarterAhead(p, (sx, sy, base) => base === 0 && canMoveTo(b, sx, sy, true)) : null;
+    if (!b) return null;
+    const mine = levelOf(p.z);
+    return W.quarterAhead(p, (sx, sy, base) => {
+      const lv = levelOf(base);
+      if (Math.abs(base - lv * UNIT) > 0.02 || (lv !== mine && lv !== mine + 1) || lv + 1 > STACK_MAX) return false;
+      return canMoveTo(b, sx, sy, true, base);
+    }, (sx, sy) => restHeight(sx, sy, b));
   }
 
   /** E with a block in your hands: set it down at `spot`. On its mark, it settles and pays. */
@@ -309,8 +348,10 @@
     state.carry = null;
     state.run.carry = null;
     place(b, spot.sx, spot.sy);
-    // From over your head back down to the floor, in an arc. It now belongs
-    // to the room it's set down in.
+    b.base = spot.base || 0;
+    b.top = b.base + UNIT;
+    // From over your head back down to where it rests, in an arc. It now
+    // belongs to the room it's set down in.
     const from = b.mesh.getWorldPosition(new THREE.Vector3());
     inRoom(b, state.exp.registry[cellOf(spot.sx, spot.sy)]);
     b.group.worldToLocal(from);
@@ -329,16 +370,24 @@
    * doorways and the figure, and (pushed or pulled) in its room; set down
    * (`anyRoom`), any room.
    */
-  function canMoveTo(b, sx, sy, anyRoom) {
+  function canMoveTo(b, sx, sy, anyRoom, base = b.base || 0) {
     const room = state.exp.registry[cellOf(sx, sy)];
     if (room === undefined || (!anyRoom && room !== b.spaceId) || inDoorMouth(sx, sy)) return false;
-    const r = sub(sx, sy);
-    for (const o of state.blockAt.get(cellOf(sx, sy)) || []) {
-      if (o !== b && o.x0 < r.x1 && o.x1 > r.x0 && o.y0 < r.y1 && o.y1 > r.y0) return false;
-    }
-    const p = state.player;
+    // It rests at `base` there: nothing else in the way at that height.
+    if (restHeight(sx, sy, b) !== base) return false;
+    const p = state.player, r = sub(sx, sy);
+    if (base >= p.z + FIGURE_H || base + UNIT <= p.z) return true; // above your head or under your feet
     const ex = Math.max(r.x0 - p.x, 0, p.x - r.x1), ey = Math.max(r.y0 - p.y, 0, p.y - r.y1);
     return Math.hypot(ex, ey) >= RADIUS;
+  }
+  const FIGURE_H = 0.62; // cells, about the figure's height
+
+  /** Is anything resting on top of this block (another block, a jar)? Then it stays put. */
+  function loaded(b) {
+    for (const o of state.blockAt.get(cellOf(b.sx, b.sy)) || []) {
+      if (o !== b && Math.abs((o.base || 0) - b.top) < 0.02 && o.x0 < b.x1 && o.x1 > b.x0 && o.y0 < b.y1 && o.y1 > b.y0) return true;
+    }
+    return false;
   }
 
   function move(b, dir) {
@@ -387,11 +436,13 @@
 
   /** E at a push block or crate right in front of you, standing on the floor: lift it. */
   function liftNear(p) {
-    if (p.z > 0.05 || state.carry) return null;
-    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    if (state.carry) return null;
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle), mine = levelOf(p.z);
     let best = null, bestD = RADIUS + 0.15;
     for (const b of state.pushBlocks) {
-      if (b.carried) continue;
+      if (b.carried || b.top <= p.z + 0.05) continue; // not what you stand on, nor anything lower
+      const lv = levelOf(b.base || 0);
+      if ((lv !== mine && lv !== mine + 1) || loaded(b)) continue; // in reach, and nothing on it
       const qx = THREE.MathUtils.clamp(p.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(p.y, b.y0, b.y1);
       const d = Math.hypot(qx - p.x, qy - p.y);
       if (d >= bestD) continue;
@@ -413,7 +464,7 @@
       if (b.slide) {
         b.slide.t = Math.min(1, b.slide.t + dt / SLIDE_TIME);
         const k = easeOut(b.slide.t);
-        b.mesh.position.set(b.slide.from.x + (tx - b.slide.from.x) * k, 0, b.slide.from.z + (tz - b.slide.from.z) * k);
+        b.mesh.position.set(b.slide.from.x + (tx - b.slide.from.x) * k, b.base * S, b.slide.from.z + (tz - b.slide.from.z) * k);
         if (b.slide.t >= 1) b.slide = null;
         // Pushing or pulling it, you move with it.
         const g = state.grab;
@@ -433,7 +484,7 @@
     const k = W.easeInOut(a.t);
     W.heldRig.parent.localToWorld(overhead.set(0, 0.6 * S, 0));
     b.group.worldToLocal(overhead);
-    const to = a.up ? overhead : new THREE.Vector3((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
+    const to = a.up ? overhead : new THREE.Vector3((b.x0 + 0.25) * S, b.base * S, (b.y0 + 0.25) * S);
     b.mesh.position.lerpVectors(a.from, to, k);
     b.mesh.position.y += Math.sin(Math.PI * a.t) * 0.12 * S;
     if (a.t < 1) return;

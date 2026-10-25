@@ -454,8 +454,12 @@
     return base;
   }
 
-  /** The free quarter nearest a point just ahead of you, among those in front; `ok(sx, sy, base)` filters. */
-  function quarterAhead(p, ok) {
+  /**
+   * The free quarter nearest a point just ahead of you, among those in
+   * front; `ok(sx, sy, base)` filters. `surface(sx, sy)` is the height
+   * something would rest at there, or null (quarterSurface by default).
+   */
+  function quarterAhead(p, ok, surface = quarterSurface) {
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     const ax = p.x + fx * (RADIUS + 0.27), ay = p.y + fy * (RADIUS + 0.27);
     const bsx = Math.floor(ax * 2), bsy = Math.floor(ay * 2);
@@ -469,7 +473,7 @@
     cands.sort((u, v) => u.d - v.d);
     for (const c of cands) {
       if (!quarterReachable(c.sx, c.sy, p)) continue;
-      const base = quarterSurface(c.sx, c.sy);
+      const base = surface(c.sx, c.sy);
       if (base !== null && ok(c.sx, c.sy, base)) return { sx: c.sx, sy: c.sy, base };
     }
     return null;

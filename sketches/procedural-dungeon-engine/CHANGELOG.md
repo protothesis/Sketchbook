@@ -433,6 +433,12 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **Stacking** (playtest round 1, step 4). Set a carried
+  block down at your level or one up, on the floor or on top of anything
+  that covers the whole half-cell (a fixed block, another crate); stacks
+  reach 3 units. Lift a block at your level or one up, never one with
+  something on it; push and pull on the floor only. An object's level is
+  saved (`lv` in `run.objects`, 0 by default, so no save change).
 - 2026-10-24: **Blocks travel** (playtest round 1, step 3). Crates and
   push blocks live in one run-wide list (`run.objects`) instead of with
   their room. Carried, they go anywhere and can be set down in any room
