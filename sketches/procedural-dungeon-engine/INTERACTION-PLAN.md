@@ -89,5 +89,7 @@ built; this file is the plan until it's all in.
 4. [x] Hands: lantern slot, one held thing shown on the figure, touch
        collect for tools, keys as a tool (F to unlock). (F unlocking is a
        tap, like every F. The thread stays a pickup for now.)
-5. [ ] Carrying blocks and jars; pull removed; run save v4.
+5. [x] Carrying blocks and jars; pull removed. (Lifting a block that's
+       home is a 0.5 s hold. The carried block is `run.carry`, additive, so
+       the v4 bump moves to step 6 with the jar contents.)
 6. [ ] Jar swipe: pixies, well entropy, pouring.

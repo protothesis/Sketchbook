@@ -100,7 +100,7 @@
         if (s.block && s.block.push && p.z <= 0.05) {
           pushingBlock = s.block; pushDir = { x: -d.x, y: -d.y }; pk = 'push:' + s.block.key; break;
         }
-        if (s.block && canClimb(s.block)) {
+        if (s.block && canClimb(s.block) && !state.carry) { // not with a block in your hands
           pushingBlock = s.block; pk = 'block:' + s.block.x0 + ',' + s.block.y0; break;
         }
       }

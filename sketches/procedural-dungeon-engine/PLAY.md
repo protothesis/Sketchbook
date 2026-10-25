@@ -228,16 +228,23 @@ Determinism).
 - **Crates.** About 2 in 5 of the single, one-unit blocks a room's props
   lay out are loose wooden crates instead (boards in a frame, crossed by a
   brace). They move exactly like push blocks (walk into one to shove it,
-  E to pull it), but they have no home and pay nothing: just something to
+  E to lift it), but they have no home and pay nothing: just something to
   rearrange. Like push blocks, they can't be climbed. Where you've moved
   one is kept with the run (`run.pushed`, by room seed).
 - **Push blocks (restoration).** About 1 room in 5 (depth 1+) has a stone
   block in a solid colour that's out of place, and a matching coloured
   square on the floor where it belongs, in the same row or column. Walk into
-  the block for a beat and it slides half a cell. E, facing it, pulls it one
-  half-cell toward you (you step back), which is how a block shoved into a
-  corner comes back out. A block only moves within its room, onto bare
-  floor, never into a doorway's mouth. Home, it and its mark light up, and
+  the block for a beat and it slides half a cell. **E lifts it** and you
+  carry it over your head; E again sets it down on the free half-cell of
+  floor ahead (a faint box shows where), so a block shoved into a corner
+  is never stuck. A block only goes down in its own room, on bare floor,
+  never in a doorway's mouth. Set down on its mark, it's home. Lifting a
+  block that's home takes a short hold (0.5 s), since it takes its entropy
+  back; any other lift is a tap.
+- **Hands full.** With a block in your hands, E only sets it down; F does
+  nothing ("your hands are full"), the hotbar won't switch (it shakes),
+  and you can't climb or run. The block you carry is saved with the run
+  (`run.carry`), and goes with its room if that room is rerolled. Home, it and its mark light up, and
   it pays **2 shards** of entropy. It can still be moved: off its mark, the
   room takes the charge back (what you still have, and never enough to put
   your lamp out), and home again pays back only what was taken, so a block
@@ -269,7 +276,7 @@ Determinism).
     else, it goes in the bag.
   - **Objects** (jars) are things in the world as themselves. A jar from a
     room's loot is already standing there when the room appears. E lifts
-    it, F sets it down again, with whatever's inside.
+    it, and E sets it down again, with whatever's inside.
   - **Creatures** (ghosts, pixies) aren't items: they move on their own,
     by the ecology's rules.
 - **The hotbar.** Tools and objects sit in slots at the bottom of the
@@ -302,7 +309,7 @@ Determinism).
   lighting or snuffing a sconce 0.5 s, waking a waystone 0.7 s, and the
   ones that cost entropy and can't be undone, rerolling a room or
   retracing a lost path, 1 s. Taking a tool, lifting a jar, climbing,
-  pulling a block, travelling and the surface door are a tap. Something
+  lifting or setting down a block, travelling and the surface door are a tap. Something
   you can't do right now (a lock with no key, a reroll you can't afford)
   is a tap that says why.
 - **Closing doors.** Any opened door closes (hold E at it, from either
@@ -327,12 +334,14 @@ Determinism).
   ahead), wipes it. You start with one silver stick,
   and more turn up in about 1 room in 13 (seeded colour). Marks persist with
   the run, and vanish with a room you collapse.
-- **Jars.** Standing in about 1 room in 15 (depth 1+). F sets one down on the
-  nearest free quarter-tile in front of you: on the floor, or on top of a
-  one-unit block. It's a small solid thing you can't climb or stand on, and
-  ghosts float over it. Nothing prompts you to place one. If there's no
-  room (say you're facing a wall), the hotbar gives a little shake, and so
-  does any other F that can't do anything. E lifts it again, with whatever's
+- **Jars.** Standing in about 1 room in 15 (depth 1+). With a jar in your
+  hands (its slot selected), E sets it down on the nearest free
+  quarter-tile in front of you (a faint box shows where): on the floor, or
+  on top of a one-unit block. While a jar is in your hands, that's all E
+  does; select the lantern slot to interact with other things. It's a
+  small solid thing you can't climb or stand on, and ghosts float over it.
+  If there's no room, the prompt says so. An F that can't do anything
+  gives the hotbar a little shake. E lifts a jar again, with whatever's
   inside. A jar holds **one pixie**. A collapse shatters any jar in the
   branch, and a pixie in it is lost.
 - **Pixies.** Small violet lights with fluttering wings, in about 1 room

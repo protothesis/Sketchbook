@@ -116,7 +116,8 @@
       if (mag < 0.15) return { x: 0, y: 0, mag: 0 };
       x = stick.vx / mag; y = stick.vy / mag;
     }
-    return { x, y, mag: Math.min(1, mag), run: keys.has('shift') || (stick.active && mag > 0.95) };
+    const run = !state.carry && (keys.has('shift') || (stick.active && mag > 0.95)); // no running with a block
+    return { x, y, mag: Math.min(1, mag), run };
   }
 
   Object.assign(W, { keys, promptEl, readInput });

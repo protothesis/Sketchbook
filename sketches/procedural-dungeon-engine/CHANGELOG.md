@@ -433,6 +433,14 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **Carrying** (interaction cleanup, step 5). E lifts a push
+  block or crate and you carry it over your head; E sets it down on the
+  free half-cell ahead, shown by a faint box, so a block is never stuck.
+  **Pull is gone.** Set down on its mark, a block settles and pays as
+  before; lifting one that's home is a 0.5 s hold (it takes its entropy
+  back). Hands full: E only sets down, F does nothing, the hotbar won't
+  switch, and no climbing or running. The carried block is saved
+  (`run.carry`). A jar in your hands is set down with E now, not F.
 - 2026-10-24: **Hands** (interaction cleanup, step 4). What's selected
   on the hotbar is what you hold, and the figure shows it: a tool in its
   left hand, a jar over its head. Slot 1 is always the lantern (empty

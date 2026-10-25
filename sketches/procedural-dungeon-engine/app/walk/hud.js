@@ -30,7 +30,11 @@
       case 'wake': return { cls: 'collapse', text: `wake the waystone · ${chargeText(RULES.waystoneCharges)}` };
       case 'travel': return { cls: 'collapse', text: 'travel from the waystone · a shard per ley line' };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
-      case 'pull': return { cls: 'jar', text: near.block.crate ? 'pull the crate (or push it)' : 'pull the block (push it home)' };
+      case 'lift': return { cls: 'jar', text: near.block.crate ? 'lift the crate (or push it)'
+        : near.block.done ? 'lift the block off its mark · it takes its entropy back' : 'lift the block (or push it home)' };
+      case 'setblock': return near.spot ? { cls: 'jar', text: `set the ${near.block.crate ? 'crate' : 'block'} down` }
+        : { cls: 'blocked', text: `no room to set it down here${near.block.spaceId !== state.exp.registry[DE.key(Math.floor(state.player.x), Math.floor(state.player.y))] ? ' · it belongs in its own room' : ''}` };
+      case 'setjar': return near.spot ? { cls: 'jar', text: `set the ${near.jar.fill ? 'pixie jar' : 'jar'} down` } : { cls: 'blocked', text: 'no room to set the jar down here' };
       case 'pickjar': return { cls: 'jar', text: `lift the ${near.jar.fill ? 'pixie jar' : 'empty jar'}` };
       case 'climb': return { text: state.push.key ? 'climbing…' : 'climb (or push into it)' };
       case 'open': return { text: state.push.key ? 'opening…' : 'open the door (or push)' };
@@ -85,6 +89,7 @@
     showLine(promptF, 'F', f);
     promptF.classList.toggle('alone', !e);
     updateFocus(nearE);
+    W.updatePreview(nearE);
     updateRing(state.hold.ring);
   }
 

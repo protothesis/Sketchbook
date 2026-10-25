@@ -123,6 +123,7 @@
     push: { key: null, t: 0 },
     hold: { sig: null, t: 0, spent: false }, // holding E on a hold action (actions.js)
     pushBlocks: [],      // push blocks in built rooms (see restore.js)
+    carry: null,         // the push block in your hands (restore.js)
     sconces: [],         // sconces in built rooms (see restore.js)
     waystones: [],       // waystones in built halls (see waystones.js)
     gutter: null,        // { t } while the lamp is guttering out
@@ -147,6 +148,7 @@
       collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
       walked: 0, collected: [], unlocked: [], extracted: null,
       closed: [],    // connection ids of opened doors you've shut again
+      carry: null,   // the push block or crate in your hands (its run.pushed key), or null
       keyRooms: [],  // "spaceId:seed" of rooms whose key showed up (locks first, keys later)
       unmade: { count: 0, log: [] }, // hash ghosts undone by a collapse (or in a jar that shattered); no use yet
       ghostSeen: [], // "spaceId:seed:ghost" for rooms whose ghost roll has happened

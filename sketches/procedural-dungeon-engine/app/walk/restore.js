@@ -1,7 +1,9 @@
 // Walk mode: restoration (GAME-DESIGN.md). Setting the dungeon right pays
 // entropy, once. For now: push blocks, each with a matching floor mark where
 // it belongs, and unlit sconces on the walls. Crates (loose props) move the
-// same way as push blocks but have no home and pay nothing.
+// same way as push blocks but have no home and pay nothing. Either can be
+// pushed (walk into it) or lifted (E) and carried over your head, then set
+// down again (E): a block you can lift is never stuck.
 (function (global) {
   'use strict';
 
@@ -107,12 +109,12 @@
         tile: tileAt[cellOf(pb.from.sx, pb.from.sy)], slide: null,
         paid: saved ? (saved.paid != null ? saved.paid : saved.done ? RULES.restoreCharges : 0) : 0,
       };
+      b.group = rec.group;
       const at = saved ? { sx: saved.sx, sy: saved.sy } : pb.from;
       place(b, at.sx, at.sy);
       mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
       if (b.done) settle(b, false);
-      indexBlock(b, true);
-      state.pushBlocks.push(b);
+      addBlock(b);
     }
     // Crates: no mark and no reward; only where they've been pushed is kept.
     for (const pr of DP.props(space).blocks) {
@@ -129,12 +131,62 @@
         key, spaceId: space.id, push: true, crate: true, units: 1, top: UNIT, to: null, done: false, paid: 0,
         mesh, tile: tileAt[cellOf(pr.crate.sx, pr.crate.sy)], slide: null,
       };
+      b.group = rec.group;
       const at = saved || pr.crate;
       place(b, at.sx, at.sy);
       mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
-      indexBlock(b, true);
-      state.pushBlocks.push(b);
+      addBlock(b);
     }
+  }
+
+  /** Into the world, or back into your hands if it's the one you were carrying (run.carry). */
+  function addBlock(b) {
+    state.pushBlocks.push(b);
+    if (state.run.carry === b.key) hold(b);
+    else indexBlock(b, true);
+  }
+
+  /** A block in your hands: out of the world (nothing collides with it), its mesh over your head. */
+  function hold(b) {
+    b.carried = true;
+    b.slide = null;
+    state.carry = b;
+    state.run.carry = b.key;
+    W.refreshHotbar(); // the figure shows it (updateHeld)
+  }
+
+  /** E at a push block or crate right in front of you: lift it. Off its mark, it takes its entropy back. */
+  function liftBlock(b) {
+    if (b.done) unsettle(b);
+    indexBlock(b, false);
+    state.run.pushed[b.key] = { sx: b.sx, sy: b.sy, done: false, paid: +b.paid.toFixed(4) };
+    hold(b);
+    W.showCaption(b.crate ? 'you lift the crate' : 'you lift the block');
+    savePlayer();
+  }
+
+  /** Where E would set the carried block down: a free half-cell of floor ahead, in its own room. */
+  function blockSpot(p) {
+    const b = state.carry;
+    return b ? W.quarterAhead(p, (sx, sy, base) => base === 0 && canMoveTo(b, sx, sy)) : null;
+  }
+
+  /** E with a block in your hands: set it down at `spot`. On its mark, it settles and pays. */
+  function setDownBlock(spot) {
+    const b = state.carry;
+    if (!b) return;
+    b.carried = false;
+    state.carry = null;
+    state.run.carry = null;
+    place(b, spot.sx, spot.sy);
+    b.mesh.scale.setScalar(1);
+    b.mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
+    b.group.add(b.mesh);
+    indexBlock(b, true);
+    if (!b.crate && spot.sx === b.to.sx && spot.sy === b.to.sy) settle(b, true);
+    state.run.pushed[b.key] = b.crate ? { sx: b.sx, sy: b.sy } : { sx: b.sx, sy: b.sy, done: b.done, paid: +b.paid.toFixed(4) };
+    W.refreshHotbar();
+    savePlayer();
   }
 
   /** Can a push block move onto half-cell (sx, sy)? Same room, bare floor, clear of doorways and the figure. */
@@ -198,44 +250,28 @@
     W.refreshHud();
   }
 
-  /**
-   * E at a push block right in front of you: pull it one half-cell toward
-   * you, stepping back to make room. That's how a block pushed into a
-   * corner comes back out.
-   */
-  function pullNear(p) {
-    if (p.z > 0.05) return null;
+  /** E at a push block or crate right in front of you, standing on the floor: lift it. */
+  function liftNear(p) {
+    if (p.z > 0.05 || state.carry) return null;
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     let best = null, bestD = RADIUS + 0.15;
     for (const b of state.pushBlocks) {
+      if (b.carried) continue;
       const qx = THREE.MathUtils.clamp(p.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(p.y, b.y0, b.y1);
       const d = Math.hypot(qx - p.x, qy - p.y);
       if (d >= bestD) continue;
       const cx = (b.x0 + b.x1) / 2 - p.x, cy = (b.y0 + b.y1) / 2 - p.y;
       if ((cx * fx + cy * fy) / (Math.hypot(cx, cy) || 1) < 0.5) continue; // roughly facing it
-      const dir = Math.abs(cx) > Math.abs(cy) ? { x: -Math.sign(cx), y: 0 } : { x: 0, y: -Math.sign(cy) };
       bestD = d;
-      best = { action: 'pull', block: b, dir };
+      best = { action: 'lift', block: b };
     }
     return best;
-  }
-
-  function pull(near) {
-    const p = state.player, b = near.block, d = near.dir;
-    const back = { x: p.x + d.x * 0.5, y: p.y + d.y * 0.5 };
-    // Room to step back: still this room's floor, and no block where you'd stand.
-    const bsx = Math.floor(back.x * 2), bsy = Math.floor(back.y * 2);
-    const free = state.exp.registry[cellOf(bsx, bsy)] === b.spaceId &&
-      !(state.blockAt.get(cellOf(bsx, bsy)) || []).some((o) => o.top > p.z + 0.05 &&
-        back.x > o.x0 - RADIUS && back.x < o.x1 + RADIUS && back.y > o.y0 - RADIUS && back.y < o.y1 + RADIUS);
-    if (!free) { W.showCaption('no room behind you to pull it'); return; }
-    p.x = back.x; p.y = back.y; // step back first, so the block has somewhere to go
-    if (!move(b, d)) { p.x -= d.x * 0.5; p.y -= d.y * 0.5; W.showCaption('it won\'t budge that way'); }
   }
 
   /** Slides, and growing and shrinking with the floor as the room assembles. */
   function updatePushBlocks(dt) {
     for (const b of state.pushBlocks) {
+      if (b.carried) continue; // over your head (items.js updateHeld)
       const tx = (b.x0 + 0.25) * S, tz = (b.y0 + 0.25) * S;
       if (b.slide) {
         b.slide.t = Math.min(1, b.slide.t + dt / SLIDE_TIME);
@@ -360,6 +396,6 @@
     });
   }
 
-  Object.assign(W, { SCONCE_Y, addPushBlocks, pushBlock, pullNear, pull, updatePushBlocks, addSconces,
+  Object.assign(W, { SCONCE_Y, addPushBlocks, pushBlock, liftNear, liftBlock, blockSpot, setDownBlock, updatePushBlocks, addSconces,
     sconceNear, lightSconce, snuffSconce, updateSconces });
 })(window);

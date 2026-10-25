@@ -8,7 +8,7 @@
   const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, PUSH_TIME, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
     climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn,
-    pullNear, pull, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
+    liftNear, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
 
   // ---------------------------------------------------------------------------
   // Doors: open, unlock, or close + collapse
@@ -108,7 +108,12 @@
         const m = near.mark, z = m.base || 0;
         return { x0: m.sx / 2, y0: m.sy / 2, x1: m.sx / 2 + 0.5, y1: m.sy / 2 + 0.5, z0: z, z1: z + 0.02 };
       }
-      case 'pull': return blk(near.block, 0, near.block.top);
+      case 'lift': return blk(near.block, 0, near.block.top);
+      case 'setblock': case 'setjar': {
+        if (!near.spot) return null;
+        const z = near.spot.base || 0, h = near.action === 'setjar' ? W.JAR_H : UNIT;
+        return { x0: near.spot.sx / 2, y0: near.spot.sy / 2, x1: near.spot.sx / 2 + 0.5, y1: near.spot.sy / 2 + 0.5, z0: z, z1: z + h };
+      }
       case 'light': case 'snuff': return pad(near.sconce.x, near.sconce.y, 0.08, W.SCONCE_Y - 0.1, W.SCONCE_Y + 0.12);
       case 'climb': return blk(near.block, near.block.base || 0, near.block.top);
       default: { // a door
@@ -126,9 +131,17 @@
    */
   const FACING_WEIGHT = 0.6; // cells of distance one unit of (1 - cos) is worth
   function actionNear(p) {
+    // An object in your hands (a block, or a jar selected): E only sets it down.
+    if (state.carry) {
+      const spot = W.blockSpot(p), near = { action: 'setblock', spot, block: state.carry };
+      near.box = focusBox(near);
+      return near;
+    }
+    const jar = W.jarSetDown(p);
+    if (jar) { jar.box = focusBox(jar); return jar; }
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     let best = null, bestScore = Infinity;
-    for (const find of [doorNear, waystoneNear, jarNear, markNear, pullNear, sconceNear, blockNear]) {
+    for (const find of [doorNear, waystoneNear, jarNear, markNear, liftNear, sconceNear, blockNear]) {
       const near = find(p);
       if (!near) continue;
       const b = near.box = focusBox(near);
@@ -153,17 +166,19 @@
   // The ring's icon, per action.
   const HOLD_ICON = {
     open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
-    wake: '◆', collapse: '↻', retrace: '↺',
+    wake: '◆', collapse: '↻', retrace: '↺', lift: '⇡',
   };
 
   /** Can't be done right now: a tap says why instead of filling a ring. */
   function blockedNow(near) {
     const a = near.action;
     return a === 'locked' || (a === 'collapse' && (near.haunted || !near.affordable)) ||
-      (a === 'retrace' && (!near.thread || !near.affordable));
+      (a === 'retrace' && (!near.thread || !near.affordable)) || ((a === 'setblock' || a === 'setjar') && !near.spot);
   }
   /** Seconds E must be held for this action, or 0 for a tap. */
-  const holdTime = (near) => (blockedNow(near) ? 0 : HOLD[near.action] || 0);
+  const holdTime = (near) => (blockedNow(near) ? 0
+    : near.action === 'lift' ? (near.block.done ? 0.5 : 0) // a block that's home takes its entropy back
+    : HOLD[near.action] || 0);
 
   // What's being held: the action and its box, so a different target restarts the ring.
   const holdSig = (near) => near.action + ':' + Object.values(near.box).map((v) => v.toFixed(2)).join(',');
@@ -240,7 +255,12 @@
     if (near.action === 'travel') { travelFrom(near.stone); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
     if (near.action === 'pickjar') { pickUpJar(near.jar); return; }
-    if (near.action === 'pull') { pull(near); return; }
+    if (near.action === 'lift') { W.liftBlock(near.block); return; }
+    if (near.action === 'setblock' || near.action === 'setjar') {
+      if (!near.spot) { W.showCaption('no room to set it down here'); return; }
+      if (near.action === 'setblock') W.setDownBlock(near.spot); else W.setDownJar(near);
+      return;
+    }
     if (near.action === 'light') { lightSconce(near.sconce); return; }
     if (near.action === 'erase') {
       removeMarkFromWorld(near.mark);
@@ -408,6 +428,7 @@
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
     if (run.closed) run.closed = run.closed.filter((id) => exp.connections[id]);
+    if (run.carry && ids.has(run.carry.split(':')[0])) run.carry = null; // a carried block goes with its room
     W.spendFuel(near.price.charges);
     run.chargesSpent += near.price.charges;
     run.collapses++;

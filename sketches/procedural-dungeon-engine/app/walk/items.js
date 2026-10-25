@@ -230,6 +230,7 @@
   function select(i) {
     const s = slots();
     if (!s.length) return;
+    if (state.carry) { shakeHotbar(); return; } // set the block down first
     const slot = s[((i % s.length) + s.length) % s.length];
     if (slot.key === state.sel && slot.variants && slot.variants.length > 1) { cycleVariant(slot, 1); return; }
     state.sel = slot.key;
@@ -341,6 +342,7 @@
       b.addEventListener('click', (e) => {
         e.preventDefault();
         if (heldOpen) { heldOpen = false; return; }
+        if (state.carry) { shakeHotbar(); return; } // set the block down first
         if (slot.variants && state.sel === slot.key) state.expanded = state.expanded === slot.key ? null : slot.key;
         else { state.sel = slot.key; state.expanded = null; }
         refreshHotbar();
@@ -633,6 +635,7 @@
     removeJarFromWorld(rec);
     state.run.jars.push({ id: rec.id, fill: rec.fill });
     state.sel = 'jar';
+    state.variant.jar = 'f' + rec.fill; // this jar is the one in your hands
     W.showCaption(rec.fill ? 'you lift the jar · a pixie glows inside' : 'you lift the jar');
     savePlayer();
     W.refreshHud();
@@ -651,10 +654,26 @@
     return sg && sg.cell.x === cx && sg.cell.y === cy ? byFill[byFill.length - 1] : byFill[0];
   }
 
+  /** E with a jar in your hands: where it would go down, and which jar. */
+  function jarSetDown(p) {
+    const slot = selectedSlot();
+    if (!slot || slot.kind !== 'jar') return null;
+    const spot = jarSpot(p);
+    return { action: 'setjar', spot, jar: spot && jarFor(slot.cur, spot) };
+  }
+  function setDownJar(near) {
+    const run = state.run, j = near.jar;
+    run.jars = run.jars.filter((o) => o !== j);
+    addJarToWorld({ id: j.id, sx: near.spot.sx, sy: near.spot.sy, fill: j.fill });
+    state.variant.jar = 'auto'; // a jar picked by hand is for this one time
+    savePlayer();
+    W.refreshHud();
+  }
+
   /** What F would do right now with the selected item, or null. */
   function useNear(p) {
     const slot = selectedSlot();
-    if (!slot || state.paused || state.climb) return null;
+    if (!slot || state.paused || state.climb || state.carry) return null; // a block fills your hands
     if (slot.kind === 'lantern') return { action: 'lamp', slot };
     if (slot.kind === 'key') {
       const door = W.doorNear(p);
@@ -664,9 +683,7 @@
       // An empty jar (auto, or the empty group) near a free pixie catches it.
       const empty = (slot.cur.auto || slot.cur.fill === 0) && state.run.jars.find((j) => j.fill === 0);
       const px = empty && W.pixieNear(p);
-      if (px) return { action: 'catch', slot, pixie: px, jar: empty };
-      const spot = jarSpot(p);
-      return spot ? { action: 'place', slot, spot, jar: jarFor(slot.cur, spot) } : null;
+      return px ? { action: 'catch', slot, pixie: px, jar: empty } : null; // setting it down is E
     }
     if (slot.kind === 'chalk') {
       const spot = markSpot(p);
@@ -682,6 +699,7 @@
   function useSelected() {
     const run = state.run;
     const u = useNear(state.player);
+    if (!u && state.carry) W.showCaption('your hands are full · E to set it down');
     if (!u) { shakeHotbar(); return; } // "that didn't work"
     if (u.action === 'lamp') { W.toggleLamp(); return; }
     if (u.action === 'unlock') { W.unlockDoor(u.door); return; }
@@ -689,12 +707,7 @@
       W.catchPixie(u.pixie, u.jar);
       return;
     }
-    if (u.action === 'place') {
-      const j = u.jar;
-      run.jars = run.jars.filter((o) => o !== j);
-      addJarToWorld({ id: j.id, sx: u.spot.sx, sy: u.spot.sy, fill: j.fill });
-      state.variant.jar = 'auto'; // a jar picked by hand is for this one time
-    } else if (u.action === 'carve') {
+    if (u.action === 'carve') {
       W.carveDoor(u);
       return;
     } else if (u.action === 'mark') {
@@ -711,13 +724,18 @@
   W.bodyRig.add(heldRig);
   let heldSig = null;
   function updateHeld(slot) {
-    const sig = !slot || slot.kind === 'lantern' ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : '');
+    const sig = state.carry ? 'carry:' + state.carry.key
+      : !slot || slot.kind === 'lantern' ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : '');
     if (sig === heldSig) return;
     heldSig = sig;
     heldRig.clear();
     if (!sig) return;
     let m;
-    if (slot.kind === 'jar') {
+    if (state.carry) { // a block over your head, a little smaller than life
+      m = state.carry.mesh;
+      m.scale.setScalar(0.7);
+      m.position.set(0, 0.6 * S, 0);
+    } else if (slot.kind === 'jar') {
       m = makeJarMesh();
       const fill = slot.cur.auto ? Math.max(...state.run.jars.map((j) => j.fill)) : slot.cur.fill;
       m.userData.wisps.forEach((w, i) => { w.visible = i < fill; w.position.y = 0.15 * S; });
@@ -731,6 +749,19 @@
       m.position.set(-0.15 * S, 0.27 * S, 0.1 * S);
     }
     heldRig.add(m);
+  }
+
+  // The set-down preview: a faint box where E would put what you carry.
+  const previewMat = new THREE.MeshBasicMaterial({ color: 0xe8935f, transparent: true, opacity: 0.22, depthWrite: false });
+  const preview = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), previewMat);
+  preview.visible = false;
+  scene.add(preview);
+  function updatePreview(near) {
+    const b = near && near.spot && near.box;
+    preview.visible = !!b;
+    if (!b) return;
+    preview.scale.set((b.x1 - b.x0) * S * 0.96, (b.z1 - b.z0) * S, (b.y1 - b.y0) * S * 0.96);
+    preview.position.set((b.x0 + b.x1) / 2 * S, (b.z0 + b.z1) / 2 * S, (b.y0 + b.y1) / 2 * S);
   }
 
   /** Jars in rooms about to collapse shatter; a pixie inside is lost with the room. */
@@ -1003,7 +1034,7 @@
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, quarterAhead, jarSetDown, setDownJar, updatePreview, JAR_H, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn, addJarToWorld,
     clearJars, jarNear, pickUpJar, useNear, useSelected, shatterJarsIn, noteUnmade,
     updateJars, addSigil, updateSigils });
