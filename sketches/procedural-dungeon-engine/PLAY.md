@@ -329,9 +329,9 @@ Determinism).
   press a line to do it. Drawing a mark never prompts.
 - **Hold to act.** Anything that changes the world takes E held (or the E
   prompt pressed and held on touch) while a ring fills over the target,
-  with the action's icon in it; the key on the prompt fills too, and the
-  line ends "· hold". Let go early and nothing happens; one hold, one
-  action. Opening, closing and unlocking a door take 0.35 s (as long as
+  with the action's icon in it (on touch, the E prompt's key fills too,
+  and its line ends "· hold"). Let go early and nothing happens; one hold,
+  one action. Opening and closing a door take 0.35 s (as long as
   pushing into one, which fills the same ring; pushing a block or climbing
   shows no ring), wiping chalk 0.4 s,
   lighting or snuffing a sconce 0.5 s, waking a waystone 0.7 s, and the
