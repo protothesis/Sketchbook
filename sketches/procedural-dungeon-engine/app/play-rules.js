@@ -35,10 +35,15 @@
     // Doorstones: open a door in any bare wall. About as rare as keys turn out.
     chalkChance: 0.045,
     chalkMinDepth: 2,
-    // Jars hold one pixie each; a sigil tile powers up with a pixie jar.
+    // A jar (a tool: walk over it) holds one thing: a pixie, or a charge of
+    // entropy swiped from a full well. A vessel (carried, set down in the
+    // world) holds up to vesselCapacity of one kind; a vessel of pixies on a
+    // sigil tile powers it, +1 entropy max per pixie.
     jarChance: 1 / 15,
     jarMinDepth: 1,
-    jarCapacity: 1,
+    vesselChance: 1 / 10,
+    vesselMinDepth: 1,
+    vesselCapacity: 3,
     // Pixies: small winged lights, drifting in about 1 room in 10. Catch one
     // in an empty jar; ghosts are drawn to them, free or jarred.
     pixieChance: 0.1,
@@ -83,6 +88,9 @@
     pushMinDepth: 1,
     pushColors: ['#e0a94a', '#57cdbf', '#c47be0', '#e86a6a'],
     restoreCharges: 2 / 3,    // two shards (was a whole charge)
+    // Crates: some single one-unit blocks are loose, a plain push block with
+    // no home and no reward (seeded on their own stream, per block).
+    crateChance: 0.4,
     // Sconces: unlit, on a room's walls. Lighting one costs a shard of your
     // lamp's entropy, and the room never drains the lamp again.
     sconceChance: 0.35,
@@ -188,6 +196,35 @@
   }
 
   /**
+   * A vessel standing in this space, if it has one: { sx, sy } (a
+   * half-cell). Seeded on its own stream; never on a door, item, sigil,
+   * well or waystone cell, a prop, or a push block's start or mark.
+   */
+  function vessel(space) {
+    if (!space.parentId || space.deadEnd || space.depth < RULES.vesselMinDepth) return null;
+    const r = DE.deriveRng(space.seed, 'vessel');
+    if (!r.chance(RULES.vesselChance)) return null;
+    const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
+    for (const f of [sigil(space), well(space), waystone(space)]) if (f) avoid.add(DE.key(f.cell.x, f.cell.y));
+    const solid = new Set();
+    for (const b of props(space).blocks) {
+      for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) solid.add(x + ',' + y);
+    }
+    for (const pb of pushBlocks(space)) { solid.add(pb.from.sx + ',' + pb.from.sy); solid.add(pb.to.sx + ',' + pb.to.sy); }
+    const free = [];
+    for (const k of space.cells.slice().sort()) {
+      if (avoid.has(k)) continue;
+      const c = DE.parseKey(k);
+      for (let q = 0; q < 4; q++) {
+        const sx = c.x * 2 + (q & 1), sy = c.y * 2 + (q >> 1);
+        if (!solid.has(sx + ',' + sy)) free.push({ sx, sy });
+      }
+    }
+    return free.length ? free[Math.floor(r.next() * free.length)] : null;
+  }
+
+  /**
    * A sigil tile in this space, if it has one: { cell, seed }. Seeded on its
    * own stream; never on a door cell or an item's cell.
    */
@@ -229,7 +266,9 @@
    * absolute grid units:
    *   blocks:  [{ x0, y0, x1, y1, units }]   solid; `units` stacked half-cell
    *            cubes tall (3 = floor to ceiling, a column). Collide, cast
-   *            shadows, and (below a column) can be climbed.
+   *            shadows, and (below a column) can be climbed. A block with
+   *            `crate: { id, sx, sy }` is loose: walk mode makes it a push
+   *            block (no home), starting on half-cell (sx, sy).
    *   details: [{ x0, y0, x1, y1, h, shade }]   flat floor dressing only
    *
    * Shapes: single (1 sub), double (2x1), big (2x2), and in chambers short
@@ -314,13 +353,21 @@
       };
       // Rows stay modular (one cube per sub) so they read as built pieces.
       if (kind === 'row') cells.forEach((s) => blocks.push(rect([s])));
-      else blocks.push(rect(cells));
+      else blocks.push(Object.assign(rect(cells), kind === 'single' && units === 1 ? { single: true } : {}));
     }
 
     // Clear blocks off cells that gained a door after the room was made.
     for (let i = blocks.length - 1; i >= 0; i--) {
       const b = blocks[i];
       if (laterCells.some((c) => b.x0 < c.x + 1 && b.x1 > c.x && b.y0 < c.y + 1 && b.y1 > c.y)) blocks.splice(i, 1);
+    }
+
+    // Some single one-unit blocks are crates (loose; walk mode makes them
+    // push blocks). One draw per single block, on its own stream.
+    const cr = DE.deriveRng(space.seed, 'crate');
+    for (const b of blocks) {
+      if (b.single && cr.chance(RULES.crateChance)) b.crate = { id: 'crate' + b.x0 * 2 + ',' + b.y0 * 2, sx: b.x0 * 2, sy: b.y0 * 2 };
+      delete b.single;
     }
 
     // Floor detail on its own stream, skipping blocked sub-cells.
@@ -687,5 +734,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, well, props, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, vessel, sigil, well, props, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

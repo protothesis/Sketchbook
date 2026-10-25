@@ -29,7 +29,7 @@
     if (k === 'escape') { W.openPause(); return; }
     keys.add(k);
     if (k === 'e') {
-      if (!e.repeat) act(actionNear(state.player));
+      if (!e.repeat) W.pressE();
       e.preventDefault();
     } else if (k === 'f') {
       if (!e.repeat) useSelected();
@@ -46,16 +46,20 @@
     }
     if (k.startsWith('arrow')) e.preventDefault();
   });
-  global.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
-  global.addEventListener('blur', () => keys.clear());
+  global.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    keys.delete(k);
+    if (k === 'e') W.releaseE();
+  });
+  global.addEventListener('blur', () => { keys.clear(); W.releaseE(true); });
 
   const promptEl = $('prompt');
-  promptEl.addEventListener('click', (e) => {
-    const near = actionNear(state.player);
-    if (near) act(near); else useSelected();
-    promptEl.blur();
-    e.preventDefault();
-  });
+  // Pressing the E prompt is E: held down, it fills a hold action's ring.
+  promptEl.addEventListener('pointerdown', (e) => { W.pressE(); e.preventDefault(); });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) promptEl.addEventListener(ev, () => W.releaseE());
+  promptEl.addEventListener('click', (e) => { promptEl.blur(); e.preventDefault(); });
+  const promptF = $('prompt-f');
+  if (promptF) promptF.addEventListener('click', (e) => { useSelected(); promptF.blur(); e.preventDefault(); });
   canvas.addEventListener('wheel', (e) => {
     if (state.bigmap || state.paused) return;
     const s = slots(), i = s.findIndex((x) => x.key === state.sel);
@@ -112,7 +116,8 @@
       if (mag < 0.15) return { x: 0, y: 0, mag: 0 };
       x = stick.vx / mag; y = stick.vy / mag;
     }
-    return { x, y, mag: Math.min(1, mag), run: keys.has('shift') || (stick.active && mag > 0.95) };
+    const run = !state.carry && (keys.has('shift') || (stick.active && mag > 0.95)); // no running with a block
+    return { x, y, mag: Math.min(1, mag), run };
   }
 
   Object.assign(W, { keys, promptEl, readInput });

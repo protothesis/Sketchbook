@@ -9,8 +9,8 @@
     DITHER_RADIUS, CAM_OFFSET, LANTERN, renderer, scene, camera, state, world, freshRun,
     isLockedNow, save, savePlayer, dither, doorMat, buildWorld, easeOut, easeInOut,
     applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions, placeLamp,
-    canClimb, climb, addMarkToWorld, addJarToWorld, useNear, collectPickups, updateItems,
-    pushBlock, updatePushBlocks, updateSconces, noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
+    canClimb, climb, addMarkToWorld, useNear, collectPickups, updateItems,
+    updatePushBlocks, updateSconces, noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
     addGhost, lightReaches, updateGhosts, tmpV2, post, fxPerf, renderFrame, updatePrompt,
     showCaption, stanceEl, refreshHud, notice, REFRESH_HINT, drawMinimap, drawBigMap,
     showRecord, hideRecord } = W;
@@ -41,6 +41,12 @@
       p.y = c.fy + (c.ty - c.fy) * carry;
       p.z = c.fz + (c.tz - c.fz) * rise + Math.sin(Math.PI * c.t) * 0.04;
       if (c.t >= 1) { p.z = c.tz; p.vz = 0; state.climb = null; }
+      inp = { x: 0, y: 0, mag: 0 };
+    }
+
+    // Holding on to a block (E held): movement pushes or pulls it instead.
+    if (state.grab && !state.climb) {
+      W.grabInput(inp, dt);
       inp = { x: 0, y: 0, mag: 0 };
     }
 
@@ -87,7 +93,7 @@
 
     // Pushing into a closed (unlocked) door, or a climbable block, for a
     // beat opens it / steps up onto it. A wall is a block's way of saying no.
-    let pushing = null, pushingBlock = null, pushDir = null, pk = null;
+    let pushing = null, pushingBlock = null, pk = null;
     if (inp.mag > 0) {
       for (const s of touched) {
         const d = DE.DIRS[s.facing];
@@ -97,10 +103,7 @@
         if (s.door && p.z <= 0.05 && !isLockedNow(exp.spaces[s.door.spaceId], s.door.exit)) {
           pushing = s.door; pk = s.door.spaceId + '/' + s.door.exit.id; break;
         }
-        if (s.block && s.block.push && p.z <= 0.05) {
-          pushingBlock = s.block; pushDir = { x: -d.x, y: -d.y }; pk = 'push:' + s.block.key; break;
-        }
-        if (s.block && canClimb(s.block)) {
+        if (s.block && canClimb(s.block) && !state.carry) { // not with a block in your hands
           pushingBlock = s.block; pk = 'block:' + s.block.x0 + ',' + s.block.y0; break;
         }
       }
@@ -111,9 +114,9 @@
       state.push.key = null;
       if (pushing) {
         if (pushing.exit.kind === 'surface') W.askSurface();
+        else if (pushing.exit.connectionId) W.reopenDoor(pushing.exit.connectionId);
         else openDoor(pushing.spaceId, pushing.exit.id);
       }
-      else if (pushDir) pushBlock(pushingBlock, pushDir);
       else climb(pushingBlock, { x: inp.x, y: inp.y });
     }
 
@@ -139,7 +142,10 @@
       }
     }
 
-    updatePrompt(state.paused || state.climb ? null : actionNear(p) || useNear(p));
+    const idle = state.paused || state.climb;
+    const nearE = idle ? null : actionNear(p);
+    W.tickHold(nearE, dt);
+    updatePrompt(nearE, idle ? null : useNear(p));
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;
@@ -218,6 +224,7 @@
     updatePushBlocks(dt);
     updateSconces();
     W.updateWaystones();
+    W.lostFx.uTime.value = state.time; // lost-path doors shimmer
     W.updateLamp(dt);
     W.updateLampLook(dt); // the lamp's colour, halo, sparks and light (after placeLamp)
   }
@@ -262,14 +269,9 @@
     const savedGhosts = state.run.ghosts || [];
     const savedPixies = state.run.pixies || [];
     const savedCreepers = state.run.creepers || [];
-    const savedJars = state.run.placedJars || [];
     const savedMarks = state.run.marks || [];
     state.buffReady = false;
     buildWorld();
-    for (const j of savedJars) {
-      if (exp.registry[DE.key(Math.floor(j.sx / 2), Math.floor(j.sy / 2))] !== undefined) addJarToWorld(j);
-      else for (let i = 0; i < j.fill; i++) noteUnmade('jar:' + j.id, null); // its room is gone: the jar broke
-    }
     for (const m of savedMarks) {
       if (exp.registry[DE.key(Math.floor(m.sx / 2), Math.floor(m.sy / 2))] !== undefined) addMarkToWorld(m);
     }
@@ -370,7 +372,7 @@
   global.addEventListener('pagehide', savePlayer);
 
   // Handy from the console.
-  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern, renderFrame, fxPerf, post, addJarToWorld });
+  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern, renderFrame, fxPerf, post });
 
   Object.assign(W, { newExpedition, setExpedition, snapCamera, spawnPoint });
 })(window);

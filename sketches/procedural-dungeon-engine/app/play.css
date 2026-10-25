@@ -186,6 +186,29 @@ kbd {
   cursor: pointer;
 }
 .prompt[hidden] { display: none; }
+.prompt.f { top: calc(60% + 34px); }
+.prompt.f.alone { top: 60%; }
+.prompt .key {
+  display: inline-block;
+  min-width: 1.4em;
+  margin: 0 8px 0 -6px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+  opacity: 0.85;
+}
+.prompt .key { background: conic-gradient(rgba(232, 147, 95, 0.45) calc(var(--p, 0) * 1turn), transparent 0); }
+/* The hold ring, over what you're acting on. */
+.holdring { position: fixed; z-index: 3; width: 34px; height: 34px; transform: translate(-50%, -100%); pointer-events: none; }
+.holdring[hidden] { display: none; }
+.holdring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.holdring circle { fill: rgba(14, 10, 8, 0.6); stroke-width: 3.5; }
+.holdring .bg { stroke: rgba(20, 12, 30, 0.7); }
+.holdring .fg { fill: none; stroke: var(--accent); stroke-linecap: round; }
+.holdring span { position: absolute; inset: 0; display: grid; place-items: center; color: #ffe8d2; font-size: 15px; line-height: 1; }
 .prompt.lock { color: #9cc6ea; border-color: rgba(111, 168, 216, 0.6); }
 .prompt.collapse { color: var(--entropy); border-color: rgba(181, 156, 255, 0.6); }
 .prompt.surface { color: #dcebff; border-color: rgba(220, 235, 255, 0.55); }
@@ -538,6 +561,7 @@ kbd {
 .slot .fill { position: absolute; left: 0; right: 0; bottom: 4px; display: flex; justify-content: center; gap: 3px; }
 .slot .fill i { width: 5px; height: 5px; border-radius: 50%; border: 1px solid rgba(210, 168, 255, 0.6); }
 .slot .fill i.on { background: #d2a8ff; }
+.slot .fill i.ent { border-radius: 1px; width: 8px; background: #9a63ff; border-color: #9a63ff; } /* a jar of entropy */
 .slot.jar .ic { color: #a9c3d6; }
 .slot.chalk .ic { color: #f2efe6; }
 .slot.echo .ic { color: #d678ff; }

@@ -112,7 +112,6 @@
     creepers: [],        // shadow creepers (see creepers.js)
     creeperDrain: 0,     // 0..1: the nearest creeper's pull on your psychic stamina this frame
     wells: [],           // entropy wells in built rooms (see wells.js)
-    jars: [],            // jars standing in the world (see "Inventory")
     sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
     buff: 0,             // powered sigils: +1 entropy max each
     buffReady: false,    // false until the first sigil pass (no caption on load)
@@ -124,7 +123,10 @@
       levels: {} },      // per effect profile (FX_PROFILES in fx.js): how strong it is right now
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
+    hold: { sig: null, t: 0, spent: false }, // holding E on a hold action (actions.js)
     pushBlocks: [],      // push blocks in built rooms (see restore.js)
+    carry: null,         // the push block in your hands (restore.js)
+    grab: null,          // the push block you have hold of, E held: { block, dir, off, moved } (restore.js)
     sconces: [],         // sconces in built rooms (see restore.js)
     waystones: [],       // waystones in built halls (see waystones.js)
     gutter: null,        // { t } while the lamp is guttering out
@@ -148,6 +150,8 @@
       shardsFound: 0, keysFound: 0, keysUsed: 0, chalk: 0, chalkFound: 0, chalkUsed: 0,
       collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
       walked: 0, collected: [], unlocked: [], extracted: null,
+      closed: [],    // connection ids of opened doors you've shut again
+      carry: null,   // the push block or crate in your hands (its run.objects key), or null
       keyRooms: [],  // "spaceId:seed" of rooms whose key showed up (locks first, keys later)
       unmade: { count: 0, log: [] }, // hash ghosts undone by a collapse (or in a jar that shattered); no use yet
       ghostSeen: [], // "spaceId:seed:ghost" for rooms whose ghost roll has happened
@@ -160,13 +164,13 @@
       creeperSeen: [], // "spaceId:seed:creeper" for rooms whose creeper roll has happened
       creepers: [],  // shadow creepers' saved positions: [{ id, x, y }]
       wells: {},     // entropy wells drawn on: { "spaceId:seed:well": { level, drawn } } (see wells.js)
-      jars: [],      // jars carried: [{ id, fill }] (fill 1: a pixie inside)
-      placedJars: [], // jars set down: [{ id, sx, sy, fill }] (half-cell coordinates)
+      jars: [],      // jars carried: [{ id, holds }] (holds: null, 'pixie' or 'entropy', one charge)
       jarSeq: 0,
       chalks: { silver: 3 }, // chalk carried, by colour, in strokes (3 per stick)
       marks: [],             // chalk marks drawn: [{ sx, sy, color, rot, base }] (quarter-tiles)
       doorstones: 0,         // open a door in a bare wall
-      pushed: {},            // push blocks moved: { "spaceId:seed:id": { sx, sy, done } }
+      objects: {},           // loose objects (crates, push blocks), run-wide: { "spaceId:seed:id": { kind, sx, sy, ... } } (restore.js)
+      despawned: [],         // objects that went with a rerolled room: [{ key, kind, color, room, at }], for later use
       lit: {},               // sconces lit: { "spaceId:seed:id": true }
       waystones: {},         // waystones woken: { "spaceId:seed": true } (the starter's is always awake)
       hearth: null,          // "spaceId:seed" of the waystone you last woke or used: where you wake
@@ -191,6 +195,11 @@
   /** Locked and not yet unlocked by this run (unlocked doors are checkpoints). */
   function isLockedNow(space, ex) {
     return !ex.connectionId && DP.isLocked(space, ex) && !state.run.unlocked.includes(space.id + '/' + ex.id);
+  }
+
+  /** An opened door (a connection) you've shut again: solid until you open it. */
+  function isClosed(connectionId) {
+    return !!connectionId && !!state.run.closed && state.run.closed.includes(connectionId);
   }
 
   function ownsDoorPanel(spaceId, ex) {
@@ -231,11 +240,10 @@
   function snapshot() {
     const p = state.player;
     state.run.marks = state.marks.map((m) => ({ sx: m.sx, sy: m.sy, color: m.color, rot: m.rot, base: m.base }));
-    state.run.placedJars = state.jars.map((j) => ({ id: j.id, sx: j.sx, sy: j.sy, fill: j.fill }));
     state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
     state.run.pixies = state.pixies.map((o) => ({ id: o.id, x: +o.x.toFixed(3), y: +o.y.toFixed(3) }));
     state.run.creepers = state.creepers.map((c) => ({ id: c.id, x: +c.x.toFixed(3), y: +c.y.toFixed(3) }));
-    return SAVES.make({ record: state.exp, run: state.run, player: { x: p.x, y: p.y, angle: p.angle } });
+    return SAVES.make({ record: state.exp, run: state.run, player: { x: p.x, y: p.y, angle: p.angle }, runVersion: RUN_VERSION });
   }
   /** The resume slot (every second, on pagehide, on quitting to the menu). */
   function savePlayer() {
@@ -254,7 +262,7 @@
   // save slots over (game.js). Saves are stamped with DP.saves.BUILD now:
   // when `run` changes shape, bump that instead of adding a step here.
   // Saves from before versioning count as version 0.
-  const RUN_VERSION = 3;
+  const RUN_VERSION = 6;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
@@ -273,6 +281,31 @@
     (run) => {
       for (const j of (run.jars || []).concat(run.placedJars || [])) j.fill = j.fill > 0 ? 1 : 0;
     },
+    // 3 -> 4: a jar says what it holds (a pixie, or a charge of entropy
+    // swiped from a well) instead of a pixie count.
+    (run) => {
+      for (const j of (run.jars || []).concat(run.placedJars || [])) {
+        j.holds = j.fill > 0 ? 'pixie' : null;
+        delete j.fill;
+      }
+    },
+    // 4 -> 5: moved crates and push blocks (run.pushed, by room) become
+    // run-wide loose objects. Their kind, colour and mark come back from
+    // their room's generation when it's built (restore.js spawnObjects).
+    (run) => {
+      run.objects = Object.assign({}, run.pushed || {});
+      delete run.pushed;
+      run.despawned = run.despawned || [];
+    },
+    // 5 -> 6: jars are a tool (in the bag) now, and what stood in the world
+    // is a vessel: a jar set down becomes a vessel holding what it held.
+    (run) => {
+      run.objects = run.objects || {};
+      for (const j of run.placedJars || []) {
+        run.objects['vessel:' + j.id] = { kind: 'vessel', sx: j.sx, sy: j.sy, holds: j.holds || null, n: j.holds ? 1 : 0 };
+      }
+      delete run.placedJars;
+    },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */
   function migrateRun(run, version) {
@@ -285,6 +318,6 @@
     CLIMB_TIME, GRAVITY, PUSH_TIME, USE_RANGE, PICKUP_RANGE, DOOR_SWING, SWING_ANGLE,
     REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_RADIUS, DITHER_APPROACH, CAM_OFFSET, SEAM,
     LOCK_SEAM, OPEN_SEAM, LANTERN, LANTERN_RANGE, OPP, ekey, canvas, renderer, scene, camera, state, world,
-    freshRun, rebuildExitIndex, isLockedNow, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,
+    freshRun, rebuildExitIndex, isLockedNow, isClosed, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,
     savePlayer, saveCheckpoint, snapshot, SAVES, RUN_VERSION });
 })(window);

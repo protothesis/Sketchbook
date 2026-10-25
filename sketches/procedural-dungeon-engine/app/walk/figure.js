@@ -32,7 +32,7 @@
   // through as a dithered, lantern-orange silhouette. GreaterDepth: these
   // only draw where something nearer already covers the figure.
   const ghostMat = new THREE.MeshBasicMaterial({
-    color: 0xffa25c, transparent: true, opacity: 0.6, depthFunc: THREE.GreaterDepth, depthWrite: false,
+    color: 0xffa25c, transparent: true, opacity: 0.85, depthFunc: THREE.GreaterDepth, depthWrite: false,
   });
   ghostMat.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
@@ -42,12 +42,16 @@
   // The figure is one thing: where any part of it is drawn (body, head,
   // lamp), it marks the stencil, and the silhouette skips those pixels. So
   // the head in front of the body, or the lamp in front of either, never
-  // dithers the figure itself; only something else in front does.
+  // dithers the figure itself; only something else in front does. The
+  // figure draws after every other solid thing (renderOrder), so it only
+  // marks pixels where it's really in front: drawn first, it marked pixels a
+  // block then covered, and the silhouette never showed.
   const FIGURE_STENCIL = 1;
   for (const mat of [bone, lanternMesh.material]) {
     Object.assign(mat, { stencilWrite: true, stencilRef: FIGURE_STENCIL, stencilFunc: THREE.AlwaysStencilFunc,
       stencilZPass: THREE.ReplaceStencilOp });
   }
+  for (const m of [body, head, lanternMesh]) m.renderOrder = 5;
   Object.assign(ghostMat, { stencilWrite: true, stencilRef: FIGURE_STENCIL, stencilFunc: THREE.NotEqualStencilFunc,
     stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp, stencilZPass: THREE.KeepStencilOp });
   for (const m of [body, head]) {
@@ -103,12 +107,13 @@
         const back = state.exitAt.get(ekey(n.x, n.y, OPP[f]));
         if (back && back.exit.connectionId) hit = back;
       }
-      if (hit && hit.exit.connectionId) {
+      const shut = hit && W.isClosed(hit.exit.connectionId);
+      if (hit && hit.exit.connectionId && !shut) {
         const dx = bx - ax, dy = by - ay;
         out.push({ ax, ay, bx: ax + dx * JAMB, by: ay + dy * JAMB });
         out.push({ ax: bx - dx * JAMB, ay: by - dy * JAMB, bx, by });
       } else {
-        out.push({ ax, ay, bx, by, door: hit && hit.spaceId === sid ? hit : null, facing: f });
+        out.push({ ax, ay, bx, by, door: hit && (hit.spaceId === sid || shut) ? hit : null, facing: f });
       }
     }
   }
@@ -209,7 +214,7 @@
     lanternMesh.position.z = (wx * sn + wy * c) * S;
   }
 
-  const canClimb = (b) => !b.jar && !b.push && b.top - state.player.z > 0.05 &&
+  const canClimb = (b) => !b.jar && !b.carried && b.top - state.player.z > 0.05 &&
     b.top - state.player.z <= RULES.climbMaxUnits * UNIT + 0.01 && b.top <= RULES.climbMaxTop * UNIT + 0.01;
 
   /** A climbable block right in front of the figure, if no door is closer. */

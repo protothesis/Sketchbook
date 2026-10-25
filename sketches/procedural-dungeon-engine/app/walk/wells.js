@@ -132,13 +132,16 @@
       const level = levelOf(w);
       const inIt = !frozen && p.z < 0.05 && p.spaceId === w.spaceId &&
         Math.hypot(p.x - (w.cell.x + 0.5), p.y - (w.cell.y + 0.5)) < WELL.reach;
+      // An empty jar in your hands: the well waits for your swipe (F) instead.
+      const jar = W.heldJar(), saving = !!(jar && !jar.holds);
       if (inIt && !w.inIt) {
-        W.showCaption(level > 0.01 ? 'an entropy well · it pours into your lamp'
+        W.showCaption(saving ? 'an entropy well · swipe your jar through it (F) to fill it'
+          : level > 0.01 ? 'an entropy well · it pours into your lamp'
           : `the well is dry · ${w.kind === 'surge' ? 'it surges back when the rim is lit' : 'it drips back, slowly'}`);
       }
       w.inIt = inIt;
       w.drinking = false;
-      if (inIt && level > 0) {
+      if (inIt && level > 0 && !saving) {
         const want = Math.min(RULES.wellRate * dt, level);
         const got = W.gainFuel(want, true);
         if (got > 0) {
@@ -230,8 +233,17 @@
     if (w.grow >= 1) w.fall = { y: WELL.dripHeight, v: 0 };
   }
 
+  /** The well you're standing in, or null. */
+  const wellHere = () => state.wells.find((w) => w.inIt) || null;
+  /** Swipe an empty jar through a full well: the jar takes its charge, and the well is dry. */
+  function scoopWell(w, jar) {
+    jar.holds = 'entropy';
+    state.run.wells[w.key] = { level: 0, drawn: state.run.walked };
+    W.showCaption(`the jar fills with entropy · ${w.kind === 'surge' ? 'watch the rim' : 'watch the drip'}`);
+  }
+
   /** Is the figure drinking from a well right now? (The lamp's icon shimmers.) */
   const drinking = () => state.wells.some((w) => w.drinking);
 
-  Object.assign(W, { WELL, addWell, updateWells, wellLevel: levelOf, drinking });
+  Object.assign(W, { WELL, addWell, updateWells, wellLevel: levelOf, wellHere, scoopWell, drinking });
 })(window);

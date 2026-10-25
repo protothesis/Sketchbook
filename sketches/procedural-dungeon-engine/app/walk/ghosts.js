@@ -163,7 +163,7 @@
       let sp = exp.spaces[here];
       // Mostly its own room; sometimes the room next door.
       if (Math.random() < 0.25) {
-        const doors = sp.exits.filter((ex) => ex.connectionId);
+        const doors = sp.exits.filter((ex) => ex.connectionId && !W.isClosed(ex.connectionId));
         if (doors.length) {
           const c = exp.connections[doors[Math.floor(Math.random() * doors.length)].connectionId];
           sp = exp.spaces[c.a.spaceId === here ? c.b.spaceId : c.a.spaceId] || sp;

@@ -26,7 +26,7 @@ decisions, see [`NOTES.md`](NOTES.md).
    draw from, so every reroll shortens how far you can go.
 6. **Restore** the dungeon on the way: put things back where they belong,
    light what was dark. Push blocks pay entropy; a lit sconce gives the
-   lamp a place to rest.
+   lamp a place to rest (snuff it and its shard comes back).
 7. **Arrive.** The waypoint is a setpiece, a big hall. Wake its waystone
    and it joins your fast-travel network, and new waypoints may appear.
 8. **Using a waystone is a checkpoint.** If you faint (your psychic
@@ -119,7 +119,10 @@ for some kinds, the **thing** that goes in it.
 - **Push blocks.** A variant of the 1x1 block, styled differently, that
   slides across the floor when you push it. A floor tile in a matching
   colour marks where it belongs. Self-contained in one room, and familiar
-  from adventure games.
+  from adventure games. Crates are the plain version: loose, no home, no
+  reward, just something to move. Both can be carried out of their room;
+  what's sitting in a room when it's rerolled is despawned with it (kept
+  in a list, for later), and anything elsewhere stays.
 - **Sconces.** Mounted on walls, unlit. Light one with your lantern for
   entropy. The lantern's light ray already exists.
 - **Candles.** Carried and placed anywhere in a room. They pay while lit,
@@ -555,6 +558,13 @@ last one lights. A trickle well has a drip: a drop slowly forms while it
 waits, then drops fall and the pool grows. This is the rule for
 everything from here on (section 15).
 
+**A jar carries a well.** Swipe an empty jar through a full well and its
+charge goes into the jar instead of your lamp; pour it into the lamp later
+(all or nothing). It's how to bank a well you'd otherwise waste on a full
+lamp, or bring entropy to where you'll need it. (It cuts against the
+*temporary entropy* idea below: if that's built, jarred entropy might be
+the one kind that keeps.)
+
 **Later:** *temporary* entropy with a potency that starts draining at once,
 so you can fill up but can't carry it across the map; wells you have to
 restore before they flow.
@@ -562,10 +572,11 @@ restore before they flow.
 ## 14. Pixies, jars and the ecology
 
 **Pixies** are a second creature: small winged lights. Catch one in an
-empty jar; a jar holds one. A pixie jar does two things, and you have to
-choose:
+empty jar (a tool; a jar holds one), then pour it into a **vessel**, a
+clay urn you carry and set down (up to 3 of one kind). A vessel of pixies
+does two things, and you have to choose:
 
-- **On a sigil** it powers the sigil (+1 entropy max).
+- **On a sigil** it powers the sigil (+1 entropy max per pixie).
 - **Anywhere else** it draws ghosts. They drift over and circle it, wander
   off and come back, like moths. It's how you move a ghost out of your
   way, never how you get rid of one.
@@ -665,6 +676,47 @@ the entropy, then come back.
 
 Waypoint distance stays as is (it played well). The thread is the first
 version of "retracing is earned"; it may become a proper ability later.
+
+### Needs a design pass: what a save keeps (open, 2026-10-24)
+
+Found in playtesting, deliberately not fixed yet. Checkpoints, progress and
+waystone interactions are tangled, and want thinking through together, in
+one place, before anything changes.
+
+**The symptom.** You wake in a waystone hall and the blocks you pushed home
+and the sconces you lit there are undone, every time.
+
+**Why.** Restoration lives in the run (`run.pushed`, `run.lit`,
+`run.wells`), not in the map. The checkpoint is a snapshot of the run taken
+the moment you use the waystone, and a faint rolls the run back to it. The
+natural order is to arrive, wake the stone (checkpoint), then tidy the hall,
+so the tidying comes after the snapshot and a faint takes it back. Tidy
+first and touch the stone after, and it sticks; nothing teaches that, and
+it's backwards.
+
+**The wider questions:**
+
+- **What is progress, and what is the run?** Today a faint rolls back
+  everything in `run` except tallies and the thread. Restoration (the
+  "leave it better than you found it" ethos) arguably belongs to the world,
+  not to the run, and shouldn't be undone by failing. Inventory and entropy
+  probably should be.
+- **Entropy paid for restoration.** A block home pays entropy once. If
+  restoration survives a faint but fuel rolls back, the payout is lost for
+  good (no farming, but a real loss). Is that the intent?
+- **What sets your respawn?** Only touching a waystone (wake, travel, E).
+  Passing through a hall doesn't. Should anything else: restoring in a
+  hall, resting, lighting its sconces?
+- **Autosave vs checkpoint vs respawn** are three ideas sharing two slots
+  (resume = where you are; checkpoint = what a faint rolls back to, and
+  where you wake). Should "what's kept" and "where you wake" be separate?
+- **Lost rooms' restoration.** If restoration is kept, a retraced path
+  comes back tidied. Is that right?
+
+Options already on the table: (1) restoration survives faints (pushed,
+lit, wells kept; inventory and entropy roll back); (2) restoring inside a
+waystone hall writes a checkpoint; (3) keep it and teach "touch the stone
+after tidying".
 
 ## First slice (built 2026-10-21)
 
