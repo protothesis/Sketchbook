@@ -1,10 +1,11 @@
 // Walk mode: hash ghosts. Spawning, light and line of sight, noticing,
-// following, and their markers at the screen edge.
+// following, and their off-screen markers (markers.js draws them).
 (function (global) {
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, THREE, $, S, UNIT, scene, camera, state, passable, lantern, noteUnmade, roomGap } = W;
+  const { DE, THREE, S, UNIT, scene, state, lantern, noteUnmade, roomGap,
+    lowBlockTop, driftToward, followPath, lightReaches } = W;
 
   // ---------------------------------------------------------------------------
   // Hash ghosts
@@ -34,11 +35,10 @@
     swellShrink: 1,      // s for the reach to shrink back once you're clear
     shySpeed: 0.6,       // cells/s, backing out of steady light (the ecology's flee rule)
     lean: 0.35,          // radians: a ghost drawn to something leans toward it
-    markRooms: 1,        // an idle ghost off screen gets a marker this many rooms away or nearer
+    markRooms: 1,        // an idle ghost off screen gets a marker (markers.js) this many rooms away or nearer
     markRange: 14,       // cells: and only within this distance
     wanderSpeed: 0.35,
     chaseSpeed: 0.5,     // slow but relentless: far slower than walking (2.4) or crawling (1.1)
-    lightRange: 4.5,     // cells: how far the lantern "touches"
     noticeTime: 0.25,    // s in your light before it stops and turns to you ("?"): a moment
     stun: 1.2,           // s a ghost reels after you bump into it, before it follows
     alertPause: 0.8,     // s of "?" before the ring starts filling
@@ -49,8 +49,8 @@
     loseRooms: 2,        // ...or once the rooms between you reach this (one room in between)
     height: 0.55,        // cells: hover height of the head's center
     hoverClear: 0.45,    // over a low block, stay this far above its top
-    tall: 1.5 * UNIT,    // blocks taller than this are obstacles; lower ones it floats over
-    radius: 0.14,        // kept this far from tall blocks
+    // How far the lantern "touches", which blocks it floats over and how far it keeps
+    // off the rest: the kit's defaults (CREATURE in creatures.js).
   };
 
   // The status icon: "?" while it's deciding about you, a purple "!!" once
@@ -135,7 +135,7 @@
     const ghost = Object.assign({
       mode: 'wander', lit: 0, dark: 0, ring: 0, alertT: 0, idle: 0, stun: 0, target: null, pause: 0, next: null, pathT: 0,
     }, g, {
-      mesh, mat, bits, alert, alertCanvas, alertTex, drawnKey: '', litNow: false, edge: null,
+      mesh, mat, bits, alert, alertCanvas, alertTex, drawnKey: '', litNow: false,
       h: GHOST.height, phase: Math.random() * 10,
     });
     if (ghost.mode === 'alert' && !ghost.alertT) ghost.alertT = GHOST.alertPause;
@@ -148,150 +148,10 @@
     g.mat.dispose();
     g.alertTex.dispose();
     g.alert.material.dispose();
-    if (g.edge) g.edge.remove();
     state.ghosts = state.ghosts.filter((o) => o !== g);
   }
 
   function clearGhosts() { for (const g of state.ghosts.slice()) removeGhost(g); }
-
-  const blocksAt = (cx, cy) => state.blockAt.get(DE.key(cx, cy)) || [];
-
-  /** Is this half-cell taken by a block too tall to float over? */
-  function subBlocked(sx, sy) {
-    const x = (sx + 0.5) / 2, y = (sy + 0.5) / 2;
-    for (const b of blocksAt(Math.floor(x), Math.floor(y))) {
-      if (!b.jar && b.top > GHOST.tall && x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1) return true;
-    }
-    return false;
-  }
-
-  /** Top of the highest low block under a point (what a ghost floats over). */
-  function lowBlockTop(x, y) {
-    let top = 0;
-    for (const b of blocksAt(Math.floor(x), Math.floor(y))) {
-      if (b.top <= GHOST.tall && x > b.x0 - 0.1 && x < b.x1 + 0.1 && y > b.y0 - 0.1 && y < b.y1 + 0.1) top = Math.max(top, b.top);
-    }
-    return top;
-  }
-
-  /** Does a ray (from f to t, both {x, y, h} in cells) pass through block b? */
-  function rayHitsBlock(f, t, b) {
-    let t0 = 0, t1 = 1;
-    const axes = [[f.x, t.x - f.x, b.x0, b.x1], [f.y, t.y - f.y, b.y0, b.y1], [f.h, t.h - f.h, 0, b.top]];
-    for (const [o, d, lo, hi] of axes) {
-      if (Math.abs(d) < 1e-9) { if (o <= lo || o >= hi) return false; continue; }
-      let a = (lo - o) / d, c = (hi - o) / d;
-      if (a > c) { const s2 = a; a = c; c = s2; }
-      t0 = Math.max(t0, a); t1 = Math.min(t1, c);
-      if (t0 >= t1) return false;
-    }
-    return t1 > 0.01 && t0 < 0.99;
-  }
-
-  /**
-   * Does the lantern's light reach a point? A 3D ray from the lamp (its real
-   * position and height, so crouching lowers it) to the target: in range,
-   * not through a wall or closed door, and not through any block. This is
-   * the same light that casts the shadows you see, so in shadow = unseen.
-   */
-  function lightReaches(f, t) {
-    const d = Math.hypot(t.x - f.x, t.y - f.y);
-    if (d > GHOST.lightRange) return false;
-    const n = Math.max(1, Math.ceil(d / 0.08));
-    let cx = Math.floor(f.x), cy = Math.floor(f.y);
-    const cells = [[cx, cy]];
-    for (let i = 1; i <= n; i++) {
-      const nx = Math.floor(f.x + (t.x - f.x) * i / n), ny = Math.floor(f.y + (t.y - f.y) * i / n);
-      if (nx === cx && ny === cy) continue;
-      if (nx !== cx && ny !== cy) {
-        if (!((passable(cx, cy, nx, cy) && passable(nx, cy, nx, ny)) ||
-              (passable(cx, cy, cx, ny) && passable(cx, ny, nx, ny)))) return false;
-        cells.push([nx, cy], [cx, ny]);
-      } else if (!passable(cx, cy, nx, ny)) return false;
-      cells.push([nx, ny]);
-      cx = nx; cy = ny;
-    }
-    const seen = new Set();
-    for (const [x, y] of cells) {
-      for (const b of blocksAt(x, y)) {
-        if (seen.has(b)) continue;
-        seen.add(b);
-        if (rayHitsBlock(f, t, b)) return false;
-      }
-    }
-    return true;
-  }
-
-  /** Next half-cell on a shortest floating path (around tall blocks, through open doors). */
-  function nextSubToward(fsx, fsy, tsx, tsy, limit) {
-    const start = fsx + ',' + fsy, goal = tsx + ',' + tsy;
-    if (start === goal) return null;
-    const prev = new Map([[start, null]]);
-    const q = [[fsx, fsy]];
-    for (let h = 0; h < q.length && prev.size < limit; h++) {
-      const [x, y] = q[h];
-      const cx = Math.floor(x / 2), cy = Math.floor(y / 2);
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
-        if (prev.has(k)) continue;
-        const ncx = Math.floor(nx / 2), ncy = Math.floor(ny / 2);
-        if ((ncx !== cx || ncy !== cy) && !passable(cx, cy, ncx, ncy)) continue;
-        if (ncx === cx && ncy === cy && state.exp.registry[DE.key(cx, cy)] === undefined) continue;
-        if (subBlocked(nx, ny) && k !== goal) continue;
-        prev.set(k, x + ',' + y);
-        if (k === goal) {
-          let c = k;
-          while (prev.get(c) !== start) c = prev.get(c);
-          const [sx, sy] = c.split(',').map(Number);
-          return { x: sx, y: sy };
-        }
-        q.push([nx, ny]);
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Drift toward a point: only into cells it can float between and never
-   * into a tall block (and kept a little clear of their sides). True on arrival.
-   */
-  function driftToward(g, tx, ty, speed, dt) {
-    const dx = tx - g.x, dy = ty - g.y, d = Math.hypot(dx, dy);
-    if (d < 0.02) return true;
-    const step = Math.min(d, speed * dt);
-    const nx = g.x + dx / d * step, ny = g.y + dy / d * step;
-    const ox = Math.floor(g.x), oy = Math.floor(g.y);
-    const ok = (x, y) => {
-      const cx = Math.floor(x), cy = Math.floor(y);
-      const cellOk = (cx === ox && cy === oy) || (Math.abs(cx - ox) + Math.abs(cy - oy) === 1 && passable(ox, oy, cx, cy));
-      return cellOk && !subBlocked(Math.floor(x * 2), Math.floor(y * 2));
-    };
-    if (ok(nx, ny)) { g.x = nx; g.y = ny; } else if (ok(nx, g.y)) g.x = nx; else if (ok(g.x, ny)) g.y = ny;
-    // Keep the body off the sides of tall blocks.
-    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
-      for (const b of blocksAt(Math.floor(g.x) + i, Math.floor(g.y) + j)) {
-        if (b.top <= GHOST.tall) continue;
-        const qx = THREE.MathUtils.clamp(g.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(g.y, b.y0, b.y1);
-        const ex = g.x - qx, ey = g.y - qy, e = Math.hypot(ex, ey);
-        if (e > 1e-6 && e < GHOST.radius) { g.x += ex / e * (GHOST.radius - e); g.y += ey / e * (GHOST.radius - e); }
-      }
-    }
-    return d <= step + 0.02;
-  }
-
-  /** Steer half-cell by half-cell (around blocks, through doors), then straight to the goal. */
-  function followPath(g, gx, gy, speed, dt) {
-    g.pathT -= dt;
-    const sx = Math.floor(g.x * 2), sy = Math.floor(g.y * 2);
-    if (g.pathT <= 0 || (g.next && g.next.x === sx && g.next.y === sy)) {
-      g.next = nextSubToward(sx, sy, Math.floor(gx * 2), Math.floor(gy * 2), 2400);
-      g.pathT = 0.3;
-    }
-    if (g.next === undefined) return true; // no way through: give up on this goal
-    if (g.next === null) return driftToward(g, gx, gy, speed, dt);
-    driftToward(g, (g.next.x + 0.5) / 2, (g.next.y + 0.5) / 2, speed, dt);
-    return false;
-  }
 
   function wander(g, dt) {
     if (g.pause > 0) { g.pause -= dt; return; }
@@ -434,7 +294,6 @@
         b.rotation.set(a, a * 1.3, 0);
       });
     }
-    updateEdgeMarkers();
     state.ghostTouch = touching; // read by the lamp's stamina
 
     // Screen effects: wobble grows with nearness, glitch with contact. Both
@@ -466,60 +325,20 @@
     x.fill();
   }
 
-  /**
-   * Off-screen ghosts get a marker on a ring around the figure (not the
-   * screen's edge, so none get lost in a far corner), with an arrow toward
-   * them: any watching or following you, and idle ones in your room or the
-   * next. Watching and following show their status; idle ones a faint ghost.
-   */
-  const edgeLayer = $('ghost-edges');
-  const edgeV = new THREE.Vector3();
-  function updateEdgeMarkers() {
-    const w = global.innerWidth, h = global.innerHeight, p = state.player;
-    edgeV.set(p.x * S, (p.z + 0.35) * S, p.y * S).project(camera);
-    const ox = (edgeV.x + 1) / 2 * w, oy = (1 - edgeV.y) / 2 * h;
-    const R = Math.min(w, h) * 0.42;
-    const here = p.spaceId;
-    for (const g of state.ghosts) {
-      let show = false, px = 0, py = 0, ang = 0;
-      let wanted = g.mode !== 'wander';
-      if (!wanted && here != null && Math.hypot(g.x - p.x, g.y - p.y) < GHOST.markRange) {
-        const gs = state.exp.registry[DE.key(Math.floor(g.x), Math.floor(g.y))];
-        wanted = gs !== undefined && roomGap(gs, here, GHOST.markRooms) <= GHOST.markRooms;
-      }
-      if (wanted && !state.bigmap && !state.paused) {
-        edgeV.copy(g.mesh.position);
-        edgeV.y += 0.5 * S;
-        edgeV.project(camera);
-        const behind = edgeV.z > 1;
-        let sx = (edgeV.x + 1) / 2 * w, sy = (1 - edgeV.y) / 2 * h;
-        if (behind) { sx = w - sx; sy = h - sy; }
-        if (behind || sx < 8 || sx > w - 8 || sy < 8 || sy > h - 8) {
-          show = true;
-          ang = Math.atan2(sy - oy, sx - ox);
-          px = ox + Math.cos(ang) * R; py = oy + Math.sin(ang) * R;
-        }
-      }
-      if (show && !g.edge) {
-        g.edge = document.createElement('div');
-        g.edge.className = 'gedge';
-        g.edge.innerHTML = '<canvas width="96" height="96"></canvas><i class="arrow"></i>';
-        edgeLayer.append(g.edge);
-      }
-      if (!g.edge) continue;
-      g.edge.hidden = !show;
-      if (!show) continue;
-      g.edge.style.left = px + 'px';
-      g.edge.style.top = py + 'px';
-      g.edge.classList.toggle('chase', g.mode === 'chase');
-      g.edge.classList.toggle('idle', g.mode === 'wander');
-      g.edge.querySelector('.arrow').style.transform = `rotate(${ang}rad) translateX(26px)`;
-      if (g.mode === 'wander') { drawIdle(g.edge.firstChild); continue; }
-      const cx = g.edge.firstChild.getContext('2d');
-      cx.clearRect(0, 0, 96, 96);
-      cx.drawImage(g.alertCanvas, 0, 0);
-    }
-  }
+  // Off-screen markers: any ghost watching or following you, showing its
+  // status, and idle ones in your room or the next, as a faint ghost.
+  W.markers.register({
+    list: () => state.ghosts,
+    wanted: (g) => g.mode !== 'wander' || W.markers.near(g, GHOST.markRooms, GHOST.markRange),
+    key: (g) => (g.mode === 'wander' ? 'idle' : g.drawnKey),
+    draw(g, cv) {
+      if (g.mode === 'wander') { drawIdle(cv); return; }
+      const x = cv.getContext('2d');
+      x.clearRect(0, 0, cv.width, cv.height);
+      x.drawImage(g.alertCanvas, 0, 0);
+    },
+    cls: (g) => (g.mode === 'chase' ? 'chase' : g.mode === 'wander' ? 'idle' : ''),
+  });
 
   /** Is a ghost in any of these rooms? (A room can't be rerolled while one is.) */
   function ghostIn(ids) {
@@ -536,5 +355,5 @@
     return gone.length;
   }
 
-  Object.assign(W, { addGhost, clearGhosts, lightReaches, updateGhosts, ghostIn, banishGhostsIn });
+  Object.assign(W, { addGhost, clearGhosts, updateGhosts, ghostIn, banishGhostsIn });
 })(window);

@@ -1,7 +1,7 @@
 // Walk mode: the ecology, a first pass at emergent behaviour (see
 // EMERGENCE.md). Creatures don't know each other by name. Everything in
 // the world that matters to a creature is a *presence*: a point with tags
-// ('ghost', 'pixie', 'well', 'light', 'lamp', 'player', 'steady'). Your lamp
+// ('ghost', 'pixie', 'creeper', 'well', 'light', 'lamp', 'player', 'steady'). Your lamp
 // is one ('light', 'lamp', 'player', while it's lit), and so are lit
 // sconces and awake waystones ('light', 'steady'). A small table of rules says how a creature
 // of one kind responds to a tag: seek it (go and circle it, for a while)
@@ -37,6 +37,7 @@
       { who: 'pixie', what: 'ghost', does: 'flee', range: 2.2 },
       { who: 'pixie', what: 'light', does: 'flee', range: 2.5 },    // so you have to chase them down
       { who: 'pixie', what: 'well', does: 'seek', chance: 0.5, orbit: [0.15, 0.6], range: 10, rooms: 0 },
+      { who: 'creeper', what: 'steady', does: 'flee', range: 2.4 }, // shadows keep off lit sconces and waystones
     ],
   };
 
@@ -47,6 +48,7 @@
     const out = [];
     for (const g of state.ghosts) out.push({ tags: ['ghost'], x: g.x, y: g.y, ref: g });
     for (const o of state.pixies) out.push({ tags: ['pixie'], x: o.x, y: o.y, ref: o });
+    for (const c of state.creepers) out.push({ tags: ['creeper'], x: c.x, y: c.y, ref: c });
     for (const v of state.pushBlocks) if (v.vessel && !v.carried && v.holds === 'pixie' && v.n) out.push({ tags: ['pixie', 'jarred'], x: v.sx / 2 + 0.25, y: v.sy / 2 + 0.25, ref: v });
     for (const w of state.wells) out.push({ tags: ['well'], x: w.cell.x + 0.5, y: w.cell.y + 0.5, ref: w });
     const p = state.player;

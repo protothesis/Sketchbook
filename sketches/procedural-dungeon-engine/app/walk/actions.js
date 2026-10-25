@@ -428,6 +428,7 @@
     const unravelled = W.banishGhostsIn(ids); // none, normally: a haunted room can't be rerolled
     const despawned = W.despawnObjectsIn(ids); // crates, blocks and vessels sitting in them; one in your hands stays
     W.dropPixiesIn(ids);
+    W.dropCreepersIn(ids);
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
     if (run.closed) run.closed = run.closed.filter((id) => exp.connections[id]);

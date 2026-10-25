@@ -581,6 +581,49 @@ the room's imprint, which is fixed once the room exists). Where ghosts drift
 afterwards is run state: their positions are saved with the run, and each
 room's roll happens once (`run.ghostSeen`).
 
+## Playtest notes, 2026-10-24 (shadow creepers, second pass)
+
+Addressed the same day.
+
+- **The drain range was far too big** (3 cells): now a quarter of that.
+- **A solid disc, not a ring** (like the lamp's halo, not the edge of its
+  reach), shown much less: only while it hunts. Tiers of drain show as
+  bands (overlapping discs), handy as a dev view too (`debugBands`).
+- **Afraid, it shouldn't drain at all.** Bold, a very faint, short pull.
+  Hunting dashes hit harder.
+
+## Playtest notes, 2026-10-24 (shadow creepers, first pass)
+
+Addressed the same day.
+
+- **Structure:** creepers should be their own type, not hang off ghosts.
+  We don't yet know the full cast (hostile, helpful like pixies, neutral),
+  so no class hierarchy yet: the shared parts (getting around, the light
+  check) moved into a creature kit (`creatures.js`) that each type uses,
+  alongside the shared off-screen markers (`markers.js`) and screen
+  effects (`fx.js` profiles).
+- **It hovered like a ghost.** It should be a living thing on the ground:
+  now it hops (dip, arc, landing squish, nervous pause) with a contact
+  shadow, and walks around every block.
+- **Jittery, bouncing between spots.** It re-picked the best shadow every
+  third of a second and flipped sides. Now it keeps its spot until your
+  light reaches it or you walk off past its edge.
+- **It moved closer to get into a new shadow.** It's afraid of the light,
+  so closer is always bad while the lamp is lit: it now only waits at or
+  past the light's edge and never steps inside it, and only comes closer
+  because the light shrank (bold too, with a thinner margin).
+- **Hunting, it homed straight in and stopped on you.** Now it skitters
+  about you in quick hops, and winds up and dashes at you now and then.
+  You can outwalk it; its dashes catch you up in bursts.
+- **Too fast by default.** Its hops average well under walking pace.
+- **Blinks:** keep them, add quick doubles and triples, and a burst when
+  your light hits it (it flinches, blinks off the daze and dashes away).
+- **No sign it was draining you, or how far it reaches.** A thin ring on
+  the floor at its drain range (hidden while it's afraid, faint when bold,
+  full when hunting), and a subtle red glitch that fades in as it drains
+  you and stacks with several. The glitch is the ghost's post-process made
+  general: each creature kind has a profile (tear, split, static, tint).
+
 ## Playtest notes, 2026-10-22 (after the voice-memo build)
 
 Addressed the same day unless marked later.

@@ -287,6 +287,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       if (gc) W.addGhost({ id: gid, x: gc.x + 0.5, y: gc.y + 0.5 });
     }
     W.spawnPixie(space); // and a pixie (also rolled once, ever)
+    W.spawnCreeper(space); // and a shadow creeper (the same)
 
     const spaceKey = space.id + ':' + space.seed;
     for (const item of DP.loot(space)) {
@@ -484,6 +485,7 @@ void main() {
     W.resetHeld();
     W.clearGhosts();
     W.clearPixies();
+    W.clearCreepers();
     W.clearMarks();
     for (const id of Array.from(state.spaces.keys())) disposeSpace(id);
     for (const rec of state.dying) world.remove(rec.group);

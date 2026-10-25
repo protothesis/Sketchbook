@@ -123,6 +123,7 @@
     staminaHit: 0.15,
     staminaDrain: 0.2,        // per second in a ghost's reach: a full meter lasts 5 s
     staminaDarkDrain: 0.08,   // per second in the dark: about 12 s
+    staminaCreeperDrain: 0.2, // per second in a bold or hunting shadow creeper's strongest band, times the band's share (creepers.js); adds to the dark's
     staminaRegen: 0.12,       // per second
     staminaRegenDelay: 1.5,
     // Halls (setpieces at waypoints): sizes, and what they always hold.
@@ -151,6 +152,9 @@
     ghostImprintBase: 0.1,
     ghostImprintBoost: 0.3,
     ghostChanceMax: 0.4,
+    // Shadow creepers: about 1 room in 12, from depth 2.
+    creeperChance: 1 / 12,
+    creeperMinDepth: 2,
   };
 
   /** Items lying in a space: [{ id, kind: 'shard'|'key'|'chalk'|'jar', cell }]. */
@@ -407,6 +411,16 @@
     const r = DE.deriveRng(space.seed, 'pixie');
     const roll = r.next(), pick = r.next();
     if (roll >= RULES.pixieChance) return null;
+    const cells = space.cells.slice().sort();
+    return DE.parseKey(cells[Math.floor(pick * cells.length)]);
+  }
+
+  /** Does a shadow creeper start in this space? Returns its cell, or null. */
+  function creeperSpawn(space) {
+    if (!space.parentId || space.depth < RULES.creeperMinDepth) return null;
+    const r = DE.deriveRng(space.seed, 'creeper');
+    const roll = r.next(), pick = r.next();
+    if (roll >= RULES.creeperChance) return null;
     const cells = space.cells.slice().sort();
     return DE.parseKey(cells[Math.floor(pick * cells.length)]);
   }
@@ -720,5 +734,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, vessel, sigil, well, props, ghostSpawn, pixieSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, vessel, sigil, well, props, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -14,7 +14,7 @@
 // from file://), which play.html loads in this order:
 //
 //   saves, core, world, figure, items, restore, waystones, lamp, actions,
-//   input, ecology, wells, pixies, ghosts, fx, hud, game, main
+//   input, ecology, creatures, markers, wells, pixies, ghosts, creepers, fx, hud, game, main
 //
 // (saves.js is the odd one out: it knows nothing of W, and hangs its save
 // slots on DungeonPlay.saves, so it can move to another client.)
@@ -109,6 +109,8 @@
     ghosts: [],          // live hash ghosts (see ghosts.js)
     ghostTouch: false,   // in a ghost's reach this frame (drains psychic stamina)
     pixies: [],          // free pixies (see pixies.js)
+    creepers: [],        // shadow creepers (see creepers.js)
+    creeperDrain: 0,     // 0..1: the nearest creeper's pull on your psychic stamina this frame
     wells: [],           // entropy wells in built rooms (see wells.js)
     sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
     buff: 0,             // powered sigils: +1 entropy max each
@@ -117,7 +119,8 @@
     variant: {},         // per group slot: the variant in use (e.g. chalk colour)
     expanded: null,      // the group slot whose picker is open
     marks: [],           // chalk marks drawn in the world
-    fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9 }, // screen effects, 0..1
+    fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9, // screen effects, 0..1
+      levels: {} },      // per effect profile (FX_PROFILES in fx.js): how strong it is right now
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
     hold: { sig: null, t: 0, spent: false }, // holding E on a hold action (actions.js)
@@ -158,6 +161,8 @@
       ley: null,     // ley lines made so far: [["spaceId:seed", "spaceId:seed"]] (null: not yet built, see waystones.js)
       pixieSeen: [], // "spaceId:seed:pixie" for rooms whose pixie roll has happened
       pixies: [],    // free pixies' saved positions: [{ id, x, y }]
+      creeperSeen: [], // "spaceId:seed:creeper" for rooms whose creeper roll has happened
+      creepers: [],  // shadow creepers' saved positions: [{ id, x, y }]
       wells: {},     // entropy wells drawn on: { "spaceId:seed:well": { level, drawn } } (see wells.js)
       jars: [],      // jars carried: [{ id, holds }] (holds: null, 'pixie' or 'entropy', one charge)
       jarSeq: 0,
@@ -237,6 +242,7 @@
     state.run.marks = state.marks.map((m) => ({ sx: m.sx, sy: m.sy, color: m.color, rot: m.rot, base: m.base }));
     state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
     state.run.pixies = state.pixies.map((o) => ({ id: o.id, x: +o.x.toFixed(3), y: +o.y.toFixed(3) }));
+    state.run.creepers = state.creepers.map((c) => ({ id: c.id, x: +c.x.toFixed(3), y: +c.y.toFixed(3) }));
     return SAVES.make({ record: state.exp, run: state.run, player: { x: p.x, y: p.y, angle: p.angle }, runVersion: RUN_VERSION });
   }
   /** The resume slot (every second, on pagehide, on quitting to the menu). */

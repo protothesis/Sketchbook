@@ -544,6 +544,45 @@ All notable changes to this sketch are logged here, per
     after every other solid thing.
   - A door to a **lost path** shimmers: a rippling violet glow strongest at
     the panel's edges, on both faces, and sparks drifting up its sides.
+- 2026-10-24: **Shadow creepers** (`app/walk/creepers.js`, tunables in
+  `CREEPER`): a small dark capsule with one emissive red eye that always
+  faces you. About 1 room in 12 from depth 2 (`RULES.creeperChance`,
+  rolled once per room, saved like pixies). It hops (a dip, an arc, a
+  landing squish, a nervous pause) with a contact shadow, and walks around
+  every block. Its mood follows your lamp: *afraid* (over two charges) it
+  waits just past the light's edge and never steps inside, scrambling back
+  if you walk at it, and flinching, blinking and dashing off if your light
+  hits it; *bold* (the last two charges) the same with a thinner margin,
+  a little inside the edge; *hunting* (under one charge, or the lamp
+  covered or out) it skitters about you and now and then winds up and
+  dashes at you. It keeps its waiting spot until that stops being at the
+  edge, so it doesn't jitter between shadows. Lurking, it hops slowly
+  between dark corners and keeps off steady light (an ecology rule). Bold
+  or hunting, it drains psychic stamina like the dark, in bands
+  (`CREEPER.bands`, × `RULES.staminaCreeperDrain`, in its sight): bold, a
+  faint pull within 0.55 cells; hunting, full within 0.45 and about half
+  out to 0.75, and half again harder while it dashes. Afraid, it doesn't
+  drain. Creepers stack. While it hunts, its bands show as faint solid
+  discs on the floor (flaring as it dashes; `CREEPER.debugBands` shows
+  them in every mood that has bands), and a subtle red glitch eases in. Its hops average well under walking pace. Blinks:
+  every 2-6 s, sometimes a quick double or triple. New: `lightRadius()` in
+  `lamp.js` (the floor ring's radius, growing to 4.5 cells at a full lamp).
+- 2026-10-24: **A creature kit** (`app/walk/creatures.js`): the movement
+  and light helpers ghosts had (half-cell paths, drifting, `lightReaches`)
+  moved out of `ghosts.js` for every creature type to use. A creature can
+  set its own `tall` (blocks above that are in its way; 0 for walkers) and
+  `radius`, and `lightReaches` takes an optional range.
+- 2026-10-24: **Screen effect profiles** (`fx.js`, `FX_PROFILES`): the
+  ghost's glitch post-process is now general. Each creature kind has a
+  profile (tear, colour split, static, scanlines, tint, glow) and a level;
+  levels add up, so effects mix and stack. Ghosts look as before; creepers
+  use a much subtler red one that eases in (`fxToward`).
+- 2026-10-24: **Off-screen markers for any creature** (`app/walk/markers.js`):
+  the ghosts' ring markers moved out of `ghosts.js` into a module each
+  creature kind registers with (which ones want a marker, the icon, the
+  ring's colour). Ghosts look as before; shadow creepers get a dark disc
+  with the red eye (it blinks there too), ringed red while stalking and
+  faint red while lurking in your room or the next.
 
 ### Fixed
 
