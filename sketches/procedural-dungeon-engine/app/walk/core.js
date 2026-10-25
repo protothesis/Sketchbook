@@ -110,7 +110,6 @@
     ghostTouch: false,   // in a ghost's reach this frame (drains psychic stamina)
     pixies: [],          // free pixies (see pixies.js)
     wells: [],           // entropy wells in built rooms (see wells.js)
-    jars: [],            // jars standing in the world (see "Inventory")
     sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
     buff: 0,             // powered sigils: +1 entropy max each
     buffReady: false,    // false until the first sigil pass (no caption on load)
@@ -161,7 +160,6 @@
       pixies: [],    // free pixies' saved positions: [{ id, x, y }]
       wells: {},     // entropy wells drawn on: { "spaceId:seed:well": { level, drawn } } (see wells.js)
       jars: [],      // jars carried: [{ id, holds }] (holds: null, 'pixie' or 'entropy', one charge)
-      placedJars: [], // jars set down: [{ id, sx, sy, holds }] (half-cell coordinates)
       jarSeq: 0,
       chalks: { silver: 3 }, // chalk carried, by colour, in strokes (3 per stick)
       marks: [],             // chalk marks drawn: [{ sx, sy, color, rot, base }] (quarter-tiles)
@@ -237,7 +235,6 @@
   function snapshot() {
     const p = state.player;
     state.run.marks = state.marks.map((m) => ({ sx: m.sx, sy: m.sy, color: m.color, rot: m.rot, base: m.base }));
-    state.run.placedJars = state.jars.map((j) => ({ id: j.id, sx: j.sx, sy: j.sy, holds: j.holds }));
     state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
     state.run.pixies = state.pixies.map((o) => ({ id: o.id, x: +o.x.toFixed(3), y: +o.y.toFixed(3) }));
     return SAVES.make({ record: state.exp, run: state.run, player: { x: p.x, y: p.y, angle: p.angle }, runVersion: RUN_VERSION });
@@ -259,7 +256,7 @@
   // save slots over (game.js). Saves are stamped with DP.saves.BUILD now:
   // when `run` changes shape, bump that instead of adding a step here.
   // Saves from before versioning count as version 0.
-  const RUN_VERSION = 5;
+  const RUN_VERSION = 6;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
@@ -293,6 +290,15 @@
       run.objects = Object.assign({}, run.pushed || {});
       delete run.pushed;
       run.despawned = run.despawned || [];
+    },
+    // 5 -> 6: jars are a tool (in the bag) now, and what stood in the world
+    // is a vessel: a jar set down becomes a vessel holding what it held.
+    (run) => {
+      run.objects = run.objects || {};
+      for (const j of run.placedJars || []) {
+        run.objects['vessel:' + j.id] = { kind: 'vessel', sx: j.sx, sy: j.sy, holds: j.holds || null, n: j.holds ? 1 : 0 };
+      }
+      delete run.placedJars;
     },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */

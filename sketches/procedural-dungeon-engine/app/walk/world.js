@@ -295,7 +295,6 @@ if (vDitherEW > 0.7 && south > 0.2) {
       if (item.kind === 'key' && !state.run.keyRooms.includes(spaceKey)) continue;
       if (item.kind === 'thread' && state.run.thread) continue; // found once, kept for good
       const tile = tileAt[DE.key(item.cell.x, item.cell.y)];
-      if (W.ITEMS[item.kind].cls === 'object') { W.spawnObject(item, key, tile); continue; }
       const mesh = W.itemMesh(item, key);
       mesh.position.set((item.cell.x + 0.5) * S, W.ITEMS[item.kind].cls === 'pickup' ? 0.45 * S : 0, (item.cell.y + 0.5) * S);
       group.add(mesh);
@@ -478,7 +477,6 @@ void main() {
   function buildWorld() {
     W.clearGhosts();
     W.clearPixies();
-    W.clearJars();
     W.clearMarks();
     for (const id of Array.from(state.spaces.keys())) disposeSpace(id);
     for (const rec of state.dying) world.remove(rec.group);

@@ -18,6 +18,10 @@
   // line). A line that can't be done right now has no key and reads muted.
   const promptF = $('prompt-f') || document.createElement('button');
 
+  /** "crate", "block", "vessel" (with what's in it). */
+  const objName = (b) => (b.crate ? 'crate' : !b.vessel ? 'block'
+    : !b.n ? 'empty vessel' : `vessel (${b.n} ${b.holds === 'pixie' ? (b.n === 1 ? 'pixie' : 'pixies') : (b.n === 1 ? 'charge' : 'charges')})`);
+
   /** E's line for the focused thing: { text, cls }. */
   function eLine(near) {
     const run = state.run;
@@ -30,14 +34,12 @@
       case 'wake': return { cls: 'collapse', text: `wake the waystone · ${chargeText(RULES.waystoneCharges)}` };
       case 'travel': return { cls: 'collapse', text: 'travel from the waystone · a shard per ley line' };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
-      case 'lift': return { cls: 'jar', text: `grab the ${near.block.crate ? 'crate' : 'block'}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
+      case 'lift': return { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
       case 'grabbed': return { cls: 'jar', text: state.grab && state.grab.moved
-        ? `pushing or pulling the ${near.block.crate ? 'crate' : 'block'} · let go of E to let go`
-        : `holding the ${near.block.crate ? 'crate' : 'block'} · let go of E to lift it · move to push or pull` };
-      case 'setblock': return near.spot ? { cls: 'jar', text: `set the ${near.block.crate ? 'crate' : 'block'} down` }
+        ? `pushing or pulling the ${objName(near.block)} · let go of E to let go`
+        : `holding the ${objName(near.block)} · let go of E to lift it · move to push or pull` };
+      case 'setblock': return near.spot ? { cls: 'jar', text: `set the ${objName(near.block)} down` }
         : { cls: 'blocked', text: `no room to set it down here${near.block.spaceId !== state.exp.registry[DE.key(Math.floor(state.player.x), Math.floor(state.player.y))] ? ' · it belongs in its own room' : ''}` };
-      case 'setjar': return near.spot ? { cls: 'jar', text: `set the ${W.jarName(near.jar)} down` } : { cls: 'blocked', text: 'no room to set the jar down here' };
-      case 'pickjar': return { cls: 'jar', text: `lift the ${W.jarName(near.jar)}` };
       case 'climb': return { text: state.push.key ? 'climbing…' : 'climb (or push into it)' };
       case 'open': return { text: state.push.key ? 'opening…' : 'open the door (or push)' };
       case 'retrace': {
@@ -71,6 +73,9 @@
       return near.full ? { cls: 'jar', text: 'swipe the well into the jar · 1 charge' }
         : { cls: 'blocked', text: 'the well isn\'t full enough to fill a jar' };
     }
+    if (near.action === 'deposit') return { cls: 'jar', text: `pour the jar into the vessel (${near.vessel.n}/${RULES.vesselCapacity})` };
+    if (near.action === 'withdraw') return { cls: 'jar', text: `take ${near.vessel.holds === 'pixie' ? 'a pixie' : 'a charge'} out of the vessel into the jar` };
+    if (near.action === 'vesselno') return { cls: 'blocked', text: near.vessel.n >= RULES.vesselCapacity ? 'the vessel is full' : 'the vessel holds something else' };
     if (near.action === 'pour') return { cls: 'collapse', text: `pour the jar into your lamp · 1 charge${W.lampRoom() < 0.99 ? ' (your lamp takes only ' + chargeText(W.lampRoom()) + ')' : ''}` };
     if (near.action === 'unlock') return { cls: 'lock', text: `unlock the door · 1 of ${state.run.keys} key${state.run.keys === 1 ? '' : 's'}` };
     return null;

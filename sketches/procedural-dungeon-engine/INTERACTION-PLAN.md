@@ -147,4 +147,5 @@ unit up.
 2. [x] Grab / push / pull / climb, the lift hold and its animation.
 3. [x] Objects across rooms (run save v5).
 4. [x] Stacking.
-5. [ ] Jars and vessels.
+5. [x] Jars and vessels. (Run save v6. Sigils: +1 entropy max per
+       pixie in a vessel on them.)

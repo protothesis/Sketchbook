@@ -35,10 +35,15 @@
     // Doorstones: open a door in any bare wall. About as rare as keys turn out.
     chalkChance: 0.045,
     chalkMinDepth: 2,
-    // A jar holds one thing: a pixie, or a charge of entropy swiped from a
-    // full well. A sigil tile powers up with a pixie jar.
+    // A jar (a tool: walk over it) holds one thing: a pixie, or a charge of
+    // entropy swiped from a full well. A vessel (carried, set down in the
+    // world) holds up to vesselCapacity of one kind; a vessel of pixies on a
+    // sigil tile powers it, +1 entropy max per pixie.
     jarChance: 1 / 15,
     jarMinDepth: 1,
+    vesselChance: 1 / 10,
+    vesselMinDepth: 1,
+    vesselCapacity: 3,
     // Pixies: small winged lights, drifting in about 1 room in 10. Catch one
     // in an empty jar; ghosts are drawn to them, free or jarred.
     pixieChance: 0.1,
@@ -184,6 +189,35 @@
       items.push({ id: 'thread', kind: 'thread', cell: spots[(n + 5) % spots.length] });
     }
     return items;
+  }
+
+  /**
+   * A vessel standing in this space, if it has one: { sx, sy } (a
+   * half-cell). Seeded on its own stream; never on a door, item, sigil,
+   * well or waystone cell, a prop, or a push block's start or mark.
+   */
+  function vessel(space) {
+    if (!space.parentId || space.deadEnd || space.depth < RULES.vesselMinDepth) return null;
+    const r = DE.deriveRng(space.seed, 'vessel');
+    if (!r.chance(RULES.vesselChance)) return null;
+    const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
+    for (const f of [sigil(space), well(space), waystone(space)]) if (f) avoid.add(DE.key(f.cell.x, f.cell.y));
+    const solid = new Set();
+    for (const b of props(space).blocks) {
+      for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) solid.add(x + ',' + y);
+    }
+    for (const pb of pushBlocks(space)) { solid.add(pb.from.sx + ',' + pb.from.sy); solid.add(pb.to.sx + ',' + pb.to.sy); }
+    const free = [];
+    for (const k of space.cells.slice().sort()) {
+      if (avoid.has(k)) continue;
+      const c = DE.parseKey(k);
+      for (let q = 0; q < 4; q++) {
+        const sx = c.x * 2 + (q & 1), sy = c.y * 2 + (q >> 1);
+        if (!solid.has(sx + ',' + sy)) free.push({ sx, sy });
+      }
+    }
+    return free.length ? free[Math.floor(r.next() * free.length)] : null;
   }
 
   /**
@@ -686,5 +720,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, sigil, well, props, ghostSpawn, pixieSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, vessel, sigil, well, props, ghostSpawn, pixieSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

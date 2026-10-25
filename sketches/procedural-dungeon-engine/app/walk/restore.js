@@ -80,9 +80,9 @@
   // ---------------------------------------------------------------------------
   // Loose objects (crates and push blocks) live in one run-wide list,
   // run.objects, by key ("spaceId:seed:id" of the room they came from) ->
-  // { kind: 'crate' | 'block', sx, sy, lv (how many units up it rests:
-  // 0 on the floor, up to 2 stacked), and for a block color, to, done,
-  // paid }. A room adds its own the first time it's built, and builds
+  // { kind: 'crate' | 'block' | 'vessel', sx, sy, lv (how many units up it rests:
+  // 0 on the floor, up to 2 stacked), for a block color, to, done, paid,
+  // and for a vessel holds (null, 'pixie', 'entropy') and n }. A room adds its own the first time it's built, and builds
   // whichever objects sit in its cells now, wherever they came from. An
   // object sitting in a room that's rerolled is despawned (run.despawned);
   // one in your hands, or set down anywhere else, stays. A push block's
@@ -94,6 +94,8 @@
     const id = (x) => space.id + ':' + space.seed + ':' + x;
     for (const pb of DP.pushBlocks(space)) out.push({ key: id(pb.id), kind: 'block', from: pb.from, to: pb.to, color: pb.color });
     for (const pr of DP.props(space).blocks) if (pr.crate) out.push({ key: id(pr.crate.id), kind: 'crate', from: pr.crate });
+    const v = DP.vessel(space);
+    if (v) out.push({ key: id('vessel'), kind: 'vessel', from: v });
     return out;
   }
 
@@ -109,6 +111,7 @@
       if (!o && run.despawned.some((x) => x.key === d.key)) continue;
       const rec = o || { sx: d.from.sx, sy: d.from.sy };
       rec.kind = d.kind;
+      if (d.kind === 'vessel') { rec.holds = rec.holds || null; rec.n = rec.n || 0; }
       if (d.kind === 'block') {
         Object.assign(rec, { color: d.color, to: d.to, done: !!rec.done });
         // (Saves from before blocks could move: a block home has paid.)
@@ -129,7 +132,7 @@
     const o = state.run.objects[b.key];
     if (!o) return;
     o.sx = b.sx; o.sy = b.sy; o.lv = Math.round(b.base / UNIT);
-    if (!b.crate) { o.done = b.done; o.paid = +b.paid.toFixed(4); }
+    if (b.vessel) { o.holds = b.holds || null; o.n = b.n || 0; } else if (!b.crate) { o.done = b.done; o.paid = +b.paid.toFixed(4); }
   }
 
   /** The mark materials of push blocks whose home room is built, by key (a block may be elsewhere). */
@@ -156,6 +159,7 @@
     for (const key in state.run.objects) {
       const o = state.run.objects[key];
       if (!o.kind || key === state.run.carry || state.exp.registry[cellOf(o.sx, o.sy)] !== space.id) continue;
+      if (o.lv == null) o.lv = propLevel(space, o.sx, o.sy); // a jar set down before v6, maybe on a block
       const b = makeObject(key, o);
       inRoom(b, space.id, rec);
       b.mesh.position.set((b.x0 + 0.25) * S, b.base * S, (b.y0 + 0.25) * S);
@@ -164,8 +168,26 @@
     }
   }
 
+  /** The level a one-unit prop block under half-cell (sx, sy) lifts something to (0 or 1). */
+  function propLevel(space, sx, sy) {
+    const r = sub(sx, sy);
+    return DP.props(space).blocks.some((b) => b.units === 1 && !b.crate &&
+      b.x0 <= r.x0 && b.x1 >= r.x1 && b.y0 <= r.y0 && b.y1 >= r.y1) ? 1 : 0;
+  }
+
+  const VESSEL_H = 0.4; // cells: a vessel stands this tall (it can't be climbed or stacked on)
+
   /** A built object (mesh and collision box) from its run.objects entry. Not yet in any room. */
   function makeObject(key, o) {
+    if (o.kind === 'vessel') {
+      const base = (o.lv || 0) * UNIT;
+      const b = {
+        key, push: true, vessel: true, jar: true, units: 1, base, top: base + VESSEL_H,
+        holds: o.holds || null, n: o.n || 0, mesh: W.makeVesselMesh(), slide: null,
+      };
+      place(b, o.sx, o.sy);
+      return b;
+    }
     const mesh = new THREE.Group();
     let body, bodyMat = null, col = null;
     if (o.kind === 'crate') body = new THREE.Mesh(pushGeo.block, crateMat);
@@ -219,7 +241,7 @@
       if (key === run.carry) continue;
       const room = state.exp.registry[cellOf(o.sx, o.sy)];
       if (!ids.has(room)) continue;
-      run.despawned.push({ key, kind: o.kind, color: o.color || null, room, at: Math.round(run.walked) });
+      run.despawned.push({ key, kind: o.kind, color: o.color || null, holds: o.holds || null, n: o.n || 0, room, at: Math.round(run.walked) });
       if (run.despawned.length > 200) run.despawned.shift();
       delete run.objects[key];
       n++;
@@ -298,7 +320,7 @@
     b.mesh.traverse((o) => { o.castShadow = false; });
     b.anim = { t: 0, up: true, from: b.mesh.position.clone() };
     hold(b);
-    W.showCaption(b.crate ? 'you lift the crate' : 'you lift the block');
+    W.showCaption(b.crate ? 'you lift the crate' : b.vessel ? 'you lift the vessel' : 'you lift the block');
     savePlayer();
   }
 
@@ -349,7 +371,7 @@
     state.run.carry = null;
     place(b, spot.sx, spot.sy);
     b.base = spot.base || 0;
-    b.top = b.base + UNIT;
+    b.top = b.base + (b.vessel ? VESSEL_H : UNIT);
     // From over your head back down to where it rests, in an arc. It now
     // belongs to the room it's set down in.
     const from = b.mesh.getWorldPosition(new THREE.Vector3());
@@ -359,7 +381,7 @@
     b.mesh.rotation.set(0, 0, 0);
     b.anim = { t: 0, up: false, from };
     indexBlock(b, true);
-    if (!b.crate && spot.sx === b.to.sx && spot.sy === b.to.sy) settle(b, true);
+    if (b.to && spot.sx === b.to.sx && spot.sy === b.to.sy) settle(b, true);
     saveObject(b);
     W.refreshHotbar();
     savePlayer();
@@ -400,7 +422,7 @@
     b.slide = { from, t: 0 };
     const home = state.spaces.get(b.spaceId);
     b.tile = (home && home.tileAt[cellOf(sx, sy)]) || b.tile;
-    if (!b.crate) {
+    if (b.to) {
       if (sx === b.to.sx && sy === b.to.sy) settle(b, true);
       else if (b.done) unsettle(b);
     }
@@ -609,7 +631,7 @@
     });
   }
 
-  Object.assign(W, { SCONCE_Y, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
+  Object.assign(W, { SCONCE_Y, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
     setDownBlock, updatePushBlocks, addSconces,
     sconceNear, lightSconce, snuffSconce, updateSconces });
 })(window);

@@ -47,7 +47,7 @@
     const out = [];
     for (const g of state.ghosts) out.push({ tags: ['ghost'], x: g.x, y: g.y, ref: g });
     for (const o of state.pixies) out.push({ tags: ['pixie'], x: o.x, y: o.y, ref: o });
-    for (const j of state.jars) if (j.holds === 'pixie') out.push({ tags: ['pixie', 'jarred'], x: j.sx / 2 + 0.25, y: j.sy / 2 + 0.25, ref: j });
+    for (const v of state.pushBlocks) if (v.vessel && !v.carried && v.holds === 'pixie' && v.n) out.push({ tags: ['pixie', 'jarred'], x: v.sx / 2 + 0.25, y: v.sy / 2 + 0.25, ref: v });
     for (const w of state.wells) out.push({ tags: ['well'], x: w.cell.x + 0.5, y: w.cell.y + 0.5, ref: w });
     const p = state.player;
     out.push({ tags: W.lampOn() ? ['player', 'light', 'lamp'] : ['player'], x: p.x, y: p.y, ref: p });

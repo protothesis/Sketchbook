@@ -9,7 +9,7 @@
     DITHER_RADIUS, CAM_OFFSET, LANTERN, renderer, scene, camera, state, world, freshRun,
     isLockedNow, save, savePlayer, dither, doorMat, buildWorld, easeOut, easeInOut,
     applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions, placeLamp,
-    canClimb, climb, addMarkToWorld, addJarToWorld, useNear, collectPickups, updateItems,
+    canClimb, climb, addMarkToWorld, useNear, collectPickups, updateItems,
     updatePushBlocks, updateSconces, noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
     addGhost, lightReaches, updateGhosts, tmpV2, post, fxPerf, renderFrame, updatePrompt,
     showCaption, stanceEl, refreshHud, notice, REFRESH_HINT, drawMinimap, drawBigMap,
@@ -266,14 +266,9 @@
     const savedPlayer = same ? saved.player : null;
     const savedGhosts = state.run.ghosts || [];
     const savedPixies = state.run.pixies || [];
-    const savedJars = state.run.placedJars || [];
     const savedMarks = state.run.marks || [];
     state.buffReady = false;
     buildWorld();
-    for (const j of savedJars) {
-      if (exp.registry[DE.key(Math.floor(j.sx / 2), Math.floor(j.sy / 2))] !== undefined) addJarToWorld(j);
-      else if (j.holds === 'pixie') noteUnmade('jar:' + j.id, null); // its room is gone: the jar broke
-    }
     for (const m of savedMarks) {
       if (exp.registry[DE.key(Math.floor(m.sx / 2), Math.floor(m.sy / 2))] !== undefined) addMarkToWorld(m);
     }
@@ -369,7 +364,7 @@
   global.addEventListener('pagehide', savePlayer);
 
   // Handy from the console.
-  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern, renderFrame, fxPerf, post, addJarToWorld });
+  Object.assign(DP, { state, scene, camera, renderer, openDoor, doorNear, act, showRecord, addGhost, lightReaches, lantern, renderFrame, fxPerf, post });
 
   Object.assign(W, { newExpedition, setExpedition, snapCamera, spawnPoint });
 })(window);

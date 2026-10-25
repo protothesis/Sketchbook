@@ -36,8 +36,9 @@
   //           the hotbar and used up with F (a key too: F at a locked door),
   //           never put back. Collected, it goes in the bag, never into
   //           your hands.
-  //   object  a thing in the world as itself. It stands where it spawned;
-  //           E lifts it and F sets it down again, with whatever's inside.
+  //   object  a thing in the world as itself (crates, push blocks and
+  //           vessels, restore.js). Never in the bag: hold E to lift it,
+  //           E again to set it down.
   //
   // `take(run, item)` adds a pickup or tool to the run and returns its caption.
   const ITEMS = {
@@ -80,7 +81,13 @@
         return 'a spool of thread · now a path lost to a faint can be retraced, at its door';
       },
     },
-    jar: { cls: 'object' },
+    jar: {
+      cls: 'tool',
+      take(run) {
+        run.jars.push({ id: 'j' + (++run.jarSeq), holds: null });
+        return `an empty jar · ${W.verbF} swipes it: catch a pixie, fill it at a well, pour it into a vessel`;
+      },
+    },
   };
 
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
@@ -116,6 +123,10 @@
       flat.rotation.x = -Math.PI / 2;
       flat.position.y = 0.025 * S;
       mesh.add(flat);
+    } else if (item.kind === 'jar') {
+      const jar = makeJarMesh();
+      jar.scale.setScalar(0.55);
+      mesh.add(jar);
     } else if (item.kind === 'thread') {
       const spool = new THREE.Mesh(threadGeo, threadMat); // a coil, standing on its edge
       mesh.add(spool);
@@ -141,7 +152,6 @@
       it.mesh.rotation.y = state.time * 1.6;
       it.mesh.position.y = (0.45 + 0.05 * Math.sin(state.time * 2.4 + it.item.cell.x)) * S;
     }
-    for (const j of state.jars) if (j.tile) j.mesh.scale.setScalar(Math.max(0.001, j.tile.scale.x));
   }
 
   /** Walking into a pickup or over a tool collects it. */
@@ -161,24 +171,6 @@
     W.showCaption(ITEMS[it.item.kind].take(state.run, it.item));
     savePlayer();
     W.refreshHud();
-  }
-
-  /**
-   * An object from a room's loot is placed in the world once, the first
-   * time its room is built, and from then on it's like any jar you set down
-   * (saved with the run, shattered if its room collapses).
-   */
-  function spawnObject(item, key, tile) {
-    state.run.collected.push(key); // out of the loot, into the world
-    const start = parseInt(DE.hash(key, 'quarter').slice(-2), 16) % 4;
-    let q = null;
-    for (let i = 0; i < 4 && !q; i++) {
-      const n = (start + i) % 4, sx = item.cell.x * 2 + (n & 1), sy = item.cell.y * 2 + (n >> 1);
-      if (!inDoorMouth(sx, sy)) q = { sx, sy };
-    }
-    if (!q) q = { sx: item.cell.x * 2, sy: item.cell.y * 2 };
-    const rec = addJarToWorld({ id: 'j' + (++state.run.jarSeq), sx: q.sx, sy: q.sy, holds: null });
-    rec.tile = tile; // rises with the floor as the room assembles
   }
 
   /**
@@ -553,37 +545,6 @@
     return g;
   }
 
-  function addJarToWorld(j) {
-    const x0 = j.sx / 2, y0 = j.sy / 2;
-    // Standing on the floor, or on a one-unit block filling its quarter.
-    let base = 0;
-    for (const bl of state.blockAt.get(DE.key(Math.floor(x0), Math.floor(y0))) || []) {
-      if (!bl.jar && bl.units === 1 && bl.x0 <= x0 && bl.x1 >= x0 + 0.5 && bl.y0 <= y0 && bl.y1 >= y0 + 0.5) base = Math.max(base, bl.top);
-    }
-    const block = { x0, y0, x1: x0 + 0.5, y1: y0 + 0.5, top: base + JAR_H, base, units: 1, jar: true, spaceId: 'jar:' + j.id };
-    const k = DE.key(Math.floor(x0), Math.floor(y0));
-    const list = state.blockAt.get(k) || [];
-    list.push(block);
-    state.blockAt.set(k, list);
-    const mesh = makeJarMesh();
-    mesh.position.set((x0 + 0.25) * S, base * S, (y0 + 0.25) * S);
-    scene.add(mesh);
-    const rec = { id: j.id, sx: j.sx, sy: j.sy, holds: j.holds || null, block, mesh };
-    mesh.userData.liquid.visible = rec.holds === 'entropy';
-    state.jars.push(rec);
-    return rec;
-  }
-
-  function removeJarFromWorld(rec) {
-    scene.remove(rec.mesh);
-    const k = DE.key(Math.floor(rec.block.x0), Math.floor(rec.block.y0));
-    const keep = (state.blockAt.get(k) || []).filter((b) => b !== rec.block);
-    if (keep.length) state.blockAt.set(k, keep); else state.blockAt.delete(k);
-    state.jars = state.jars.filter((o) => o !== rec);
-  }
-
-  function clearJars() { for (const r of state.jars.slice()) removeJarFromWorld(r); }
-
   /** Is quarter (sx, sy) in a doorway's mouth (one of the two quarters at a door's edge)? */
   function inDoorMouth(sx, sy) {
     const cx = Math.floor(sx / 2), cy = Math.floor(sy / 2);
@@ -597,69 +558,11 @@
     return false;
   }
 
-  /** Where F would set a jar down: the nearest free quarter ahead, not in a doorway's mouth or on you. */
-  function jarSpot(p) {
-    return quarterAhead(p, (sx, sy, base) => {
-      if (inDoorMouth(sx, sy)) return false;
-      const x0 = sx / 2, y0 = sy / 2;
-      const ex = Math.max(x0 - p.x, 0, p.x - x0 - 0.5), ey = Math.max(y0 - p.y, 0, p.y - y0 - 0.5);
-      return !(Math.hypot(ex, ey) < RADIUS + 0.02 && Math.abs(base - p.z) < JAR_H); // not onto the figure
-    });
-  }
-
-  /** A placed jar right in front of you. */
-  function jarAhead(p) {
-    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
-    let best = null, bestD = RADIUS + 0.32;
-    for (const j of state.jars) {
-      const b = j.block;
-      const qx = THREE.MathUtils.clamp(p.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(p.y, b.y0, b.y1);
-      const d = Math.hypot(qx - p.x, qy - p.y);
-      if (d >= bestD) continue;
-      const cx = (b.x0 + b.x1) / 2 - p.x, cy = (b.y0 + b.y1) / 2 - p.y;
-      if ((cx * fx + cy * fy) / (Math.hypot(cx, cy) || 1) < 0.2) continue;
-      bestD = d;
-      best = j;
-    }
-    return best;
-  }
-
-  /** E at a placed jar: lift it (with whatever's inside) into the hotbar. */
-  function jarNear(p) {
-    const j = jarAhead(p);
-    return j ? { action: 'pickjar', jar: j } : null;
-  }
-
-  function pickUpJar(rec) {
-    removeJarFromWorld(rec);
-    state.run.jars.push({ id: rec.id, holds: rec.holds });
-    state.sel = 'jar';
-    state.variant.jar = rec.holds || 'empty'; // this jar is the one in your hands
-    W.showCaption(rec.holds === 'pixie' ? 'you lift the jar · a pixie glows inside'
-      : rec.holds === 'entropy' ? 'you lift the jar · entropy swirls inside' : 'you lift the jar');
-    savePlayer();
-    W.refreshHud();
-  }
-
   /** The jar in your hands (one of the selected group's), or null. */
   function heldJar() {
     const slot = selectedSlot();
     if (!slot || slot.kind !== 'jar' || state.carry) return null;
     return state.run.jars.find((j) => (j.holds || null) === slot.cur.holds) || null;
-  }
-
-  /** E with a jar in your hands: where it would go down, and which jar. */
-  function jarSetDown(p) {
-    const slot = selectedSlot();
-    if (!slot || slot.kind !== 'jar') return null;
-    return { action: 'setjar', spot: jarSpot(p), jar: heldJar() };
-  }
-  function setDownJar(near) {
-    const run = state.run, j = near.jar;
-    run.jars = run.jars.filter((o) => o !== j);
-    addJarToWorld({ id: j.id, sx: near.spot.sx, sy: near.spot.sy, holds: j.holds });
-    savePlayer();
-    W.refreshHud();
   }
 
   /** What F would do right now with the selected item, or null. */
@@ -677,6 +580,14 @@
       // entropy in it, it pours into your lamp. Anything else: a swipe at air.
       const jar = heldJar();
       if (!jar) return null;
+      // A vessel right in front of you comes first: pour the jar in, or take one out.
+      const v = vesselAhead(p);
+      if (v) {
+        const room = !v.n || (v.holds === jar.holds && v.n < RULES.vesselCapacity);
+        if (jar.holds && room) return { action: 'deposit', slot, jar, vessel: v };
+        if (!jar.holds && v.n) return { action: 'withdraw', slot, jar, vessel: v };
+        return { action: 'vesselno', slot, jar, vessel: v };
+      }
       if (jar.holds === 'entropy') return { action: 'pour', slot, jar };
       if (jar.holds) return { action: 'swipe', slot, jar };
       const px = W.pixieNear(p);
@@ -710,6 +621,10 @@
         if (u.full) W.scoopWell(u.well, u.jar);
         else W.showCaption('the well isn\'t full enough to fill a jar');
       } else if (u.action === 'pour') pourJar(u.jar);
+      else if (u.action === 'deposit') deposit(u.jar, u.vessel);
+      else if (u.action === 'withdraw') withdraw(u.jar, u.vessel);
+      else if (u.action === 'vesselno') W.showCaption(u.vessel.n >= RULES.vesselCapacity ? 'the vessel is full'
+        : `the vessel holds ${u.vessel.holds === 'pixie' ? 'pixies' : 'entropy'}, not ${u.jar.holds === 'pixie' ? 'a pixie' : 'entropy'}`);
       state.variant.jar = u.jar.holds || 'empty'; // the same jar stays in your hands
       savePlayer();
       W.refreshHud();
@@ -723,6 +638,78 @@
     }
     savePlayer();
     W.refreshHud();
+  }
+
+  // --- vessels: loose objects (restore.js) that hold up to
+  // RULES.vesselCapacity of one kind. A jar pours into one, or takes one out.
+
+  /** A vessel right in front of you, in reach (your level or one up). */
+  function vesselAhead(p) {
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle), mine = Math.round(p.z / W.UNIT);
+    let best = null, bestD = RADIUS + 0.35;
+    for (const b of state.pushBlocks) {
+      if (!b.vessel || b.carried) continue;
+      const lv = Math.round((b.base || 0) / W.UNIT);
+      if (lv !== mine && lv !== mine + 1) continue;
+      const qx = THREE.MathUtils.clamp(p.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(p.y, b.y0, b.y1);
+      const d = Math.hypot(qx - p.x, qy - p.y);
+      const cx = (b.x0 + b.x1) / 2 - p.x, cy = (b.y0 + b.y1) / 2 - p.y;
+      if (d >= bestD || (cx * fx + cy * fy) / (Math.hypot(cx, cy) || 1) < 0.3) continue;
+      bestD = d;
+      best = b;
+    }
+    return best;
+  }
+  const holdsName = (h, n) => (h === 'pixie' ? (n === 1 ? 'a pixie' : n + ' pixies') : (n === 1 ? 'a charge of entropy' : n + ' charges of entropy'));
+  function deposit(jar, v) {
+    v.holds = jar.holds;
+    v.n = (v.n || 0) + 1;
+    jar.holds = null;
+    W.saveObject(v);
+    W.showCaption(`you pour the jar into the vessel · it holds ${holdsName(v.holds, v.n)}`);
+  }
+  function withdraw(jar, v) {
+    jar.holds = v.holds;
+    v.n--;
+    if (!v.n) v.holds = null;
+    W.saveObject(v);
+    W.showCaption(v.n ? `you take ${jar.holds === 'pixie' ? 'a pixie' : 'a charge'} back out · ${holdsName(v.holds, v.n)} left` : 'you take the last one out · the vessel is empty');
+  }
+
+  // A vessel: a squat clay urn. What's inside shows at its mouth: pixies
+  // flit above it, entropy glows in it, brighter the more there is.
+  const vesselGeo = {
+    body: new THREE.CylinderGeometry(0.15 * S, 0.12 * S, 0.24 * S, 16),
+    belly: new THREE.SphereGeometry(0.17 * S, 16, 10),
+    rim: new THREE.TorusGeometry(0.1 * S, 0.025 * S, 6, 16),
+    mouth: new THREE.CircleGeometry(0.09 * S, 16),
+  };
+  const clayMat = new THREE.MeshLambertMaterial({ color: 0x8a5a3c, emissive: 0x1a0c06 });
+  function makeVesselMesh() {
+    const g = new THREE.Group();
+    const belly = new THREE.Mesh(vesselGeo.belly, clayMat);
+    belly.scale.y = 0.85;
+    belly.position.y = 0.15 * S;
+    const neck = new THREE.Mesh(vesselGeo.body, clayMat);
+    neck.scale.set(0.75, 0.5, 0.75);
+    neck.position.y = 0.3 * S;
+    const rim = new THREE.Mesh(vesselGeo.rim, clayMat);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.36 * S;
+    for (const m of [belly, neck, rim]) { m.castShadow = true; m.receiveShadow = true; }
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0x9a63ff, transparent: true, opacity: 0, depthWrite: false });
+    const glow = new THREE.Mesh(vesselGeo.mouth, glowMat);
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.y = 0.355 * S;
+    g.add(belly, neck, rim, glow);
+    g.userData.glow = glow;
+    g.userData.wisps = [0, 1, 2].map(() => {
+      const w = new THREE.Mesh(jarGeo.wisp, jarWispMat);
+      w.visible = false;
+      g.add(w);
+      return w;
+    });
+    return g;
   }
 
   /** Pour a jar of entropy into your lamp: all or nothing, the jar is empty after either way. */
@@ -753,11 +740,12 @@
       m = state.carry.mesh;
       m.scale.setScalar(1);
       m.position.set(0, 0.6 * S, 0);
-    } else if (slot.kind === 'jar') {
+    } else if (slot.kind === 'jar') { // a tool now: in the left hand, at its size on the floor
       m = makeJarMesh();
       m.userData.wisps.forEach((w, i) => { w.visible = i === 0 && slot.cur.holds === 'pixie'; w.position.y = 0.15 * S; });
       m.userData.liquid.visible = slot.cur.holds === 'entropy';
-      m.position.set(0, 0.64 * S, 0);
+      m.scale.setScalar(0.55);
+      m.position.set(-0.17 * S, 0.2 * S, 0.1 * S);
     } else {
       const item = slot.kind === 'chalk' ? { kind: 'chalk', color: slot.cur.color } : { kind: slot.kind };
       m = itemMesh(item, 'held');
@@ -783,20 +771,6 @@
     preview.position.set((b.x0 + b.x1) / 2 * S, (b.z0 + b.z1) / 2 * S, (b.y0 + b.y1) / 2 * S);
   }
 
-  /** Jars in rooms about to collapse shatter; a pixie inside is lost with the room. */
-  function shatterJarsIn(ids) {
-    const reg = state.exp.registry;
-    let pixies = 0, n = 0;
-    for (const j of state.jars.slice()) {
-      const room = reg[DE.key(Math.floor(j.block.x0), Math.floor(j.block.y0))];
-      if (!ids.has(room)) continue;
-      if (j.holds === 'pixie') pixies++;
-      n++;
-      removeJarFromWorld(j);
-    }
-    return { n, pixies };
-  }
-
   /** A ghost undone by a collapse. Kept as a tally and a short log; no use yet. */
   function noteUnmade(ghostId, room) {
     const u = state.run.unmade;
@@ -806,8 +780,9 @@
   }
 
   /**
-   * A pixie in a jar flits about inside it. With a ghost drawn close (within
-   * JAR_FLARE cells), it flares: bigger, and beating at the glass.
+   * Pixies in a vessel flit above its mouth. With a ghost drawn close
+   * (within JAR_FLARE cells), they flare: bigger, and faster. Entropy in
+   * one glows at the mouth, brighter the more there is.
    */
   const JAR_FLARE = 2.5;
   const SWIPE = 0.32; // s: the held jar sweeps forward and down, and back
@@ -817,14 +792,17 @@
     const sw = k >= 0 && k < 1 ? Math.sin(k * Math.PI) : 0;
     heldRig.rotation.x = sw * 1.1;
     heldRig.position.z = sw * 0.12 * S;
-    for (const j of state.jars) {
-      const jx = j.sx / 2 + 0.25, jy = j.sy / 2 + 0.25;
-      const near = j.holds === 'pixie' ? state.ghosts.reduce((m, g) => Math.min(m, Math.hypot(g.x - jx, g.y - jy)), Infinity) : Infinity;
+    for (const v of state.pushBlocks) {
+      if (!v.vessel) continue;
+      const ud = v.mesh.userData, n = v.n || 0;
+      ud.glow.material.opacity = v.holds === 'entropy' ? (0.35 + 0.2 * n) * (0.85 + 0.15 * Math.sin(state.time * 3 + v.sx)) : 0;
+      const vx = (v.x0 + v.x1) / 2, vy = (v.y0 + v.y1) / 2;
+      const near = v.holds === 'pixie' && !v.carried ? state.ghosts.reduce((m, g) => Math.min(m, Math.hypot(g.x - vx, g.y - vy)), Infinity) : Infinity;
       const flare = Math.max(0, 1 - near / JAR_FLARE);
-      j.mesh.userData.wisps.forEach((w, i) => {
-        w.visible = i === 0 && j.holds === 'pixie';
-        const a = state.time * (2.6 + 5 * flare) + i * 2.1, r = 0.06 + 0.04 * flare;
-        w.position.set(Math.cos(a) * r * S, (0.15 + Math.sin(a * 1.7) * 0.05) * S, Math.sin(a * 1.3) * r * S);
+      ud.wisps.forEach((w, i) => {
+        w.visible = v.holds === 'pixie' && i < n;
+        const a = state.time * (2.6 + 5 * flare) + i * 2.1, r = 0.07 + 0.05 * flare;
+        w.position.set(Math.cos(a) * r * S, (0.45 + Math.sin(a * 1.7) * 0.05) * S, Math.sin(a * 1.3) * r * S);
         w.scale.setScalar(1 + flare * (0.7 + 0.3 * Math.sin(state.time * 14)));
       });
     }
@@ -1010,18 +988,20 @@
   }
 
   /**
-   * A sigil takes up to four jars, one per quarter of its tile. A pixie jar
-   * on it wakes it fully (stage 3; stages 1-2 were for jars of 1-2 ghosts),
-   * and every pixie jar on it is +1 entropy max.
+   * A sigil takes up to four vessels, one per quarter of its tile. A vessel
+   * of pixies on it wakes it fully (stage 3; stages 1-2 were for jars of
+   * 1-2 ghosts), and every pixie in them is +1 entropy max.
    */
   function updateSigils(dt) {
     let powered = 0;
     const lit = [];
     for (const sg of state.sigils.values()) {
       let stage = 0, full = 0;
-      for (const j of state.jars) {
-        if (Math.floor(j.sx / 2) !== sg.cell.x || Math.floor(j.sy / 2) !== sg.cell.y) continue;
-        if (j.holds === 'pixie') { stage = 3; full++; }
+      for (const v of state.pushBlocks) {
+        if (!v.vessel || v.carried || v.holds !== 'pixie' || !v.n) continue;
+        if (Math.floor(v.sx / 2) !== sg.cell.x || Math.floor(v.sy / 2) !== sg.cell.y) continue;
+        stage = 3;
+        full += v.n;
       }
       if (sg.stage !== -1 && stage > sg.stage && stage < 3) W.showCaption(`the sigil stirs · stage ${stage} of 3`);
       if (sg.stage === -1) sg.fx.full = full; // no flash for sigils already lit when the run loads
@@ -1058,8 +1038,8 @@
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, heldRig, quarterAhead, jarSetDown, setDownJar, updatePreview, JAR_H, heldJar, jarName, lampRoom, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
-    removeMarkFromWorld, clearMarks, markNear, wipeMarksIn, addJarToWorld,
-    clearJars, jarNear, pickUpJar, useNear, useSelected, shatterJarsIn, noteUnmade,
+    takeItem, selectedSlot, heldRig, quarterAhead, updatePreview, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
+    useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });
 })(window);

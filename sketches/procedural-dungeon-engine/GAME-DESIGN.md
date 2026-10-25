@@ -572,10 +572,11 @@ restore before they flow.
 ## 14. Pixies, jars and the ecology
 
 **Pixies** are a second creature: small winged lights. Catch one in an
-empty jar; a jar holds one. A pixie jar does two things, and you have to
-choose:
+empty jar (a tool; a jar holds one), then pour it into a **vessel**, a
+clay urn you carry and set down (up to 3 of one kind). A vessel of pixies
+does two things, and you have to choose:
 
-- **On a sigil** it powers the sigil (+1 entropy max).
+- **On a sigil** it powers the sigil (+1 entropy max per pixie).
 - **Anywhere else** it draws ghosts. They drift over and circle it, wander
   off and come back, like moths. It's how you move a ghost out of your
   way, never how you get rid of one.

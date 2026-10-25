@@ -295,9 +295,9 @@ Determinism).
     one to collect it. They live on the hotbar and work only in your hand,
     with F, used up and never put back. Collected, a tool goes in the
     bag; what's in your hands never changes by itself.
-  - **Objects** (jars) are things in the world as themselves. A jar from a
-    room's loot is already standing there when the room appears. E lifts
-    it, and E sets it down again, with whatever's inside.
+  - **Objects** (crates, push blocks, vessels) are things in the world as
+    themselves, never in the bag. Hold E to grab one and lift it, E to set
+    it down again, with whatever's inside.
   - **Creatures** (ghosts, pixies) aren't items: they move on their own,
     by the ecology's rules.
 - **The hotbar.** Tools and objects sit in slots at the bottom of the
@@ -347,7 +347,9 @@ Determinism).
   and down, always, so you see it): an empty jar catches a pixie within
   0.75 cells, or scoops a full well you're standing in; a jar of entropy
   pours into your lamp, all or nothing (it tops the lamp up to its max,
-  and the jar is empty after either way). A swipe at nothing just swipes.
+  and the jar is empty after either way). At a **vessel** right in front
+  of you, F pours the jar into it, or (an empty jar) takes one back out.
+  A swipe at nothing just swipes.
 - **Chalk marks.** Your own markup, drawn in the world, and it shows up on
   the maps. Chalk comes in five colours, each with its own simple mark:
   silver arrow (it points the way you faced), gold triangle, crimson
@@ -358,28 +360,32 @@ Determinism).
   ahead), wipes it. You start with one silver stick,
   and more turn up in about 1 room in 13 (seeded colour). Marks persist with
   the run, and vanish with a room you collapse.
-- **Jars.** Standing in about 1 room in 15 (depth 1+). With a jar in your
-  hands (its slot selected), E sets it down on the nearest free
-  quarter-tile in front of you (a faint box shows where): on the floor, or
-  on top of a one-unit block. While a jar is in your hands, that's all E
-  does; select the lantern slot to interact with other things. It's a
-  small solid thing you can't climb or stand on, and ghosts float over it.
-  If there's no room, the prompt says so. An F that can't do anything
-  gives the hotbar a little shake. E lifts a jar again, with whatever's
-  inside. A jar holds **one pixie**. A collapse shatters any jar in the
-  branch, and a pixie in it is lost.
+- **Jars** are a tool: one lies in about 1 room in 15 (depth 1+); walk
+  over it to collect it, empty. It lives in the bag and is shown in your
+  left hand when selected. A jar holds **one thing**, a pixie or a charge
+  of entropy, and never goes back into the world.
+- **Vessels.** A squat clay urn standing in about 1 room in 10 (depth
+  1+; seeded on its own `'vessel'` stream, on a free half-cell). An object,
+  like a crate: hold E to grab and lift it, carry it anywhere, set it down
+  (stacked too, but nothing stacks on a vessel, and you can't climb it;
+  ghosts float over it). It holds **up to 3 of one kind** (pixies, or
+  charges of entropy): F with a full jar pours it in, F with an empty jar
+  takes one back out (a jar of the other kind, or a full vessel, says
+  so). Pixies in it flit above its mouth; entropy glows in it, brighter
+  the more there is. A vessel sitting in a rerolled room is despawned
+  with what's inside (`run.despawned`).
 - **Pixies.** Small violet lights with fluttering wings, in about 1 room
   in 10 (depth 1+; rolled once per room, like ghosts). They drift about
   their room, flee ghosts that come close, and linger at entropy wells.
   With an empty jar in your hands, swipe it (F) within 0.75 cells of one
-  to catch it (the prompt says so). Set a pixie jar down and ghosts are drawn to it: they drift
+  to catch it (the prompt says so). Pour it into a vessel and ghosts are drawn to it: they drift
   over and circle it, wander off, and come back. A ghost that comes within
   2.5 cells of a pixie (same room) is **held** by it: it drops whatever it
   was doing, even watching or following you ("a hash ghost turns from you
   to the pixie"), and circles it closely. You can see the pull: the ghost
   leans toward it and its bits spin faster, and a jarred pixie flares and
-  beats at the glass as a ghost comes near. That's how you move a ghost
-  out of your way, or peel one off you. Or put the jar on a sigil.
+  flits faster as a ghost comes near. That's how you move a ghost out of
+  your way, or peel one off you. Or set the vessel on a sigil.
   Pixies flee your lit lamp (you have to corner them, or cover the lamp
   and creep up).
 - **The ecology.** How creatures treat each other comes from one small
@@ -395,14 +401,15 @@ Determinism).
   [`EMERGENCE.md`](EMERGENCE.md).
 - **Sigil tiles.** A glowing hex on the floor of about 1 room in 25 (depth
   1+, not the smallest rooms; never under blocks). It takes up to **four
-  jars**, one per quarter of its tile. A **pixie jar** on it wakes it: a
+  vessels**, one per quarter of its tile. A **vessel of pixies** on it wakes it: a
   flash, a big beam with a bright core, a ring of energy radiating across
   the floor, and a violet light (no shadows). (Stages 1 and 2, for jars of
   one or two ghosts, are still in the code but nothing reaches them now.)
 
-  Every pixie jar on it is **+1 entropy max** (so up to +4 per sigil) for
-  as long as it stays there. Lifting a jar takes its +1 away. That's the
-  trade-off: a pixie jar powers a sigil, or it moves ghosts, not both.
+  Every pixie in the vessels on it is **+1 entropy max** (up to 3 per
+  vessel) for as long as it stays there. Lifting the vessel takes it away.
+  That's the trade-off: a vessel of pixies powers a sigil, or it moves
+  ghosts, not both.
   Sigils stack. If the max drops while you're above it, you keep the extra
   charges until spent but can't gain more.
 - **Doorstones.** A rare find (about 1 room in 33, from depth 2). Select
@@ -456,7 +463,8 @@ you pass out and wake at your last waystone.
 | Held item | the selected tool in the figure's left hand, tilted up; a jar or block over its head; all at their true size, and casting no shadow; nothing for the lantern slot | |
 | Jar | a small glass jar with a dark lid; a pixie flits inside when it holds one | a solid half-cell |
 | Pixie | a small pale-violet sphere with two fluttering translucent wings and a soft additive glow, bobbing about 0.6 cells up | no light of its own (cost) |
-| Jars | glass, a dark lid; a pixie flits inside, a jar of entropy holds a glowing violet liquid; held over the head, the swipe tips it forward and down over 0.32 s | |
+| Jars | glass, a dark lid; a pixie flits inside, a jar of entropy holds a glowing violet liquid; on the floor and in the left hand at 0.55×; the swipe tips it forward and down over 0.32 s | |
+| Vessel | a squat clay urn 0.4 cells tall; pixies (up to 3) flit above its mouth, entropy glows violet in it (brighter per charge) | |
 | Entropy well | a dark stone ring on the floor around an additive pool, violet (surge) or teal (trickle); the pool's size and brightness are its level; motes rise slowly, and fast while you drink. Surge: 8 notches in the rim, lit by level (drinking) or by cooldown progress (recharging, the next one pulsing), and a burst (pool overshoot, motes thrown high, a big ripple) when it comes back. Trickle: a small stone spout 1.1 cells up; a drop forms under it over the 10 s wait, then falls every 0.7 s while refilling (every 4 s when full), each with a ripple (`WELL` in `wells.js`) | on the maps a small circle, filled by its level |
 | Stamina | a thin pink bar under the lamp's meter, redder below 35%, pulsing while something drains it; a dark violet vignette closes in as it falls | |
 | Beyond a lock | a faint gold warmth on the floor, "beyond a lock" in the caption, a gold outline on the maps | |
@@ -518,10 +526,11 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), needs the thread; let go: push the door (the path turns to corruption); unchosen: dim at the next faint, fade at the one after |
 | Thread | 1 room in 20 at depth 3+ (`threadChance`, `threadMinDepth`, last on the loot stream); a pickup; kept for the rest of the run, through faints; 🧵 under the lamp meter |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
-| Jars | 1/15 of rooms at depth 1+ (seeded, drawn after chalk); one pixie each (`jarCapacity`); F sets one on the free quarter-tile nearest a point 0.47 cells ahead, among the quarters in front (floor or the top of a one-unit block; not through a wall, not onto taller blocks or other jars, not in the two quarters at a doorway's mouth); 0.38 cells tall |
+| Jars | 1/15 of rooms at depth 1+ (seeded on the loot stream, drawn after chalk); a tool, collected by walking over it; holds one pixie or one charge |
+| Vessels | 1/10 of rooms at depth 1+, not dead ends (`vesselChance`, own `'vessel'` stream; a free half-cell, off doors, items, sigils, wells, waystones, props and push blocks' starts and marks); up to 3 of one kind (`vesselCapacity`); a loose object in `run.objects` |
 | Chalk | start with one silver stick (3 strokes); 1/12 of rooms at depth 1+ hold a stick (seeded on the loot stream, after jars; colour from silver/gold/crimson/teal/violet); F draws on the nearest free quarter ahead (floor or a one-unit block's top, not under a jar, not on another mark); E facing a mark within 0.7 cells wipes it |
 | Beyond a lock | `DP.pastLock(exp, space)`: the room's entry door was generated locked (`lockedBySeed`, ignoring that it's since been opened) |
-| Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 jars (one per quarter); a pixie jar wakes it fully; each pixie jar on it = entropy max +1 (up to +4), stacking across sigils |
+| Sigils | about 1/25 of rooms (seeded `'sigil'` stream; depth 1+, 4+ cells, not on door or item cells; blocks keep off it); up to 4 vessels (one per quarter); a vessel of pixies wakes it fully; each pixie in them = entropy max +1, stacking across sigils |
 | Persistence | two slots (`saves.js`): resume (every 1 s, on pagehide, on quitting to the menu) and checkpoint (waystones); each stamped with the build, and a save from another build isn't loaded; the record is mirrored to the chart view's key, but the chart view's edits don't flow back |
 | Menu | Esc or the Menu button: Resume, Quit to main menu (writes the resume slot only); title: Continue, New run, Import / Export save |
 

@@ -433,6 +433,15 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **Jars and vessels** (playtest round 1, step 5). A jar is a
+  plain tool now: walk over one to collect it; it lives in the bag (shown
+  in your left hand) and never goes back into the world, so a jar in
+  hand no longer ties up E. **Vessels** are new: a clay urn in about 1
+  room in 10, a loose object like a crate (grab, lift, carry, set down,
+  stack), holding up to 3 of one kind. F with a full jar pours it in; F
+  with an empty jar takes one out. A vessel of pixies draws ghosts and
+  powers a sigil (+1 entropy max per pixie). **Run save v6**: jars that
+  were set down become vessels holding what they held.
 - 2026-10-24: **Stacking** (playtest round 1, step 4). Set a carried
   block down at your level or one up, on the floor or on top of anything
   that covers the whole half-cell (a fixed block, another crate); stacks

@@ -7,7 +7,7 @@
   const W = global.DungeonPlay.walk;
   const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, PUSH_TIME, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
-    climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn,
+    climb, removeMarkFromWorld, markNear, wipeMarksIn,
     liftNear, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
 
   // ---------------------------------------------------------------------------
@@ -103,15 +103,14 @@
     const blk = (b, z0, z1) => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, z0, z1 });
     switch (near.action) {
       case 'wake': case 'travel': return blk(near.stone.ws, 0, near.stone.ws.top || 2.5 * UNIT);
-      case 'pickjar': return blk(near.jar.block, near.jar.block.base, near.jar.block.top);
       case 'erase': {
         const m = near.mark, z = m.base || 0;
         return { x0: m.sx / 2, y0: m.sy / 2, x1: m.sx / 2 + 0.5, y1: m.sy / 2 + 0.5, z0: z, z1: z + 0.02 };
       }
       case 'lift': return blk(near.block, 0, near.block.top);
-      case 'setblock': case 'setjar': {
+      case 'setblock': {
         if (!near.spot) return null;
-        const z = near.spot.base || 0, h = near.action === 'setjar' ? W.JAR_H : UNIT;
+        const z = near.spot.base || 0, h = near.block.top - (near.block.base || 0);
         return { x0: near.spot.sx / 2, y0: near.spot.sy / 2, x1: near.spot.sx / 2 + 0.5, y1: near.spot.sy / 2 + 0.5, z0: z, z1: z + h };
       }
       case 'light': case 'snuff': return pad(near.sconce.x, near.sconce.y, 0.08, W.SCONCE_Y - 0.1, W.SCONCE_Y + 0.12);
@@ -137,17 +136,15 @@
       near.box = focusBox(Object.assign({}, near, { action: 'lift' }));
       return near;
     }
-    // An object in your hands (a block, or a jar selected): E only sets it down.
+    // An object in your hands (a block, a crate, a vessel): E only sets it down.
     if (state.carry) {
       const spot = W.blockSpot(p), near = { action: 'setblock', spot, block: state.carry };
       near.box = focusBox(near);
       return near;
     }
-    const jar = W.jarSetDown(p);
-    if (jar) { jar.box = focusBox(jar); return jar; }
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     let best = null, bestScore = Infinity;
-    for (const find of [doorNear, waystoneNear, jarNear, markNear, liftNear, sconceNear, blockNear]) {
+    for (const find of [doorNear, waystoneNear, markNear, liftNear, sconceNear, blockNear]) {
       const near = find(p);
       if (!near) continue;
       const b = near.box = focusBox(near);
@@ -166,20 +163,20 @@
 
   const HOLD = {
     open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME,
-    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7, lift: 0.4, pickjar: 0.35,
+    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7, lift: 0.4,
     collapse: 1.0, retrace: 1.0, // they cost entropy and can't be undone
   };
   // The ring's icon, per action.
   const HOLD_ICON = {
     open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
-    wake: '◆', collapse: '↻', retrace: '↺', lift: '✋', pickjar: '⇡',
+    wake: '◆', collapse: '↻', retrace: '↺', lift: '✋',
   };
 
   /** Can't be done right now: a tap says why instead of filling a ring. */
   function blockedNow(near) {
     const a = near.action;
     return a === 'locked' || (a === 'collapse' && (near.haunted || !near.affordable)) ||
-      (a === 'retrace' && (!near.thread || !near.affordable)) || ((a === 'setblock' || a === 'setjar') && !near.spot);
+      (a === 'retrace' && (!near.thread || !near.affordable)) || (a === 'setblock' && !near.spot);
   }
   /** Seconds E must be held for this action, or 0 for a tap. */
   const holdTime = (near) => (blockedNow(near) ? 0 : HOLD[near.action] || 0);
@@ -260,12 +257,11 @@
     if (near.action === 'wake') { wakeWaystone(near.stone); return; }
     if (near.action === 'travel') { travelFrom(near.stone); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
-    if (near.action === 'pickjar') { pickUpJar(near.jar); return; }
     if (near.action === 'lift') { W.startGrab(near.block); return; } // the ring filled: you have hold of it
     if (near.action === 'grabbed') return;
-    if (near.action === 'setblock' || near.action === 'setjar') {
+    if (near.action === 'setblock') {
       if (!near.spot) { W.showCaption('no room to set it down here'); return; }
-      if (near.action === 'setblock') W.setDownBlock(near.spot); else W.setDownJar(near);
+      W.setDownBlock(near.spot);
       return;
     }
     if (near.action === 'light') { lightSconce(near.sconce); return; }
@@ -430,8 +426,7 @@
     if (!loopsIntoParent) touched.delete(near.space.id);
 
     const unravelled = W.banishGhostsIn(ids); // none, normally: a haunted room can't be rerolled
-    const shattered = shatterJarsIn(ids);
-    const despawned = W.despawnObjectsIn(ids); // crates and blocks sitting in them; one in your hands stays
+    const despawned = W.despawnObjectsIn(ids); // crates, blocks and vessels sitting in them; one in your hands stays
     W.dropPixiesIn(ids);
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
@@ -451,7 +446,6 @@
 
     W.showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}` +
       (unravelled ? ` · ${unravelled === 1 ? 'a hash ghost comes undone' : unravelled + ' hash ghosts come undone'}` : '') +
-      (shattered.n ? ` · ${shattered.n === 1 ? 'a jar shatters' : shattered.n + ' jars shatter'}` : '') +
       (despawned ? ` · ${despawned === 1 ? 'a block goes with it' : despawned + ' blocks go with it'}` : ''));
     save();
     savePlayer();
