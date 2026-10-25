@@ -440,6 +440,8 @@ All notable changes to this sketch are logged here, per
   A carried block goes down right where you lifted it if you haven't
   moved, otherwise straight ahead along your facing. Travelling from a
   waystone takes a hold.
+- 2026-10-24: **Known issue:** dragging grabbed blocks is still glitchy
+  in play; a thorough investigation is needed (GitHub issue #26).
 - 2026-10-24: **Fixed:** fainting while carrying a block left it in your
   hands and duplicated it when the checkpoint rebuilt the world. A
   rebuild now starts with empty hands; what you carry comes from the run.
