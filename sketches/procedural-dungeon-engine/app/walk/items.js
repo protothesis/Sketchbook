@@ -34,7 +34,8 @@
   //           Counted on the HUD, never on the hotbar.
   //   tool    lies flat on the floor; walk over it to collect it. Carried on
   //           the hotbar and used up with F (a key too: F at a locked door),
-  //           never put back. Collected with empty hands, it's in them.
+  //           never put back. Collected, it goes in the bag, never into
+  //           your hands.
   //   object  a thing in the world as itself. It stands where it spawned;
   //           E lifts it and F sets it down again, with whatever's inside.
   //
@@ -53,7 +54,6 @@
       take(run) {
         run.keys++;
         run.keysFound++;
-        equipIfEmpty('key');
         return `a key · ${W.verbF} with it in hand at a locked door unlocks it`;
       },
     },
@@ -61,7 +61,6 @@
       cls: 'tool',
       take(run) {
         run.doorstones++;
-        equipIfEmpty('doorstone');
         return `a doorstone · ${W.verbF} at a bare wall to open a door there`;
       },
     },
@@ -71,7 +70,6 @@
         const color = item.color || 'silver';
         run.chalks[color] = (run.chalks[color] || 0) + STROKES;
         run.chalkFound++;
-        if (equipIfEmpty('chalk')) state.variant.chalk = color;
         return `a stick of ${color} chalk · ${W.verbF} to draw a ${CHALK[color].name}`;
       },
     },
@@ -84,14 +82,6 @@
     },
     jar: { cls: 'object' },
   };
-
-  /** A tool just collected goes into your hands if they're empty (the lantern slot), else the bag. */
-  function equipIfEmpty(key) {
-    const cur = selectedSlot();
-    if (cur && cur.key !== 'lantern') return false;
-    state.sel = key;
-    return true;
-  }
 
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
   const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
@@ -755,23 +745,24 @@
     heldRig.clear();
     if (!sig) return;
     let m;
-    if (state.carry) { // a block over your head, a little smaller than life
+    if (state.carry) { // a block over your head
       m = state.carry.mesh;
-      m.scale.setScalar(0.7);
+      m.scale.setScalar(1);
       m.position.set(0, 0.6 * S, 0);
     } else if (slot.kind === 'jar') {
       m = makeJarMesh();
       m.userData.wisps.forEach((w, i) => { w.visible = i === 0 && slot.cur.holds === 'pixie'; w.position.y = 0.15 * S; });
       m.userData.liquid.visible = slot.cur.holds === 'entropy';
-      m.scale.setScalar(0.8);
       m.position.set(0, 0.64 * S, 0);
     } else {
       const item = slot.kind === 'chalk' ? { kind: 'chalk', color: slot.cur.color } : { kind: slot.kind };
       m = itemMesh(item, 'held');
       m.rotation.set(-0.5, 0, 0.35); // tilted up in the hand
-      m.scale.setScalar(1.5); // a little larger than life, so it reads at the camera's distance
       m.position.set(-0.15 * S, 0.27 * S, 0.1 * S);
     }
+    // What you hold casts no shadow: the lantern is right beside it, and
+    // its shadow would sweep the whole room.
+    m.traverse((o) => { o.castShadow = false; });
     heldRig.add(m);
   }
 

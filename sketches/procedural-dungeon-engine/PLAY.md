@@ -273,9 +273,8 @@ Determinism).
     slots.
   - **Tools** (chalk, doorstones, keys) lie flat on the floor. Walk over
     one to collect it. They live on the hotbar and work only in your hand,
-    with F, used up and never put back. Collected with empty hands (the
-    lantern slot), a tool goes straight into them; holding something
-    else, it goes in the bag.
+    with F, used up and never put back. Collected, a tool goes in the
+    bag; what's in your hands never changes by itself.
   - **Objects** (jars) are things in the world as themselves. A jar from a
     room's loot is already standing there when the room appears. E lifts
     it, and E sets it down again, with whatever's inside.
@@ -307,7 +306,8 @@ Determinism).
   with the action's icon in it; the key on the prompt fills too, and the
   line ends "· hold". Let go early and nothing happens; one hold, one
   action. Opening, closing and unlocking a door take 0.35 s (as long as
-  pushing into one, which fills the same ring), wiping chalk 0.4 s,
+  pushing into one, which fills the same ring; pushing a block or climbing
+  shows no ring), wiping chalk 0.4 s,
   lighting or snuffing a sconce 0.5 s, waking a waystone 0.7 s, and the
   ones that cost entropy and can't be undone, rerolling a room or
   retracing a lost path, 1 s. Taking a tool, lifting a jar, climbing,
@@ -431,7 +431,7 @@ you pass out and wake at your last waystone.
 | Chalk | sticks in five colours; on the hotbar, one group slot: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
 | Hotbar | bottom-centre slots: the lantern (always slot 1: empty hands), ⚱ jars (one group slot: empty, a violet pip for a pixie or a violet bar for entropy, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
-| Held item | the selected tool in the figure's left hand, tilted up, 1.5× size; a jar over its head (0.8×); nothing for the lantern slot | |
+| Held item | the selected tool in the figure's left hand, tilted up; a jar or block over its head; all at their true size, and casting no shadow; nothing for the lantern slot | |
 | Jar | a small glass jar with a dark lid; a pixie flits inside when it holds one | a solid half-cell |
 | Pixie | a small pale-violet sphere with two fluttering translucent wings and a soft additive glow, bobbing about 0.6 cells up | no light of its own (cost) |
 | Jars | glass, a dark lid; a pixie flits inside, a jar of entropy holds a glowing violet liquid; held over the head, the swipe tips it forward and down over 0.32 s | |

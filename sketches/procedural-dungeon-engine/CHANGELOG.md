@@ -433,6 +433,11 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **After the first playtest of the cleanup** (plan in
+  `INTERACTION-PLAN.md`, "Playtest round 1"): held items are their true
+  size and cast no shadow; a new item goes into the bag and never into
+  your hands; pushing a block or climbing no longer shows the hold ring
+  (doors still do).
 - 2026-10-24: **The jar swipe** (interaction cleanup, step 6). F swipes
   the jar in your hands, and the swipe always plays: an empty jar catches
   a pixie close by, or scoops a full entropy well you're standing in (with

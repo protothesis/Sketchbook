@@ -211,9 +211,9 @@
       const need = holdTime(near);
       h.ring = { v: Math.min(1, h.t / need), icon: HOLD_ICON[near.action] || '' };
       if (h.t >= need) { h.spent = true; act(near); }
-    } else if (state.push.key && state.push.t > 0) {
-      const door = near && /^(open|reopen|surface|retrace)$/.test(near.action);
-      h.ring = { v: Math.min(1, state.push.t / PUSH_TIME), icon: door ? HOLD_ICON.open : '' };
+    } else if (state.push.key && state.push.t > 0 && !/^(push|block):/.test(state.push.key)) {
+      // Pushing into a door fills the same ring; pushing a block or climbing doesn't.
+      h.ring = { v: Math.min(1, state.push.t / PUSH_TIME), icon: HOLD_ICON.open };
     }
     return h.ring;
   }

@@ -180,6 +180,7 @@
     state.run.carry = null;
     place(b, spot.sx, spot.sy);
     b.mesh.scale.setScalar(1);
+    b.mesh.traverse((o) => { o.castShadow = true; });
     b.mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
     b.group.add(b.mesh);
     indexBlock(b, true);

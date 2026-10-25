@@ -96,3 +96,55 @@ built; this file is the plan until it's all in.
        fills only from a full well; with an empty jar in hand a well waits
        for the swipe instead of pouring into the lamp. Snapshots now carry
        `runVersion` and migrate on load, so this didn't need a new BUILD.)
+
+## Playtest round 1 (2026-10-24)
+
+Agreed after the first play of steps 1-6.
+
+**Quick fixes**
+- Held items at their true size (as on the ground), and casting no
+  shadows.
+- A new item goes into the bag, never into your hands.
+- No ring for pushing a block or climbing; doors keep theirs.
+
+**Grab, push, pull, climb.** One rule for every movable block (crates
+and restoration blocks alike):
+- Walking into one climbs it, like any one-unit block.
+- Hold E: when the ring fills you **grab** it. Let go without moving and
+  you **lift** it (with a short arc up over your head; setting down arcs
+  back). Move while holding and you **push or pull** it along that axis;
+  let go while moving and you just let go of it.
+- Hands full (carrying): no climbing or jumping.
+
+**Objects travel.** Crates, blocks and vessels can leave their room:
+one run-wide list of loose objects (`run.objects`), placed by cell. A
+room adds its crates and blocks to it the first time it's built. What
+happens to an object depends on where it is now, never where it came
+from: one held, carried or in the bag, or set down in another room,
+stays when its origin room is rerolled. One sitting in a room when that
+room is rerolled is **despawned**: removed from the world and kept in a
+list (`run.despawned`) for some later use. A restoration block's mark
+stays in its home room. Run save v5.
+
+**Stacking.** Set a block down at the level you stand on, or one level
+up: from the floor, on the floor or a one-unit top; from on a block, on
+a one- or two-unit top. Stacks reach 3 units. You still only stand one
+unit up.
+
+**Jars and vessels.**
+- **Jar**: a plain tool. Walk over it to collect it; F swipes it (catch a
+  pixie, scoop a full well, pour into the lamp). A full jar stays in the
+  bag.
+- **Vessel**: a world object (lift, carry, set down; never in the bag)
+  that holds one kind of thing, up to 3. F with a full jar at a vessel
+  pours it in; F with an empty jar takes one back out. A vessel of
+  pixies powers a sigil and draws ghosts, as a placed pixie jar does now.
+- Loot spawns a vessel or a jar item. Old saves: placed jars become
+  vessels, carried jars become jar items.
+
+**Build order**
+1. [x] Quick fixes.
+2. [ ] Grab / push / pull / climb, the lift hold and its animation.
+3. [ ] Objects across rooms (run save v5).
+4. [ ] Stacking.
+5. [ ] Jars and vessels.
