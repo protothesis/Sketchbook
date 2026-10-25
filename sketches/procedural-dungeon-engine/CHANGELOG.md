@@ -433,6 +433,16 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **Playtest round 2.** No E prompt line or focus brackets on
+  a keyboard (fewer callouts; touch keeps its E button). Dragging a block
+  is smooth along the grab axis, slower than walking by weight (crate,
+  vessel, stone), and eases into the nearest half-cell when you let go.
+  A carried block goes down right where you lifted it if you haven't
+  moved, otherwise straight ahead along your facing. Travelling from a
+  waystone takes a hold.
+- 2026-10-24: **Fixed:** fainting while carrying a block left it in your
+  hands and duplicated it when the checkpoint rebuilt the world. A
+  rebuild now starts with empty hands; what you carry comes from the run.
 - 2026-10-24: **Jars and vessels** (playtest round 1, step 5). A jar is a
   plain tool now: walk over one to collect it; it lives in the bag (shown
   in your left hand) and never goes back into the world, so a jar in

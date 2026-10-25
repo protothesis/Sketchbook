@@ -728,6 +728,7 @@
   const heldRig = new THREE.Group();
   W.bodyRig.add(heldRig);
   let heldSig = null;
+  function resetHeld() { heldRig.clear(); heldSig = null; }
   function updateHeld(slot) {
     const sig = state.carry ? (state.carry.anim ? '' : 'carry:' + state.carry.key) // mid-arc: not in your hands yet
       : !slot || slot.kind === 'lantern' ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : '');
@@ -1038,7 +1039,7 @@
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, heldRig, quarterAhead, updatePreview, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, heldRig, resetHeld, quarterAhead, quarterReachable, updatePreview, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });

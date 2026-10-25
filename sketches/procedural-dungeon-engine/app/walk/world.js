@@ -475,6 +475,13 @@ void main() {
   }
 
   function buildWorld() {
+    // Loose objects are rebuilt from the run, a carried one included: drop
+    // whatever the last world had in hand, or a faint would leave you with
+    // two (the old one in your hands, and the checkpoint's).
+    state.pushBlocks = [];
+    state.carry = null;
+    state.grab = null;
+    W.resetHeld();
     W.clearGhosts();
     W.clearPixies();
     W.clearMarks();

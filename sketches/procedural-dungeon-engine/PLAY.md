@@ -243,12 +243,17 @@ Determinism).
   **climb** it, like any one-unit block. **Hold E** facing it and a ring
   fills (0.4 s): you've **grabbed** it. Then:
   - let go of E without moving and you **lift** it: it swings up in an
-    arc over your head (0.38 s), and you carry it. E again sets it down on
-    the free half-cell of floor ahead (a faint box shows where), arcing
-    back down. So a block shoved into a corner is never stuck.
-  - move while holding E and you **push** it (toward it) or **pull** it
-    (away, if there's room behind you), half a cell at a time, and you
-    move with it. Sideways does nothing. Let go of E and you let go of it.
+    arc over your head (0.38 s), and you carry it. E again sets it down
+    (a faint box shows where), arcing back down: right back where it was
+    if you haven't moved, otherwise on the half-cell straight ahead along
+    the way you most face (never a diagonal). So a block shoved into a
+    corner is never stuck.
+  - move while holding E and you **drag** it: toward it pushes, away pulls
+    (if there's room behind you). It slides smoothly, off the grid, slower
+    than you walk (a crate at 0.55 of walking speed, a vessel 0.6, a stone
+    block 0.35), and you move with it; it stops against anything in the
+    way. Sideways does nothing. Let go of E and it eases into the nearest
+    half-cell, the notch it stays aligned to.
   Pushed or pulled, a block stays in its room, on the floor; carried, it
   goes anywhere: set it down in any room, never in a doorway's mouth. Set
   down or pushed onto its mark (in its home room), it's home.
@@ -314,13 +319,14 @@ Determinism).
   hold it) to open its picker, or press its number again to cycle.
 - **Focus and prompts.** E acts on one thing at a time: of everything in
   reach, the one you're most squarely facing (nearer breaks a tie; the
-  score is distance + 0.6 × (1 − cos of the angle to it)). Faint corner
-  brackets frame it. Below the figure, up to two prompt lines: one for E
-  (what the focused thing would do) and one for F (what the item in hand
-  would do: open a door with a doorstone, catch a pixie). Each starts with
-  its key; one that can't be done right now has no key and reads muted. On
-  touch, press a line to do it. Setting a jar down or drawing a mark still
-  never prompts.
+  score is distance + 0.6 × (1 − cos of the angle to it)). Nothing on
+  screen marks it, and E has no prompt line (on a keyboard): the hold
+  ring is its feedback, and a tap at something you can't do says why in a
+  caption. F keeps a prompt line below the figure for what the item in
+  hand would do (open a door with a doorstone, catch a pixie, pour into a
+  vessel), starting with its key; one that can't be done right now has no
+  key and reads muted. On touch the E line stays too (it's the E button):
+  press a line to do it. Drawing a mark never prompts.
 - **Hold to act.** Anything that changes the world takes E held (or the E
   prompt pressed and held on touch) while a ring fills over the target,
   with the action's icon in it; the key on the prompt fills too, and the
@@ -330,8 +336,8 @@ Determinism).
   shows no ring), wiping chalk 0.4 s,
   lighting or snuffing a sconce 0.5 s, waking a waystone 0.7 s, and the
   ones that cost entropy and can't be undone, rerolling a room or
-  retracing a lost path, 1 s. Grabbing a block takes 0.4 s and lifting a
-  jar 0.35 s. Climbing, setting something down, travelling and the surface
+  retracing a lost path, 1 s. Grabbing a block takes 0.4 s and
+  travelling from a waystone 0.5 s. Climbing, setting something down and the surface
   door are a tap. Something
   you can't do right now (a lock with no key, a reroll you can't afford)
   is a tap that says why.

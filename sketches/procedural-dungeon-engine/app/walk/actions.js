@@ -163,13 +163,13 @@
 
   const HOLD = {
     open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME,
-    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7, lift: 0.4,
+    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7, travel: 0.5, lift: 0.4,
     collapse: 1.0, retrace: 1.0, // they cost entropy and can't be undone
   };
   // The ring's icon, per action.
   const HOLD_ICON = {
     open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
-    wake: '◆', collapse: '↻', retrace: '↺', lift: '✋',
+    wake: '◆', collapse: '↻', retrace: '↺', lift: '✋', travel: '◇',
   };
 
   /** Can't be done right now: a tap says why instead of filling a ring. */

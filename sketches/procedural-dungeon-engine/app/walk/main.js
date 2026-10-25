@@ -46,7 +46,7 @@
 
     // Holding on to a block (E held): movement pushes or pulls it instead.
     if (state.grab && !state.climb) {
-      W.grabInput(inp);
+      W.grabInput(inp, dt);
       inp = { x: 0, y: 0, mag: 0 };
     }
 

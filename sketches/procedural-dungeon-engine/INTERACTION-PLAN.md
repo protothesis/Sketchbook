@@ -97,6 +97,20 @@ built; this file is the plan until it's all in.
        for the swipe instead of pouring into the lamp. Snapshots now carry
        `runVersion` and migrate on load, so this didn't need a new BUILD.)
 
+## Playtest round 2 (2026-10-24)
+
+- [x] No E prompt line or focus brackets (keyboard; touch keeps the E line,
+      it's the button). The focus is still worked out in code; the hold
+      ring sits above it.
+- [x] Dragging: smooth along the grab axis, slower than walking by weight,
+      easing into the nearest half-cell on release.
+- [x] Dropping: back where it was lifted if you haven't moved; otherwise
+      the half-cell straight ahead along your cardinal facing.
+- [x] A faint while carrying no longer leaves a duplicate (a rebuild
+      starts with empty hands; the checkpoint says what you carry).
+- [x] Travelling from an awake waystone is a hold (0.5 s).
+- Kept: the set-down preview box.
+
 ## Playtest round 1 (2026-10-24)
 
 Agreed after the first play of steps 1-6.

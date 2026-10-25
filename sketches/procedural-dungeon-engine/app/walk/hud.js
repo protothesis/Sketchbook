@@ -95,8 +95,10 @@
   }
 
   function updatePrompt(nearE, nearF) {
-    const e = nearE && eLine(nearE), f = nearF && fLine(nearF);
-    if (e && nearE && W.holdTime(nearE)) e.text += ' · hold';
+    // E has no prompt on a keyboard (fewer callouts; the hold ring is its
+    // feedback). On touch the E line stays: it's the only E button.
+    const e = touchUi && nearE && eLine(nearE), f = nearF && fLine(nearF);
+    if (e && W.holdTime(nearE)) e.text += ' · hold';
     showLine(promptEl, 'E', e);
     showLine(promptF, 'F', f);
     promptF.classList.toggle('alone', !e);
@@ -116,40 +118,33 @@
   document.body.append(ringEl);
   const ringFg = ringEl.querySelector('.fg'), ringIcon = ringEl.querySelector('span');
   function updateRing(ring) {
-    const on = !!(ring && ring.v > 0.02 && !focusEl.hidden);
+    const on = !!(ring && ring.v > 0.02 && focusRect);
     ringEl.hidden = !on;
     promptEl.style.setProperty('--p', on ? ring.v.toFixed(3) : 0);
     if (!on) return;
     ringFg.setAttribute('stroke-dashoffset', (RING_C * (1 - ring.v)).toFixed(2));
     if (ringIcon.textContent !== ring.icon) ringIcon.textContent = ring.icon;
-    ringEl.style.left = (parseFloat(focusEl.style.left) + parseFloat(focusEl.style.width) / 2) + 'px';
-    ringEl.style.top = parseFloat(focusEl.style.top) + 'px';
+    ringEl.style.left = (focusRect.x0 + focusRect.x1) / 2 + 'px';
+    ringEl.style.top = focusRect.y0 + 'px';
   }
 
-  // The focus outline: corner brackets around the box of what E would act
-  // on (focusBox in actions.js), projected to the screen every frame.
-  const focusEl = el('div', 'focus');
-  for (let i = 0; i < 4; i++) focusEl.append(el('i'));
-  focusEl.hidden = true;
-  document.body.append(focusEl);
+  // Where the focused thing is on screen (its box, projected each frame):
+  // the hold ring sits just above it. Nothing outlines it.
+  let focusRect = null;
   const corner = new THREE.Vector3();
   function updateFocus(near) {
+    focusRect = null;
     const b = near && near.box;
-    if (!b) { focusEl.hidden = true; return; }
+    if (!b) return;
     const rect = W.canvas.getBoundingClientRect();
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (let i = 0; i < 8; i++) {
       corner.set((i & 1 ? b.x1 : b.x0) * S, (i & 2 ? b.z1 : b.z0) * S, (i & 4 ? b.y1 : b.y0) * S).project(W.camera);
-      if (corner.z > 1) { focusEl.hidden = true; return; } // behind the camera
+      if (corner.z > 1) return; // behind the camera
       const sx = rect.left + (corner.x + 1) / 2 * rect.width, sy = rect.top + (1 - corner.y) / 2 * rect.height;
       x0 = Math.min(x0, sx); y0 = Math.min(y0, sy); x1 = Math.max(x1, sx); y1 = Math.max(y1, sy);
     }
-    const m = 6; // px of breathing room around the box
-    focusEl.hidden = false;
-    focusEl.style.left = (x0 - m) + 'px';
-    focusEl.style.top = (y0 - m) + 'px';
-    focusEl.style.width = (x1 - x0 + 2 * m) + 'px';
-    focusEl.style.height = (y1 - y0 + 2 * m) + 'px';
+    focusRect = { x0, y0: y0 - 6, x1, y1 };
   }
 
   let captionTimer = null;
