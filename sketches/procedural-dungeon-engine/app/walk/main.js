@@ -10,7 +10,7 @@
     isLockedNow, save, savePlayer, dither, doorMat, buildWorld, easeOut, easeInOut,
     applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions, placeLamp,
     canClimb, climb, addMarkToWorld, addJarToWorld, useNear, collectPickups, updateItems,
-    pushBlock, updatePushBlocks, updateSconces, noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
+    updatePushBlocks, updateSconces, noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
     addGhost, lightReaches, updateGhosts, tmpV2, post, fxPerf, renderFrame, updatePrompt,
     showCaption, stanceEl, refreshHud, notice, REFRESH_HINT, drawMinimap, drawBigMap,
     showRecord, hideRecord } = W;
@@ -41,6 +41,12 @@
       p.y = c.fy + (c.ty - c.fy) * carry;
       p.z = c.fz + (c.tz - c.fz) * rise + Math.sin(Math.PI * c.t) * 0.04;
       if (c.t >= 1) { p.z = c.tz; p.vz = 0; state.climb = null; }
+      inp = { x: 0, y: 0, mag: 0 };
+    }
+
+    // Holding on to a block (E held): movement pushes or pulls it instead.
+    if (state.grab && !state.climb) {
+      W.grabInput(inp);
       inp = { x: 0, y: 0, mag: 0 };
     }
 
@@ -87,7 +93,7 @@
 
     // Pushing into a closed (unlocked) door, or a climbable block, for a
     // beat opens it / steps up onto it. A wall is a block's way of saying no.
-    let pushing = null, pushingBlock = null, pushDir = null, pk = null;
+    let pushing = null, pushingBlock = null, pk = null;
     if (inp.mag > 0) {
       for (const s of touched) {
         const d = DE.DIRS[s.facing];
@@ -96,9 +102,6 @@
         if (into <= 0.5) continue;
         if (s.door && p.z <= 0.05 && !isLockedNow(exp.spaces[s.door.spaceId], s.door.exit)) {
           pushing = s.door; pk = s.door.spaceId + '/' + s.door.exit.id; break;
-        }
-        if (s.block && s.block.push && p.z <= 0.05) {
-          pushingBlock = s.block; pushDir = { x: -d.x, y: -d.y }; pk = 'push:' + s.block.key; break;
         }
         if (s.block && canClimb(s.block) && !state.carry) { // not with a block in your hands
           pushingBlock = s.block; pk = 'block:' + s.block.x0 + ',' + s.block.y0; break;
@@ -114,7 +117,6 @@
         else if (pushing.exit.connectionId) W.reopenDoor(pushing.exit.connectionId);
         else openDoor(pushing.spaceId, pushing.exit.id);
       }
-      else if (pushDir) pushBlock(pushingBlock, pushDir);
       else climb(pushingBlock, { x: inp.x, y: inp.y });
     }
 

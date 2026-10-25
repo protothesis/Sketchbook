@@ -144,7 +144,7 @@ unit up.
 
 **Build order**
 1. [x] Quick fixes.
-2. [ ] Grab / push / pull / climb, the lift hold and its animation.
+2. [x] Grab / push / pull / climb, the lift hold and its animation.
 3. [ ] Objects across rooms (run save v5).
 4. [ ] Stacking.
 5. [ ] Jars and vessels.

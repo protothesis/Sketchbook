@@ -229,31 +229,34 @@ Determinism).
   placeholder for whatever lies above the dungeon.
 - **Crates.** About 2 in 5 of the single, one-unit blocks a room's props
   lay out are loose wooden crates instead (boards in a frame, crossed by a
-  brace). They move exactly like push blocks (walk into one to shove it,
-  E to lift it), but they have no home and pay nothing: just something to
-  rearrange. Like push blocks, they can't be climbed. Where you've moved
+  brace). They're handled exactly like push blocks (below), but they have
+  no home and pay nothing: just something to rearrange. Where you've moved
   one is kept with the run (`run.pushed`, by room seed).
 - **Push blocks (restoration).** About 1 room in 5 (depth 1+) has a stone
   block in a solid colour that's out of place, and a matching coloured
-  square on the floor where it belongs, in the same row or column. Walk into
-  the block for a beat and it slides half a cell. **E lifts it** and you
-  carry it over your head; E again sets it down on the free half-cell of
-  floor ahead (a faint box shows where), so a block shoved into a corner
-  is never stuck. A block only goes down in its own room, on bare floor,
-  never in a doorway's mouth. Set down on its mark, it's home. Lifting a
-  block that's home takes a short hold (0.5 s), since it takes its entropy
-  back; any other lift is a tap.
+  square on the floor where it belongs, in the same row or column. Home,
+  it and its mark light up, and it pays **2 shards** of entropy. It can
+  still be moved: off its mark, the room takes the charge back (what you
+  still have, and never enough to put your lamp out), and home again pays
+  back only what was taken, so a block can't be farmed. Jars and chalk
+  can't go on them. Positions persist with the run; a rerolled room rolls
+  a new one. See [`GAME-DESIGN.md`](GAME-DESIGN.md).
+- **Moving blocks (crates and push blocks).** Walk into one and you
+  **climb** it, like any one-unit block. **Hold E** facing it and a ring
+  fills (0.4 s): you've **grabbed** it. Then:
+  - let go of E without moving and you **lift** it: it swings up in an
+    arc over your head (0.38 s), and you carry it. E again sets it down on
+    the free half-cell of floor ahead (a faint box shows where), arcing
+    back down. So a block shoved into a corner is never stuck.
+  - move while holding E and you **push** it (toward it) or **pull** it
+    (away, if there's room behind you), half a cell at a time, and you
+    move with it. Sideways does nothing. Let go of E and you let go of it.
+  A block only goes in its own room, on bare floor, never in a doorway's
+  mouth. Set down or pushed onto its mark, it's home.
 - **Hands full.** With a block in your hands, E only sets it down; F does
   nothing ("your hands are full"), the hotbar won't switch (it shakes),
   and you can't climb or run. The block you carry is saved with the run
-  (`run.carry`), and goes with its room if that room is rerolled. Home, it and its mark light up, and
-  it pays **2 shards** of entropy. It can still be moved: off its mark, the
-  room takes the charge back (what you still have, and never enough to put
-  your lamp out), and home again pays back only what was taken, so a block
-  can't be farmed. Blocks can't
-  be climbed, and jars and chalk can't go on them. Positions persist with
-  the run; a rerolled room rolls a new one. See
-  [`GAME-DESIGN.md`](GAME-DESIGN.md).
+  (`run.carry`), and goes with its room if that room is rerolled.
 - **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
   sconce on a wall, chambers sometimes two. Never on a south wall: the
   camera looks north and would only see its back. E, facing one in your
@@ -310,8 +313,9 @@ Determinism).
   shows no ring), wiping chalk 0.4 s,
   lighting or snuffing a sconce 0.5 s, waking a waystone 0.7 s, and the
   ones that cost entropy and can't be undone, rerolling a room or
-  retracing a lost path, 1 s. Taking a tool, lifting a jar, climbing,
-  lifting or setting down a block, travelling and the surface door are a tap. Something
+  retracing a lost path, 1 s. Grabbing a block takes 0.4 s and lifting a
+  jar 0.35 s. Climbing, setting something down, travelling and the surface
+  door are a tap. Something
   you can't do right now (a lock with no key, a reroll you can't afford)
   is a tap that says why.
 - **Closing doors.** Any opened door closes (hold E at it, from either
@@ -456,7 +460,7 @@ you pass out and wake at your last waystone.
 | Waystone | a grey slab, 0.38 × 0.18 cells, 2.5 units tall, with five seeded glyphs on its north and south faces; awake, the glyphs glow violet, pulse slowly and shine (an additive copy over each face, so light and shadow don't touch them), a faint additive shaft rises 3.2 cells, and the two awake stones nearest you get a violet-blue point light (`GLOW` in `waystones.js`, pooled, no shadows) | on the maps, a small slab, glowing when awake |
 | Ley lines | between awake waystones on both maps: dashed and faint, solid and brighter on the travel map; the route to the stone under the pointer glows; fares in ◆ by each stone's id | |
 | Surface door | weathered pale panel with a daylight-white seam | white on the maps |
-| Push block | the whole block in its colour; home, it glows | |
+| Push block | the whole block in its colour; home, it glows; lifted, it arcs up over the head in 0.38 s (eased, rising a little above the straight line) and back down the same way | |
 | Crate | a wooden crate, a half-cell cube one unit tall: boards in a lighter frame, a diagonal brace | |
 | Passing out | the lamp fades out and the world goes black over ~1 s; HUD and captions stay | |
 
@@ -487,7 +491,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
-| Climb | push into a block for 0.35 s or tap E facing it; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
+| Climb | push into a block (crates and push blocks too) for 0.35 s or tap E facing a fixed one; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells, swelling to 0.8 while it touches you and shrinking back over 1 s (`swell`, `swellShrink`). No catching; a room with a ghost in it can't be rerolled |

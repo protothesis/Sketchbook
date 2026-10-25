@@ -30,8 +30,10 @@
       case 'wake': return { cls: 'collapse', text: `wake the waystone · ${chargeText(RULES.waystoneCharges)}` };
       case 'travel': return { cls: 'collapse', text: 'travel from the waystone · a shard per ley line' };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
-      case 'lift': return { cls: 'jar', text: near.block.crate ? 'lift the crate (or push it)'
-        : near.block.done ? 'lift the block off its mark · it takes its entropy back' : 'lift the block (or push it home)' };
+      case 'lift': return { cls: 'jar', text: `grab the ${near.block.crate ? 'crate' : 'block'}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
+      case 'grabbed': return { cls: 'jar', text: state.grab && state.grab.moved
+        ? `pushing or pulling the ${near.block.crate ? 'crate' : 'block'} · let go of E to let go`
+        : `holding the ${near.block.crate ? 'crate' : 'block'} · let go of E to lift it · move to push or pull` };
       case 'setblock': return near.spot ? { cls: 'jar', text: `set the ${near.block.crate ? 'crate' : 'block'} down` }
         : { cls: 'blocked', text: `no room to set it down here${near.block.spaceId !== state.exp.registry[DE.key(Math.floor(state.player.x), Math.floor(state.player.y))] ? ' · it belongs in its own room' : ''}` };
       case 'setjar': return near.spot ? { cls: 'jar', text: `set the ${W.jarName(near.jar)} down` } : { cls: 'blocked', text: 'no room to set the jar down here' };

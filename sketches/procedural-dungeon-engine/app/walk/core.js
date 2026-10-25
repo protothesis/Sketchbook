@@ -124,6 +124,7 @@
     hold: { sig: null, t: 0, spent: false }, // holding E on a hold action (actions.js)
     pushBlocks: [],      // push blocks in built rooms (see restore.js)
     carry: null,         // the push block in your hands (restore.js)
+    grab: null,          // the push block you have hold of, E held: { block, dir, off, moved } (restore.js)
     sconces: [],         // sconces in built rooms (see restore.js)
     waystones: [],       // waystones in built halls (see waystones.js)
     gutter: null,        // { t } while the lamp is guttering out

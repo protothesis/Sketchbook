@@ -433,6 +433,13 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **Grab** (playtest round 1, step 2). Crates and push
+  blocks can be climbed: walking into one climbs it now, instead of
+  shoving it. Hold E at one (0.4 s) to grab it: let go without moving and
+  you lift it, in an arc up over your head (and back down when you set it
+  down); move while holding and you push or pull it along that axis, half
+  a cell at a time, moving with it; let go while moving and you let go.
+  Pull is back, as part of the grab. Lifting a jar takes a 0.35 s hold.
 - 2026-10-24: **After the first playtest of the cleanup** (plan in
   `INTERACTION-PLAN.md`, "Playtest round 1"): held items are their true
   size and cast no shadow; a new item goes into the bag and never into

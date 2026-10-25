@@ -51,7 +51,7 @@
     keys.delete(k);
     if (k === 'e') W.releaseE();
   });
-  global.addEventListener('blur', () => { keys.clear(); W.releaseE(); });
+  global.addEventListener('blur', () => { keys.clear(); W.releaseE(true); });
 
   const promptEl = $('prompt');
   // Pressing the E prompt is E: held down, it fills a hold action's ring.

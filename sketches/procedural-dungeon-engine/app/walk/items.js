@@ -738,7 +738,7 @@
   W.bodyRig.add(heldRig);
   let heldSig = null;
   function updateHeld(slot) {
-    const sig = state.carry ? 'carry:' + state.carry.key
+    const sig = state.carry ? (state.carry.anim ? '' : 'carry:' + state.carry.key) // mid-arc: not in your hands yet
       : !slot || slot.kind === 'lantern' ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : '');
     if (sig === heldSig) return;
     heldSig = sig;
@@ -1054,7 +1054,7 @@
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, quarterAhead, jarSetDown, setDownJar, updatePreview, JAR_H, heldJar, jarName, lampRoom, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, heldRig, quarterAhead, jarSetDown, setDownJar, updatePreview, JAR_H, heldJar, jarName, lampRoom, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn, addJarToWorld,
     clearJars, jarNear, pickUpJar, useNear, useSelected, shatterJarsIn, noteUnmade,
     updateJars, addSigil, updateSigils });

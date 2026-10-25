@@ -210,7 +210,7 @@
     lanternMesh.position.z = (wx * sn + wy * c) * S;
   }
 
-  const canClimb = (b) => !b.jar && !b.push && b.top - state.player.z > 0.05 &&
+  const canClimb = (b) => !b.jar && !b.carried && b.top - state.player.z > 0.05 &&
     b.top - state.player.z <= RULES.climbMaxUnits * UNIT + 0.01 && b.top <= RULES.climbMaxTop * UNIT + 0.01;
 
   /** A climbable block right in front of the figure, if no door is closer. */

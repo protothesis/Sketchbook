@@ -131,6 +131,12 @@
    */
   const FACING_WEIGHT = 0.6; // cells of distance one unit of (1 - cos) is worth
   function actionNear(p) {
+    // Holding on to a block: that's what E is about until you let go.
+    if (state.grab) {
+      const near = { action: 'grabbed', block: state.grab.block };
+      near.box = focusBox(Object.assign({}, near, { action: 'lift' }));
+      return near;
+    }
     // An object in your hands (a block, or a jar selected): E only sets it down.
     if (state.carry) {
       const spot = W.blockSpot(p), near = { action: 'setblock', spot, block: state.carry };
@@ -160,13 +166,13 @@
 
   const HOLD = {
     open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME,
-    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7,
+    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7, lift: 0.4, pickjar: 0.35,
     collapse: 1.0, retrace: 1.0, // they cost entropy and can't be undone
   };
   // The ring's icon, per action.
   const HOLD_ICON = {
     open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
-    wake: '◆', collapse: '↻', retrace: '↺', lift: '⇡',
+    wake: '◆', collapse: '↻', retrace: '↺', lift: '✋', pickjar: '⇡',
   };
 
   /** Can't be done right now: a tap says why instead of filling a ring. */
@@ -176,9 +182,7 @@
       (a === 'retrace' && (!near.thread || !near.affordable)) || ((a === 'setblock' || a === 'setjar') && !near.spot);
   }
   /** Seconds E must be held for this action, or 0 for a tap. */
-  const holdTime = (near) => (blockedNow(near) ? 0
-    : near.action === 'lift' ? (near.block.done ? 0.5 : 0) // a block that's home takes its entropy back
-    : HOLD[near.action] || 0);
+  const holdTime = (near) => (blockedNow(near) ? 0 : HOLD[near.action] || 0);
 
   // What's being held: the action and its box, so a different target restarts the ring.
   const holdSig = (near) => near.action + ':' + Object.values(near.box).map((v) => v.toFixed(2)).join(',');
@@ -190,9 +194,11 @@
     h.sig = null; h.t = 0; h.spent = false; h.down = true;
     if (near && !holdTime(near)) { h.spent = true; act(near); }
   }
-  function releaseE() {
+  /** E let go: a grabbed block is lifted (or let go, if you moved it). `cancel` (focus lost): just let go. */
+  function releaseE(cancel) {
     const h = state.hold;
     h.down = false; h.sig = null; h.t = 0; h.spent = false;
+    if (state.grab) W.endGrab(cancel);
   }
 
   /**
@@ -255,7 +261,8 @@
     if (near.action === 'travel') { travelFrom(near.stone); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
     if (near.action === 'pickjar') { pickUpJar(near.jar); return; }
-    if (near.action === 'lift') { W.liftBlock(near.block); return; }
+    if (near.action === 'lift') { W.startGrab(near.block); return; } // the ring filled: you have hold of it
+    if (near.action === 'grabbed') return;
     if (near.action === 'setblock' || near.action === 'setjar') {
       if (!near.spot) { W.showCaption('no room to set it down here'); return; }
       if (near.action === 'setblock') W.setDownBlock(near.spot); else W.setDownJar(near);

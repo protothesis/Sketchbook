@@ -1,9 +1,11 @@
 // Walk mode: restoration (GAME-DESIGN.md). Setting the dungeon right pays
 // entropy, once. For now: push blocks, each with a matching floor mark where
 // it belongs, and unlit sconces on the walls. Crates (loose props) move the
-// same way as push blocks but have no home and pay nothing. Either can be
-// pushed (walk into it) or lifted (E) and carried over your head, then set
-// down again (E): a block you can lift is never stuck.
+// same way as push blocks but have no home and pay nothing. Either one:
+// walk into it and you climb it, like any one-unit block. Hold E and you
+// grab it: let go without moving and you lift it over your head (set it
+// down again with E); move while holding and you push or pull it along
+// that axis. A block you can lift is never stuck.
 (function (global) {
   'use strict';
 
@@ -12,6 +14,7 @@
     inDoorMouth } = W;
 
   const SLIDE_TIME = 0.22; // seconds for a push to slide one half-cell
+  const LIFT_TIME = 0.38;  // seconds for the arc up over your head, or back down
 
   const pushGeo = {
     block: new THREE.BoxGeometry(0.5 * S * 0.98, UNIT * S, 0.5 * S * 0.98),
@@ -152,14 +155,63 @@
     b.slide = null;
     state.carry = b;
     state.run.carry = b.key;
-    W.refreshHotbar(); // the figure shows it (updateHeld)
+    W.refreshHotbar(); // the figure shows it (updateHeld), once any lift arc is done
   }
 
-  /** E at a push block or crate right in front of you: lift it. Off its mark, it takes its entropy back. */
+  // --- grabbing: hold E at a block (actions.js) and the ring fills; then
+  // you have hold of it until you let go of E.
+
+  /** The ring filled: you have hold of it. Facing it squarely, along one axis. */
+  function startGrab(b) {
+    const p = state.player;
+    const cx = (b.x0 + b.x1) / 2 - p.x, cy = (b.y0 + b.y1) / 2 - p.y;
+    const dir = Math.abs(cx) > Math.abs(cy) ? { x: Math.sign(cx), y: 0 } : { x: 0, y: Math.sign(cy) };
+    state.grab = { block: b, dir, off: { x: -cx, y: -cy }, moved: false };
+    p.angle = Math.atan2(dir.x, dir.y);
+  }
+
+  /** E let go: lift it, or (if you pushed or pulled it) just let go. `cancel`: let go either way. */
+  function endGrab(cancel) {
+    const g = state.grab;
+    if (!g) return;
+    state.grab = null;
+    if (!cancel && !g.moved && !g.block.slide) liftBlock(g.block);
+  }
+
+  /**
+   * While you have hold of a block, movement along its axis pushes it
+   * (toward it) or pulls it (away), half a cell at a time; you move with
+   * it. Sideways does nothing. Called from the main loop with the input.
+   */
+  function grabInput(inp) {
+    const g = state.grab, b = g.block, p = state.player;
+    if (b.slide || inp.mag < 0.5) return;
+    const along = inp.x * g.dir.x + inp.y * g.dir.y;
+    if (along > 0.6) {
+      if (move(b, g.dir)) g.moved = true;
+      else W.showCaption('it won\'t budge that way');
+    } else if (along < -0.6) {
+      // Pull: room behind you to step back, then the block follows.
+      const back = { x: p.x - g.dir.x * 0.5, y: p.y - g.dir.y * 0.5 };
+      const bsx = Math.floor(back.x * 2), bsy = Math.floor(back.y * 2);
+      const free = state.exp.registry[cellOf(bsx, bsy)] === b.spaceId &&
+        !(state.blockAt.get(cellOf(bsx, bsy)) || []).some((o) => o !== b && o.top > p.z + 0.05 &&
+          back.x > o.x0 - RADIUS && back.x < o.x1 + RADIUS && back.y > o.y0 - RADIUS && back.y < o.y1 + RADIUS);
+      if (!free) { W.showCaption('no room behind you to pull it'); return; }
+      const was = { x: p.x, y: p.y };
+      p.x = back.x; p.y = back.y; // out of the way, so the block has somewhere to go
+      if (move(b, { x: -g.dir.x, y: -g.dir.y })) g.moved = true;
+      else { p.x = was.x; p.y = was.y; W.showCaption('it won\'t budge that way'); }
+    }
+  }
+
+  /** E held at a block, and let go without moving: lift it, in an arc up over your head. Off its mark, it takes its entropy back. */
   function liftBlock(b) {
     if (b.done) unsettle(b);
     indexBlock(b, false);
-    state.run.pushed[b.key] = { sx: b.sx, sy: b.sy, done: false, paid: +b.paid.toFixed(4) };
+    state.run.pushed[b.key] = b.crate ? { sx: b.sx, sy: b.sy } : { sx: b.sx, sy: b.sy, done: false, paid: +b.paid.toFixed(4) };
+    b.mesh.traverse((o) => { o.castShadow = false; });
+    b.anim = { t: 0, up: true, from: b.mesh.position.clone() };
     hold(b);
     W.showCaption(b.crate ? 'you lift the crate' : 'you lift the block');
     savePlayer();
@@ -179,10 +231,13 @@
     state.carry = null;
     state.run.carry = null;
     place(b, spot.sx, spot.sy);
-    b.mesh.scale.setScalar(1);
-    b.mesh.traverse((o) => { o.castShadow = true; });
-    b.mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
+    // From over your head back down to the floor, in an arc.
+    const from = b.mesh.getWorldPosition(new THREE.Vector3());
     b.group.add(b.mesh);
+    b.group.worldToLocal(from);
+    b.mesh.position.copy(from);
+    b.mesh.rotation.set(0, 0, 0);
+    b.anim = { t: 0, up: false, from };
     indexBlock(b, true);
     if (!b.crate && spot.sx === b.to.sx && spot.sy === b.to.sy) settle(b, true);
     state.run.pushed[b.key] = b.crate ? { sx: b.sx, sy: b.sy } : { sx: b.sx, sy: b.sy, done: b.done, paid: +b.paid.toFixed(4) };
@@ -222,10 +277,6 @@
     return true;
   }
 
-  /** Walking into a push block for a beat shoves it one half-cell (even off its mark). */
-  function pushBlock(b, dir) {
-    if (!move(b, dir)) W.showCaption('it won\'t budge that way');
-  }
 
   /** Home: its mark lights up, and the room pays entropy (whatever it hasn't paid already). */
   function settle(b, now) {
@@ -269,9 +320,11 @@
     return best;
   }
 
-  /** Slides, and growing and shrinking with the floor as the room assembles. */
+  /** Slides, lift arcs, and growing and shrinking with the floor as the room assembles. */
+  const overhead = new THREE.Vector3();
   function updatePushBlocks(dt) {
     for (const b of state.pushBlocks) {
+      if (b.anim) { animateLift(b, dt); continue; }
       if (b.carried) continue; // over your head (items.js updateHeld)
       const tx = (b.x0 + 0.25) * S, tz = (b.y0 + 0.25) * S;
       if (b.slide) {
@@ -279,8 +332,33 @@
         const k = easeOut(b.slide.t);
         b.mesh.position.set(b.slide.from.x + (tx - b.slide.from.x) * k, 0, b.slide.from.z + (tz - b.slide.from.z) * k);
         if (b.slide.t >= 1) b.slide = null;
+        // Pushing or pulling it, you move with it.
+        const g = state.grab;
+        if (g && g.block === b) {
+          state.player.x = b.mesh.position.x / S + g.off.x;
+          state.player.y = b.mesh.position.z / S + g.off.y;
+        }
       }
       b.mesh.scale.setScalar(Math.max(0.001, b.tile ? b.tile.scale.x : 1));
+    }
+  }
+
+  /** The arc from the floor to over your head (up) or back down, with a little heft: slow to start, a rise above the straight line. */
+  function animateLift(b, dt) {
+    const a = b.anim;
+    a.t = Math.min(1, a.t + dt / LIFT_TIME);
+    const k = W.easeInOut(a.t);
+    W.heldRig.parent.localToWorld(overhead.set(0, 0.6 * S, 0));
+    b.group.worldToLocal(overhead);
+    const to = a.up ? overhead : new THREE.Vector3((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
+    b.mesh.position.lerpVectors(a.from, to, k);
+    b.mesh.position.y += Math.sin(Math.PI * a.t) * 0.12 * S;
+    if (a.t < 1) return;
+    b.anim = null;
+    if (a.up) W.refreshHotbar(); // now it's in your hands (updateHeld)
+    else {
+      b.mesh.position.copy(to);
+      b.mesh.traverse((o) => { o.castShadow = true; });
     }
   }
 
@@ -397,6 +475,7 @@
     });
   }
 
-  Object.assign(W, { SCONCE_Y, addPushBlocks, pushBlock, liftNear, liftBlock, blockSpot, setDownBlock, updatePushBlocks, addSconces,
+  Object.assign(W, { SCONCE_Y, addPushBlocks, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
+    setDownBlock, updatePushBlocks, addSconces,
     sconceNear, lightSconce, snuffSconce, updateSconces });
 })(window);
