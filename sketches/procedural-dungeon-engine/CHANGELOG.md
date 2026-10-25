@@ -428,6 +428,29 @@ All notable changes to this sketch are logged here, per
     exact (`stress-test.js` checks restores, tags and uncarves).
   - The chart view still reads walk mode's record, but its own edits no
     longer flow into walk mode.
+- 2026-10-24: **Shadow creepers** (`app/walk/creepers.js`, tunables in
+  `CREEPER`): a dark grey capsule with one emissive red eye that always
+  faces you and blinks every 2–6 s. About 1 room in 12 from depth 2
+  (`RULES.creeperChance`, rolled once per room, saved like pixies). It
+  lurks in a room's corners and keeps off steady light (an ecology flee
+  rule). Within 7 cells it stalks you from the edge of your light: the
+  nearest spot in sight of you that your lamp doesn't reach (just past the
+  light's radius plus a margin, or in a block's shadow). It follows the
+  edge in as the lamp dims, dips inside it in the last two charges, and
+  under one charge (or with the lamp covered or out) comes straight at you.
+  It drains psychic stamina like the dark does, more the closer it is
+  (`RULES.staminaCreeperDrain`, within 3 cells and in sight). It moves at
+  2.1 cells/s, under walking (2.4), so only running loses it. It walks
+  around every block, low ones too (ghosts float over those). New:
+  `lightRadius()` in `lamp.js` (the floor ring's radius, growing to 4.5
+  cells at a full lamp); `lightReaches` takes an optional range; the
+  ghost path helpers take a per-creature block height (`tall`).
+- 2026-10-24: **Off-screen markers for any creature** (`app/walk/markers.js`):
+  the ghosts' ring markers moved out of `ghosts.js` into a module each
+  creature kind registers with (which ones want a marker, the icon, the
+  ring's colour). Ghosts look as before; shadow creepers get a dark disc
+  with the red eye (it blinks there too), ringed red while stalking and
+  faint red while lurking in your room or the next.
 
 ### Fixed
 

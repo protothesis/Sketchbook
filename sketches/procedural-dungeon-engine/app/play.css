@@ -480,6 +480,11 @@ kbd {
 .gedge.chase .arrow { border-left-color: #d678ff; }
 .gedge.idle { border-color: rgba(181, 156, 255, 0.35); opacity: 0.8; }
 .gedge.idle .arrow { border-left-color: rgba(181, 156, 255, 0.7); }
+/* Shadow creepers: red while one stalks you, faint red while it lurks. */
+.gedge.stalk { border-color: rgba(255, 70, 50, 0.7); }
+.gedge.stalk .arrow { border-left-color: #ff4a32; }
+.gedge.lurk { border-color: rgba(220, 100, 90, 0.3); }
+.gedge.lurk .arrow { border-left-color: rgba(220, 100, 90, 0.6); }
 
 /* On-screen notice: frame errors and stale cached files. */
 .notice {

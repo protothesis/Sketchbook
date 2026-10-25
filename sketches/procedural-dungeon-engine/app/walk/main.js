@@ -190,6 +190,8 @@
     W.updateWells(dt);
     W.updatePixies(dt);
     updateGhosts(dt);
+    W.updateCreepers(dt);
+    W.updateMarkers(); // off-screen markers, after everything they mark has moved
     updateJars();
     updateSigils(dt);
 
@@ -259,6 +261,7 @@
     const savedPlayer = same ? saved.player : null;
     const savedGhosts = state.run.ghosts || [];
     const savedPixies = state.run.pixies || [];
+    const savedCreepers = state.run.creepers || [];
     const savedJars = state.run.placedJars || [];
     const savedMarks = state.run.marks || [];
     state.buffReady = false;
@@ -276,8 +279,12 @@
     for (const o of savedPixies) {
       if (exp.registry[DE.key(Math.floor(o.x), Math.floor(o.y))] !== undefined && !state.pixies.some((q) => q.id === o.id)) W.addPixie(o);
     }
+    for (const c of savedCreepers) {
+      if (exp.registry[DE.key(Math.floor(c.x), Math.floor(c.y))] !== undefined && !state.creepers.some((q) => q.id === c.id)) W.addCreeper(c);
+    }
     state.fx.wobble = state.fx.glitch = state.fx.flash = 0;
     state.ghostTouch = state.wasTouched = false;
+    state.creeperDrain = 0;
     state.gutter = null;
     state.arrival = null;
     state.paused = false;

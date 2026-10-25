@@ -14,7 +14,7 @@
 // from file://), which play.html loads in this order:
 //
 //   saves, core, world, figure, items, restore, waystones, lamp, actions,
-//   input, ecology, wells, pixies, ghosts, fx, hud, game, main
+//   input, ecology, markers, wells, pixies, ghosts, creepers, fx, hud, game, main
 //
 // (saves.js is the odd one out: it knows nothing of W, and hangs its save
 // slots on DungeonPlay.saves, so it can move to another client.)
@@ -109,6 +109,8 @@
     ghosts: [],          // live hash ghosts (see ghosts.js)
     ghostTouch: false,   // in a ghost's reach this frame (drains psychic stamina)
     pixies: [],          // free pixies (see pixies.js)
+    creepers: [],        // shadow creepers (see creepers.js)
+    creeperDrain: 0,     // 0..1: the nearest creeper's pull on your psychic stamina this frame
     wells: [],           // entropy wells in built rooms (see wells.js)
     jars: [],            // jars standing in the world (see "Inventory")
     sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
@@ -154,6 +156,8 @@
       ley: null,     // ley lines made so far: [["spaceId:seed", "spaceId:seed"]] (null: not yet built, see waystones.js)
       pixieSeen: [], // "spaceId:seed:pixie" for rooms whose pixie roll has happened
       pixies: [],    // free pixies' saved positions: [{ id, x, y }]
+      creeperSeen: [], // "spaceId:seed:creeper" for rooms whose creeper roll has happened
+      creepers: [],  // shadow creepers' saved positions: [{ id, x, y }]
       wells: {},     // entropy wells drawn on: { "spaceId:seed:well": { level, drawn } } (see wells.js)
       jars: [],      // jars carried: [{ id, fill }] (fill 1: a pixie inside)
       placedJars: [], // jars set down: [{ id, sx, sy, fill }] (half-cell coordinates)
@@ -229,6 +233,7 @@
     state.run.placedJars = state.jars.map((j) => ({ id: j.id, sx: j.sx, sy: j.sy, fill: j.fill }));
     state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
     state.run.pixies = state.pixies.map((o) => ({ id: o.id, x: +o.x.toFixed(3), y: +o.y.toFixed(3) }));
+    state.run.creepers = state.creepers.map((c) => ({ id: c.id, x: +c.x.toFixed(3), y: +c.y.toFixed(3) }));
     return SAVES.make({ record: state.exp, run: state.run, player: { x: p.x, y: p.y, angle: p.angle } });
   }
   /** The resume slot (every second, on pagehide, on quitting to the menu). */

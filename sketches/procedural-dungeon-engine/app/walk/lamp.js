@@ -158,17 +158,22 @@
   function updateStamina(dt, mode) {
     const run = state.run;
     const touch = !!state.ghostTouch, dark = mode === 'dark';
+    const creep = state.creeperDrain || 0; // 0..1, a creeper's nearness (creepers.js)
     if (touch && !state.wasTouched) run.stamina -= RULES.staminaHit;
     state.wasTouched = touch;
-    if (touch || dark) {
-      run.stamina -= ((touch ? RULES.staminaDrain : 0) + (dark ? RULES.staminaDarkDrain : 0)) * dt;
+    if (touch || dark || creep > 0) {
+      run.stamina -= ((touch ? RULES.staminaDrain : 0) + (dark ? RULES.staminaDarkDrain : 0) +
+        RULES.staminaCreeperDrain * creep) * dt;
       staminaIdle = 0;
     } else {
       staminaIdle += dt;
       if (staminaIdle >= RULES.staminaRegenDelay) run.stamina += RULES.staminaRegen * dt;
     }
     run.stamina = THREE.MathUtils.clamp(run.stamina, 0, 1);
-    if (run.stamina <= 0) passOut(touch ? 'the ghost is too much · you pass out' : 'the dark is too much · you pass out');
+    if (run.stamina <= 0) {
+      passOut(touch ? 'the ghost is too much · you pass out'
+        : creep > 0 && !dark ? 'the creeper is too close · you pass out' : 'the dark is too much · you pass out');
+    }
   }
 
   function passOut(text) {
@@ -291,7 +296,21 @@
     ringRadius: [1.1, 3.2], // cells, at empty and at ringBelow
     ringOpacity: 0.22,
     swell: 0.35,        // dying: brightness swell while you move
+    fullRadius: 4.5,    // cells: what creatures count as lit at a full lamp (ghosts' lightRange)
   };
+
+  /**
+   * How far the light reaches, in cells, for creatures that keep to its
+   * edge (creepers.js); 0 while it's out or covered. At ringBelow charges
+   * or less it's the floor ring you see; above, it grows to fullRadius at
+   * a full lamp.
+   */
+  function lightRadius() {
+    if (!lampOn()) return 0;
+    const fuel = state.run.fuel;
+    if (fuel <= LIGHT.ringBelow) return lerp(LIGHT.ringRadius[0], LIGHT.ringRadius[1], fuel / LIGHT.ringBelow);
+    return lerp(LIGHT.ringRadius[1], LIGHT.fullRadius, smooth(LIGHT.ringBelow, RULES.lampFullCharges, fuel));
+  }
   const ringMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 64), ringMat);
   ring.rotation.x = -Math.PI / 2;
@@ -486,8 +505,8 @@
     if (staminaEl) {
       staminaEl.firstChild.style.width = (run.stamina * 100).toFixed(1) + '%';
       staminaEl.classList.toggle('low', run.stamina < 0.35);
-      staminaEl.classList.toggle('draining', !!state.ghostTouch || lampMode === 'dark');
-      staminaEl.title = `psychic stamina ${Math.round(run.stamina * 100)}% · a ghost's touch and the dark drain it; it comes back in light`;
+      staminaEl.classList.toggle('draining', !!state.ghostTouch || lampMode === 'dark' || state.creeperDrain > 0);
+      staminaEl.title = `psychic stamina ${Math.round(run.stamina * 100)}% · a ghost's touch, a creeper close by and the dark drain it; it comes back in light`;
     }
     if (vignetteEl) vignetteEl.style.opacity = ((1 - run.stamina) * 0.85).toFixed(3);
     const n = Math.max(max, Math.ceil(run.fuel - 1e-6));
@@ -545,5 +564,5 @@
   }
 
   Object.assign(W, { gainFuel, spendFuel, takeFuel, litAt, lampOn, toggleLamp, feedFrom, updateLamp,
-    updateLampLook, updateLampHud, lampLevel, popEntropy });
+    updateLampLook, updateLampHud, lampLevel, lightRadius, popEntropy });
 })(window);

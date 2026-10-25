@@ -265,6 +265,7 @@
     const unravelled = W.banishGhostsIn(ids); // none, normally: a haunted room can't be rerolled
     const shattered = shatterJarsIn(ids);
     W.dropPixiesIn(ids);
+    W.dropCreepersIn(ids);
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
     W.spendFuel(near.price.charges);
