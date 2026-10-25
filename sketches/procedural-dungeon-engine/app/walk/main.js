@@ -216,6 +216,7 @@
     updatePushBlocks(dt);
     updateSconces();
     W.updateWaystones();
+    W.lostFx.uTime.value = state.time; // lost-path doors shimmer
     W.updateLamp(dt);
     W.updateLampLook(dt); // the lamp's colour, halo, sparks and light (after placeLamp)
   }

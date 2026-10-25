@@ -429,6 +429,18 @@ All notable changes to this sketch are logged here, per
   - The chart view still reads walk mode's record, but its own edits no
     longer flow into walk mode.
 
+- 2026-10-24: **Doors and the silhouette:**
+  - Door panels are solid and never dither. The doorway's frame (jambs and
+    lintel, which dithered less and were a lighter colour so a south-wall
+    doorway stayed readable) is plain wall again and dithers with it.
+  - The figure's orange **silhouette** behind blocks, doors and walls is
+    back (and a little stronger, 85%). It had stopped showing when the
+    figure began marking the stencil: drawn before a block in front of it,
+    the figure marked pixels the block then covered. The figure now draws
+    after every other solid thing.
+  - A door to a **lost path** shimmers: a rippling violet glow strongest at
+    the panel's edges, on both faces, and sparks drifting up its sides.
+
 ### Fixed
 
 - 2026-10-20: Walk mode froze for a remote playtester the moment they
