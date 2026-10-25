@@ -666,6 +666,47 @@ the entropy, then come back.
 Waypoint distance stays as is (it played well). The thread is the first
 version of "retracing is earned"; it may become a proper ability later.
 
+### Needs a design pass: what a save keeps (open, 2026-10-24)
+
+Found in playtesting, deliberately not fixed yet. Checkpoints, progress and
+waystone interactions are tangled, and want thinking through together, in
+one place, before anything changes.
+
+**The symptom.** You wake in a waystone hall and the blocks you pushed home
+and the sconces you lit there are undone, every time.
+
+**Why.** Restoration lives in the run (`run.pushed`, `run.lit`,
+`run.wells`), not in the map. The checkpoint is a snapshot of the run taken
+the moment you use the waystone, and a faint rolls the run back to it. The
+natural order is to arrive, wake the stone (checkpoint), then tidy the hall,
+so the tidying comes after the snapshot and a faint takes it back. Tidy
+first and touch the stone after, and it sticks; nothing teaches that, and
+it's backwards.
+
+**The wider questions:**
+
+- **What is progress, and what is the run?** Today a faint rolls back
+  everything in `run` except tallies and the thread. Restoration (the
+  "leave it better than you found it" ethos) arguably belongs to the world,
+  not to the run, and shouldn't be undone by failing. Inventory and entropy
+  probably should be.
+- **Entropy paid for restoration.** A block home pays entropy once. If
+  restoration survives a faint but fuel rolls back, the payout is lost for
+  good (no farming, but a real loss). Is that the intent?
+- **What sets your respawn?** Only touching a waystone (wake, travel, E).
+  Passing through a hall doesn't. Should anything else: restoring in a
+  hall, resting, lighting its sconces?
+- **Autosave vs checkpoint vs respawn** are three ideas sharing two slots
+  (resume = where you are; checkpoint = what a faint rolls back to, and
+  where you wake). Should "what's kept" and "where you wake" be separate?
+- **Lost rooms' restoration.** If restoration is kept, a retraced path
+  comes back tidied. Is that right?
+
+Options already on the table: (1) restoration survives faints (pushed,
+lit, wells kept; inventory and entropy roll back); (2) restoring inside a
+waystone hall writes a checkpoint; (3) keep it and teach "touch the stone
+after tidying".
+
 ## First slice (built 2026-10-21)
 
 Built as planned; kept for the record.
