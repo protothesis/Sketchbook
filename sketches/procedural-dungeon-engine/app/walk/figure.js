@@ -32,7 +32,7 @@
   // through as a dithered, lantern-orange silhouette. GreaterDepth: these
   // only draw where something nearer already covers the figure.
   const ghostMat = new THREE.MeshBasicMaterial({
-    color: 0xffa25c, transparent: true, opacity: 0.6, depthFunc: THREE.GreaterDepth, depthWrite: false,
+    color: 0xffa25c, transparent: true, opacity: 0.85, depthFunc: THREE.GreaterDepth, depthWrite: false,
   });
   ghostMat.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
@@ -42,12 +42,16 @@
   // The figure is one thing: where any part of it is drawn (body, head,
   // lamp), it marks the stencil, and the silhouette skips those pixels. So
   // the head in front of the body, or the lamp in front of either, never
-  // dithers the figure itself; only something else in front does.
+  // dithers the figure itself; only something else in front does. The
+  // figure draws after every other solid thing (renderOrder), so it only
+  // marks pixels where it's really in front: drawn first, it marked pixels a
+  // block then covered, and the silhouette never showed.
   const FIGURE_STENCIL = 1;
   for (const mat of [bone, lanternMesh.material]) {
     Object.assign(mat, { stencilWrite: true, stencilRef: FIGURE_STENCIL, stencilFunc: THREE.AlwaysStencilFunc,
       stencilZPass: THREE.ReplaceStencilOp });
   }
+  for (const m of [body, head, lanternMesh]) m.renderOrder = 5;
   Object.assign(ghostMat, { stencilWrite: true, stencilRef: FIGURE_STENCIL, stencilFunc: THREE.NotEqualStencilFunc,
     stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp, stencilZPass: THREE.KeepStencilOp });
   for (const m of [body, head]) {

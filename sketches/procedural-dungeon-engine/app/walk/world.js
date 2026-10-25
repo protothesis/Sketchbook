@@ -47,7 +47,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
   float approach = min(uDitherMax, 0.3) * (1.0 - smoothstep(0.4, ${(DITHER_APPROACH * S).toFixed(1)}, south));
   if (ditherBayer(gl_FragCoord.xy) < max(circle, approach)) discard;
 }`;
-  /** `max` caps how much of the surface may dissolve (frames and doors stay readable). */
+  /** `max` caps how much of the surface may dissolve. */
   function withDither(mat, max = 0.92) {
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, dither);
@@ -75,17 +75,18 @@ if (vDitherEW > 0.7 && south > 0.2) {
     keyRing: new THREE.TorusGeometry(0.06 * S, 0.018 * S, 6, 16),
     keyShaft: new THREE.BoxGeometry(0.17 * S, 0.035 * S, 0.035 * S),
   };
-  const DOOR_DITHER = 0.6, FRAME_DITHER = 0.45;
-  const doorMat = withDither(new THREE.MeshLambertMaterial({ color: 0x2b211b, emissive: 0x1a0904 }), DOOR_DITHER);
-  const doorOpenMat = withDither(new THREE.MeshLambertMaterial({ color: 0x2b211b }), DOOR_DITHER);
-  const lockMat = withDither(new THREE.MeshLambertMaterial({ color: 0x323941, emissive: 0x08111a }), DOOR_DITHER);
-  const bandMat = withDither(new THREE.MeshLambertMaterial({ color: 0x5d6670, emissive: 0x0c1218 }), DOOR_DITHER);
+  // Door panels never dither: a door is a solid thing, and the figure shows
+  // through it (its orange silhouette) like through a block.
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0x2b211b, emissive: 0x1a0904 });
+  const doorOpenMat = new THREE.MeshLambertMaterial({ color: 0x2b211b });
+  const lockMat = new THREE.MeshLambertMaterial({ color: 0x323941, emissive: 0x08111a });
+  const bandMat = new THREE.MeshLambertMaterial({ color: 0x5d6670, emissive: 0x0c1218 });
   const seamMat = new THREE.MeshBasicMaterial({ color: SEAM, side: THREE.DoubleSide }); // double: the door's point can be mirrored
   const lockSeamMat = new THREE.MeshBasicMaterial({ color: LOCK_SEAM, side: THREE.DoubleSide });
   // A door to a lost path (a faint's), waiting for your choice: a waystone's violet.
   const lostSeamMat = new THREE.MeshBasicMaterial({ color: 0xa58cff, side: THREE.DoubleSide });
   // The surface door: weathered pale wood, daylight under it.
-  const surfaceMat = withDither(new THREE.MeshLambertMaterial({ color: 0x6f6a62, emissive: 0x15171a }), DOOR_DITHER);
+  const surfaceMat = new THREE.MeshLambertMaterial({ color: 0x6f6a62, emissive: 0x15171a });
   const surfaceSeamMat = new THREE.MeshBasicMaterial({ color: 0xdcebff, side: THREE.DoubleSide });
   geo.chalk = new THREE.CylinderGeometry(0.03 * S, 0.03 * S, 0.22 * S, 8);
   geo.doorstone = new THREE.BoxGeometry(0.15 * S, 0.21 * S, 0.05 * S);
@@ -141,8 +142,6 @@ if (vDitherEW > 0.7 && south > 0.2) {
         color: new THREE.Color().setHSL(h, 0.22, l), emissive: sealed ? 0x1c1404 : 0x000000,
       })),
       wall: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.2, 0.32) })),
-      // Door frames dissolve less, so a doorway in a south wall stays readable.
-      frame: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.22, 0.36) }), FRAME_DITHER),
       // Blocks never dissolve; the figure shows through them instead.
       block: new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.16, 0.24) }),
       detail: [0.12, 0.21].map((l) => new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.18, l) })),
@@ -207,11 +206,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
         eg.rotation.y = fr.rot;
         const hit = state.exitAt.get(ekey(c.x, c.y, f));
         if (hit) {
-          const jl = shadowed(new THREE.Mesh(geo.jamb, mats.frame));
+          // The wall around a doorway: part of the wall, dithering with it.
+          const jl = shadowed(new THREE.Mesh(geo.jamb, mats.wall));
           jl.position.set(-(0.5 - JAMB / 2) * S, WALL_H * S / 2, 0);
           const jr = shadowed(jl.clone());
           jr.position.x = -jl.position.x;
-          const li = shadowed(new THREE.Mesh(geo.lintel, mats.frame));
+          const li = shadowed(new THREE.Mesh(geo.lintel, mats.wall));
           li.position.set(0, (DOOR_H + (WALL_H - DOOR_H) / 2) * S, 0);
           eg.add(jl, jr, li);
           if (ownsDoorPanel(space.id, hit.exit)) addDoor(eg, space, hit.exit, fr.beyond);
@@ -307,6 +307,72 @@ if (vDitherEW > 0.7 && south > 0.2) {
     applyReveal(rec);
   }
 
+  // A door to a lost path shimmers: a violet glow strongest at the panel's
+  // edges, rippling, on both faces, and a few sparks drifting up its sides.
+  // All in shaders off one shared clock (lostFx.uTime, set each frame).
+  const lostFx = { uTime: { value: 0 } };
+  const LOST_GLOW = 0xb59cff;
+  const glowMat = new THREE.ShaderMaterial({
+    uniforms: Object.assign({ uColor: { value: new THREE.Color(LOST_GLOW) } }, lostFx),
+    vertexShader: 'varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `
+uniform float uTime;
+uniform vec3 uColor;
+varying vec2 vUv;
+void main() {
+  vec2 d = min(vUv, 1.0 - vUv) * vec2(${(DOOR_W / DOOR_H).toFixed(3)}, 1.0);
+  float e = min(d.x, d.y);
+  float rim = smoothstep(0.12, 0.0, e);
+  float ripple = 0.55 + 0.45 * sin(uTime * 3.1 + vUv.y * 14.0 - vUv.x * 6.0);
+  float sheen = 0.1 * (0.5 + 0.5 * sin(uTime * 1.7 + (vUv.x + vUv.y) * 9.0));
+  float a = rim * ripple * 1.2 + sheen;
+  gl_FragColor = vec4(uColor * a, a);
+}`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  });
+  geo.glow = new THREE.PlaneGeometry(DOOR_W * S * 1.04, DOOR_H * S * 1.03);
+  // Sparks: points scattered along the panel's sides and top, each rising a
+  // little and twinkling on its own phase.
+  geo.sparks = (() => {
+    const n = 16, pos = new Float32Array(n * 3), phase = new Float32Array(n);
+    const r = DE.createRng(DE.hash('door sparks'));
+    for (let i = 0; i < n; i++) {
+      const side = r.next(), w = DOOR_W * S / 2, h = DOOR_H * S;
+      if (side < 0.7) { pos[i * 3] = (r.chance(0.5) ? -1 : 1) * w * (0.85 + 0.2 * r.next()); pos[i * 3 + 1] = h * r.next(); }
+      else { pos[i * 3] = w * (r.next() * 2 - 1); pos[i * 3 + 1] = h * (0.95 + 0.08 * r.next()); }
+      pos[i * 3 + 2] = (r.next() - 0.5) * 0.12 * S;
+      phase[i] = r.next();
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('phase', new THREE.BufferAttribute(phase, 1));
+    return g;
+  })();
+  const sparkMat = new THREE.ShaderMaterial({
+    uniforms: Object.assign({ uColor: { value: new THREE.Color(0xe2d8ff) } }, lostFx),
+    vertexShader: `
+uniform float uTime;
+attribute float phase;
+varying float vA;
+void main() {
+  float t = fract(uTime * 0.35 + phase);
+  vec3 p = position + vec3(0.0, t * ${(0.35 * S).toFixed(2)}, 0.0);
+  vA = sin(3.14159 * t) * (0.5 + 0.5 * sin(uTime * 9.0 + phase * 40.0));
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_PointSize = 110.0 / -mv.z; // about 8 px at the camera's distance
+  gl_Position = projectionMatrix * mv;
+}`,
+    fragmentShader: `
+uniform vec3 uColor;
+varying float vA;
+void main() {
+  float d = length(gl_PointCoord - 0.5);
+  float a = smoothstep(0.5, 0.0, d) * vA;
+  gl_FragColor = vec4(uColor * a, a);
+}`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+
   function addDoor(edgeGroup, space, ex, beyond) {
     const gate = !ex.connectionId && DP.isLocked(space, ex); // keeps its iron bands once unlocked
     const locked = isLockedNow(space, ex);
@@ -329,6 +395,21 @@ if (vDitherEW > 0.7 && south > 0.2) {
     seam.visible = !ex.connectionId || shut;
     // A closed door's point: off the bar's outer edge, toward where it opens.
     // A child of the bar, so it shows and hides with it.
+    // The lost-path shimmer, on the panel so it swings with it.
+    const shimmer = new THREE.Group();
+    for (const side of [1, -1]) {
+      const g = new THREE.Mesh(geo.glow, glowMat);
+      g.position.z = side * 0.028 * S;
+      g.renderOrder = 6;
+      shimmer.add(g);
+    }
+    const sparks = new THREE.Points(geo.sparks, sparkMat);
+    sparks.position.y = -DOOR_H * S / 2;
+    sparks.renderOrder = 6;
+    shimmer.add(sparks);
+    shimmer.position.copy(panel.position);
+    shimmer.visible = seam.material === lostSeamMat;
+    pivot.add(shimmer);
     const point = new THREE.Mesh(geo.arrow, seam.material);
     point.position.set(0, 0.01, beyond * 0.1 * S);
     point.scale.z = beyond;
@@ -339,7 +420,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     arrow.visible = !!DP.rerollThrough(state.exp, space.id, ex);
     edgeGroup.add(pivot, seam, arrow);
     const door = {
-      key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, point, arrow, locked,
+      key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, point, arrow, locked, shimmer,
       openAngle: -beyond * SWING_ANGLE, t: ex.connectionId && !shut ? 1 : 0, dir: 0,
     };
     pivot.rotation.y = door.openAngle * door.t;
@@ -355,9 +436,9 @@ if (vDitherEW > 0.7 && south > 0.2) {
     for (const d of state.doors.values()) {
       const sp = exp.spaces[d.spaceId], ex = sp && sp.exits.find((e) => e.id === d.exitId);
       d.arrow.visible = !!(ex && DP.rerollThrough(exp, d.spaceId, ex));
-      if (ex && !ex.connectionId && ex.kind !== 'surface' && !d.locked) {
-        d.seam.material = d.point.material = W.lostPathAt(d.spaceId, d.exitId) ? lostSeamMat : seamMat;
-      }
+      const lost = !!(ex && !ex.connectionId && ex.kind !== 'surface' && !d.locked && W.lostPathAt(d.spaceId, d.exitId));
+      if (ex && !ex.connectionId && ex.kind !== 'surface' && !d.locked) d.seam.material = d.point.material = lost ? lostSeamMat : seamMat;
+      d.shimmer.visible = lost;
     }
   }
 
@@ -441,6 +522,6 @@ if (vDitherEW > 0.7 && south > 0.2) {
     return !!(hit && hit.exit.connectionId && !W.isClosed(hit.exit.connectionId));
   }
 
-  Object.assign(W, { dither, geo, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows,
+  Object.assign(W, { dither, geo, lostFx, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows,
     dissolveSpace, buildWorld, easeOut, easeInOut, applyReveal, applyDissolve, passable });
 })(window);
