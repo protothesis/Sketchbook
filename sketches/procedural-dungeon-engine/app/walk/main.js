@@ -283,6 +283,7 @@
       if (exp.registry[DE.key(Math.floor(c.x), Math.floor(c.y))] !== undefined && !state.creepers.some((q) => q.id === c.id)) W.addCreeper(c);
     }
     state.fx.wobble = state.fx.glitch = state.fx.flash = 0;
+    state.fx.levels = {};
     state.ghostTouch = state.wasTouched = false;
     state.creeperDrain = 0;
     state.gutter = null;

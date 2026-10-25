@@ -429,22 +429,35 @@ All notable changes to this sketch are logged here, per
   - The chart view still reads walk mode's record, but its own edits no
     longer flow into walk mode.
 - 2026-10-24: **Shadow creepers** (`app/walk/creepers.js`, tunables in
-  `CREEPER`): a dark grey capsule with one emissive red eye that always
-  faces you and blinks every 2–6 s. About 1 room in 12 from depth 2
-  (`RULES.creeperChance`, rolled once per room, saved like pixies). It
-  lurks in a room's corners and keeps off steady light (an ecology flee
-  rule). Within 7 cells it stalks you from the edge of your light: the
-  nearest spot in sight of you that your lamp doesn't reach (just past the
-  light's radius plus a margin, or in a block's shadow). It follows the
-  edge in as the lamp dims, dips inside it in the last two charges, and
-  under one charge (or with the lamp covered or out) comes straight at you.
-  It drains psychic stamina like the dark does, more the closer it is
-  (`RULES.staminaCreeperDrain`, within 3 cells and in sight). It moves at
-  2.1 cells/s, under walking (2.4), so only running loses it. It walks
-  around every block, low ones too (ghosts float over those). New:
-  `lightRadius()` in `lamp.js` (the floor ring's radius, growing to 4.5
-  cells at a full lamp); `lightReaches` takes an optional range; the
-  ghost path helpers take a per-creature block height (`tall`).
+  `CREEPER`): a small dark capsule with one emissive red eye that always
+  faces you. About 1 room in 12 from depth 2 (`RULES.creeperChance`,
+  rolled once per room, saved like pixies). It hops (a dip, an arc, a
+  landing squish, a nervous pause) with a contact shadow, and walks around
+  every block. Its mood follows your lamp: *afraid* (over two charges) it
+  waits just past the light's edge and never steps inside, scrambling back
+  if you walk at it, and flinching, blinking and dashing off if your light
+  hits it; *bold* (the last two charges) the same with a thinner margin,
+  a little inside the edge; *hunting* (under one charge, or the lamp
+  covered or out) it skitters about you and now and then winds up and
+  dashes at you. It keeps its waiting spot until that stops being at the
+  edge, so it doesn't jitter between shadows. Lurking, it hops slowly
+  between dark corners and keeps off steady light (an ecology rule). It
+  drains psychic stamina like the dark, more the closer it is, stacking
+  with others (`RULES.staminaCreeperDrain`, within 3 cells and in sight),
+  shown by a thin ring on the floor at that range (from bold on) and a
+  subtle red glitch. Its hops average well under walking pace. Blinks:
+  every 2-6 s, sometimes a quick double or triple. New: `lightRadius()` in
+  `lamp.js` (the floor ring's radius, growing to 4.5 cells at a full lamp).
+- 2026-10-24: **A creature kit** (`app/walk/creatures.js`): the movement
+  and light helpers ghosts had (half-cell paths, drifting, `lightReaches`)
+  moved out of `ghosts.js` for every creature type to use. A creature can
+  set its own `tall` (blocks above that are in its way; 0 for walkers) and
+  `radius`, and `lightReaches` takes an optional range.
+- 2026-10-24: **Screen effect profiles** (`fx.js`, `FX_PROFILES`): the
+  ghost's glitch post-process is now general. Each creature kind has a
+  profile (tear, colour split, static, scanlines, tint, glow) and a level;
+  levels add up, so effects mix and stack. Ghosts look as before; creepers
+  use a much subtler red one that eases in (`fxToward`).
 - 2026-10-24: **Off-screen markers for any creature** (`app/walk/markers.js`):
   the ghosts' ring markers moved out of `ghosts.js` into a module each
   creature kind registers with (which ones want a marker, the icon, the

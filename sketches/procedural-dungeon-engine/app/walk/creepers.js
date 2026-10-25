@@ -1,61 +1,87 @@
-// Walk mode: shadow creepers. Dark grey shapes with one red eye, lurking in
-// the dim corners of a room (about 1 room in 12, from depth 2). They keep
-// off steady light (lit sconces, awake waystones: the ecology's flee rule)
-// and want you. Come near and one stalks you from the edge of your light:
-// the nearest spot your lamp doesn't reach, just past its radius or in the
-// shadow of a block, as close to you as it can get while still dark. It's
-// light-sensitive, not light-proof: it only keeps out of the light's
-// radius, and caught inside it backs out a little faster than it creeps.
+// Walk mode: shadow creepers. Small dark things with one red eye, hopping
+// about the dim corners of a room (about 1 room in 12, from depth 2). They
+// keep off steady light (lit sconces, awake waystones: the ecology's flee
+// rule) and want you, but they're afraid of your lamp.
 //
-// The lamp sets how close it dares. As the light shrinks it follows the
-// edge in; in the lamp's last two charges it gets bold and dips inside the
-// edge; under one charge (or with the lamp covered or out) it stops minding
-// light and comes straight at you. Its nearness wears on your psychic
-// stamina, like the dark does (lamp.js), harder the closer it is. It moves
-// a little slower than you walk: walking keeps it at bay only just, running
-// loses it. It walks the floor, so it goes around every block, even low
-// ones. Off screen, it gets a marker (markers.js) like a ghost.
+// Its mood comes from your lamp:
+//   afraid  (more than two charges): it waits at the edge of your light,
+//           just past its radius, and never steps inside it. Walk at it and
+//           it scrambles back; catch it in your light and it flinches,
+//           blinks off the daze and dashes away. It only ever comes closer
+//           because your light shrank.
+//   bold    (the last two charges): the same, with a thinner margin, until
+//           it's a little inside the edge.
+//   hunting (under one charge, or the lamp covered or out): it comes for
+//           you, skittering about you in quick hops, and now and then winds
+//           up and dashes at you.
+// Lurking (you're not near) it hops slowly between dark spots.
+//
+// It gets about in hops: a dip, a quick little arc, a squish on landing, a
+// nervous pause. Its average pace is well under your walk (dashes catch
+// you up in bursts; running loses it). It walks the floor, so it goes
+// around every block. Its nearness wears on your psychic stamina, like the
+// dark does (lamp.js), more the closer it is, and stacks with others; a
+// faint ring on the floor shows how far that reaches once it's bold, and a
+// subtle red glitch (fx.js's creeper profile) fades in as it drains you.
+// Off screen it gets a marker (markers.js).
 (function (global) {
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, S, scene, state, passable, lantern, roomGap,
-    subBlocked, followPath } = W;
+  const { DE, DP, THREE, S, scene, state, passable, lantern, roomGap, subBlocked, followPath } = W;
 
   const CREEPER = {
-    speed: 2.1,          // cells/s stalking: under walking (SPEED 2.4), far under running (RUN 4)
-    shySpeed: 2.6,       // cells/s backing out of your light when it's caught inside the radius
-    lurkSpeed: 0.4,      // cells/s, idling from dark spot to dark spot
-    pause: [1.5, 4],     // s between dark spots while lurking
     notice: 7,           // cells: this near (a room away or less) and it starts stalking you
     loseRange: 11,       // cells: farther than this and it goes back to lurking...
     loseRooms: 2,        // ...or once this many rooms lie between you
-    margin: 0.45,        // cells it keeps outside the light's edge
-    boldPips: 2,         // charges: at or under this it creeps closer...
-    boldMargin: -0.6,    // ...down to this margin (negative: inside the light) at directPips
-    directPips: 1,       // charges: under this it ignores light and comes straight at you
-    reach: 0.4,          // cells, centre to centre: as close as it comes
+    margin: 0.45,        // cells it keeps outside the light's edge (afraid)
+    boldPips: 2,         // charges: at or under this it's bold...
+    boldMargin: -0.6,    // ...its margin thinning to this (negative: inside the light) at directPips
+    directPips: 1,       // charges: under this it hunts you, light or not
+    postTol: 0.15,       // cells inside its edge it tolerates before moving back out
+    postSlack: 1.2,      // cells past its edge before it follows you in
+    reach: 0.4,          // cells, centre to centre: as close as it gets
     drainRange: 3,       // cells: within this (and in sight of you) it drains psychic stamina,
                          // RULES.staminaCreeperDrain at `reach`, falling off to nothing here
+    stack: 2,            // most creepers' worth of drain (and glitch) that adds up at once
     rays: 24,            // directions searched for the edge of the light
     look: 1.5,           // cells past the edge searched along each ray
     step: 0.12,          // cells between points tried along a ray
-    stay: 0.35,          // weight on staying near where it is when picking a spot
-    replan: 0.35,        // s between picks of where to stand
-    lightH: 0.3,         // cells: the height the light has to reach to count as touching it
+    // Hops, by what it's doing: len (cells), time (s in the air), rest (s between hops).
+    hops: {
+      lurk: { len: 0.3, time: 0.22, rest: [0.7, 2] },
+      afraid: { len: 0.35, time: 0.2, rest: [0.3, 0.8] },
+      bold: { len: 0.38, time: 0.2, rest: [0.2, 0.55] },
+      follow: { len: 0.45, time: 0.2, rest: [0.1, 0.3] },  // catching up to the edge as you move off
+      flee: { len: 0.5, time: 0.18, rest: [0.03, 0.1] },   // scrambling out of your light
+      hunt: { len: 0.5, time: 0.2, rest: [0.06, 0.22] },   // about 1.2 cells/s: under your walk (2.4)
+    },
+    hopHeight: 0.07,     // cells
+    dip: 0.07,           // s crouched before a hop
+    dash: { windup: 0.35, speed: 4.2, time: 0.32, chance: 0.22 }, // hunting: share of hops that are dashes at you
+    circle: [0.55, 1.1], // cells from you: where a hunting one hops about
+    circleTime: [0.5, 1.3], // s before it picks somewhere else around you
+    daze: { cooldown: 2.5, windup: 0.4, burst: 3 }, // caught in your light: flinch, blink, dash off
+    blink: [2, 6],       // s between blinks
+    blinkTime: 0.12,     // s the eye stays shut
+    rapid: 0.25,         // share of blinks that are a quick double or triple
+    burstGap: 0.08,      // s open between blinks in a burst
+    ring: { opacity: 0.16, bold: 0.5, ease: 2 }, // its reach on the floor: full while hunting, `bold` share while bold
     markRooms: 1,        // a lurking creeper off screen gets a marker this many rooms away or nearer
     markRange: 14,       // cells: and only within this distance
-    blink: [2, 6],       // s between blinks
-    blinkTime: 0.14,     // s the eye stays shut
+    lightH: 0.3,         // cells: the height your light has to reach to count as touching it
   };
 
   const geo = {
     body: new THREE.CapsuleGeometry(0.12 * S, 0.22 * S, 4, 10), // the figure's body
     eye: new THREE.SphereGeometry(0.028 * S, 10, 8),
+    blob: new THREE.CircleGeometry(0.17 * S, 20),
+    ring: new THREE.RingGeometry(0.965, 1, 64), // a thin line at its drain range
   };
   const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2c2b30 });
   // Emissive on black, and out of the fog: the eye shows in any darkness.
   const eyeMat = new THREE.MeshLambertMaterial({ color: 0x000000, emissive: 0xff2414, fog: false });
+  const blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false });
   const glowTex = (() => {
     const cv = document.createElement('canvas');
     cv.width = cv.height = 32;
@@ -72,24 +98,40 @@
 
   const between = (r) => r[0] + Math.random() * (r[1] - r[0]);
   const spaceAt = (x, y) => state.exp.registry[DE.key(Math.floor(x), Math.floor(y))];
+  const lerp = THREE.MathUtils.lerp, clamp = THREE.MathUtils.clamp;
 
   function addCreeper(o) {
     const mesh = new THREE.Group();
+    // The rig squashes and hops; the blob and ring stay on the floor.
+    const rig = new THREE.Group();
     const body = new THREE.Mesh(geo.body, bodyMat);
     body.position.y = 0.23 * S;
-    // The eye rig sits on the front of the body (+z, turned to face you);
-    // blinking squashes it flat.
+    // The eye sits on the front of the body (+z, turned to face you); blinking squashes it flat.
     const eye = new THREE.Group();
     eye.position.set(0, 0.36 * S, 0.115 * S);
     eye.add(new THREE.Mesh(geo.eye, eyeMat));
     const glow = new THREE.Sprite(glowMat);
     glow.scale.setScalar(0.16 * S);
     eye.add(glow);
-    mesh.add(body, eye);
+    rig.add(body, eye);
+    const blob = new THREE.Mesh(geo.blob, blobMat);
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.y = 0.01;
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xff3a24, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending });
+    const ring = new THREE.Mesh(geo.ring, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.014 * S;
+    ring.scale.setScalar(CREEPER.drainRange * S);
+    ring.visible = false;
+    mesh.add(rig, blob, ring);
     scene.add(mesh);
-    // tall 0: every block is in its way (the path helpers in ghosts.js).
-    const c = Object.assign({ mode: 'lurk', target: null, pause: 0, next: null, pathT: 0, post: null, planT: 0 }, o, {
-      mesh, eye, tall: 0, phase: Math.random() * 10, blinkT: between(CREEPER.blink), shut: 0, bold: false,
+    // tall 0: every block is in its way (creatures.js).
+    const c = Object.assign({ mode: 'lurk', target: null, next: null, pathT: 0, post: null }, o, {
+      mesh, rig, eye, blob, ring, ringMat, tall: 0, mood: 'lurk',
+      hop: { phase: 'rest', t: 0, dur: Math.random(), speed: 0, goal: null, land: 0 },
+      circleT: 0, dazeT: 0, ringOn: 0,
+      blinkT: between(CREEPER.blink), shut: 0, burst: 0, gap: 0,
     });
     state.creepers.push(c);
     return c;
@@ -97,6 +139,7 @@
 
   function removeCreeper(c) {
     scene.remove(c.mesh);
+    c.ringMat.dispose();
     state.creepers = state.creepers.filter((o) => o !== c);
   }
   function clearCreepers() { for (const c of state.creepers.slice()) removeCreeper(c); }
@@ -115,6 +158,9 @@
     for (const c of state.creepers.slice()) if (ids.has(spaceAt(c.x, c.y))) removeCreeper(c);
   }
 
+  // ---------------------------------------------------------------------------
+  // Where to go
+
   /** Can you see from cell a into the next cell b (through floor and open doors, corners included)? */
   function sightStep(ax, ay, bx, by) {
     if (ax !== bx && ay !== by) {
@@ -123,47 +169,68 @@
     return passable(ax, ay, bx, by);
   }
 
-  /** How far the light keeps a creeper off you, in cells, or 0 once it stops minding it. */
+  /** How far your light keeps creepers off you, in cells, or 0 once they hunt you. */
   function keepOff() {
     const fuel = state.run.fuel, r = W.lightRadius();
     if (!r || fuel < CREEPER.directPips) return 0;
-    const k = THREE.MathUtils.clamp((fuel - CREEPER.directPips) / (CREEPER.boldPips - CREEPER.directPips), 0, 1);
-    return Math.max(0, r + THREE.MathUtils.lerp(CREEPER.boldMargin, CREEPER.margin, k));
+    const k = clamp((fuel - CREEPER.directPips) / (CREEPER.boldPips - CREEPER.directPips), 0, 1);
+    return Math.max(0, r + lerp(CREEPER.boldMargin, CREEPER.margin, k));
   }
 
-  /** Is (x, y) inside the light, as far as a creeper keeping `keep` off you cares? */
-  function lit(x, y, keep, lamp) {
-    const p = state.player;
-    return Math.hypot(x - p.x, y - p.y) < keep && W.lightReaches(lamp, { x, y, h: CREEPER.lightH }, keep + 1);
+  /** Distance from point (px, py) to the segment a-b. */
+  function segDist(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
+    return Math.hypot(px - ax - dx * t, py - ay - dy * t);
+  }
+
+  /** Is a waiting spot still good: at the edge (not inside it, not far past it) and not by a steady light? */
+  function postOk(c, post, keep) {
+    const p = state.player, d = Math.hypot(post.x - p.x, post.y - p.y);
+    return d >= keep - CREEPER.postTol && d <= keep + CREEPER.postSlack && !W.ecology.shuns('creeper', post.x, post.y, c);
   }
 
   /**
    * Where to wait: along rays out from you (in sight of you: walls stop a
-   * ray), the first point the light doesn't touch (nor a steady light's
-   * reach: the ecology's flee rule), and of those the one
-   * nearest you, weighted a little toward staying put. Null if none.
+   * ray), the first point at or past the edge of your light, not by a
+   * steady light, and reachable without cutting through your light. Of
+   * those, the one nearest the creeper, so it shifts along the edge rather
+   * than crossing the room. Null if none.
    */
-  function pickPost(c, keep, lamp) {
+  function pickPost(c, keep) {
     const p = state.player;
     const base = Math.atan2(c.y - p.y, c.x - p.x);
+    const inner = Math.min(keep, Math.hypot(c.x - p.x, c.y - p.y)) - CREEPER.postTol;
     let best = null, bs = Infinity;
     for (let i = 0; i < CREEPER.rays; i++) {
       const a = base + i / CREEPER.rays * Math.PI * 2, dx = Math.cos(a), dy = Math.sin(a);
       let cx = Math.floor(p.x), cy = Math.floor(p.y);
-      for (let r = CREEPER.reach; r <= keep + CREEPER.look; r += CREEPER.step) {
+      for (let r = CREEPER.step; r <= keep + CREEPER.look; r += CREEPER.step) {
         const x = p.x + dx * r, y = p.y + dy * r;
         const nx = Math.floor(x), ny = Math.floor(y);
         if (nx !== cx || ny !== cy) {
           if (!sightStep(cx, cy, nx, ny)) break;
           cx = nx; cy = ny;
         }
-        if (subBlocked(Math.floor(x * 2), Math.floor(y * 2), 0) || lit(x, y, keep, lamp) || W.ecology.shuns('creeper', x, y, c)) continue;
-        const s = r + CREEPER.stay * Math.hypot(x - c.x, y - c.y);
+        if (r < keep || subBlocked(Math.floor(x * 2), Math.floor(y * 2), 0) || W.ecology.shuns('creeper', x, y, c)) continue;
+        if (segDist(p.x, p.y, c.x, c.y, x, y) < inner) break; // the way there crosses your light
+        const s = Math.hypot(x - c.x, y - c.y);
         if (s < bs) { bs = s; best = { x, y }; }
         break;
       }
     }
     return best;
+  }
+
+  /** A spot around you for a hunting one to hop to: roughly on its side of you. */
+  function circleSpot(c) {
+    const p = state.player, base = Math.atan2(c.y - p.y, c.x - p.x);
+    for (let i = 0; i < 6; i++) {
+      const a = base + (Math.random() - 0.5) * 1.8, r = between(CREEPER.circle);
+      const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r;
+      if (spaceAt(x, y) !== undefined && !subBlocked(Math.floor(x * 2), Math.floor(y * 2), 0)) return { x, y };
+    }
+    return { x: p.x, y: p.y };
   }
 
   /** A dark spot in its own room to idle at: corners and walls first, and never by a steady light. */
@@ -184,46 +251,89 @@
     return best;
   }
 
-  function lurk(c, dt) {
-    if (c.pause > 0) { c.pause -= dt; return; }
-    if (!c.target) { c.target = darkSpot(c); c.next = null; c.pathT = 0; }
-    if (c.target && followPath(c, c.target.x, c.target.y, CREEPER.lurkSpeed, dt)) {
-      c.target = null;
-      c.pause = between(CREEPER.pause);
-    }
-  }
-
-  function stalk(c, dt, lamp) {
-    const p = state.player;
-    const keep = keepOff();
-    if (!keep) {
-      // Under a charge, or no light at all: straight for you.
-      if (!c.bold) { c.bold = true; W.showCaption('the red eye stops minding your light'); }
-      c.post = null;
-      if (Math.hypot(p.x - c.x, p.y - c.y) > CREEPER.reach) followPath(c, p.x, p.y, CREEPER.speed, dt);
+  /**
+   * Decide where it's headed this frame: c.hop.goal, the hop style, and
+   * whether its next hop may be a dash at you.
+   */
+  function think(c, dt, lamp) {
+    const p = state.player, h = c.hop;
+    const d = Math.hypot(p.x - c.x, p.y - c.y);
+    if (c.mode === 'lurk') {
+      c.mood = 'lurk';
+      if (!c.target) c.target = darkSpot(c);
+      h.goal = c.target; c.style = 'lurk'; c.dashAt = null;
       return;
     }
-    c.bold = false;
+    const keep = keepOff();
+    c.mood = !keep ? 'hunt' : state.run.fuel <= CREEPER.boldPips ? 'bold' : 'afraid';
+    if (c.mood === 'hunt') {
+      c.post = null;
+      c.circleT -= dt;
+      if (c.circleT <= 0 || !h.goal) { h.goal = circleSpot(c); c.circleT = between(CREEPER.circleTime); }
+      c.style = 'hunt';
+      // A dash goes right at you, stopping at its reach.
+      c.dashAt = d > CREEPER.reach ? { x: p.x + (c.x - p.x) / d * CREEPER.reach, y: p.y + (c.y - p.y) / d * CREEPER.reach } : null;
+      return;
+    }
+    c.dashAt = null;
     // Steady light pushes it back, as it does ghosts.
     const shy = W.ecology.flee('creeper', c);
     if (shy) {
-      const d = Math.hypot(shy.x, shy.y) || 1;
-      followPath(c, c.x + shy.x / d * 0.3, c.y + shy.y / d * 0.3, CREEPER.shySpeed, dt);
-      c.post = null;
+      const n = Math.hypot(shy.x, shy.y) || 1;
+      h.goal = { x: c.x + shy.x / n * 0.6, y: c.y + shy.y / n * 0.6 }; c.style = 'flee'; c.post = null;
       return;
     }
-    c.planT -= dt;
-    if (c.planT <= 0 || !c.post) {
-      c.planT = CREEPER.replan;
-      const post = pickPost(c, keep, lamp);
-      if (post && (!c.post || Math.hypot(post.x - c.post.x, post.y - c.post.y) > 0.1)) { c.post = post; c.next = null; c.pathT = 0; }
-      if (!post) { // nowhere dark in sight: back off along the line from you
+    if (!c.post || !postOk(c, c.post, keep)) {
+      c.post = pickPost(c, keep);
+      if (!c.post) { // nowhere at the edge in sight: back straight off
         const a = Math.atan2(c.y - p.y, c.x - p.x);
         c.post = { x: p.x + Math.cos(a) * keep, y: p.y + Math.sin(a) * keep };
       }
     }
-    followPath(c, c.post.x, c.post.y, lit(c.x, c.y, keep, lamp) ? CREEPER.shySpeed : CREEPER.speed, dt);
+    h.goal = c.post;
+    c.style = d < keep - CREEPER.postTol ? 'flee'
+      : Math.hypot(c.post.x - c.x, c.post.y - c.y) > 1.5 ? 'follow' : c.mood;
+    // Caught in your light, inside its edge: flinch, blink it off, dash for the edge.
+    // (A bold one's edge is inside the light; it doesn't flinch there.)
+    c.dazeT -= dt;
+    if (c.dazeT <= 0 && d < Math.min(W.lightRadius(), keep - CREEPER.postTol) && W.lightReaches(lamp, { x: c.x, y: c.y, h: CREEPER.lightH }, keep + 1)) {
+      c.dazeT = CREEPER.daze.cooldown;
+      c.burst = CREEPER.daze.burst; c.gap = 0;
+      Object.assign(h, { phase: 'windup', t: 0, dur: CREEPER.daze.windup, dashTo: c.post });
+    }
   }
+
+  // ---------------------------------------------------------------------------
+  // Getting there: hops and dashes
+
+  function hopTo(c, dt) {
+    const h = c.hop, st = CREEPER.hops[c.style] || CREEPER.hops.afraid;
+    h.t += dt;
+    h.land = Math.max(0, h.land - dt);
+    const land = () => { h.phase = 'rest'; h.t = 0; h.dur = between(st.rest); h.land = 0.12; };
+    if (h.phase === 'rest') {
+      if (h.t < h.dur || !h.goal || Math.hypot(h.goal.x - c.x, h.goal.y - c.y) < 0.06) {
+        // There: a lurking one picks its next dark spot after a longer wait.
+        if (h.t >= h.dur && c.mode === 'lurk' && c.target) { c.target = null; h.t = 0; h.dur = between([1.5, 4]); }
+        return;
+      }
+      if (c.dashAt && Math.random() < CREEPER.dash.chance) Object.assign(h, { phase: 'windup', t: 0, dur: CREEPER.dash.windup, dashTo: c.dashAt });
+      else Object.assign(h, { phase: 'dip', t: 0, dur: CREEPER.dip });
+    } else if (h.phase === 'dip' && h.t >= h.dur) {
+      Object.assign(h, { phase: 'air', t: 0, dur: st.time, speed: st.len / st.time });
+      c.next = null; c.pathT = 0;
+    } else if (h.phase === 'windup' && h.t >= h.dur) {
+      Object.assign(h, { phase: 'dash', t: 0, dur: CREEPER.dash.time, speed: CREEPER.dash.speed });
+      c.next = null; c.pathT = 0;
+    } else if (h.phase === 'air' || h.phase === 'dash') {
+      const to = h.phase === 'dash' ? h.dashTo || h.goal : h.goal;
+      const there = !to || followPath(c, to.x, to.y, h.speed, dt);
+      if (there || h.t >= h.dur) land();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Per frame
 
   function updateCreepers(dt) {
     const p = state.player;
@@ -237,29 +347,64 @@
         const cs = spaceAt(c.x, c.y);
         const gap = cs === undefined || p.spaceId === undefined ? Infinity : roomGap(cs, p.spaceId, CREEPER.loseRooms);
         if (c.mode === 'lurk' && d < CREEPER.notice && gap <= 1) {
-          c.mode = 'stalk'; c.target = null; c.post = null; c.planT = 0;
+          c.mode = 'stalk'; c.target = null; c.post = null; c.hop.goal = null;
           W.showCaption('a red eye opens at the edge of your light');
         } else if (c.mode === 'stalk' && (d > CREEPER.loseRange || gap >= CREEPER.loseRooms)) {
-          c.mode = 'lurk'; c.post = null; c.bold = false; c.pause = 1;
+          c.mode = 'lurk'; c.post = null; c.hop.goal = null;
         }
-        if (c.mode === 'stalk') stalk(c, dt, lamp);
-        else lurk(c, dt);
-        // Its pull on you: by nearness, while it can see you.
+        const was = c.mood;
+        think(c, dt, lamp);
+        if (c.mood === 'hunt' && was !== 'hunt' && was !== 'lurk') W.showCaption('the red eye stops minding your light');
+        hopTo(c, dt);
+        // Its pull on you: by nearness, while it can see you. Several add up.
         if (d < CREEPER.drainRange && W.lightReaches(eyes, { x: c.x, y: c.y, h: CREEPER.lightH + 0.1 })) {
-          drain = Math.max(drain, THREE.MathUtils.clamp(1 - (d - CREEPER.reach) / (CREEPER.drainRange - CREEPER.reach), 0, 1));
+          drain += clamp(1 - (d - CREEPER.reach) / (CREEPER.drainRange - CREEPER.reach), 0, 1);
         }
       }
-
-      // Look: a slow sway, always turned to you, and a blink now and then.
-      c.phase += dt;
-      c.mesh.position.set(c.x * S, Math.sin(c.phase * 1.3) * 0.01 * S, c.y * S);
-      c.mesh.rotation.y = Math.atan2(p.x - c.x, p.y - c.y);
-      c.mesh.rotation.z = Math.sin(c.phase * 0.9) * 0.05;
-      if (c.shut > 0) c.shut -= dt;
-      else if ((c.blinkT -= dt) <= 0) { c.shut = CREEPER.blinkTime; c.blinkT = between(CREEPER.blink); }
-      c.eye.scale.y = c.shut > 0 ? 0.001 : 1;
+      look(c, dt, frozen);
     }
-    state.creeperDrain = drain;
+    drain = Math.min(CREEPER.stack, drain);
+    if (!frozen) {
+      state.creeperDrain = drain;
+      W.fxToward('creeper', drain, dt); // the subtle red glitch, easing in as it drains you
+    }
+  }
+
+  /** Hop arc and squish, always facing you, blinks, and its reach on the floor. */
+  function look(c, dt, frozen) {
+    const p = state.player, h = c.hop;
+    let sx = 1, sy = 1, lift = 0, shake = 0;
+    const k = h.dur > 0 ? clamp(h.t / h.dur, 0, 1) : 1;
+    if (h.phase === 'dip') { sx = 1 + 0.1 * k; sy = 1 - 0.18 * k; }
+    else if (h.phase === 'windup') { sx = 1 + 0.16 * k; sy = 1 - 0.3 * k; shake = 0.012 * k; } // anticipation: low, trembling
+    else if (h.phase === 'air') { sx = 0.93; sy = 1.1; lift = Math.sin(Math.PI * k) * CREEPER.hopHeight; }
+    else if (h.phase === 'dash') { sx = 0.9; sy = 1.08; lift = Math.sin(Math.PI * k) * CREEPER.hopHeight * 0.4; }
+    if (h.land > 0) { const q = h.land / 0.12; sx += 0.1 * q; sy -= 0.16 * q; }
+    c.mesh.position.set((c.x + (Math.random() - 0.5) * shake) * S, 0, (c.y + (Math.random() - 0.5) * shake) * S);
+    c.rig.position.y = lift * S;
+    c.rig.scale.set(sx, sy, sx);
+    c.rig.rotation.y = Math.atan2(p.x - c.x, p.y - c.y);
+    c.blob.scale.setScalar(1 - lift * 3);
+
+    // Blinks: now and then, sometimes a quick double or triple, and a burst when it's dazed.
+    if (!frozen) {
+      if (c.shut > 0) c.shut -= dt;
+      else if (c.burst > 0) {
+        if ((c.gap -= dt) <= 0) { c.shut = CREEPER.blinkTime; c.burst--; c.gap = CREEPER.burstGap; }
+      } else if ((c.blinkT -= dt) <= 0) {
+        c.shut = CREEPER.blinkTime;
+        c.burst = Math.random() < CREEPER.rapid ? 1 + Math.floor(Math.random() * 2) : 0;
+        c.gap = CREEPER.burstGap;
+        c.blinkT = between(CREEPER.blink);
+      }
+    }
+    c.eye.scale.y = c.shut > 0 ? 0.001 : 1;
+
+    // Its reach on the floor: hidden while it's afraid, part-shown when bold, full while hunting.
+    const want = c.mood === 'hunt' ? 1 : c.mood === 'bold' ? CREEPER.ring.bold : 0;
+    if (!frozen) c.ringOn += (want - c.ringOn) * Math.min(1, dt * CREEPER.ring.ease);
+    c.ring.visible = c.ringOn > 0.01;
+    c.ringMat.opacity = CREEPER.ring.opacity * c.ringOn;
   }
 
   /** Its marker icon: a dark disc and the red eye (shut mid-blink). */
@@ -268,8 +413,7 @@
     x.clearRect(0, 0, n, n);
     x.fillStyle = 'rgba(70, 68, 76, 0.9)';
     x.beginPath(); x.ellipse(n / 2, n * 0.52, n * 0.17, n * 0.24, 0, 0, Math.PI * 2); x.fill();
-    const stalking = c.mode === 'stalk';
-    x.fillStyle = stalking ? '#ff3a24' : 'rgba(255, 70, 50, 0.6)';
+    x.fillStyle = c.mode === 'stalk' ? '#ff3a24' : 'rgba(255, 70, 50, 0.6)';
     x.beginPath();
     if (c.shut > 0) x.ellipse(n / 2, n * 0.44, n * 0.075, n * 0.012, 0, 0, Math.PI * 2);
     else x.arc(n / 2, n * 0.44, n * 0.06, 0, Math.PI * 2);

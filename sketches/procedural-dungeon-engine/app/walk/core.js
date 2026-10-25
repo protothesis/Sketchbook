@@ -14,7 +14,7 @@
 // from file://), which play.html loads in this order:
 //
 //   saves, core, world, figure, items, restore, waystones, lamp, actions,
-//   input, ecology, markers, wells, pixies, ghosts, creepers, fx, hud, game, main
+//   input, ecology, creatures, markers, wells, pixies, ghosts, creepers, fx, hud, game, main
 //
 // (saves.js is the odd one out: it knows nothing of W, and hangs its save
 // slots on DungeonPlay.saves, so it can move to another client.)
@@ -120,7 +120,8 @@
     variant: {},         // per group slot: the variant in use (e.g. chalk colour)
     expanded: null,      // the group slot whose picker is open
     marks: [],           // chalk marks drawn in the world
-    fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9 }, // screen effects, 0..1
+    fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9, // screen effects, 0..1
+      levels: {} },      // per effect profile (FX_PROFILES in fx.js): how strong it is right now
     run: null,           // inventory + run stats, see freshRun()
     push: { key: null, t: 0 },
     pushBlocks: [],      // push blocks in built rooms (see restore.js)
