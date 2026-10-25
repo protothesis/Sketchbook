@@ -433,6 +433,18 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **The jar swipe** (interaction cleanup, step 6). F swipes
+  the jar in your hands, and the swipe always plays: an empty jar catches
+  a pixie close by, or scoops a full entropy well you're standing in (with
+  an empty jar in hand, the well waits for your swipe instead of pouring
+  into the lamp); a jar of entropy pours into your lamp, one charge, all
+  or nothing. Jars are grouped by what they hold (empty, pixie, entropy);
+  "auto" is gone. A jar of entropy glows violet inside.
+- 2026-10-24: **Run save v4.** A jar records what it holds (`holds: null |
+  'pixie' | 'entropy'`) instead of a pixie count. Save snapshots now carry
+  `runVersion` and older runs are migrated as they load (before this, a
+  slot save skipped `RUN_MIGRATIONS`), so this needed no new `BUILD`: an
+  existing save still loads, its pixie jars intact.
 - 2026-10-24: **Carrying** (interaction cleanup, step 5). E lifts a push
   block or crate and you carry it over your head; E sets it down on the
   free half-cell ahead, shown by a faint box, so a block is never stuck.

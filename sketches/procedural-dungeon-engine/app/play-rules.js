@@ -35,10 +35,10 @@
     // Doorstones: open a door in any bare wall. About as rare as keys turn out.
     chalkChance: 0.045,
     chalkMinDepth: 2,
-    // Jars hold one pixie each; a sigil tile powers up with a pixie jar.
+    // A jar holds one thing: a pixie, or a charge of entropy swiped from a
+    // full well. A sigil tile powers up with a pixie jar.
     jarChance: 1 / 15,
     jarMinDepth: 1,
-    jarCapacity: 1,
     // Pixies: small winged lights, drifting in about 1 room in 10. Catch one
     // in an empty jar; ghosts are drawn to them, free or jarred.
     pixieChance: 0.1,

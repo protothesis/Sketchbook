@@ -556,6 +556,13 @@ last one lights. A trickle well has a drip: a drop slowly forms while it
 waits, then drops fall and the pool grows. This is the rule for
 everything from here on (section 15).
 
+**A jar carries a well.** Swipe an empty jar through a full well and its
+charge goes into the jar instead of your lamp; pour it into the lamp later
+(all or nothing). It's how to bank a well you'd otherwise waste on a full
+lamp, or bring entropy to where you'll need it. (It cuts against the
+*temporary entropy* idea below: if that's built, jarred entropy might be
+the one kind that keeps.)
+
 **Later:** *temporary* entropy with a potency that starts draining at once,
 so you can fill up but can't carry it across the map; wells you have to
 restore before they flow.

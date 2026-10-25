@@ -92,4 +92,7 @@ built; this file is the plan until it's all in.
 5. [x] Carrying blocks and jars; pull removed. (Lifting a block that's
        home is a 0.5 s hold. The carried block is `run.carry`, additive, so
        the v4 bump moves to step 6 with the jar contents.)
-6. [ ] Jar swipe: pixies, well entropy, pouring.
+6. [x] Jar swipe: pixies, well entropy, pouring; run save v4. (A jar
+       fills only from a full well; with an empty jar in hand a well waits
+       for the swipe instead of pouring into the lamp. Snapshots now carry
+       `runVersion` and migrate on load, so this didn't need a new BUILD.)

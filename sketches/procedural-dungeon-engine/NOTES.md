@@ -121,7 +121,10 @@ Each one is a default that can change.
 - **Versioning.** `BUILD` in `saves.js` stamps every snapshot. A save with
   another build isn't loaded (title screen: "from an older build"). Bump it
   whenever a change alters what a history builds (generator, placement,
-  anything replay touches) or the shape of `run`. That replaces the old
+  anything replay touches). A change to the shape of `run` alone doesn't
+  need one: snapshots carry `runVersion` (`RUN_VERSION` in `core.js`), and
+  an older run is migrated as it loads (`RUN_MIGRATIONS`; a snapshot with
+  no `runVersion` is version 3). That replaces the old
   habit of gating generator changes behind params for old records (the
   existing gates, like `params.starter` and `params.hallChance`, stay but
   needn't grow). Within one build, replay is exact.

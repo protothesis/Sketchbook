@@ -187,7 +187,7 @@
       if (!inDoorMouth(sx, sy)) q = { sx, sy };
     }
     if (!q) q = { sx: item.cell.x * 2, sy: item.cell.y * 2 };
-    const rec = addJarToWorld({ id: 'j' + (++state.run.jarSeq), sx: q.sx, sy: q.sy, fill: 0 });
+    const rec = addJarToWorld({ id: 'j' + (++state.run.jarSeq), sx: q.sx, sy: q.sy, holds: null });
     rec.tile = tile; // rises with the floor as the room assembles
   }
 
@@ -200,15 +200,13 @@
   function slots() {
     const run = state.run, out = [{ key: 'lantern', kind: 'lantern' }]; // empty hands
     if (run.jars.length) {
-      // One slot for every jar, grouped by fill (empty, or a pixie). "auto"
-      // (the default) catches a pixie in an empty jar when one is near, sets
-      // a pixie jar onto a sigil, and an empty one anywhere else.
-      const groups = [];
-      for (let f = 0; f <= RULES.jarCapacity; f++) {
-        const count = run.jars.filter((j) => j.fill === f).length;
-        if (count) groups.push({ id: 'f' + f, fill: f, count });
+      // One slot for every jar, grouped by what it holds: empty, a pixie, a
+      // charge of entropy. The group you pick is the jar in your hands.
+      const variants = [];
+      for (const holds of JAR_HOLDS) {
+        const count = run.jars.filter((j) => (j.holds || null) === holds).length;
+        if (count) variants.push({ id: holds || 'empty', holds, count });
       }
-      const variants = groups.length > 1 ? [{ id: 'auto', auto: true, count: run.jars.length }].concat(groups) : groups;
       const cur = variants.find((v) => v.id === state.variant.jar) || variants[0];
       out.push({ key: 'jar', kind: 'jar', variants, cur, count: run.jars.length });
     }
@@ -255,19 +253,18 @@
   const LANTERN_SVG = '<svg viewBox="0 0 24 32" width="15" height="20"><path d="M8 6 a4 4 0 0 1 8 0" fill="none" stroke="currentColor" stroke-width="1.8"/>' +
     '<rect x="6" y="6" width="12" height="3" rx="1" fill="currentColor"/><rect x="7" y="9" width="10" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
     '<path d="M12 12 C15 16 15 19 12 22 C9 19 9 16 12 12 Z" fill="#ffc27a"/><rect x="6" y="25" width="12" height="3" rx="1" fill="currentColor"/></svg>';
-  const jarVariantName = (v) => (v.auto ? 'auto: catch a pixie if one is near; a pixie jar onto a sigil, an empty one elsewhere'
-    : `${v.fill ? 'a pixie' : 'empty'} · ${v.count} jar${v.count === 1 ? '' : 's'}`);
+  const JAR_HOLDS = [null, 'pixie', 'entropy'];
+  /** "empty jar", "pixie jar", "jar of entropy". */
+  const jarName = (j) => (j.holds === 'pixie' ? 'pixie jar' : j.holds === 'entropy' ? 'jar of entropy' : 'empty jar');
+  const jarVariantName = (v) => `${jarName(v)} · ${v.count} jar${v.count === 1 ? '' : 's'}`;
 
-  /** A jar group's icon: its fill (or "auto") and how many. */
+  /** A jar group's icon: what it holds and how many. */
   function jarIcon(v) {
     const w = el('span', 'jaric');
     w.append(el('span', 'ic', ICON.jar));
-    if (v.auto) w.append(el('span', 'auto', 'auto'));
-    else {
-      const pips = el('span', 'fill');
-      for (let k = 0; k < RULES.jarCapacity; k++) pips.append(el('i', k < v.fill ? 'on' : ''));
-      w.append(pips);
-    }
+    const pips = el('span', 'fill');
+    pips.append(el('i', v.holds === 'pixie' ? 'on' : v.holds === 'entropy' ? 'ent' : ''));
+    w.append(pips);
     if (v.count > 1) w.append(el('span', 'ct', '×' + v.count));
     return w;
   }
@@ -315,7 +312,7 @@
       if (slot.kind === 'chalk') {
         b.title = `chalk (${slot.variants.length} colour${slot.variants.length === 1 ? '' : 's'}): F draws a mark, E on one wipes it; click again or hold to pick a colour`;
       } else if (slot.kind === 'jar') {
-        b.title = `jars (${slot.count}): F sets one down, E lifts one; ${jarVariantName(slot.cur)}` +
+        b.title = `jars (${slot.count}): E sets the one in your hands down, F swipes it (a pixie, a full well) or pours it; ${jarVariantName(slot.cur)}` +
           (slot.variants.length > 1 ? '; click again or hold to choose' : '');
       } else if (slot.kind === 'lantern') {
         b.title = NAME.lantern;
@@ -534,6 +531,8 @@
   const jarGlassMat = new THREE.MeshLambertMaterial({ color: 0xa9c3d6, emissive: 0x0e1418, transparent: true, opacity: 0.5, depthWrite: false });
   const jarLidMat = new THREE.MeshLambertMaterial({ color: 0x3a2f28 });
   const jarWispMat = new THREE.MeshBasicMaterial({ color: 0xd9b3ff, transparent: true, opacity: 0.95 }); // a pixie inside
+  const jarLiquidMat = new THREE.MeshBasicMaterial({ color: 0x9a63ff, transparent: true, opacity: 0.75 }); // a charge of entropy
+  jarGeo.liquid = new THREE.CylinderGeometry(0.145 * S, 0.17 * S, 0.2 * S, 18);
 
   function makeJarMesh() {
     const g = new THREE.Group();
@@ -546,6 +545,11 @@
     lid.position.y = 0.365 * S;
     lid.castShadow = true;
     g.add(body, neck, lid);
+    const liquid = new THREE.Mesh(jarGeo.liquid, jarLiquidMat);
+    liquid.position.y = 0.11 * S;
+    liquid.visible = false;
+    g.add(liquid);
+    g.userData.liquid = liquid;
     g.userData.wisps = [0, 1, 2].map(() => {
       const w = new THREE.Mesh(jarGeo.wisp, jarWispMat);
       w.visible = false;
@@ -570,7 +574,8 @@
     const mesh = makeJarMesh();
     mesh.position.set((x0 + 0.25) * S, base * S, (y0 + 0.25) * S);
     scene.add(mesh);
-    const rec = { id: j.id, sx: j.sx, sy: j.sy, fill: j.fill || 0, block, mesh };
+    const rec = { id: j.id, sx: j.sx, sy: j.sy, holds: j.holds || null, block, mesh };
+    mesh.userData.liquid.visible = rec.holds === 'entropy';
     state.jars.push(rec);
     return rec;
   }
@@ -633,39 +638,32 @@
 
   function pickUpJar(rec) {
     removeJarFromWorld(rec);
-    state.run.jars.push({ id: rec.id, fill: rec.fill });
+    state.run.jars.push({ id: rec.id, holds: rec.holds });
     state.sel = 'jar';
-    state.variant.jar = 'f' + rec.fill; // this jar is the one in your hands
-    W.showCaption(rec.fill ? 'you lift the jar · a pixie glows inside' : 'you lift the jar');
+    state.variant.jar = rec.holds || 'empty'; // this jar is the one in your hands
+    W.showCaption(rec.holds === 'pixie' ? 'you lift the jar · a pixie glows inside'
+      : rec.holds === 'entropy' ? 'you lift the jar · entropy swirls inside' : 'you lift the jar');
     savePlayer();
     W.refreshHud();
   }
 
-  /**
-   * Which carried jar goes down at `spot`: the chosen group's, or on auto
-   * the fullest onto a sigil tile (to power it) and the emptiest elsewhere.
-   */
-  function jarFor(v, spot) {
-    const run = state.run;
-    if (!v.auto) return run.jars.find((j) => j.fill === v.fill);
-    const cx = Math.floor(spot.sx / 2), cy = Math.floor(spot.sy / 2);
-    const sg = state.sigils.get(state.exp.registry[DE.key(cx, cy)]);
-    const byFill = run.jars.slice().sort((a, b) => a.fill - b.fill);
-    return sg && sg.cell.x === cx && sg.cell.y === cy ? byFill[byFill.length - 1] : byFill[0];
+  /** The jar in your hands (one of the selected group's), or null. */
+  function heldJar() {
+    const slot = selectedSlot();
+    if (!slot || slot.kind !== 'jar' || state.carry) return null;
+    return state.run.jars.find((j) => (j.holds || null) === slot.cur.holds) || null;
   }
 
   /** E with a jar in your hands: where it would go down, and which jar. */
   function jarSetDown(p) {
     const slot = selectedSlot();
     if (!slot || slot.kind !== 'jar') return null;
-    const spot = jarSpot(p);
-    return { action: 'setjar', spot, jar: spot && jarFor(slot.cur, spot) };
+    return { action: 'setjar', spot: jarSpot(p), jar: heldJar() };
   }
   function setDownJar(near) {
     const run = state.run, j = near.jar;
     run.jars = run.jars.filter((o) => o !== j);
-    addJarToWorld({ id: j.id, sx: near.spot.sx, sy: near.spot.sy, fill: j.fill });
-    state.variant.jar = 'auto'; // a jar picked by hand is for this one time
+    addJarToWorld({ id: j.id, sx: near.spot.sx, sy: near.spot.sy, holds: j.holds });
     savePlayer();
     W.refreshHud();
   }
@@ -680,10 +678,18 @@
       return door && door.action === 'locked' ? { action: 'unlock', slot, door } : null;
     }
     if (slot.kind === 'jar') {
-      // An empty jar (auto, or the empty group) near a free pixie catches it.
-      const empty = (slot.cur.auto || slot.cur.fill === 0) && state.run.jars.find((j) => j.fill === 0);
-      const px = empty && W.pixieNear(p);
-      return px ? { action: 'catch', slot, pixie: px, jar: empty } : null; // setting it down is E
+      // F swipes the jar in your hands (setting it down is E). Empty, it
+      // catches a pixie close by, or scoops a full well you stand in; with
+      // entropy in it, it pours into your lamp. Anything else: a swipe at air.
+      const jar = heldJar();
+      if (!jar) return null;
+      if (jar.holds === 'entropy') return { action: 'pour', slot, jar };
+      if (jar.holds) return { action: 'swipe', slot, jar };
+      const px = W.pixieNear(p);
+      if (px) return { action: 'catch', slot, pixie: px, jar };
+      const w = W.wellHere();
+      if (w) return { action: 'scoop', slot, jar, well: w, full: W.wellLevel(w) >= RULES.wellCapacity - 1e-3 };
+      return { action: 'swipe', slot, jar };
     }
     if (slot.kind === 'chalk') {
       const spot = markSpot(p);
@@ -703,8 +709,16 @@
     if (!u) { shakeHotbar(); return; } // "that didn't work"
     if (u.action === 'lamp') { W.toggleLamp(); return; }
     if (u.action === 'unlock') { W.unlockDoor(u.door); return; }
-    if (u.action === 'catch') {
-      W.catchPixie(u.pixie, u.jar);
+    if (u.slot && u.slot.kind === 'jar') { // every jar action is a swipe of it
+      swipeAt = state.time;
+      if (u.action === 'catch') W.catchPixie(u.pixie, u.jar);
+      else if (u.action === 'scoop') {
+        if (u.full) W.scoopWell(u.well, u.jar);
+        else W.showCaption('the well isn\'t full enough to fill a jar');
+      } else if (u.action === 'pour') pourJar(u.jar);
+      state.variant.jar = u.jar.holds || 'empty'; // the same jar stays in your hands
+      savePlayer();
+      W.refreshHud();
       return;
     }
     if (u.action === 'carve') {
@@ -716,6 +730,16 @@
     savePlayer();
     W.refreshHud();
   }
+
+  /** Pour a jar of entropy into your lamp: all or nothing, the jar is empty after either way. */
+  function pourJar(jar) {
+    const got = W.gainFuel(1);
+    jar.holds = null;
+    W.showCaption(got > 0.99 ? 'you pour the jar into your lamp · +1 charge'
+      : got > 0 ? `you pour the jar into your lamp · it takes ${W.chargeText(got)}, the rest is lost` : 'you pour the jar out · your lamp was full');
+  }
+  /** How much of a charge the lamp could take right now. */
+  const lampRoom = () => Math.max(0, maxCharges() - state.run.fuel);
 
   // --- what's in your hand, shown on the figure: a tool at its left side
   // (the lantern is in the right), an object (a jar) held over its head.
@@ -737,8 +761,8 @@
       m.position.set(0, 0.6 * S, 0);
     } else if (slot.kind === 'jar') {
       m = makeJarMesh();
-      const fill = slot.cur.auto ? Math.max(...state.run.jars.map((j) => j.fill)) : slot.cur.fill;
-      m.userData.wisps.forEach((w, i) => { w.visible = i < fill; w.position.y = 0.15 * S; });
+      m.userData.wisps.forEach((w, i) => { w.visible = i === 0 && slot.cur.holds === 'pixie'; w.position.y = 0.15 * S; });
+      m.userData.liquid.visible = slot.cur.holds === 'entropy';
       m.scale.setScalar(0.8);
       m.position.set(0, 0.64 * S, 0);
     } else {
@@ -771,7 +795,7 @@
     for (const j of state.jars.slice()) {
       const room = reg[DE.key(Math.floor(j.block.x0), Math.floor(j.block.y0))];
       if (!ids.has(room)) continue;
-      pixies += j.fill;
+      if (j.holds === 'pixie') pixies++;
       n++;
       removeJarFromWorld(j);
     }
@@ -791,13 +815,19 @@
    * JAR_FLARE cells), it flares: bigger, and beating at the glass.
    */
   const JAR_FLARE = 2.5;
+  const SWIPE = 0.32; // s: the held jar sweeps forward and down, and back
+  let swipeAt = -9;
   function updateJars() {
+    const k = (state.time - swipeAt) / SWIPE;
+    const sw = k >= 0 && k < 1 ? Math.sin(k * Math.PI) : 0;
+    heldRig.rotation.x = sw * 1.1;
+    heldRig.position.z = sw * 0.12 * S;
     for (const j of state.jars) {
       const jx = j.sx / 2 + 0.25, jy = j.sy / 2 + 0.25;
-      const near = j.fill ? state.ghosts.reduce((m, g) => Math.min(m, Math.hypot(g.x - jx, g.y - jy)), Infinity) : Infinity;
+      const near = j.holds === 'pixie' ? state.ghosts.reduce((m, g) => Math.min(m, Math.hypot(g.x - jx, g.y - jy)), Infinity) : Infinity;
       const flare = Math.max(0, 1 - near / JAR_FLARE);
       j.mesh.userData.wisps.forEach((w, i) => {
-        w.visible = i < j.fill;
+        w.visible = i === 0 && j.holds === 'pixie';
         const a = state.time * (2.6 + 5 * flare) + i * 2.1, r = 0.06 + 0.04 * flare;
         w.position.set(Math.cos(a) * r * S, (0.15 + Math.sin(a * 1.7) * 0.05) * S, Math.sin(a * 1.3) * r * S);
         w.scale.setScalar(1 + flare * (0.7 + 0.3 * Math.sin(state.time * 14)));
@@ -996,8 +1026,7 @@
       let stage = 0, full = 0;
       for (const j of state.jars) {
         if (Math.floor(j.sx / 2) !== sg.cell.x || Math.floor(j.sy / 2) !== sg.cell.y) continue;
-        if (j.fill >= RULES.jarCapacity) stage = 3;
-        if (j.fill >= RULES.jarCapacity) full++;
+        if (j.holds === 'pixie') { stage = 3; full++; }
       }
       if (sg.stage !== -1 && stage > sg.stage && stage < 3) W.showCaption(`the sigil stirs · stage ${stage} of 3`);
       if (sg.stage === -1) sg.fx.full = full; // no flash for sigils already lit when the run loads
@@ -1034,7 +1063,7 @@
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, quarterAhead, jarSetDown, setDownJar, updatePreview, JAR_H, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, quarterAhead, jarSetDown, setDownJar, updatePreview, JAR_H, heldJar, jarName, lampRoom, spawnObject, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn, addJarToWorld,
     clearJars, jarNear, pickUpJar, useNear, useSelected, shatterJarsIn, noteUnmade,
     updateJars, addSigil, updateSigils });

@@ -159,8 +159,8 @@
       pixieSeen: [], // "spaceId:seed:pixie" for rooms whose pixie roll has happened
       pixies: [],    // free pixies' saved positions: [{ id, x, y }]
       wells: {},     // entropy wells drawn on: { "spaceId:seed:well": { level, drawn } } (see wells.js)
-      jars: [],      // jars carried: [{ id, fill }] (fill 1: a pixie inside)
-      placedJars: [], // jars set down: [{ id, sx, sy, fill }] (half-cell coordinates)
+      jars: [],      // jars carried: [{ id, holds }] (holds: null, 'pixie' or 'entropy', one charge)
+      placedJars: [], // jars set down: [{ id, sx, sy, holds }] (half-cell coordinates)
       jarSeq: 0,
       chalks: { silver: 3 }, // chalk carried, by colour, in strokes (3 per stick)
       marks: [],             // chalk marks drawn: [{ sx, sy, color, rot, base }] (quarter-tiles)
@@ -235,10 +235,10 @@
   function snapshot() {
     const p = state.player;
     state.run.marks = state.marks.map((m) => ({ sx: m.sx, sy: m.sy, color: m.color, rot: m.rot, base: m.base }));
-    state.run.placedJars = state.jars.map((j) => ({ id: j.id, sx: j.sx, sy: j.sy, fill: j.fill }));
+    state.run.placedJars = state.jars.map((j) => ({ id: j.id, sx: j.sx, sy: j.sy, holds: j.holds }));
     state.run.ghosts = state.ghosts.map((g) => ({ id: g.id, x: +g.x.toFixed(3), y: +g.y.toFixed(3), mode: g.mode }));
     state.run.pixies = state.pixies.map((o) => ({ id: o.id, x: +o.x.toFixed(3), y: +o.y.toFixed(3) }));
-    return SAVES.make({ record: state.exp, run: state.run, player: { x: p.x, y: p.y, angle: p.angle } });
+    return SAVES.make({ record: state.exp, run: state.run, player: { x: p.x, y: p.y, angle: p.angle }, runVersion: RUN_VERSION });
   }
   /** The resume slot (every second, on pagehide, on quitting to the menu). */
   function savePlayer() {
@@ -257,7 +257,7 @@
   // save slots over (game.js). Saves are stamped with DP.saves.BUILD now:
   // when `run` changes shape, bump that instead of adding a step here.
   // Saves from before versioning count as version 0.
-  const RUN_VERSION = 3;
+  const RUN_VERSION = 4;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
@@ -275,6 +275,14 @@
     // keeps a pixie, so a jar that powered a sigil still does.
     (run) => {
       for (const j of (run.jars || []).concat(run.placedJars || [])) j.fill = j.fill > 0 ? 1 : 0;
+    },
+    // 3 -> 4: a jar says what it holds (a pixie, or a charge of entropy
+    // swiped from a well) instead of a pixie count.
+    (run) => {
+      for (const j of (run.jars || []).concat(run.placedJars || [])) {
+        j.holds = j.fill > 0 ? 'pixie' : null;
+        delete j.fill;
+      }
     },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */

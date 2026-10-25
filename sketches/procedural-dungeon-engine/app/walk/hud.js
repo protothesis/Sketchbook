@@ -34,8 +34,8 @@
         : near.block.done ? 'lift the block off its mark · it takes its entropy back' : 'lift the block (or push it home)' };
       case 'setblock': return near.spot ? { cls: 'jar', text: `set the ${near.block.crate ? 'crate' : 'block'} down` }
         : { cls: 'blocked', text: `no room to set it down here${near.block.spaceId !== state.exp.registry[DE.key(Math.floor(state.player.x), Math.floor(state.player.y))] ? ' · it belongs in its own room' : ''}` };
-      case 'setjar': return near.spot ? { cls: 'jar', text: `set the ${near.jar.fill ? 'pixie jar' : 'jar'} down` } : { cls: 'blocked', text: 'no room to set the jar down here' };
-      case 'pickjar': return { cls: 'jar', text: `lift the ${near.jar.fill ? 'pixie jar' : 'empty jar'}` };
+      case 'setjar': return near.spot ? { cls: 'jar', text: `set the ${W.jarName(near.jar)} down` } : { cls: 'blocked', text: 'no room to set the jar down here' };
+      case 'pickjar': return { cls: 'jar', text: `lift the ${W.jarName(near.jar)}` };
       case 'climb': return { text: state.push.key ? 'climbing…' : 'climb (or push into it)' };
       case 'open': return { text: state.push.key ? 'opening…' : 'open the door (or push)' };
       case 'retrace': {
@@ -64,7 +64,12 @@
       const n = state.run.doorstones;
       return { cls: 'chalk', text: `open a door in this wall · ${n} doorstone${n === 1 ? '' : 's'}` };
     }
-    if (near.action === 'catch') return { cls: 'jar', text: 'catch the pixie in a jar' };
+    if (near.action === 'catch') return { cls: 'jar', text: 'swipe the jar to catch the pixie' };
+    if (near.action === 'scoop') {
+      return near.full ? { cls: 'jar', text: 'swipe the well into the jar · 1 charge' }
+        : { cls: 'blocked', text: 'the well isn\'t full enough to fill a jar' };
+    }
+    if (near.action === 'pour') return { cls: 'collapse', text: `pour the jar into your lamp · 1 charge${W.lampRoom() < 0.99 ? ' (your lamp takes only ' + chargeText(W.lampRoom()) + ')' : ''}` };
     if (near.action === 'unlock') return { cls: 'lock', text: `unlock the door · 1 of ${state.run.keys} key${state.run.keys === 1 ? '' : 's'}` };
     return null;
   }

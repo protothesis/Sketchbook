@@ -269,7 +269,7 @@
     buildWorld();
     for (const j of savedJars) {
       if (exp.registry[DE.key(Math.floor(j.sx / 2), Math.floor(j.sy / 2))] !== undefined) addJarToWorld(j);
-      else for (let i = 0; i < j.fill; i++) noteUnmade('jar:' + j.id, null); // its room is gone: the jar broke
+      else if (j.holds === 'pixie') noteUnmade('jar:' + j.id, null); // its room is gone: the jar broke
     }
     for (const m of savedMarks) {
       if (exp.registry[DE.key(Math.floor(m.sx / 2), Math.floor(m.sy / 2))] !== undefined) addMarkToWorld(m);

@@ -180,7 +180,9 @@ Determinism).
 - **Entropy wells.** A dark stone basin with a glowing pool, in about 1
   room in 20 (depth 1+). Stand in it and it pours entropy into your lamp,
   0.6 charges a second, a charge at most, and a stream of motes runs from
-  the pool to your lamp; then it's dry. Each kind shows its clock in the
+  the pool to your lamp; then it's dry. With an **empty jar in your
+  hands** the well waits instead: swipe the jar through it (F) and a full
+  well's charge goes into the jar (a jar takes a whole well or nothing). Each kind shows its clock in the
   world:
   - **Surge** (violet, a rim with eight notches) comes back all at once
     90 s after you last drew on it. The notches are the clock: they go out
@@ -318,12 +320,13 @@ Determinism).
   until you open it again (push or hold E, from either side). Closed doors
   are kept with the run (`run.closed`, by connection) and show on the maps
   as an orange bar.
-- **All your jars share one slot.** It's grouped by contents (empty, or a
-  pixie), with a count on each group. Its default, **auto**, catches a
-  pixie in an empty jar when one is within reach, sets down a pixie jar
-  when the spot is on a sigil tile (to power it), and an empty one
-  anywhere else. Pick a group in the picker to use that one instead, just
-  for the next jar.
+- **All your jars share one slot.** It's grouped by what they hold (empty,
+  a pixie, a charge of entropy), with a count on each group; the group you
+  pick is the jar in your hands. **F swipes it** (a quick sweep forward
+  and down, always, so you see it): an empty jar catches a pixie within
+  0.75 cells, or scoops a full well you're standing in; a jar of entropy
+  pours into your lamp, all or nothing (it tops the lamp up to its max,
+  and the jar is empty after either way). A swipe at nothing just swipes.
 - **Chalk marks.** Your own markup, drawn in the world, and it shows up on
   the maps. Chalk comes in five colours, each with its own simple mark:
   silver arrow (it points the way you faced), gold triangle, crimson
@@ -347,8 +350,8 @@ Determinism).
 - **Pixies.** Small violet lights with fluttering wings, in about 1 room
   in 10 (depth 1+; rolled once per room, like ghosts). They drift about
   their room, flee ghosts that come close, and linger at entropy wells.
-  With an empty jar, F within 0.75 cells of one catches it (the prompt
-  says so). Set a pixie jar down and ghosts are drawn to it: they drift
+  With an empty jar in your hands, swipe it (F) within 0.75 cells of one
+  to catch it (the prompt says so). Set a pixie jar down and ghosts are drawn to it: they drift
   over and circle it, wander off, and come back. A ghost that comes within
   2.5 cells of a pixie (same room) is **held** by it: it drops whatever it
   was doing, even watching or following you ("a hash ghost turns from you
@@ -427,10 +430,11 @@ you pass out and wake at your last waystone.
 | Doorstone | a small white slab with a dark doorway in it; a ⌂ slot on the hotbar; a "open a door here" prompt at a bare wall | the door looks like any other |
 | Chalk | sticks in five colours; on the hotbar, one group slot: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
-| Hotbar | bottom-centre slots: the lantern (always slot 1: empty hands), ⚱ jars (one group slot: "auto" or a fill's pips, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
+| Hotbar | bottom-centre slots: the lantern (always slot 1: empty hands), ⚱ jars (one group slot: empty, a violet pip for a pixie or a violet bar for entropy, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
 | Held item | the selected tool in the figure's left hand, tilted up, 1.5× size; a jar over its head (0.8×); nothing for the lantern slot | |
 | Jar | a small glass jar with a dark lid; a pixie flits inside when it holds one | a solid half-cell |
 | Pixie | a small pale-violet sphere with two fluttering translucent wings and a soft additive glow, bobbing about 0.6 cells up | no light of its own (cost) |
+| Jars | glass, a dark lid; a pixie flits inside, a jar of entropy holds a glowing violet liquid; held over the head, the swipe tips it forward and down over 0.32 s | |
 | Entropy well | a dark stone ring on the floor around an additive pool, violet (surge) or teal (trickle); the pool's size and brightness are its level; motes rise slowly, and fast while you drink. Surge: 8 notches in the rim, lit by level (drinking) or by cooldown progress (recharging, the next one pulsing), and a burst (pool overshoot, motes thrown high, a big ripple) when it comes back. Trickle: a small stone spout 1.1 cells up; a drop forms under it over the 10 s wait, then falls every 0.7 s while refilling (every 4 s when full), each with a ripple (`WELL` in `wells.js`) | on the maps a small circle, filled by its level |
 | Stamina | a thin pink bar under the lamp's meter, redder below 35%, pulsing while something drains it; a dark violet vignette closes in as it falls | |
 | Beyond a lock | a faint gold warmth on the floor, "beyond a lock" in the caption, a gold outline on the maps | |
@@ -474,7 +478,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Lamp stages | uneasy at 2 charges (`lampUneasy`), danger at 1 (`lampDanger`), dying at 0.5 (`lampDying`) |
 | Relight / cover | R or tapping the lamp icon; relight costs 1 shard (`relightShards`); covering is free; out of fuel, the lamp stays out until relit; covered, it doesn't burn |
 | Stamina | 0..1 (`run.stamina`); a ghost's touch: −0.15 once (`staminaHit`), then 0.2/s (`staminaDrain`) while in its reach; the dark: 0.08/s (`staminaDarkDrain`); refills 0.12/s (`staminaRegen`) after 1.5 s undrained (`staminaRegenDelay`); empty: pass out, wake at your last waystone with full stamina and at least 2 charges, having lost every room opened since your last checkpoint (the run rolls back to it) |
-| Wells | 1/20 of rooms at depth 1+ (`wellChance`, `'well'` stream; 4+ cells; not on door, item, sigil or waystone cells; blocks keep off); half surge, half trickle (`wellSurge`); 1 charge each (`wellCapacity`), poured at 0.6/s (`wellRate`) while you stand within 0.42 cells of its centre; surge: full again 90 s after the last draw (`wellSurgeCooldown`); trickle: refills from 10 s after (`wellTrickleDelay`), a full well per 120 s (`wellTrickleTime`); saved as `run.wells` |
+| Wells | 1/20 of rooms at depth 1+ (`wellChance`, `'well'` stream; 4+ cells; not on door, item, sigil or waystone cells; blocks keep off); half surge, half trickle (`wellSurge`); 1 charge each (`wellCapacity`), poured at 0.6/s (`wellRate`) while you stand within 0.42 cells of its centre; surge: full again 90 s after the last draw (`wellSurgeCooldown`); trickle: refills from 10 s after (`wellTrickleDelay`), a full well per 120 s (`wellTrickleTime`); saved as `run.wells`; an empty jar in your hands stops the pour, and a swipe takes a full well's charge into the jar |
 | Pixies | 1/10 of rooms at depth 1+ (`pixieChance`, `'pixie'` stream), rolled once per room; wander 0.6 cells/s in their room, pausing 0.6–2 s; flee at up to 1.5 cells/s (`PIXIE` in `pixies.js`); caught within 0.75 cells |
 | Ecology | `ECOLOGY.rules` in `ecology.js`: ghost seeks pixie (90%, orbit 0.3–0.75 cells, within 12 cells and 1 room; held within 2.5 cells, pausing 0.3–1 s, at 0.55 cells/s); ghost flees steady light (1.6 cells, backing off at 0.6 cells/s, `GHOST.shySpeed`); pixie flees ghost (2.2) and light (2.5); pixie seeks well (50%, orbit 0.15–0.6, own room). A held ghost leans 0.35 rad toward what holds it (`GHOST.lean`); a jarred pixie flares within 2.5 cells of a ghost |
 | Halls | starter: 6–8 cells a side; waypoints: 7–9; unmarked: 6–8, 1% of rooms at depth 3+ (`params.hallChance`, own `'hall'` stream; was 2.5%, which older records keep); corners notched (65% each, 1–2 cells). Halls: 3 push blocks, 1–2 sconces, a waystone; loot as a chamber |

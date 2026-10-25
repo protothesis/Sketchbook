@@ -564,6 +564,7 @@ kbd {
 .slot .fill { position: absolute; left: 0; right: 0; bottom: 4px; display: flex; justify-content: center; gap: 3px; }
 .slot .fill i { width: 5px; height: 5px; border-radius: 50%; border: 1px solid rgba(210, 168, 255, 0.6); }
 .slot .fill i.on { background: #d2a8ff; }
+.slot .fill i.ent { border-radius: 1px; width: 8px; background: #9a63ff; border-color: #9a63ff; } /* a jar of entropy */
 .slot.jar .ic { color: #a9c3d6; }
 .slot.chalk .ic { color: #f2efe6; }
 .slot.echo .ic { color: #d678ff; }
