@@ -24,7 +24,7 @@
     // Much subtler: a faint red fringe and grain, barely tearing.
     // (Static brightens a dark scene a lot, so noise and glow stay tiny.)
     creeper: { tear: 0.06, split: 0.003, noise: 0.035, scan: 0.06, tint: [0.75, 0.12, 0.08], glow: [0.012, 0, 0],
-      rise: 0.5, fall: 0.6 }, // per second: eased toward its target by fxToward()
+      rise: 1, fall: 0.6 }, // per second: eased toward its target by fxToward() (quick enough to show a dash)
   };
 
   /** Ease a profile's level toward `target` at the profile's rise/fall rates (per second). */

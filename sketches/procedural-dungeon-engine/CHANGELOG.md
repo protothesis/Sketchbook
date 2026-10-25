@@ -441,11 +441,14 @@ All notable changes to this sketch are logged here, per
   covered or out) it skitters about you and now and then winds up and
   dashes at you. It keeps its waiting spot until that stops being at the
   edge, so it doesn't jitter between shadows. Lurking, it hops slowly
-  between dark corners and keeps off steady light (an ecology rule). It
-  drains psychic stamina like the dark, more the closer it is, stacking
-  with others (`RULES.staminaCreeperDrain`, within 3 cells and in sight),
-  shown by a thin ring on the floor at that range (from bold on) and a
-  subtle red glitch. Its hops average well under walking pace. Blinks:
+  between dark corners and keeps off steady light (an ecology rule). Bold
+  or hunting, it drains psychic stamina like the dark, in bands
+  (`CREEPER.bands`, × `RULES.staminaCreeperDrain`, in its sight): bold, a
+  faint pull within 0.55 cells; hunting, full within 0.45 and about half
+  out to 0.75, and half again harder while it dashes. Afraid, it doesn't
+  drain. Creepers stack. While it hunts, its bands show as faint solid
+  discs on the floor (flaring as it dashes; `CREEPER.debugBands` shows
+  them in every mood that has bands), and a subtle red glitch eases in. Its hops average well under walking pace. Blinks:
   every 2-6 s, sometimes a quick double or triple. New: `lightRadius()` in
   `lamp.js` (the floor ring's radius, growing to 4.5 cells at a full lamp).
 - 2026-10-24: **A creature kit** (`app/walk/creatures.js`): the movement

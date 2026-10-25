@@ -19,10 +19,11 @@
 // It gets about in hops: a dip, a quick little arc, a squish on landing, a
 // nervous pause. Its average pace is well under your walk (dashes catch
 // you up in bursts; running loses it). It walks the floor, so it goes
-// around every block. Its nearness wears on your psychic stamina, like the
-// dark does (lamp.js), more the closer it is, and stacks with others; a
-// faint ring on the floor shows how far that reaches once it's bold, and a
-// subtle red glitch (fx.js's creeper profile) fades in as it drains you.
+// around every block. Once it's bold, being close to it wears on your
+// psychic stamina, like the dark does (lamp.js): in bands, stronger nearer
+// in and while it dashes, stacking with others. While it hunts, its bands
+// show on the floor as faint discs, and a subtle red glitch (fx.js's
+// creeper profile) fades in as it drains you. An afraid one doesn't drain.
 // Off screen it gets a marker (markers.js).
 (function (global) {
   'use strict';
@@ -41,8 +42,15 @@
     postTol: 0.15,       // cells inside its edge it tolerates before moving back out
     postSlack: 1.2,      // cells past its edge before it follows you in
     reach: 0.4,          // cells, centre to centre: as close as it gets
-    drainRange: 3,       // cells: within this (and in sight of you) it drains psychic stamina,
-                         // RULES.staminaCreeperDrain at `reach`, falling off to nothing here
+    // Its pull on your psychic stamina, by mood: bands out from it, innermost
+    // first; inside one (and in its sight) you lose k × RULES.staminaCreeperDrain
+    // per second. Afraid, it doesn't drain you.
+    bands: {
+      bold: [{ r: 0.55, k: 0.15 }],                    // a faint, short pull
+      hunt: [{ r: 0.45, k: 1 }, { r: 0.75, k: 0.45 }], // the inner band mostly takes a dash to reach
+    },
+    dashDrain: 1.5,      // × while it dashes at you...
+    dashLinger: 0.5,     // ...and for this many s after
     stack: 2,            // most creepers' worth of drain (and glitch) that adds up at once
     rays: 24,            // directions searched for the edge of the light
     look: 1.5,           // cells past the edge searched along each ray
@@ -66,7 +74,8 @@
     blinkTime: 0.12,     // s the eye stays shut
     rapid: 0.25,         // share of blinks that are a quick double or triple
     burstGap: 0.08,      // s open between blinks in a burst
-    ring: { opacity: 0.16, bold: 0.5, ease: 2 }, // its reach on the floor: full while hunting, `bold` share while bold
+    disc: { opacity: 0.09, dash: 1.8, ease: 3 }, // its bands on the floor while it hunts: each adds this opacity (× dash while dashing)
+    debugBands: false,   // dev: show its bands in every mood that has them (DungeonPlay.walk.CREEPER.debugBands = true)
     markRooms: 1,        // a lurking creeper off screen gets a marker this many rooms away or nearer
     markRange: 14,       // cells: and only within this distance
     lightH: 0.3,         // cells: the height your light has to reach to count as touching it
@@ -76,7 +85,7 @@
     body: new THREE.CapsuleGeometry(0.12 * S, 0.22 * S, 4, 10), // the figure's body
     eye: new THREE.SphereGeometry(0.028 * S, 10, 8),
     blob: new THREE.CircleGeometry(0.17 * S, 20),
-    ring: new THREE.RingGeometry(0.965, 1, 64), // a thin line at its drain range
+    disc: new THREE.CircleGeometry(1, 48),
   };
   const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2c2b30 });
   // Emissive on black, and out of the fog: the eye shows in any darkness.
@@ -102,7 +111,7 @@
 
   function addCreeper(o) {
     const mesh = new THREE.Group();
-    // The rig squashes and hops; the blob and ring stay on the floor.
+    // The rig squashes and hops; the blob and band discs stay on the floor.
     const rig = new THREE.Group();
     const body = new THREE.Mesh(geo.body, bodyMat);
     body.position.y = 0.23 * S;
@@ -117,20 +126,22 @@
     const blob = new THREE.Mesh(geo.blob, blobMat);
     blob.rotation.x = -Math.PI / 2;
     blob.position.y = 0.01;
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xff3a24, transparent: true, opacity: 0, depthWrite: false,
-      blending: THREE.AdditiveBlending });
-    const ring = new THREE.Mesh(geo.ring, ringMat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.014 * S;
-    ring.scale.setScalar(CREEPER.drainRange * S);
-    ring.visible = false;
-    mesh.add(rig, blob, ring);
+    // One flat disc per band, additive, so where they overlap (nearer in) reads brighter.
+    const discs = CREEPER.bands.hunt.map((b, i) => {
+      const m = new THREE.Mesh(geo.disc, new THREE.MeshBasicMaterial({ color: 0xff3a24, transparent: true, opacity: 0,
+        depthWrite: false, blending: THREE.AdditiveBlending }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = (0.012 + i * 0.002) * S;
+      m.visible = false;
+      return m;
+    });
+    mesh.add(rig, blob, ...discs);
     scene.add(mesh);
     // tall 0: every block is in its way (creatures.js).
     const c = Object.assign({ mode: 'lurk', target: null, next: null, pathT: 0, post: null }, o, {
-      mesh, rig, eye, blob, ring, ringMat, tall: 0, mood: 'lurk',
+      mesh, rig, eye, blob, discs, tall: 0, mood: 'lurk',
       hop: { phase: 'rest', t: 0, dur: Math.random(), speed: 0, goal: null, land: 0 },
-      circleT: 0, dazeT: 0, ringOn: 0,
+      circleT: 0, dazeT: 0, dashT: 0, discOn: 0,
       blinkT: between(CREEPER.blink), shut: 0, burst: 0, gap: 0,
     });
     state.creepers.push(c);
@@ -139,7 +150,7 @@
 
   function removeCreeper(c) {
     scene.remove(c.mesh);
-    c.ringMat.dispose();
+    for (const m of c.discs) m.material.dispose();
     state.creepers = state.creepers.filter((o) => o !== c);
   }
   function clearCreepers() { for (const c of state.creepers.slice()) removeCreeper(c); }
@@ -356,9 +367,11 @@
         think(c, dt, lamp);
         if (c.mood === 'hunt' && was !== 'hunt' && was !== 'lurk') W.showCaption('the red eye stops minding your light');
         hopTo(c, dt);
-        // Its pull on you: by nearness, while it can see you. Several add up.
-        if (d < CREEPER.drainRange && W.lightReaches(eyes, { x: c.x, y: c.y, h: CREEPER.lightH + 0.1 })) {
-          drain += clamp(1 - (d - CREEPER.reach) / (CREEPER.drainRange - CREEPER.reach), 0, 1);
+        // Its pull on you: the band you're in, while it can see you. Several add up.
+        c.dashT = c.hop.phase === 'dash' ? CREEPER.dashLinger : Math.max(0, c.dashT - dt);
+        const bands = CREEPER.bands[c.mood];
+        if (bands && d < bands[bands.length - 1].r && W.lightReaches(eyes, { x: c.x, y: c.y, h: CREEPER.lightH + 0.1 })) {
+          drain += bands.find((b) => d < b.r).k * (c.dashT > 0 ? CREEPER.dashDrain : 1);
         }
       }
       look(c, dt, frozen);
@@ -370,7 +383,7 @@
     }
   }
 
-  /** Hop arc and squish, always facing you, blinks, and its reach on the floor. */
+  /** Hop arc and squish, always facing you, blinks, and its bands on the floor. */
   function look(c, dt, frozen) {
     const p = state.player, h = c.hop;
     let sx = 1, sy = 1, lift = 0, shake = 0;
@@ -400,11 +413,20 @@
     }
     c.eye.scale.y = c.shut > 0 ? 0.001 : 1;
 
-    // Its reach on the floor: hidden while it's afraid, part-shown when bold, full while hunting.
-    const want = c.mood === 'hunt' ? 1 : c.mood === 'bold' ? CREEPER.ring.bold : 0;
-    if (!frozen) c.ringOn += (want - c.ringOn) * Math.min(1, dt * CREEPER.ring.ease);
-    c.ring.visible = c.ringOn > 0.01;
-    c.ringMat.opacity = CREEPER.ring.opacity * c.ringOn;
+    // Its bands on the floor: only while it hunts (or in any mood that has them, with
+    // debugBands), flaring while it dashes.
+    const bands = CREEPER.bands[c.mood];
+    const want = bands && (c.mood === 'hunt' || CREEPER.debugBands) ? 1 : 0;
+    if (!frozen) c.discOn += (want - c.discOn) * Math.min(1, dt * CREEPER.disc.ease);
+    const shown = bands || c.lastBands;
+    if (bands) c.lastBands = bands; // keep the last bands' sizes while fading out
+    c.discs.forEach((m, i) => {
+      const b = shown && shown[i];
+      m.visible = !!b && c.discOn > 0.01;
+      if (!m.visible) return;
+      m.scale.setScalar(b.r * S);
+      m.material.opacity = CREEPER.disc.opacity * c.discOn * (c.dashT > 0 ? CREEPER.disc.dash : 1);
+    });
   }
 
   /** Its marker icon: a dark disc and the red eye (shut mid-blink). */

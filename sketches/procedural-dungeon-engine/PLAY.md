@@ -479,6 +479,17 @@ the room's imprint, which is fixed once the room exists). Where ghosts drift
 afterwards is run state: their positions are saved with the run, and each
 room's roll happens once (`run.ghostSeen`).
 
+## Playtest notes, 2026-10-24 (shadow creepers, second pass)
+
+Addressed the same day.
+
+- **The drain range was far too big** (3 cells): now a quarter of that.
+- **A solid disc, not a ring** (like the lamp's halo, not the edge of its
+  reach), shown much less: only while it hunts. Tiers of drain show as
+  bands (overlapping discs), handy as a dev view too (`debugBands`).
+- **Afraid, it shouldn't drain at all.** Bold, a very faint, short pull.
+  Hunting dashes hit harder.
+
 ## Playtest notes, 2026-10-24 (shadow creepers, first pass)
 
 Addressed the same day.

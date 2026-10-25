@@ -115,7 +115,7 @@
     staminaHit: 0.15,
     staminaDrain: 0.2,        // per second in a ghost's reach: a full meter lasts 5 s
     staminaDarkDrain: 0.08,   // per second in the dark: about 12 s
-    staminaCreeperDrain: 0.12, // per second with a shadow creeper at your side, less with distance (creepers.js); adds to the dark's
+    staminaCreeperDrain: 0.2, // per second in a bold or hunting shadow creeper's strongest band, times the band's share (creepers.js); adds to the dark's
     staminaRegen: 0.12,       // per second
     staminaRegenDelay: 1.5,
     // Halls (setpieces at waypoints): sizes, and what they always hold.
