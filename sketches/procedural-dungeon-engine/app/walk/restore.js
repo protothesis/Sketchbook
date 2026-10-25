@@ -77,82 +77,160 @@
     Object.assign(b, { sx, sy }, sub(sx, sy));
   }
 
+  // ---------------------------------------------------------------------------
+  // Loose objects (crates and push blocks) live in one run-wide list,
+  // run.objects, by key ("spaceId:seed:id" of the room they came from) ->
+  // { kind: 'crate' | 'block', sx, sy, and for a block color, to, done,
+  // paid }. A room adds its own the first time it's built, and builds
+  // whichever objects sit in its cells now, wherever they came from. An
+  // object sitting in a room that's rerolled is despawned (run.despawned);
+  // one in your hands, or set down anywhere else, stays. A push block's
+  // mark stays in its home room.
+
+  /** A room's own loose objects, as generated: [{ key, kind, from, to?, color? }]. */
+  function objectDefs(space) {
+    const out = [];
+    const id = (x) => space.id + ':' + space.seed + ':' + x;
+    for (const pb of DP.pushBlocks(space)) out.push({ key: id(pb.id), kind: 'block', from: pb.from, to: pb.to, color: pb.color });
+    for (const pr of DP.props(space).blocks) if (pr.crate) out.push({ key: id(pr.crate.id), kind: 'crate', from: pr.crate });
+    return out;
+  }
+
   /**
-   * A room's push blocks and their marks, built with the room. The block's
-   * position and whether it's home are kept in run.pushed, by room seed.
+   * Put a room's own objects into run.objects, once: not again after
+   * they've moved, been despawned, or (old saves) gained only a position.
    */
-  function addPushBlocks(space, rec, tileAt) {
-    for (const pb of DP.pushBlocks(space)) {
-      const key = space.id + ':' + space.seed + ':' + pb.id;
-      const saved = state.run.pushed[key];
-      const col = new THREE.Color(pb.color);
-      // The mark rides its floor tile, so it assembles and dissolves with it.
-      const markTile = tileAt[cellOf(pb.to.sx, pb.to.sy)];
-      const markMat = new THREE.MeshBasicMaterial({ map: markTexture(pb.color), transparent: true, depthWrite: false, opacity: 0.75 });
-      const mark = new THREE.Mesh(pushGeo.mark, markMat);
-      mark.rotation.x = -Math.PI / 2;
-      mark.position.set((pb.to.sx / 2 + 0.25) * S - markTile.position.x, 0.062, (pb.to.sy / 2 + 0.25) * S - markTile.position.z);
-      markTile.add(mark);
-
-      // The whole block takes its colour (programmer art for now).
-      const mesh = new THREE.Group();
-      const bodyMat = new THREE.MeshLambertMaterial({ color: col, emissive: col.clone().multiplyScalar(0.12) });
-      const body = new THREE.Mesh(pushGeo.block, bodyMat);
-      body.castShadow = body.receiveShadow = true;
-      body.position.y = UNIT * S / 2;
-      mesh.add(body);
-      rec.group.add(mesh);
-
-      // `paid`: how much of its charge the block has paid and you still
-      // hold. Moving it off its mark takes that back; home again pays the
-      // rest. (Saves from before blocks could move: a block home has paid.)
-      const b = {
-        key, spaceId: space.id, push: true, units: 1, top: UNIT, color: col,
-        to: pb.to, done: !!(saved && saved.done), mesh, bodyMat, markMat,
-        tile: tileAt[cellOf(pb.from.sx, pb.from.sy)], slide: null,
-        paid: saved ? (saved.paid != null ? saved.paid : saved.done ? RULES.restoreCharges : 0) : 0,
-      };
-      b.group = rec.group;
-      const at = saved ? { sx: saved.sx, sy: saved.sy } : pb.from;
-      place(b, at.sx, at.sy);
-      mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
-      if (b.done) settle(b, false);
-      addBlock(b);
-    }
-    // Crates: no mark and no reward; only where they've been pushed is kept.
-    for (const pr of DP.props(space).blocks) {
-      if (!pr.crate) continue;
-      const key = space.id + ':' + space.seed + ':' + pr.crate.id;
-      const saved = state.run.pushed[key];
-      const mesh = new THREE.Group();
-      const body = new THREE.Mesh(pushGeo.block, crateMat);
-      body.castShadow = body.receiveShadow = true;
-      body.position.y = UNIT * S / 2;
-      mesh.add(body);
-      rec.group.add(mesh);
-      const b = {
-        key, spaceId: space.id, push: true, crate: true, units: 1, top: UNIT, to: null, done: false, paid: 0,
-        mesh, tile: tileAt[cellOf(pr.crate.sx, pr.crate.sy)], slide: null,
-      };
-      b.group = rec.group;
-      const at = saved || pr.crate;
-      place(b, at.sx, at.sy);
-      mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
-      addBlock(b);
+  function spawnObjects(space) {
+    const run = state.run;
+    for (const d of objectDefs(space)) {
+      const o = run.objects[d.key];
+      if (o && o.kind) continue;
+      if (!o && run.despawned.some((x) => x.key === d.key)) continue;
+      const rec = o || { sx: d.from.sx, sy: d.from.sy };
+      rec.kind = d.kind;
+      if (d.kind === 'block') {
+        Object.assign(rec, { color: d.color, to: d.to, done: !!rec.done });
+        // (Saves from before blocks could move: a block home has paid.)
+        rec.paid = rec.paid != null ? rec.paid : rec.done ? RULES.restoreCharges : 0;
+      }
+      run.objects[d.key] = rec;
     }
   }
 
-  /** Into the world, or back into your hands if it's the one you were carrying (run.carry). */
-  function addBlock(b) {
+  /** After the whole world is built: objects whose room no longer exists in any form are dropped. */
+  function pruneObjects() {
+    const run = state.run;
+    for (const k in run.objects) if (!run.objects[k].kind) delete run.objects[k];
+  }
+
+  /** Save a built object's state back into run.objects. */
+  function saveObject(b) {
+    const o = state.run.objects[b.key];
+    if (!o) return;
+    o.sx = b.sx; o.sy = b.sy;
+    if (!b.crate) { o.done = b.done; o.paid = +b.paid.toFixed(4); }
+  }
+
+  /** The mark materials of push blocks whose home room is built, by key (a block may be elsewhere). */
+  const marks = new Map();
+
+  /** A room's push-block marks, and every loose object sitting in it. Called from buildSpace. */
+  function addPushBlocks(space, rec, tileAt) {
+    rec.tileAt = tileAt;
+    spawnObjects(space);
+    for (const d of objectDefs(space)) {
+      if (d.kind !== 'block') continue;
+      // The mark rides its floor tile, so it assembles and dissolves with it.
+      const markTile = tileAt[cellOf(d.to.sx, d.to.sy)];
+      if (!markTile) continue;
+      const markMat = new THREE.MeshBasicMaterial({ map: markTexture(d.color), transparent: true, depthWrite: false, opacity: 0.75 });
+      const mark = new THREE.Mesh(pushGeo.mark, markMat);
+      mark.rotation.x = -Math.PI / 2;
+      mark.position.set((d.to.sx / 2 + 0.25) * S - markTile.position.x, 0.062, (d.to.sy / 2 + 0.25) * S - markTile.position.z);
+      markTile.add(mark);
+      marks.set(d.key, markMat);
+      const o = state.run.objects[d.key];
+      if (o && o.done) markMat.opacity = 1;
+    }
+    for (const key in state.run.objects) {
+      const o = state.run.objects[key];
+      if (!o.kind || key === state.run.carry || state.exp.registry[cellOf(o.sx, o.sy)] !== space.id) continue;
+      const b = makeObject(key, o);
+      inRoom(b, space.id, rec);
+      b.mesh.position.set((b.x0 + 0.25) * S, 0, (b.y0 + 0.25) * S);
+      state.pushBlocks.push(b);
+      indexBlock(b, true);
+    }
+  }
+
+  /** A built object (mesh and collision box) from its run.objects entry. Not yet in any room. */
+  function makeObject(key, o) {
+    const mesh = new THREE.Group();
+    let body, bodyMat = null, col = null;
+    if (o.kind === 'crate') body = new THREE.Mesh(pushGeo.block, crateMat);
+    else {
+      // The whole block takes its colour (programmer art for now).
+      col = new THREE.Color(o.color);
+      bodyMat = new THREE.MeshLambertMaterial({ color: col, emissive: col.clone().multiplyScalar(0.12) });
+      body = new THREE.Mesh(pushGeo.block, bodyMat);
+    }
+    body.castShadow = body.receiveShadow = true;
+    body.position.y = UNIT * S / 2;
+    mesh.add(body);
+    // `paid`: how much of its charge the block has paid and you still
+    // hold. Moving it off its mark takes that back; home again pays the rest.
+    const b = {
+      key, push: true, crate: o.kind === 'crate', units: 1, top: UNIT, color: col, bodyMat,
+      to: o.to || null, done: !!o.done, paid: o.paid || 0, mesh, slide: null,
+    };
+    place(b, o.sx, o.sy);
+    if (b.done) settle(b, false);
+    return b;
+  }
+
+  /** The object now belongs to the room it sits in: its group (so it dissolves with it) and its tile (so it rises with it). */
+  function inRoom(b, spaceId, rec = state.spaces.get(spaceId)) { // (a room being built isn't in state.spaces yet)
+    b.spaceId = spaceId;
+    b.group = rec.group;
+    b.tile = rec.tileAt ? rec.tileAt[cellOf(b.sx, b.sy)] : null;
+    b.group.add(b.mesh);
+  }
+
+  /** On loading a run: the object you were carrying, back in your hands. */
+  function buildCarried() {
+    const run = state.run;
+    if (!run.carry || state.carry) return;
+    const o = run.objects[run.carry];
+    if (!o || !o.kind) { run.carry = null; return; }
+    const b = makeObject(run.carry, o);
+    b.spaceId = null;
     state.pushBlocks.push(b);
-    if (state.run.carry === b.key) hold(b);
-    else indexBlock(b, true);
+    hold(b);
+  }
+
+  /** A room about to be rerolled: the objects sitting in it are despawned (kept in a list, for later). */
+  function despawnObjectsIn(ids) {
+    const run = state.run;
+    let n = 0;
+    for (const key in run.objects) {
+      const o = run.objects[key];
+      if (key === run.carry) continue;
+      const room = state.exp.registry[cellOf(o.sx, o.sy)];
+      if (!ids.has(room)) continue;
+      run.despawned.push({ key, kind: o.kind, color: o.color || null, room, at: Math.round(run.walked) });
+      if (run.despawned.length > 200) run.despawned.shift();
+      delete run.objects[key];
+      n++;
+    }
+    state.pushBlocks = state.pushBlocks.filter((b) => !ids.has(b.spaceId));
+    return n;
   }
 
   /** A block in your hands: out of the world (nothing collides with it), its mesh over your head. */
   function hold(b) {
     b.carried = true;
     b.slide = null;
+    b.spaceId = null; // in your hands, not in any room: a reroll can't take it
     state.carry = b;
     state.run.carry = b.key;
     W.refreshHotbar(); // the figure shows it (updateHeld), once any lift arc is done
@@ -209,7 +287,7 @@
   function liftBlock(b) {
     if (b.done) unsettle(b);
     indexBlock(b, false);
-    state.run.pushed[b.key] = b.crate ? { sx: b.sx, sy: b.sy } : { sx: b.sx, sy: b.sy, done: false, paid: +b.paid.toFixed(4) };
+    saveObject(b);
     b.mesh.traverse((o) => { o.castShadow = false; });
     b.anim = { t: 0, up: true, from: b.mesh.position.clone() };
     hold(b);
@@ -217,10 +295,10 @@
     savePlayer();
   }
 
-  /** Where E would set the carried block down: a free half-cell of floor ahead, in its own room. */
+  /** Where E would set the carried block down: a free half-cell of floor ahead, in any room. */
   function blockSpot(p) {
     const b = state.carry;
-    return b ? W.quarterAhead(p, (sx, sy, base) => base === 0 && canMoveTo(b, sx, sy)) : null;
+    return b ? W.quarterAhead(p, (sx, sy, base) => base === 0 && canMoveTo(b, sx, sy, true)) : null;
   }
 
   /** E with a block in your hands: set it down at `spot`. On its mark, it settles and pays. */
@@ -231,23 +309,29 @@
     state.carry = null;
     state.run.carry = null;
     place(b, spot.sx, spot.sy);
-    // From over your head back down to the floor, in an arc.
+    // From over your head back down to the floor, in an arc. It now belongs
+    // to the room it's set down in.
     const from = b.mesh.getWorldPosition(new THREE.Vector3());
-    b.group.add(b.mesh);
+    inRoom(b, state.exp.registry[cellOf(spot.sx, spot.sy)]);
     b.group.worldToLocal(from);
     b.mesh.position.copy(from);
     b.mesh.rotation.set(0, 0, 0);
     b.anim = { t: 0, up: false, from };
     indexBlock(b, true);
     if (!b.crate && spot.sx === b.to.sx && spot.sy === b.to.sy) settle(b, true);
-    state.run.pushed[b.key] = b.crate ? { sx: b.sx, sy: b.sy } : { sx: b.sx, sy: b.sy, done: b.done, paid: +b.paid.toFixed(4) };
+    saveObject(b);
     W.refreshHotbar();
     savePlayer();
   }
 
-  /** Can a push block move onto half-cell (sx, sy)? Same room, bare floor, clear of doorways and the figure. */
-  function canMoveTo(b, sx, sy) {
-    if (state.exp.registry[cellOf(sx, sy)] !== b.spaceId || inDoorMouth(sx, sy)) return false;
+  /**
+   * Can a push block go onto half-cell (sx, sy)? Bare floor, clear of
+   * doorways and the figure, and (pushed or pulled) in its room; set down
+   * (`anyRoom`), any room.
+   */
+  function canMoveTo(b, sx, sy, anyRoom) {
+    const room = state.exp.registry[cellOf(sx, sy)];
+    if (room === undefined || (!anyRoom && room !== b.spaceId) || inDoorMouth(sx, sy)) return false;
     const r = sub(sx, sy);
     for (const o of state.blockAt.get(cellOf(sx, sy)) || []) {
       if (o !== b && o.x0 < r.x1 && o.x1 > r.x0 && o.y0 < r.y1 && o.y1 > r.y0) return false;
@@ -265,14 +349,13 @@
     place(b, sx, sy);
     indexBlock(b, true);
     b.slide = { from, t: 0 };
-    if (b.crate) {
-      state.run.pushed[b.key] = { sx, sy };
-      savePlayer();
-      return true;
+    const home = state.spaces.get(b.spaceId);
+    b.tile = (home && home.tileAt[cellOf(sx, sy)]) || b.tile;
+    if (!b.crate) {
+      if (sx === b.to.sx && sy === b.to.sy) settle(b, true);
+      else if (b.done) unsettle(b);
     }
-    if (sx === b.to.sx && sy === b.to.sy) settle(b, true);
-    else if (b.done) unsettle(b);
-    state.run.pushed[b.key] = { sx, sy, done: b.done, paid: +b.paid.toFixed(4) };
+    saveObject(b);
     savePlayer();
     return true;
   }
@@ -282,7 +365,7 @@
   function settle(b, now) {
     b.done = true;
     b.bodyMat.emissive.copy(b.color).multiplyScalar(0.55);
-    b.markMat.opacity = 1;
+    if (marks.has(b.key)) marks.get(b.key).opacity = 1;
     if (!now) return;
     const gain = W.gainFuel(Math.max(0, RULES.restoreCharges - b.paid));
     b.paid += gain;
@@ -296,7 +379,7 @@
   function unsettle(b) {
     b.done = false;
     b.bodyMat.emissive.copy(b.color).multiplyScalar(0.12);
-    b.markMat.opacity = 0.75;
+    if (marks.has(b.key)) marks.get(b.key).opacity = 0.75;
     b.paid -= W.takeFuel(b.paid);
     W.showCaption('the block slides off its mark · the room takes its entropy back');
     W.refreshHud();
@@ -475,7 +558,7 @@
     });
   }
 
-  Object.assign(W, { SCONCE_Y, addPushBlocks, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
+  Object.assign(W, { SCONCE_Y, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
     setDownBlock, updatePushBlocks, addSconces,
     sconceNear, lightSconce, snuffSconce, updateSconces });
 })(window);

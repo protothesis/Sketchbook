@@ -431,11 +431,11 @@
 
     const unravelled = W.banishGhostsIn(ids); // none, normally: a haunted room can't be rerolled
     const shattered = shatterJarsIn(ids);
+    const despawned = W.despawnObjectsIn(ids); // crates and blocks sitting in them; one in your hands stays
     W.dropPixiesIn(ids);
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
     if (run.closed) run.closed = run.closed.filter((id) => exp.connections[id]);
-    if (run.carry && ids.has(run.carry.split(':')[0])) run.carry = null; // a carried block goes with its room
     W.spendFuel(near.price.charges);
     run.chargesSpent += near.price.charges;
     run.collapses++;
@@ -451,7 +451,8 @@
 
     W.showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}` +
       (unravelled ? ` · ${unravelled === 1 ? 'a hash ghost comes undone' : unravelled + ' hash ghosts come undone'}` : '') +
-      (shattered.n ? ` · ${shattered.n === 1 ? 'a jar shatters' : shattered.n + ' jars shatter'}` : ''));
+      (shattered.n ? ` · ${shattered.n === 1 ? 'a jar shatters' : shattered.n + ' jars shatter'}` : '') +
+      (despawned ? ` · ${despawned === 1 ? 'a block goes with it' : despawned + ' blocks go with it'}` : ''));
     save();
     savePlayer();
     W.refreshHud();

@@ -365,7 +365,6 @@ if (vDitherEW > 0.7 && south > 0.2) {
     state.sconces = state.sconces.filter((sc) => sc.spaceId !== id);
     state.waystones = state.waystones.filter((st) => st.spaceId !== id);
     state.pushBlocks = state.pushBlocks.filter((b) => b.spaceId !== id);
-    if (state.carry && state.carry.spaceId === id) state.carry = null; // rebuilt rooms hand it back (run.carry)
     state.wells = state.wells.filter((w) => w.spaceId !== id);
     const sg = state.sigils.get(id);
     if (sg && sg.fx) scene.remove(sg.fx.group);
@@ -405,6 +404,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     state.dying = [];
     rebuildExitIndex();
     for (const id in state.exp.spaces) buildSpace(state.exp.spaces[id], false);
+    W.pruneObjects();
+    W.buildCarried(); // what you were carrying, back in your hands
   }
 
   const easeOut = (t) => 1 - Math.pow(1 - t, 3);

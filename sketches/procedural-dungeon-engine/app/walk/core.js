@@ -149,7 +149,7 @@
       collapses: 0, roomsCollapsed: 0, chargesSpent: 0,
       walked: 0, collected: [], unlocked: [], extracted: null,
       closed: [],    // connection ids of opened doors you've shut again
-      carry: null,   // the push block or crate in your hands (its run.pushed key), or null
+      carry: null,   // the push block or crate in your hands (its run.objects key), or null
       keyRooms: [],  // "spaceId:seed" of rooms whose key showed up (locks first, keys later)
       unmade: { count: 0, log: [] }, // hash ghosts undone by a collapse (or in a jar that shattered); no use yet
       ghostSeen: [], // "spaceId:seed:ghost" for rooms whose ghost roll has happened
@@ -166,7 +166,8 @@
       chalks: { silver: 3 }, // chalk carried, by colour, in strokes (3 per stick)
       marks: [],             // chalk marks drawn: [{ sx, sy, color, rot, base }] (quarter-tiles)
       doorstones: 0,         // open a door in a bare wall
-      pushed: {},            // push blocks moved: { "spaceId:seed:id": { sx, sy, done } }
+      objects: {},           // loose objects (crates, push blocks), run-wide: { "spaceId:seed:id": { kind, sx, sy, ... } } (restore.js)
+      despawned: [],         // objects that went with a rerolled room: [{ key, kind, color, room, at }], for later use
       lit: {},               // sconces lit: { "spaceId:seed:id": true }
       waystones: {},         // waystones woken: { "spaceId:seed": true } (the starter's is always awake)
       hearth: null,          // "spaceId:seed" of the waystone you last woke or used: where you wake
@@ -258,7 +259,7 @@
   // save slots over (game.js). Saves are stamped with DP.saves.BUILD now:
   // when `run` changes shape, bump that instead of adding a step here.
   // Saves from before versioning count as version 0.
-  const RUN_VERSION = 4;
+  const RUN_VERSION = 5;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
@@ -284,6 +285,14 @@
         j.holds = j.fill > 0 ? 'pixie' : null;
         delete j.fill;
       }
+    },
+    // 4 -> 5: moved crates and push blocks (run.pushed, by room) become
+    // run-wide loose objects. Their kind, colour and mark come back from
+    // their room's generation when it's built (restore.js spawnObjects).
+    (run) => {
+      run.objects = Object.assign({}, run.pushed || {});
+      delete run.pushed;
+      run.despawned = run.despawned || [];
     },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */

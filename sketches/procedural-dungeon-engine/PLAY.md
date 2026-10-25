@@ -230,8 +230,7 @@ Determinism).
 - **Crates.** About 2 in 5 of the single, one-unit blocks a room's props
   lay out are loose wooden crates instead (boards in a frame, crossed by a
   brace). They're handled exactly like push blocks (below), but they have
-  no home and pay nothing: just something to rearrange. Where you've moved
-  one is kept with the run (`run.pushed`, by room seed).
+  no home and pay nothing: just something to rearrange.
 - **Push blocks (restoration).** About 1 room in 5 (depth 1+) has a stone
   block in a solid colour that's out of place, and a matching coloured
   square on the floor where it belongs, in the same row or column. Home,
@@ -239,8 +238,7 @@ Determinism).
   still be moved: off its mark, the room takes the charge back (what you
   still have, and never enough to put your lamp out), and home again pays
   back only what was taken, so a block can't be farmed. Jars and chalk
-  can't go on them. Positions persist with the run; a rerolled room rolls
-  a new one. See [`GAME-DESIGN.md`](GAME-DESIGN.md).
+  can't go on them. See [`GAME-DESIGN.md`](GAME-DESIGN.md).
 - **Moving blocks (crates and push blocks).** Walk into one and you
   **climb** it, like any one-unit block. **Hold E** facing it and a ring
   fills (0.4 s): you've **grabbed** it. Then:
@@ -251,12 +249,22 @@ Determinism).
   - move while holding E and you **push** it (toward it) or **pull** it
     (away, if there's room behind you), half a cell at a time, and you
     move with it. Sideways does nothing. Let go of E and you let go of it.
-  A block only goes in its own room, on bare floor, never in a doorway's
-  mouth. Set down or pushed onto its mark, it's home.
+  Pushed or pulled, a block stays in its room; carried, it goes anywhere:
+  set it down on bare floor in any room, never in a doorway's mouth. Set
+  down or pushed onto its mark (in its home room), it's home.
+- **Blocks travel.** Crates and push blocks live in one run-wide list
+  (`run.objects`), not with their room: a room adds its own the first time
+  it's built, and builds whatever sits in its cells now. What happens to
+  one depends on where it is, never where it came from. In your hands, or
+  set down in another room, it stays when its home room is rerolled. One
+  **sitting in a room when that room is rerolled is despawned**: gone from
+  the world ("a block goes with it"), and kept in `run.despawned` for some
+  later use. A room lost to a faint isn't rerolled: what's in it waits,
+  and comes back if you retrace the path.
 - **Hands full.** With a block in your hands, E only sets it down; F does
   nothing ("your hands are full"), the hotbar won't switch (it shakes),
   and you can't climb or run. The block you carry is saved with the run
-  (`run.carry`), and goes with its room if that room is rerolled.
+  (`run.carry`).
 - **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
   sconce on a wall, chambers sometimes two. Never on a south wall: the
   camera looks north and would only see its back. E, facing one in your

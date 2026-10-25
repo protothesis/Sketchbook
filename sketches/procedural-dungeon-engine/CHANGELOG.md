@@ -433,6 +433,13 @@ All notable changes to this sketch are logged here, per
   loose wooden crates, pushed and pulled like push blocks but with no home
   and no reward (`crateChance`, its own `'crate'` stream). Moved crates
   persist in `run.pushed`.
+- 2026-10-24: **Blocks travel** (playtest round 1, step 3). Crates and
+  push blocks live in one run-wide list (`run.objects`) instead of with
+  their room. Carried, they go anywhere and can be set down in any room
+  (pushing still keeps them in their room). A rerolled room despawns what
+  sits in it into `run.despawned` ("a block goes with it"); one in your
+  hands or elsewhere stays. **Run save v5**: `run.pushed` becomes
+  `run.objects` (kind and colour filled in from the room when it's built).
 - 2026-10-24: **Grab** (playtest round 1, step 2). Crates and push
   blocks can be climbed: walking into one climbs it now, instead of
   shoving it. Hold E at one (0.4 s) to grab it: let go without moving and
