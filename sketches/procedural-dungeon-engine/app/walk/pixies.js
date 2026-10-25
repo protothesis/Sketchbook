@@ -133,9 +133,9 @@
     return best;
   }
 
-  /** Catch a pixie in a carried empty jar. */
+  /** Catch a pixie in a carried empty jar (a swipe of it, F). */
   function catchPixie(px, jar) {
-    jar.fill = 1;
+    jar.holds = 'pixie';
     removePixie(px);
     state.run.pixiesCaught = (state.run.pixiesCaught || 0) + 1;
     W.showCaption('you catch the pixie in a jar · ghosts are drawn to it');

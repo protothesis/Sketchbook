@@ -259,6 +259,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     };
     for (const d of pr.details) onTile(d, d.h, mats.detail[d.shade < 0.5 ? 0 : 1], false);
     for (const b of pr.blocks) {
+      if (b.crate) continue; // a push block (restore.js)
       // One seamless box per block, however many units tall.
       const t = tileAt[DE.key(Math.floor((b.x0 + b.x1) / 2), Math.floor((b.y0 + b.y1) / 2))];
       const m = shadowed(new THREE.Mesh(geo.block, mats.block));
@@ -294,7 +295,6 @@ if (vDitherEW > 0.7 && south > 0.2) {
       if (item.kind === 'key' && !state.run.keyRooms.includes(spaceKey)) continue;
       if (item.kind === 'thread' && state.run.thread) continue; // found once, kept for good
       const tile = tileAt[DE.key(item.cell.x, item.cell.y)];
-      if (W.ITEMS[item.kind].cls === 'object') { W.spawnObject(item, key, tile); continue; }
       const mesh = W.itemMesh(item, key);
       mesh.position.set((item.cell.x + 0.5) * S, W.ITEMS[item.kind].cls === 'pickup' ? 0.45 * S : 0, (item.cell.y + 0.5) * S);
       group.add(mesh);
@@ -378,7 +378,8 @@ void main() {
     const surface = ex.kind === 'surface';
     const pivot = new THREE.Group();
     pivot.position.set(-DOOR_W / 2 * S, 0, 0);
-    const panel = shadowed(new THREE.Mesh(geo.door, surface ? surfaceMat : ex.connectionId ? doorOpenMat : locked ? lockMat : doorMat));
+    const shut = W.isClosed(ex.connectionId);
+    const panel = shadowed(new THREE.Mesh(geo.door, surface ? surfaceMat : ex.connectionId && !shut ? doorOpenMat : locked ? lockMat : doorMat));
     panel.position.set(DOOR_W / 2 * S, DOOR_H * S / 2, 0);
     pivot.add(panel);
     if (gate) {
@@ -390,7 +391,7 @@ void main() {
     }
     const seam = new THREE.Mesh(geo.seam, surface ? surfaceSeamMat : locked ? lockSeamMat : !ex.connectionId && W.lostPathAt(space.id, ex.id) ? lostSeamMat : seamMat);
     seam.position.set(0, 0.02, 0);
-    seam.visible = !ex.connectionId;
+    seam.visible = !ex.connectionId || shut;
     // A closed door's point: off the bar's outer edge, toward where it opens.
     // A child of the bar, so it shows and hides with it.
     // The lost-path shimmer, on the panel so it swings with it.
@@ -419,7 +420,7 @@ void main() {
     edgeGroup.add(pivot, seam, arrow);
     const door = {
       key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, point, arrow, locked, shimmer,
-      openAngle: -beyond * SWING_ANGLE, t: ex.connectionId ? 1 : 0, dir: 0,
+      openAngle: -beyond * SWING_ANGLE, t: ex.connectionId && !shut ? 1 : 0, dir: 0,
     };
     pivot.rotation.y = door.openAngle * door.t;
     state.doors.set(door.key, door);
@@ -474,15 +475,23 @@ void main() {
   }
 
   function buildWorld() {
+    // Loose objects are rebuilt from the run, a carried one included: drop
+    // whatever the last world had in hand, or a faint would leave you with
+    // two (the old one in your hands, and the checkpoint's).
+    state.pushBlocks = [];
+    state.carry = null;
+    state.grab = null;
+    W.resetHeld();
     W.clearGhosts();
     W.clearPixies();
-    W.clearJars();
     W.clearMarks();
     for (const id of Array.from(state.spaces.keys())) disposeSpace(id);
     for (const rec of state.dying) world.remove(rec.group);
     state.dying = [];
     rebuildExitIndex();
     for (const id in state.exp.spaces) buildSpace(state.exp.spaces[id], false);
+    W.pruneObjects();
+    W.buildCarried(); // what you were carrying, back in your hands
   }
 
   const easeOut = (t) => 1 - Math.pow(1 - t, 3);
@@ -515,7 +524,7 @@ void main() {
     if (sa === undefined || sb === undefined) return false;
     if (sa === sb) return true;
     const hit = state.exitAt.get(ekey(ax, ay, FACE[(bx - ax) + ',' + (by - ay)]));
-    return !!(hit && hit.exit.connectionId);
+    return !!(hit && hit.exit.connectionId && !W.isClosed(hit.exit.connectionId));
   }
 
   Object.assign(W, { dither, geo, lostFx, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows,

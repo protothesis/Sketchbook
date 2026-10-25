@@ -107,12 +107,13 @@
         const back = state.exitAt.get(ekey(n.x, n.y, OPP[f]));
         if (back && back.exit.connectionId) hit = back;
       }
-      if (hit && hit.exit.connectionId) {
+      const shut = hit && W.isClosed(hit.exit.connectionId);
+      if (hit && hit.exit.connectionId && !shut) {
         const dx = bx - ax, dy = by - ay;
         out.push({ ax, ay, bx: ax + dx * JAMB, by: ay + dy * JAMB });
         out.push({ ax: bx - dx * JAMB, ay: by - dy * JAMB, bx, by });
       } else {
-        out.push({ ax, ay, bx, by, door: hit && hit.spaceId === sid ? hit : null, facing: f });
+        out.push({ ax, ay, bx, by, door: hit && (hit.spaceId === sid || shut) ? hit : null, facing: f });
       }
     }
   }
@@ -213,7 +214,7 @@
     lanternMesh.position.z = (wx * sn + wy * c) * S;
   }
 
-  const canClimb = (b) => !b.jar && !b.push && b.top - state.player.z > 0.05 &&
+  const canClimb = (b) => !b.jar && !b.carried && b.top - state.player.z > 0.05 &&
     b.top - state.player.z <= RULES.climbMaxUnits * UNIT + 0.01 && b.top <= RULES.climbMaxTop * UNIT + 0.01;
 
   /** A climbable block right in front of the figure, if no door is closer. */

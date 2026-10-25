@@ -428,6 +428,110 @@ All notable changes to this sketch are logged here, per
     exact (`stress-test.js` checks restores, tags and uncarves).
   - The chart view still reads walk mode's record, but its own edits no
     longer flow into walk mode.
+- 2026-10-24: **Crates**, the first step of the interaction cleanup
+  (`INTERACTION-PLAN.md`): about 2 in 5 single one-unit prop blocks are
+  loose wooden crates, pushed and pulled like push blocks but with no home
+  and no reward (`crateChance`, its own `'crate'` stream). Moved crates
+  persist in `run.pushed`.
+- 2026-10-24: **Playtest round 2.** No E prompt line or focus brackets on
+  a keyboard (fewer callouts; touch keeps its E button). Dragging a block
+  is smooth along the grab axis, slower than walking by weight (crate,
+  vessel, stone), and eases into the nearest half-cell when you let go.
+  A carried block goes down right where you lifted it if you haven't
+  moved, otherwise straight ahead along your facing. Travelling from a
+  waystone takes a hold.
+- 2026-10-24: **Known issue:** dragging grabbed blocks is still glitchy
+  in play; a thorough investigation is needed (GitHub issue #26).
+- 2026-10-24: **Fixed:** fainting while carrying a block left it in your
+  hands and duplicated it when the checkpoint rebuilt the world. A
+  rebuild now starts with empty hands; what you carry comes from the run.
+- 2026-10-24: **Jars and vessels** (playtest round 1, step 5). A jar is a
+  plain tool now: walk over one to collect it; it lives in the bag (shown
+  in your left hand) and never goes back into the world, so a jar in
+  hand no longer ties up E. **Vessels** are new: a clay urn in about 1
+  room in 10, a loose object like a crate (grab, lift, carry, set down,
+  stack), holding up to 3 of one kind. F with a full jar pours it in; F
+  with an empty jar takes one out. A vessel of pixies draws ghosts and
+  powers a sigil (+1 entropy max per pixie). **Run save v6**: jars that
+  were set down become vessels holding what they held.
+- 2026-10-24: **Stacking** (playtest round 1, step 4). Set a carried
+  block down at your level or one up, on the floor or on top of anything
+  that covers the whole half-cell (a fixed block, another crate); stacks
+  reach 3 units. Lift a block at your level or one up, never one with
+  something on it; push and pull on the floor only. An object's level is
+  saved (`lv` in `run.objects`, 0 by default, so no save change).
+- 2026-10-24: **Blocks travel** (playtest round 1, step 3). Crates and
+  push blocks live in one run-wide list (`run.objects`) instead of with
+  their room. Carried, they go anywhere and can be set down in any room
+  (pushing still keeps them in their room). A rerolled room despawns what
+  sits in it into `run.despawned` ("a block goes with it"); one in your
+  hands or elsewhere stays. **Run save v5**: `run.pushed` becomes
+  `run.objects` (kind and colour filled in from the room when it's built).
+- 2026-10-24: **Grab** (playtest round 1, step 2). Crates and push
+  blocks can be climbed: walking into one climbs it now, instead of
+  shoving it. Hold E at one (0.4 s) to grab it: let go without moving and
+  you lift it, in an arc up over your head (and back down when you set it
+  down); move while holding and you push or pull it along that axis, half
+  a cell at a time, moving with it; let go while moving and you let go.
+  Pull is back, as part of the grab. Lifting a jar takes a 0.35 s hold.
+- 2026-10-24: **After the first playtest of the cleanup** (plan in
+  `INTERACTION-PLAN.md`, "Playtest round 1"): held items are their true
+  size and cast no shadow; a new item goes into the bag and never into
+  your hands; pushing a block or climbing no longer shows the hold ring
+  (doors still do).
+- 2026-10-24: **The jar swipe** (interaction cleanup, step 6). F swipes
+  the jar in your hands, and the swipe always plays: an empty jar catches
+  a pixie close by, or scoops a full entropy well you're standing in (with
+  an empty jar in hand, the well waits for your swipe instead of pouring
+  into the lamp); a jar of entropy pours into your lamp, one charge, all
+  or nothing. Jars are grouped by what they hold (empty, pixie, entropy);
+  "auto" is gone. A jar of entropy glows violet inside.
+- 2026-10-24: **Run save v4.** A jar records what it holds (`holds: null |
+  'pixie' | 'entropy'`) instead of a pixie count. Save snapshots now carry
+  `runVersion` and older runs are migrated as they load (before this, a
+  slot save skipped `RUN_MIGRATIONS`), so this needed no new `BUILD`: an
+  existing save still loads, its pixie jars intact.
+- 2026-10-24: **Carrying** (interaction cleanup, step 5). E lifts a push
+  block or crate and you carry it over your head; E sets it down on the
+  free half-cell ahead, shown by a faint box, so a block is never stuck.
+  **Pull is gone.** Set down on its mark, a block settles and pays as
+  before; lifting one that's home is a 0.5 s hold (it takes its entropy
+  back). Hands full: E only sets down, F does nothing, the hotbar won't
+  switch, and no climbing or running. The carried block is saved
+  (`run.carry`). A jar in your hands is set down with E now, not F.
+- 2026-10-24: **Hands** (interaction cleanup, step 4). What's selected
+  on the hotbar is what you hold, and the figure shows it: a tool in its
+  left hand, a jar over its head. Slot 1 is always the lantern (empty
+  hands); F with it covers or relights the lamp (R still works). Tools
+  (chalk, doorstones, and now keys) lie flat and are collected by walking
+  over them; with empty hands a new tool goes into them, otherwise into
+  the bag. **Keys are a tool**: F with one in hand unlocks a door, then you
+  open it as usual; E at a lock only says so. The key count by the lamp
+  is gone (the thread is still shown there).
+- 2026-10-24: **Hold to act** (interaction cleanup, step 3). Anything
+  that changes the world takes E held while a ring (like a ghost's) fills
+  over the target with the action's icon: doors 0.35 s (as long as a
+  push, which fills the same ring), wiping chalk 0.4 s, sconces 0.5 s,
+  waking a waystone 0.7 s, rerolling or retracing 1 s. Taking, lifting,
+  climbing, pulling and travelling stay a tap; a tap at something you
+  can't do says why. On touch, press and hold the E prompt.
+- 2026-10-24: **Any opened door closes** (hold E, from either side),
+  except into a provisional room, where closing is the reroll. A closed
+  door is a wall to you, ghosts and light until you open it again (push or
+  hold E). Saved in `run.closed`; orange on the maps.
+- 2026-10-24: **Snuff a sconce** (hold E at a lit one): its shard goes back
+  to your lamp and off the restored tally.
+- 2026-10-24: **E acts on what you face** (interaction cleanup, step 2).
+  The fixed priority order (doors first, then waystones, tools, jars,
+  marks, push blocks, sconces, blocks) is gone: of everything in reach,
+  the thing you're most squarely facing wins, nearer breaking ties, so a
+  sconce beside a door no longer opens the door. Faint corner brackets
+  frame the focused thing. The prompt is two lines, E's and F's, each
+  starting with its key (tap a line on touch), so a doorstone's or a
+  pixie's prompt no longer hides behind E's. Wiping a chalk mark now means
+  facing it (within 0.7 cells), not standing on it.
+- 2026-10-24: `INTERACTION-PLAN.md`: the agreed plan for E/F, hold-to-act,
+  hands and carrying, jars, sconces and keys.
 
 - 2026-10-24: **Doors and the silhouette:**
   - Door panels are solid and never dither. The doorway's frame (jambs and

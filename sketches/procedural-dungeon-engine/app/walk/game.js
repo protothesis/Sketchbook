@@ -9,7 +9,7 @@
 
   const W = global.DungeonPlay.walk;
   const { DE, RULES, $, STORAGE_KEY, PLAYER_KEY, SAVES, state, freshRun, migrateRun, save, savePlayer,
-    saveCheckpoint, rebuildExitIndex, el } = W;
+    saveCheckpoint, rebuildExitIndex, el, RUN_VERSION } = W;
 
   // ---------------------------------------------------------------------------
   // Lost paths
@@ -137,7 +137,7 @@
         e.facing === ev.facing && (e.tags || []).includes('carved'));
       if (ex) DE.uncarve(exp, sp.id, ex.id);
     }
-    const run = Object.assign(freshRun(exp.rootSeed), cp.snap.run);
+    const run = Object.assign(freshRun(exp.rootSeed), snapRun(cp.snap));
     for (const k of KEEP) if (live[k] !== undefined) run[k] = live[k];
     if (lost) { run.faints = (run.faints || 0) + 1; run.roomsLost = (run.roomsLost || 0) + lost; }
     W.setExpedition(exp, { run, player: cp.snap.player });
@@ -158,6 +158,9 @@
    * the run key. Nothing in build 1 changes what those histories build, so
    * build 1 brings one over (once: it then lives in the slots).
    */
+  /** A snapshot's run, brought up to RUN_VERSION (snapshots from before runVersion are version 3). */
+  const snapRun = (snap) => migrateRun(JSON.parse(JSON.stringify(snap.run)), snap.runVersion || 3);
+
   function legacySave() {
     if (SAVES.BUILD !== 1) return null;
     try {
@@ -167,7 +170,7 @@
       const record = JSON.parse(text);
       if (pl.rootSeed !== record.rootSeed) return null;
       const run = Object.assign(freshRun(record.rootSeed), migrateRun(pl.run, pl.v));
-      return SAVES.make({ record, run, player: { x: pl.x, y: pl.y, angle: pl.angle || 0 } });
+      return SAVES.make({ record, run, player: { x: pl.x, y: pl.y, angle: pl.angle || 0 }, runVersion: RUN_VERSION });
     } catch (e) { return null; }
   }
 
@@ -222,7 +225,7 @@
       return false;
     }
     hideTitle();
-    W.setExpedition(res.expedition, { run: snap.run, player: snap.player });
+    W.setExpedition(res.expedition, { run: snapRun(snap), player: snap.player });
     // A run needs a checkpoint to faint back to: its own, or here and now.
     const cp = SAVES.read('checkpoint');
     if (cp.status !== 'ok' || cp.snap.rootSeed !== snap.rootSeed) saveCheckpoint();

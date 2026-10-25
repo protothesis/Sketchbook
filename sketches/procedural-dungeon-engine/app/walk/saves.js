@@ -13,9 +13,11 @@
 // Every snapshot carries BUILD. A save from another build isn't loaded (the
 // generator may have changed, and replaying its history would build a
 // different dungeon); the title screen offers a new run instead. So bump
-// BUILD whenever a change alters what a history builds or the shape of
-// `run`, rather than gating the change behind params for old records.
-// Within one build, replay is exact.
+// BUILD whenever a change alters what a history builds, rather than gating
+// the change behind params for old records. Within one build, replay is
+// exact. A change to the shape of `run` alone doesn't need a new build: the
+// snapshot carries `runVersion` (walk mode's RUN_VERSION, core.js), and an
+// older run is migrated as it loads (snapshots without one are version 3).
 //
 // The backend is swappable (setBackend): anything with get / set / remove
 // of strings by key. localStorage by default.
@@ -42,6 +44,7 @@
     return {
       format: FORMAT, build: BUILD, savedAt: new Date().toISOString(),
       rootSeed: o.record.rootSeed, record: o.record, run: o.run, player: o.player,
+      runVersion: o.runVersion,
     };
   }
 

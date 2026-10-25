@@ -5,21 +5,22 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, RADIUS, USE_RANGE, state, rebuildExitIndex, isLockedNow, chargeText, save,
+  const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, PUSH_TIME, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
-    climb, removeMarkFromWorld, markNear, wipeMarksIn, jarNear, pickUpJar, shatterJarsIn, toolNear,
-    takeItem, pullNear, pull, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
+    climb, removeMarkFromWorld, markNear, wipeMarksIn,
+    liftNear, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
 
   // ---------------------------------------------------------------------------
   // Doors: open, unlock, or close + collapse
 
   /**
    * The door in the player's own room within reach, and what can be done
-   * with it: 'open' | 'retrace' | 'locked' | 'collapse'. Collapse (a
-   * reroll) is only offered into a room that's still provisional; retrace,
-   * at the door to a path lost to a faint (pushing it open lets the path
-   * go instead). Loop doors,
-   * the way back into a room, and doors into committed rooms have no action.
+   * with it: 'open' | 'retrace' | 'locked' | 'collapse' | 'close' |
+   * 'reopen'. Collapse (a reroll) is what closing a door into a room
+   * that's still provisional does; retrace, at the door to a path lost to a
+   * faint (pushing it open lets the path go instead). Any other opened
+   * door just closes ('close'), and a door you closed opens again
+   * ('reopen'), from either side.
    */
   function doorNear(p) {
     const exp = state.exp;
@@ -33,7 +34,9 @@
       let action = null, child = null;
       if (p.z > 0.05) continue; // no doors from on top of a block
       if (!ex.connectionId) action = ex.kind === 'surface' ? 'surface' : isLockedNow(sp, ex) ? 'locked' : 'open';
+      else if (W.isClosed(ex.connectionId)) action = 'reopen';
       else if ((child = DP.rerollThrough(exp, sp.id, ex))) action = 'collapse';
+      else action = 'close';
       if (!action) continue;
       bestD = d;
       best = { space: sp, exit: ex, action, child };
@@ -90,21 +93,177 @@
     W.refreshHud();
   }
 
-  /** What E would do right now, in priority order (F uses the hotbar item: useNear). */
-  const actionNear = (p) =>
-    doorNear(p) || waystoneNear(p) || toolNear(p) || jarNear(p) || markNear(p) || pullNear(p) ||
-    sconceNear(p) || blockNear(p);
+  /**
+   * The box around what E would act on, in cells: { x0, y0, x1, y1, z0, z1 }
+   * (z up from the floor). It's the focus outline, and its middle is the
+   * point the focus scorer aims at.
+   */
+  function focusBox(near) {
+    const pad = (x, y, r, z0, z1) => ({ x0: x - r, y0: y - r, x1: x + r, y1: y + r, z0, z1 });
+    const blk = (b, z0, z1) => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, z0, z1 });
+    switch (near.action) {
+      case 'wake': case 'travel': return blk(near.stone.ws, 0, near.stone.ws.top || 2.5 * UNIT);
+      case 'erase': {
+        const m = near.mark, z = m.base || 0;
+        return { x0: m.sx / 2, y0: m.sy / 2, x1: m.sx / 2 + 0.5, y1: m.sy / 2 + 0.5, z0: z, z1: z + 0.02 };
+      }
+      case 'lift': return blk(near.block, 0, near.block.top);
+      case 'setblock': {
+        if (!near.spot) return null;
+        const z = near.spot.base || 0, h = near.block.top - (near.block.base || 0);
+        return { x0: near.spot.sx / 2, y0: near.spot.sy / 2, x1: near.spot.sx / 2 + 0.5, y1: near.spot.sy / 2 + 0.5, z0: z, z1: z + h };
+      }
+      case 'light': case 'snuff': return pad(near.sconce.x, near.sconce.y, 0.08, W.SCONCE_Y - 0.1, W.SCONCE_Y + 0.12);
+      case 'climb': return blk(near.block, near.block.base || 0, near.block.top);
+      default: { // a door
+        const [ax, ay, bx, by] = edgeEnds(near.exit.cell.x, near.exit.cell.y, near.exit.facing);
+        const mx = (ax + bx) / 2, my = (ay + by) / 2, h = ax === bx ? 0 : DOOR_W / 2, v = ax === bx ? DOOR_W / 2 : 0;
+        return { x0: mx - h - 0.04, y0: my - v - 0.04, x1: mx + h + 0.04, y1: my + v + 0.04, z0: 0, z1: DOOR_H };
+      }
+    }
+  }
+
+  /**
+   * What E would do right now: one focused thing. Each kind offers its best
+   * candidate within its own reach, and the one you're most squarely facing
+   * wins, nearer breaking ties (F uses the hotbar item: useNear).
+   */
+  const FACING_WEIGHT = 0.6; // cells of distance one unit of (1 - cos) is worth
+  function actionNear(p) {
+    // Holding on to a block: that's what E is about until you let go.
+    if (state.grab) {
+      const near = { action: 'grabbed', block: state.grab.block };
+      near.box = focusBox(Object.assign({}, near, { action: 'lift' }));
+      return near;
+    }
+    // An object in your hands (a block, a crate, a vessel): E only sets it down.
+    if (state.carry) {
+      const spot = W.blockSpot(p), near = { action: 'setblock', spot, block: state.carry };
+      near.box = focusBox(near);
+      return near;
+    }
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
+    let best = null, bestScore = Infinity;
+    for (const find of [doorNear, waystoneNear, markNear, liftNear, sconceNear, blockNear]) {
+      const near = find(p);
+      if (!near) continue;
+      const b = near.box = focusBox(near);
+      const dx = (b.x0 + b.x1) / 2 - p.x, dy = (b.y0 + b.y1) / 2 - p.y, d = Math.hypot(dx, dy);
+      const cos = d < 0.05 ? 1 : (dx * fx + dy * fy) / d;
+      const score = d + FACING_WEIGHT * (1 - cos);
+      if (score < bestScore) { bestScore = score; best = near; }
+    }
+    return best;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hold to act: anything that changes the world needs E held (or the E
+  // prompt pressed and held on touch) while a ring fills; the rest is a tap.
+  // Opening and closing a door take as long as pushing into one.
+
+  const HOLD = {
+    open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME,
+    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7, travel: 0.5, lift: 0.4,
+    collapse: 1.0, retrace: 1.0, // they cost entropy and can't be undone
+  };
+  // The ring's icon, per action.
+  const HOLD_ICON = {
+    open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
+    wake: '◆', collapse: '↻', retrace: '↺', lift: '✋', travel: '◇',
+  };
+
+  /** Can't be done right now: a tap says why instead of filling a ring. */
+  function blockedNow(near) {
+    const a = near.action;
+    return a === 'locked' || (a === 'collapse' && (near.haunted || !near.affordable)) ||
+      (a === 'retrace' && (!near.thread || !near.affordable)) || (a === 'setblock' && !near.spot);
+  }
+  /** Seconds E must be held for this action, or 0 for a tap. */
+  const holdTime = (near) => (blockedNow(near) ? 0 : HOLD[near.action] || 0);
+
+  // What's being held: the action and its box, so a different target restarts the ring.
+  const holdSig = (near) => near.action + ':' + Object.values(near.box).map((v) => v.toFixed(2)).join(',');
+
+  /** E pressed (key down or the prompt pressed): taps act now; holds start the ring. */
+  function pressE() {
+    const near = actionNear(state.player);
+    const h = state.hold;
+    h.sig = null; h.t = 0; h.spent = false; h.down = true;
+    if (near && !holdTime(near)) { h.spent = true; act(near); }
+  }
+  /** E let go: a grabbed block is lifted (or let go, if you moved it). `cancel` (focus lost): just let go. */
+  function releaseE(cancel) {
+    const h = state.hold;
+    h.down = false; h.sig = null; h.t = 0; h.spent = false;
+    if (state.grab) W.endGrab(cancel);
+  }
+
+  /**
+   * Each frame: fill the ring while E is held on the same target, and act
+   * when it's full. One hold, one action; release to go again. Returns the
+   * ring's progress (0-1) and icon, for the HUD. Pushing into a door or
+   * block fills the same ring.
+   */
+  function tickHold(near, dt) {
+    const h = state.hold;
+    h.ring = null;
+    if (h.down && !h.spent && near && holdTime(near)) {
+      const sig = holdSig(near);
+      if (sig !== h.sig) { h.sig = sig; h.t = 0; }
+      h.t += dt;
+      const need = holdTime(near);
+      h.ring = { v: Math.min(1, h.t / need), icon: HOLD_ICON[near.action] || '' };
+      if (h.t >= need) { h.spent = true; act(near); }
+    } else if (state.push.key && state.push.t > 0 && !/^(push|block):/.test(state.push.key)) {
+      // Pushing into a door fills the same ring; pushing a block or climbing doesn't.
+      h.ring = { v: Math.min(1, state.push.t / PUSH_TIME), icon: HOLD_ICON.open };
+    }
+    return h.ring;
+  }
+
+  /** Shut an opened door: it's a wall again (to you, ghosts and light) until you open it. */
+  function closeDoor(cid) {
+    const run = state.run;
+    if (!run.closed) run.closed = [];
+    if (!run.closed.includes(cid)) run.closed.push(cid);
+    const c = state.exp.connections[cid];
+    const door = c && state.doors.get(c.a.spaceId + '/' + c.a.exitId);
+    if (door) door.dir = -1;
+    W.showCaption('you close the door');
+    savePlayer();
+    W.refreshHud();
+  }
+  function reopenDoor(cid) {
+    const run = state.run;
+    run.closed = (run.closed || []).filter((id) => id !== cid);
+    const c = state.exp.connections[cid];
+    const door = c && state.doors.get(c.a.spaceId + '/' + c.a.exitId);
+    if (door) {
+      door.dir = 1;
+      door.seam.visible = false;
+      door.panel.material = doorOpenMat;
+    }
+    savePlayer();
+    W.refreshHud();
+  }
 
   function act(near) {
     if (!near || state.paused || state.climb) return;
+    if (near.action === 'close') { closeDoor(near.exit.connectionId); return; }
+    if (near.action === 'reopen') { reopenDoor(near.exit.connectionId); return; }
+    if (near.action === 'snuff') { W.snuffSconce(near.sconce); return; }
     if (near.action === 'climb') { climb(near.block, near.dir); return; }
     if (near.action === 'surface') { askSurface(); return; }
     if (near.action === 'wake') { wakeWaystone(near.stone); return; }
     if (near.action === 'travel') { travelFrom(near.stone); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
-    if (near.action === 'pickjar') { pickUpJar(near.jar); return; }
-    if (near.action === 'take') { takeItem(near.key, near.it); return; }
-    if (near.action === 'pull') { pull(near); return; }
+    if (near.action === 'lift') { W.startGrab(near.block); return; } // the ring filled: you have hold of it
+    if (near.action === 'grabbed') return;
+    if (near.action === 'setblock') {
+      if (!near.spot) { W.showCaption('no room to set it down here'); return; }
+      W.setDownBlock(near.spot);
+      return;
+    }
     if (near.action === 'light') { lightSconce(near.sconce); return; }
     if (near.action === 'erase') {
       removeMarkFromWorld(near.mark);
@@ -135,22 +294,8 @@
       savePlayer();
       W.refreshHud();
     } else if (near.action === 'locked') {
-      if (run.keys <= 0) { W.showCaption('locked. you need a key'); return; }
-      run.keys--;
-      run.keysUsed++;
-      run.unlocked.push(doorKey);
-      const door = state.doors.get(doorKey);
-      if (door) {
-        door.locked = false;
-        door.panel.material = doorMat;
-        door.seam.material = door.point.material = seamMat;
-      }
-      // The door just opens now. The record / leave-the-dungeon screen
-      // (showRecord) is kept for whatever a lock leads to later.
-      W.showCaption('the key turns');
-      openDoor(near.space.id, near.exit.id);
-      savePlayer();
-      W.refreshHud();
+      // A key in hand unlocks it (F); E can't.
+      W.showCaption(run.keys > 0 ? `locked · ${W.verbF} with your key in hand to unlock it` : 'locked. you need a key');
     } else if (near.action === 'collapse') {
       if (near.haunted) {
         W.showCaption(`a hash ghost lingers in ${near.child.id} · it won't let the room unmake`);
@@ -162,6 +307,24 @@
       }
       collapseThrough(near);
     }
+  }
+
+  /** F with a key in hand at a locked door: the key turns. Open it as usual after. */
+  function unlockDoor(near) {
+    const run = state.run;
+    const doorKey = near.space.id + '/' + near.exit.id;
+    run.keys--;
+    run.keysUsed++;
+    run.unlocked.push(doorKey);
+    const door = state.doors.get(doorKey);
+    if (door) {
+      door.locked = false;
+      door.panel.material = doorMat;
+      door.seam.material = door.point.material = seamMat;
+    }
+    W.showCaption('the key turns · the door is unlocked');
+    savePlayer();
+    W.refreshHud();
   }
 
   /**
@@ -263,10 +426,11 @@
     if (!loopsIntoParent) touched.delete(near.space.id);
 
     const unravelled = W.banishGhostsIn(ids); // none, normally: a haunted room can't be rerolled
-    const shattered = shatterJarsIn(ids);
+    const despawned = W.despawnObjectsIn(ids); // crates, blocks and vessels sitting in them; one in your hands stays
     W.dropPixiesIn(ids);
     wipeMarksIn(ids);
     DP.collapse(exp, near.child.id);
+    if (run.closed) run.closed = run.closed.filter((id) => exp.connections[id]);
     W.spendFuel(near.price.charges);
     run.chargesSpent += near.price.charges;
     run.collapses++;
@@ -282,11 +446,12 @@
 
     W.showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}` +
       (unravelled ? ` · ${unravelled === 1 ? 'a hash ghost comes undone' : unravelled + ' hash ghosts come undone'}` : '') +
-      (shattered.n ? ` · ${shattered.n === 1 ? 'a jar shatters' : shattered.n + ' jars shatter'}` : ''));
+      (despawned ? ` · ${despawned === 1 ? 'a block goes with it' : despawned + ' blocks go with it'}` : ''));
     save();
     savePlayer();
     W.refreshHud();
   }
 
-  Object.assign(W, { doorNear, wallNear, carveDoor, actionNear, act, openDoor, askSurface });
+  Object.assign(W, { doorNear, wallNear, carveDoor, unlockDoor, focusBox, actionNear, holdTime, pressE, releaseE, tickHold,
+    closeDoor, reopenDoor, act, openDoor, askSurface });
 })(window);
