@@ -9,7 +9,7 @@
   const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, PUSH_TIME, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
     climb, removeMarkFromWorld, markNear, wipeMarksIn,
-    liftNear, sconceNear, lightSconce, waystoneNear, wakeWaystone, travelFrom } = W;
+    liftNear, sconceNear, lightSconce } = W;
 
   // ---------------------------------------------------------------------------
   // Doors: open, unlock, or close + collapse
@@ -67,13 +67,13 @@
 
   /**
    * What's yours in these rooms (ids; `rooms`: their spaces or traces), as
-   * icon kinds (choice.js): a pack, a hall's save lantern. (Waystones join
-   * when they can be moved.)
+   * icon kinds (choice.js): a pack, a hall's save lantern, a waystone.
    */
   function thingsIn(ids, rooms) {
     const out = [];
     for (let i = W.packsIn(ids).length; i > 0; i--) out.push('pack');
     for (const r of rooms) if (r.archetype === 'hall') out.push('lantern');
+    for (let i = W.stonesIn(rooms); i > 0; i--) out.push('waystone');
     return out;
   }
 
@@ -120,7 +120,6 @@
     const pad = (x, y, r, z0, z1) => ({ x0: x - r, y0: y - r, x1: x + r, y1: y + r, z0, z1 });
     const blk = (b, z0, z1) => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, z0, z1 });
     switch (near.action) {
-      case 'wake': case 'travel': return blk(near.stone.ws, 0, near.stone.ws.top || 2.5 * UNIT);
       case 'save': return blk(near.lantern.ws, 0, 3 * UNIT);
       case 'erase': {
         const m = near.mark, z = m.base || 0;
@@ -166,7 +165,7 @@
     }
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     let best = null, bestScore = Infinity;
-    for (const find of [doorNear, waystoneNear, W.lanternNear, markNear, liftNear, sconceNear, blockNear]) {
+    for (const find of [doorNear, W.lanternNear, markNear, liftNear, sconceNear, blockNear]) {
       const near = find(p);
       if (!near) continue;
       const b = near.box = focusBox(near);
@@ -185,7 +184,7 @@
 
   const HOLD = {
     open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME,
-    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7, travel: 0.5, lift: 0.4, save: 0.5,
+    erase: 0.4, light: 0.5, snuff: 0.5, lift: 0.4, save: 0.5,
     collapse: 1.0, // it costs entropy and can't be undone
   };
   HOLD.lostdoor = RULES.lostDoorHold; // then a choice (choice.js)
@@ -193,7 +192,7 @@
   // The ring's icon, per action.
   const HOLD_ICON = {
     open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
-    wake: '◆', collapse: '↻', lostdoor: '⇄', lift: '✋', travel: '◇', save: '✧',
+    collapse: '↻', lostdoor: '⇄', lift: '✋', save: '✧',
   };
 
   /** Can't be done right now: a tap says why instead of filling a ring. */
@@ -210,18 +209,25 @@
   const holdSig = (near) => near.action + (near.sel != null ? '#' + near.sel : '') + ':' +
     Object.values(near.box || {}).map((v) => v.toFixed(2)).join(',');
 
-  /** E pressed (key down or the prompt pressed): taps act now; holds start the ring. */
+  /**
+   * E pressed (key down or the prompt pressed): taps act now; holds start
+   * the ring. At a powered waystone the hold grabs it, as at any object, and
+   * a tap (let go before the ring fills) opens the travel map.
+   */
   function pressE() {
     const near = actionNear(state.player);
     const h = state.hold;
     h.sig = null; h.t = 0; h.spent = false; h.down = true;
+    h.tap = near && near.action === 'lift' && near.block.waystone && near.block.holds ? near.block : null;
     if (near && !holdTime(near)) { h.spent = true; act(near); }
   }
-  /** E let go: a grabbed block is lifted (or let go, if you moved it). `cancel` (focus lost): just let go. */
+  /** E let go: a grabbed block is lifted (or let go, if you moved it); a tap at a powered waystone travels. `cancel` (focus lost): just let go. */
   function releaseE(cancel) {
     const h = state.hold;
-    h.down = false; h.sig = null; h.t = 0; h.spent = false;
+    const tap = !cancel && h.down && !h.spent && h.tap;
+    h.down = false; h.sig = null; h.t = 0; h.spent = false; h.tap = null;
     if (state.grab) W.endGrab(cancel);
+    if (tap) W.travelFrom(W.stoneOf(tap));
   }
 
   /**
@@ -278,7 +284,6 @@
     if (near.action === 'snuff') { W.snuffSconce(near.sconce); return; }
     if (near.action === 'climb') { climb(near.block, near.dir); return; }
     if (near.action === 'surface') { askSurface(); return; }
-    if (near.action === 'wake') { wakeWaystone(near.stone); return; }
     if (near.action === 'save') { W.saveAt(near.lantern); return; }
     if (near.action === 'choose') {
       if (near.opt.off) { W.showCaption(near.opt.off); return; }
@@ -286,7 +291,6 @@
       near.opt.act();
       return;
     }
-    if (near.action === 'travel') { travelFrom(near.stone); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
     if (near.action === 'lift') { W.startGrab(near.block); return; } // the ring filled: you have hold of it
     if (near.action === 'grabbed') return;

@@ -244,7 +244,6 @@ if (vDitherEW > 0.7 && south > 0.2) {
     W.addWell(space, tileAt);
     W.addPushBlocks(space, rec, tileAt);
     W.addSconces(space, edgeAt);
-    W.addWaystone(space, rec, tileAt);
     W.addLantern(space, rec, tileAt);
 
     // Props ride on their cell's tile, so they assemble and dissolve with it.

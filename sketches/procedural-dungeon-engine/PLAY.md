@@ -73,7 +73,7 @@ Determinism).
   leave alone dims at your next faint and fades at the one after, and a
   pack on it goes with it. See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections
   17 and 19.
-- **Save lanterns.** Every hall has one, by its waystone: a lantern on a
+- **Save lanterns.** Every hall has one, on its centre cell: a lantern on a
   dark stone plinth, always lit with a dim, flickering red flame. E held
   (0.5 s) saves: the flame flares bright, then settles back. The first save
   at a hall's lantern is what reveals new waypoints (0–3, below). Like a lit
@@ -142,7 +142,7 @@ Determinism).
   a restored room pushes them back. A covered or empty lamp can't be
   noticed at all.
 - **Halls and waypoints.** New expeditions start in a **hall**: a big room
-  with notched corners, a **save lantern** and an awake **waystone**, at least two doors and a
+  with notched corners, a **save lantern** and an awake **waystone** (a block), at least two doors and a
   pale **surface door** on a north wall. Three violet **"?" pins** on the
   map are **waypoints**, two near (25–35 cells) and one far (45–60): each
   marks a hall reserved ahead of time (the footprint isn't shown, and the
@@ -150,31 +150,37 @@ Determinism).
   edge, pointing the way. Ordinary rooms grow around a footprint, never into
   it, and any room built against one gets a door into it. Open that door
   and you're there: the hall holds from the moment you arrive (no rerolling
-  it). A hall always has three push blocks, at least one sconce, a save
-  lantern and a dormant waystone, plus anything else a room can hold.
+  it). A hall always has three push blocks, at least one sconce and a save
+  lantern, and its waystone (a dormant one) is in it or turns up nearby,
+  plus anything else a room can hold.
   Rarely (1 room in 100, depth 3+) an ordinary door opens onto an
   **unmarked hall**, lantern, waystone and all. See
   [`GAME-DESIGN.md`](GAME-DESIGN.md), sections 8, 9 and 19.
-- **Waystones.** A small slab with seeded glyphs, in the middle of a hall,
-  beside its save lantern. E at a dormant one wakes it for **1 charge** (the
-  glyphs glow) and it joins your ley lines. (Saving at the hall's lantern
-  for the first time is what reveals new waypoints: 0–3, seeded by the hall
-  (0: 10%, 1: 45%, 2: 35%, 3: 10%; never 0 if no waypoint is left waiting),
-  near and far by turns, fanned out past it.) E at an awake one opens the
-  big map on every awake waystone, glowing; tap one to travel there.
-  Waystones don't save, and don't set where you wake. The starter hall's
-  is always awake. An awake waystone is hard to miss: its glyphs shine
-  regardless of light, a faint violet shaft rises from it, and the nearest
-  two cast a violet-blue light. It still doesn't shelter the lamp.
-- **Ley lines.** Awake waystones are joined into a network. Links are made
-  when you wake a stone: it joins its two nearest awake stones, and those
-  links stay (saved as `run.ley`), so the network grows in the order you
-  woke them, and it's always in one piece. (A save from before links were
-  stored gets the tidiest network over the stones already awake, once.) They're drawn on
-  both maps (dashed, and bright on the travel map). Travel rides the lines,
-  by the fewest of them, and costs **a shard per line**. The travel map
-  shows each stone's fare in ◆ (greyed if you can't afford it) and lights
-  up the route under the pointer.
+- **Waystones.** A block of dark glass, one unit, with a seeded sigil on
+  its four sides. It's a loose object like a crate: hold E to grab it, lift
+  it or drag it (heavy as stone: slow to drag, 0.7 of your pace carried,
+  one at a time). Every hall had one: half of them still do (on the centre
+  cell, beside the lantern; `hallStoneChance`), and for the rest the ruin
+  scattered it, so it turns up in the first room grown within two rooms of
+  the hall (reroll that room before you take it and it turns up again). The
+  starter hall's stands there, already awake. **F wakes a dormant one,
+  once:** with your lamp in hand it costs a charge (`waystoneCharges`);
+  with a full jar in hand it takes the jar's entropy or its pixie. Awake,
+  its sigil glows (paler for a pixie) and the nearest two cast a violet
+  light. A stone woken by a pixie still holds one, so it draws ghosts like
+  a jar. **A tap of E at an awake stone** opens the big map on every awake
+  stone; tap one to travel there (a hold grabs it, as with any object).
+  Waystones don't save, and don't set where you wake. They don't shelter
+  the lamp.
+- **Ley lines.** Awake stones standing in the world are joined into a
+  network, worked out from where they stand: each links to its two nearest
+  awake stones, plus whatever joins the pieces into one. Move a stone and
+  the network rewires; one in your hands (or on a lost path) is out of it
+  until you set it down (or retrace the path). The lines are drawn on both
+  maps (dashed, and bright on the travel map). Travel rides the lines, by
+  the fewest of them, and costs **a shard per line**. The travel map shows
+  each stone's fare in ◆ (greyed if you can't afford it) and lights up the
+  route under the pointer.
 - **The lamp burns entropy.** Entropy is a fluid amount of charges, and the
   lamp burns it steadily: a shard's worth every 18 s (a charge every 54 s),
   everywhere except within a tile of a lit sconce (its tile and the 8
@@ -531,7 +537,7 @@ you pass out and wake by your save lantern.
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
 | Captions | a short typewriter-style log line when you enter a space | e.g. "s7 · chamber · damp · depth 3" (the Navidson Record feel) |
 | Waypoint pin | a violet square with a "?" and a glow, on both maps; off the map, a smaller one on the edge in its direction | |
-| Waystone | a grey slab, 0.38 × 0.18 cells, 2.5 units tall, with five seeded glyphs on its north and south faces; awake, the glyphs glow violet, pulse slowly and shine (an additive copy over each face, so light and shadow don't touch them), a faint additive shaft rises 3.2 cells, and the two awake stones nearest you get a violet-blue point light (`GLOW` in `waystones.js`, pooled, no shadows) | on the maps, a small slab, glowing when awake |
+| Waystone | a half-cell block, one unit tall, of dark glass (Phong, a cool specular); a seeded star in a ring ({5–8/2–3}) on each side, drawn additively: a faint etching while dormant, violet while awake (paler for a pixie), pulsing slowly; the two awake stones nearest you get a violet point light (`GLOW` in `waystones.js`, pooled, no shadows) | on the maps, a small slab, glowing when awake |
 | Save lantern | a dark stone plinth 0.36 cells square and 2 units tall on the west half of the hall's centre cell, with an iron-capped lantern on top: glass glowing red, a small flame; a dim red point light (the two lanterns nearest you get one, `SAVE_LANTERN` in `lanterns.js`, pooled) that flickers slowly and unevenly, and a light pool of 1.8 cells; saving flares it (brightness 9, pool 2.6) and it eases back over 1.4 s | on the maps, a small red flame, brighter where you'd wake |
 | Pack | a cloth bundle with a knot, and beside it a little lantern whose glass and soft glow are the lamp's colour at the fuel it holds (`packs.js`) | on the maps, a flickering flame, dimmer on a dimmed path |
 | Choice | a panel over what you're acting on: a title, the icons of what's at stake, the options side by side (the picked one outlined, red when it would lose things; unavailable ones struck through, with why), and a hint line | |
@@ -594,9 +600,9 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Wells | 1/20 of rooms at depth 1+ (`wellChance`, `'well'` stream; 4+ cells; not on door, item, sigil or waystone cells; blocks keep off); half surge, half trickle (`wellSurge`); 1 charge each (`wellCapacity`), poured at 0.6/s (`wellRate`) while you stand within 0.42 cells of its centre; surge: full again 90 s after the last draw (`wellSurgeCooldown`); trickle: refills from 10 s after (`wellTrickleDelay`), a full well per 120 s (`wellTrickleTime`); saved as `run.wells`; an empty jar in your hands stops the pour, and a swipe takes a full well's charge into the jar |
 | Pixies | 1/10 of rooms at depth 1+ (`pixieChance`, `'pixie'` stream), rolled once per room; wander 0.6 cells/s in their room, pausing 0.6–2 s; flee at up to 1.5 cells/s (`PIXIE` in `pixies.js`); caught within 0.75 cells |
 | Ecology | `ECOLOGY.rules` in `ecology.js`: ghost seeks pixie (90%, orbit 0.3–0.75 cells, within 12 cells and 1 room; held within 2.5 cells, pausing 0.3–1 s, at 0.55 cells/s); ghost flees steady light (1.6 cells, backing off at 0.6 cells/s, `GHOST.shySpeed`); pixie flees ghost (2.2) and light (2.5); pixie seeks well (50%, orbit 0.15–0.6, own room). A held ghost leans 0.35 rad toward what holds it (`GHOST.lean`); a jarred pixie flares within 2.5 cells of a ghost |
-| Halls | starter: 6–8 cells a side; waypoints: 7–9; unmarked: 6–8, 1% of rooms at depth 3+ (`params.hallChance`, own `'hall'` stream; was 2.5%, which older records keep); corners notched (65% each, 1–2 cells). Halls: 3 push blocks, 1–2 sconces, a save lantern and a waystone (side by side on the centre cell); loot as a chamber |
+| Halls | starter: 6–8 cells a side; waypoints: 7–9; unmarked: 6–8, 1% of rooms at depth 3+ (`params.hallChance`, own `'hall'` stream; was 2.5%, which older records keep); corners notched (65% each, 1–2 cells). Halls: 3 push blocks, 1–2 sconces, a save lantern (west half of the centre cell), and their waystone: on the centre cell's north-east quarter with odds 0.5 (`hallStoneChance`, `'waystone'` stream; always, for the starter), else in the first room grown within two rooms (`run.stonePaid`; a free half-cell on the room's `'waystone-spot'` stream); loot as a chamber |
 | Waypoints | the start: two near (25–35 cells centre to centre), one far (45–60), all round the root. The first save at a hall's lantern: 0–3 (`waypointOdds`), near/far/near, fanned outward. A free ring around each footprint; pin within ±2 cells of the centre |
-| Waystones | wake: 1 charge (`waystoneCharges`), joins the ley lines; travel: awake to awake only, picked on the big map, along ley lines (a stone joins its 2 nearest awake ones, `leyNeighbours`, when it's woken; the links stay, in `run.ley`), the fewest lines first, then the shortest; 1 shard per line (`travelShardsPerHop`) |
+| Waystones | loose objects (`kind: 'waystone'` in `run.objects`, `holds`: null, `'entropy'` or `'pixie'`); wake with F: a charge from your lamp (`waystoneCharges`) or a full jar, once; travel (a tap of E): awake to awake only, picked on the big map, along ley lines worked out from where the awake stones stand (each joins its 2 nearest, `leyNeighbours`, plus a spanning tree), the fewest lines first, then the shortest; 1 shard per line (`travelShardsPerHop`) |
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |

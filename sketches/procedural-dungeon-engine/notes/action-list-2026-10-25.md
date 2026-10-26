@@ -108,8 +108,8 @@ What's already decided about containers (user, 2026-10-25):
    maps), and swap halls' waystones for save lanterns. They go together:
    the lantern is what you wake at.
 2. **Waystone blocks** (§19). Replaces the doorstone-style "placed
-   waystones" from the Oct 25 memo. Settle tap vs. hold for E (lift vs.
-   travel) first.
+   waystones" from the Oct 25 memo. Built 2026-10-26 (tap E travels, hold
+   grabs, F powers).
 3. **Inventory menu.** Parked in INTERACTION-PLAN until now.
 4. **Chest** (Oct 24). Opens to show a number of slots. Seeded: some empty,
    some junk, some useful.

@@ -54,6 +54,8 @@
     for (const o of state.pixies) out.push({ tags: ['pixie'], x: o.x, y: o.y, ref: o });
     for (const c of state.creepers) out.push({ tags: ['creeper'], x: c.x, y: c.y, ref: c });
     for (const v of state.pushBlocks) if (v.vessel && !v.carried && v.holds === 'pixie' && v.n) out.push({ tags: ['pixie', 'jarred'], x: v.sx / 2 + 0.25, y: v.sy / 2 + 0.25, ref: v });
+    // A waystone woken by a pixie still holds one: it draws ghosts like a jar does.
+    for (const v of state.pushBlocks) if (v.waystone && !v.carried && v.holds === 'pixie') out.push({ tags: ['pixie', 'jarred'], x: (v.x0 + v.x1) / 2, y: (v.y0 + v.y1) / 2, ref: v });
     for (const w of state.wells) out.push({ tags: ['well'], x: w.cell.x + 0.5, y: w.cell.y + 0.5, ref: w });
     const p = state.player;
     // Lights carry their light (light.js), which is what fleeing them tests.

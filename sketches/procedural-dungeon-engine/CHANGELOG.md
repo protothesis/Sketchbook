@@ -663,6 +663,25 @@ All notable changes to this sketch are logged here, per
   differ. Records from before (no `moodInherit` in their params) keep their
   old moods. Waypoint halls and the root roll their own. `stress-test.js`
   checks the regions.
+- 2026-10-26: **Waystones are blocks you carry** (GAME-DESIGN §19).
+  - A one-unit block of dark glass with a seeded sigil on its sides, handled
+    like a crate (grab, lift, drag; heavy as stone). The fixed monolith is
+    gone.
+  - **Where:** half the halls keep theirs on the centre cell
+    (`hallStoneChance`); for the rest it turns up in the first room grown
+    within two rooms of the hall, and again if that room is rerolled before
+    you take it (`run.stonePaid`). The starter hall's is already awake.
+  - **F wakes one, once:** a charge from your lamp (lamp in hand), or a full
+    jar's entropy or pixie. A pixie's stone draws ghosts like a jar.
+  - **A tap of E at an awake stone travels** (the map, as before); a hold
+    grabs it.
+  - **The network is worked out from where awake stones stand** (each to its
+    two nearest, plus a spanning tree), so moving stones rewires it; a stone
+    in your hands or on a lost path is out of it. `run.ley` is gone.
+  - Loss icons and the longer reroll cover waystones too. Dev panel: give a
+    waystone, dormant or awake.
+  - Saves carry on: run version 8; a hall whose old stone you woke gets its
+    block awake.
 - 2026-10-26: **A faint moves you, it doesn't rewind; save lanterns**
   (GAME-DESIGN §17, §19).
   - **Save lanterns** (`app/walk/lanterns.js`): every hall has one, beside

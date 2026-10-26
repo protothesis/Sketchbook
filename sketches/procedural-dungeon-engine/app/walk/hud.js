@@ -19,7 +19,7 @@
   const promptF = $('prompt-f') || document.createElement('button');
 
   /** "crate", "block", "vessel" (with what's in it). */
-  const objName = (b) => (b.crate ? 'crate' : !b.vessel ? 'block'
+  const objName = (b) => (b.crate ? 'crate' : b.waystone ? (b.holds ? 'waystone' : 'dormant waystone') : !b.vessel ? 'block'
     : !b.n ? 'empty vessel' : `vessel (${b.n} ${b.holds === 'pixie' ? (b.n === 1 ? 'pixie' : 'pixies') : (b.n === 1 ? 'charge' : 'charges')})`);
 
   /** E's line for the focused thing: { text, cls }. */
@@ -31,13 +31,12 @@
       case 'snuff': return { text: `snuff the sconce · its shard back to your lamp` };
       case 'close': return { text: 'close the door' };
       case 'reopen': return { text: 'open the door' };
-      case 'wake': return { cls: 'collapse', text: `wake the waystone · ${chargeText(RULES.waystoneCharges)}` };
       case 'save': return { cls: 'save', text: 'save at the lantern · you\'ll wake here' };
       case 'choose': return near.opt.off ? { cls: 'blocked', text: `${near.opt.label} · ${near.opt.off}` }
         : { cls: near.opt.lose ? 'lose' : 'collapse', text: `${near.opt.label} · ${near.opt.detail || ''}` };
-      case 'travel': return { cls: 'collapse', text: 'travel from the waystone · a shard per ley line' };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
-      case 'lift': return { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
+      case 'lift': return near.block.waystone && near.block.holds ? { cls: 'collapse', text: 'tap: travel from the waystone · hold: grab it' }
+        : { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
       case 'grabbed': return { cls: 'jar', text: state.grab && state.grab.moved
         ? `pushing or pulling the ${objName(near.block)} · let go of E to let go`
         : `holding the ${objName(near.block)} · let go of E to lift it · move to push or pull` };
@@ -77,6 +76,8 @@
     if (near.action === 'withdraw') return { cls: 'jar', text: `take ${near.vessel.holds === 'pixie' ? 'a pixie' : 'a charge'} out of the vessel into the jar` };
     if (near.action === 'vesselno') return { cls: 'blocked', text: near.vessel.n >= RULES.vesselCapacity ? 'the vessel is full' : 'the vessel holds something else' };
     if (near.action === 'pour') return { cls: 'collapse', text: `pour the jar into your lamp · 1 charge${W.lampRoom() < 0.99 ? ' (your lamp takes only ' + chargeText(W.lampRoom()) + ')' : ''}` };
+    if (near.action === 'powerlamp') return { cls: 'collapse', text: `wake the waystone from your lamp · ${chargeText(RULES.waystoneCharges)}` };
+    if (near.action === 'power') return { cls: 'jar', text: `pour the jar into the waystone · its ${near.jar.holds === 'pixie' ? 'pixie' : 'entropy'} wakes it` };
     if (near.action === 'unlock') return { cls: 'lock', text: `unlock the door · 1 of ${state.run.keys} key${state.run.keys === 1 ? '' : 's'}` };
     return null;
   }

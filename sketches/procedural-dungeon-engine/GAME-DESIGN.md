@@ -834,7 +834,7 @@ changes the moods of saved expeditions (not their layouts).
 damp that dims the lamp), regions of material as well as mood, and
 regions that know their size (a region that has run long enough ends).
 
-## 19. Save lanterns and waystone blocks (lanterns built 2026-10-26; blocks next)
+## 19. Save lanterns and waystone blocks (built 2026-10-26)
 
 The old waystone did three jobs: travel, checkpoint and goal. Touching it
 to save felt wrong, because using it opens the travel map, and you don't
@@ -845,8 +845,7 @@ and one that only travels.
 
 A lantern the size of one block, on a dark stone plinth one block wide and
 two tall. Every hall has one: the starter hall, every setpiece hall and
-the unmarked ones. Until waystones become blocks, the hall's old waystone
-stands beside it on the same cell, for travel only.
+the unmarked ones, on the hall's centre cell.
 
 - **Always lit, dimly:** a low red flame, flickering. Nothing to wake, no
   cost.
@@ -863,7 +862,7 @@ stands beside it on the same cell, for travel only.
 - In the ecology it acts like a sconce: its pool pushes ghosts and
   creepers out, and pixies flee it.
 
-### Waystone blocks
+### Waystone blocks (built 2026-10-26)
 
 Waystones become **1x1 blocks you can carry**, so the fast-travel network
 is yours to build. You decide what's worth travelling to, and you
@@ -873,17 +872,11 @@ is yours to build. You decide what's worth travelling to, and you
   glows while it's powered.
 - **Carried like any block:** one at a time, it slows you, no running or
   climbing. Less free than a doorstone, on purpose.
-- **Powered from a jar,** like a vessel: pour in entropy or a pixie. A
-  powered stone links to its two nearest powered stones (the ley lines of
-  section 9, unchanged), and E at it opens the travel map. Each line still
-  costs a shard to ride.
-- **Entropy and pixies power it differently** (to tune; a first shape):
-  entropy lasts a while (a time, or a number of trips), so an all-entropy
-  network needs upkeep; a pixie powers it for good, and maybe reaches
-  farther (three links), but a stone with a pixie in it still counts as a
-  pixie, so it draws ghosts, with no new rule.
-- **Lifting a powered stone spills its power,** and its links drop.
-  Re-power it where you set it down. Rewiring is a small, deliberate spend.
+- **Powered with F, once:** a full jar in hand pours its entropy or its
+  pixie in; the lamp in hand gives it a charge. Each ley line still costs a
+  shard to ride.
+- **A pixie's stone still counts as a pixie,** so it draws ghosts, with no
+  new rule. (Whether it should also reach farther is for tuning.)
 - **One in every hall, or within two rooms of it** (decided 2026-10-26):
   the hall in its pristine state had one, and the ruin may have scattered
   it nearby. Rooms grow as doors open, so the hall owes a stone, and one of

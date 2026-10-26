@@ -124,6 +124,8 @@
     ['crate', () => giveObject('crate')],
     ['block', () => giveObject('block', { color: RULES.pushColors[seq % RULES.pushColors.length] })],
     ['vessel', () => giveObject('vessel', { holds: null, n: 0 })],
+    ['waystone', () => giveObject('waystone', { holds: null })],
+    ['waystone: awake', () => giveObject('waystone', { holds: 'entropy' })],
   ];
 
   const SPAWN = [

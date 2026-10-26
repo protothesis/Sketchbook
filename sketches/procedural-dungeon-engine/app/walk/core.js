@@ -160,7 +160,6 @@
       ghosts: [],    // saved positions: [{ id, x, y, mode }]
       stamina: 1,    // psychic stamina, 0..1 (see lamp.js)
       lampOn: true,  // false while covered or out (R relights it)
-      ley: null,     // ley lines made so far: [["spaceId:seed", "spaceId:seed"]] (null: not yet built, see waystones.js)
       pixieSeen: [], // "spaceId:seed:pixie" for rooms whose pixie roll has happened
       pixies: [],    // free pixies' saved positions: [{ id, x, y }]
       creeperSeen: [], // "spaceId:seed:creeper" for rooms whose creeper roll has happened
@@ -174,7 +173,8 @@
       objects: {},           // loose objects (crates, push blocks), run-wide: { "spaceId:seed:id": { kind, sx, sy, ... } } (restore.js)
       despawned: [],         // objects that went with a rerolled room: [{ key, kind, color, room, at }], for later use
       lit: {},               // sconces lit: { "spaceId:seed:id": true }
-      waystones: {},         // waystones woken: { "spaceId:seed": true } (the starter's is always awake)
+      waystones: {},         // halls whose fixed waystone was woken, before waystones were blocks: their stone starts powered
+      stonePaid: {},         // halls whose scattered waystone has turned up: { "hallId:seed": object key } (packs.js, restore.js)
       lanterns: {},          // save lanterns saved at, ever: { "spaceId:seed": true } (the first save reveals waypoints)
       hearth: null,          // "spaceId:seed" of the hall whose lantern you last saved at: where you wake
       packs: [],             // what you carried when you fainted, where you fell (packs.js)
@@ -267,7 +267,7 @@
   // save slots over (game.js). Saves are stamped with DP.saves.BUILD now:
   // when `run` changes shape, bump that instead of adding a step here.
   // Saves from before versioning count as version 0.
-  const RUN_VERSION = 7;
+  const RUN_VERSION = 8;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
@@ -318,6 +318,13 @@
       run.lanterns = Object.assign({}, run.waystones || {});
       run.packs = run.packs || [];
       run.packSeq = run.packSeq || 0;
+    },
+    // 7 -> 8: waystones are blocks; the network is rebuilt from where the
+    // powered ones stand, so stored links go. A hall whose stone you woke
+    // (run.waystones) gets its block powered when it turns up.
+    (run) => {
+      delete run.ley;
+      run.stonePaid = run.stonePaid || {};
     },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */
