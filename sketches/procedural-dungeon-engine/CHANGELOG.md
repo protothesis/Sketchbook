@@ -600,6 +600,19 @@ All notable changes to this sketch are logged here, per
     and 0.32 s for a vessel.
   - Carrying overhead, you walk at 0.7 of your speed with stone and 0.85
     with a crate.
+- 2026-10-25: **The lamp's light has a hard edge** (item B of
+  `notes/action-list-2026-10-25.md`). Inside a circle around you the light
+  looks as before; past it there's only the ambient fill. The circle is
+  always there, full lamp included (3.2 cells, where the light used to
+  reach across rooms), and shrinks with the fuel to 0.9 cells. It's a mask
+  on the lantern in every lit material's shader (`lamp.js`), measured
+  across the ground, so walls are cut at the same distance as the floor.
+  The additive floor ring under 1 charge is gone. `lightRadius()` returns
+  the edge, so creepers wait just past what you can see. New `LIGHT` keys
+  for the dev panel: `radiusFull`, `radiusEmpty`, `radiusCurve`,
+  `breathe`, `soft`, and a banding toggle (`banded`, `bands`, `bandWidth`,
+  `bandFloor`) that steps the light down just inside the edge, like a
+  creeper's discs. Off by default. Screenshots in `notes/screenshots/`.
 
 ### Fixed
 
