@@ -75,14 +75,12 @@
     return take;
   }
 
-  /** Is this spot sheltered by a lit sconce (its tile, or one of the 8 around it, same room)? */
+  /** Is this spot sheltered by a lit sconce: inside its light's bands, nothing in the way (light.js)? */
   function litAt(p) {
     return !!shelterAt(p);
   }
   function shelterAt(p) {
-    const cx = Math.floor(p.x), cy = Math.floor(p.y);
-    return state.sconces.find((sc) => sc.lit && sc.spaceId === p.spaceId &&
-      Math.abs(sc.cell.x - cx) <= 1 && Math.abs(sc.cell.y - cy) <= 1) || null;
+    return state.sconces.find((sc) => sc.lit && W.light.litBy(W.sconceLight(sc), p.x, p.y, 0.5)) || null;
   }
 
   // ---------------------------------------------------------------------------
@@ -285,75 +283,42 @@
   halo.renderOrder = 5;
   scene.add(halo); // follows the lamp in world space (the figure's rig squashes when crouched)
 
-  // The light's reach and colour. Dimming, it goes redder and dimmer. It
-  // ends at a hard edge: a circle around you (on the ground plan, so walls
-  // are cut at the same distance), past which there's only the ambient
-  // fill. The circle is always there and shrinks with the fuel. Optionally
-  // the last stretch inside it steps down in bands, like a creeper's discs.
+  // The light's look: the lantern, a plain point light that goes redder,
+  // dimmer and shorter as the fuel drops, flickering with the flame. Its
+  // pool is separate (light.js): a steady circle on the floor around you
+  // where the light shows in bands, and what creatures read as your light.
   const LIGHT = {
     minIntensity: 0.25, // of full, when empty
-    minRange: 0.18,     // of full, when empty: the point light's own falloff, inside the edge
+    minRange: 0.18,     // of full, when empty: how far the point light's falloff reaches
     redden: 0.5,        // how far the light's colour follows the lamp's toward red
     swell: 0.35,        // dying: brightness swell while you move
-    radiusFull: 3.2,    // cells: the edge at a full lamp (RULES.lampFullCharges or more)
-    radiusEmpty: 0.9,   // cells: the edge as it empties
-    radiusCurve: 1,     // over 1 holds it wide and shrinks it late; under 1, early
-    breathe: 0.04,      // of the radius: how much the flame's flicker moves the edge
-    soft: 0.03,         // cells: anti-aliasing across the edge (0 is razor sharp)
-    banded: false,      // step the light down in bands just inside the edge
-    bands: 3,           // how many
-    bandWidth: 0.22,    // cells each
-    bandFloor: 0.3,     // the outermost band's brightness (the inner ones step up to full)
+    poolFull: 3.2,      // cells: the pool's radius at a full lamp (RULES.lampFullCharges or more)
+    poolEmpty: 0.9,     // cells: its radius as the lamp empties
+    poolCurve: 1,       // over 1 holds it wide and shrinks it late; under 1, early
+    breathe: 0,         // of the radius: how much the flame's flicker moves the pool (0: steady)
   };
 
   /**
-   * How far the light reaches, in cells: the hard edge, without the
-   * flicker. Creatures that keep to its edge read it (creepers.js); 0 while
-   * the lamp is out or covered.
+   * The lamp's pool, as a light.js pool: centred on you, its radius from
+   * the fuel (steady), and the lamp as where its light comes from (what
+   * blocks it). Covered or out, it has no radius.
    */
-  function lightRadius() {
-    return lampOn() ? edgeRadius() : 0;
-  }
-  function edgeRadius() {
-    return lerp(LIGHT.radiusEmpty, LIGHT.radiusFull, Math.pow(lampLevel(), LIGHT.radiusCurve));
+  function lampLight() {
+    const p = state.player, q = lantern.position;
+    return {
+      x: p.x, y: p.y, from: { x: q.x / S, y: q.z / S, h: q.y / S },
+      r: lampOn() ? lerp(LIGHT.poolEmpty, LIGHT.poolFull, Math.pow(lampLevel(), LIGHT.poolCurve)) : 0,
+    };
   }
 
-  // The edge is a mask on the lantern's light in every lit material's
-  // shader: three.js sorts shadow-casting lights first, and the lantern is
-  // the only point light that casts shadows, so it's always pointLights[0].
-  // Every material shares the one uniform object (three.js copies a
-  // uniform's value by reference when it isn't a vector, colour, matrix or
-  // texture), so setting it once a frame reaches them all.
-  const lampMask = { center: new THREE.Vector4(), band: new THREE.Vector4() }; // center: world xyz, radius; band: count, width, floor, soft
-  for (const k of ['lambert', 'phong', 'standard', 'physical', 'toon']) {
-    if (THREE.ShaderLib[k]) THREE.ShaderLib[k].uniforms.lampMask = { value: lampMask };
+  /**
+   * How far your light reaches across the floor, in cells: its pool's edge.
+   * Creatures that keep to its edge read it (creepers.js); 0 while the lamp
+   * is out or covered.
+   */
+  function lightRadius() {
+    return lampLight().r;
   }
-  THREE.ShaderChunk.lights_pars_begin += `
-struct LampMask { vec4 center; vec4 band; };
-uniform LampMask lampMask;
-// 1 inside the lamp's edge, 0 past it; the distance is across the ground, from you.
-float lampMaskAt(vec3 viewPos) {
-  float R = lampMask.center.w;
-  if (R <= 0.0) return 1.0;
-  vec3 c = (viewMatrix * vec4(lampMask.center.xyz, 1.0)).xyz;
-  vec3 up = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
-  vec3 dv = viewPos - c;
-  float d = length(dv - dot(dv, up) * up);
-  float m = 1.0 - smoothstep(R - lampMask.band.w, R, d);
-  float n = lampMask.band.x;
-  if (n > 0.5) {
-    float i = ceil((R - d) / lampMask.band.y); // 1 in the outermost band
-    if (i <= n) m *= mix(lampMask.band.z, 1.0, (max(i, 1.0) - 1.0) / n);
-  }
-  return m;
-}
-`;
-  THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begin.replace(
-    'getPointLightInfo( pointLight, geometryPosition, directLight );',
-    `getPointLightInfo( pointLight, geometryPosition, directLight );
-		#if ( UNROLLED_LOOP_INDEX == 0 ) && ( NUM_POINT_LIGHT_SHADOWS > 0 )
-		directLight.color *= lampMaskAt( geometryPosition );
-		#endif`);
 
   // Embers: points rising off the lamp. Walking, they spray and trail
   // behind you; standing still, they rise in a slow, swaying column, like
@@ -468,11 +433,10 @@ float lampMaskAt(vec3 viewPos) {
     halo.scale.setScalar(HALO.full * (HALO.minScale + (1 - HALO.minScale) * level) * Math.max(0.3, wob));
     haloMat.opacity = lerp(HALO.lowOpacity, HALO.opacity, smooth(0, 0.66, level)) * Math.min(1.2, bright) * on;
 
-    // The light's edge, breathing a little with the flame.
-    const edge = edgeRadius() * (1 - LIGHT.breathe + LIGHT.breathe * Math.min(1.2, bright));
-    lampMask.center.set(p.x * S, p.z * S, p.y * S, Math.max(0.01, edge * S));
-    lampMask.band.set(LIGHT.banded ? Math.round(LIGHT.bands) : 0, Math.max(0.01, LIGHT.bandWidth * S),
-      LIGHT.bandFloor, Math.max(0, LIGHT.soft * S));
+    // The pool on the floor, breathing with the flame only as much as LIGHT.breathe says.
+    const pool = lampLight();
+    pool.r *= 1 - LIGHT.breathe + LIGHT.breathe * Math.min(1.2, bright);
+    W.light.setLampPool(pool);
 
     // Embers: fewer, dimmer and shorter-lived as the lamp fails; how still
     // you are (eased) blends the walking spray into the idle column; dying,
@@ -598,6 +562,6 @@ float lampMaskAt(vec3 viewPos) {
   }
 
   Object.assign(W, { gainFuel, spendFuel, takeFuel, litAt, lampOn, toggleLamp, feedFrom, updateLamp,
-    updateLampLook, updateLampHud, lampLevel, lightRadius, popEntropy });
+    updateLampLook, updateLampHud, lampLevel, lightRadius, lampLight, popEntropy });
   Object.assign(W, { LIGHT, HALO, UNREST, EMBER, STREAM }); // tuning tables (the dev panel, dev.js)
 })(window);

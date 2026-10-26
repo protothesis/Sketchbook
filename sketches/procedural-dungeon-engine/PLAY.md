@@ -218,9 +218,11 @@ Determinism).
   red; the halo (a flat, see-through disc with a hard edge) shrinks but
   wobbles with the flame, more as it fails, sometimes out past its average,
   and lasts until the lamp is out; the light turns redder and gets dimmer
-  and much shorter; and it ends at a hard edge, a circle around you that's
-  there even at a full lamp and closes in as the fuel drops. Past it,
-  only the dark. Walking, the
+  and much shorter. On the floor it shows in a pool around you: the light
+  as it is in the middle, then three bands stepping down to a hard edge,
+  a circle that closes in as the fuel drops; past it, only the dark.
+  Walls are lit as usual. That pool is what every creature reads as your
+  light (see "Light pools" below). Walking, the
   embers trail behind you; standing still, they rise in a slow, swaying
   column. Gaining entropy pops a purple +◆ over your head (+◆◆◆ for a
   charge).
@@ -491,12 +493,12 @@ you pass out and wake at your last waystone.
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
 | Lamp HUD | bottom left: a lantern icon (92 px; 64 on phones) in the lamp's colour, its flame scaled to 100 / 80 / 62 / 45% by stage; a fluid meter of 6 sections (32 × 20 px; more with sigils), the burning one dimmer; the stamina bar, then the thread (and relight words when the lamp is off). The icon shimmers gold by a sconce, violet at a well; tap it to cover or relight | violet liquid, gold for a sigil's extra sections |
 | Lamp streams | motes flowing in an arc into the lamp from what feeds it: a lit sconce's flame (warm) while it shelters you, a well's pool (its colour) while you drink (`STREAM` in `lamp.js`, 16/s, 0.6 s each) | |
-| Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges). Unrest by fuel (`UNREST` in `lamp.js`, blended): flicker depth 0.03 at full, 0.08 at 2, 0.38 at 1, then settling to 0.02 at empty while a slow irregular fade grows to 0.5; dying, a brightness swell of up to 35% while you move. Halo (`HALO`): flat, hard-edged, see-through, about 4x the lamp across at full, shrinking to 40%, wobbling with the flicker and fade (it can exceed its average), opacity 0.3 down to 0.12, until the lamp is out. Light (`LIGHT`): intensity 25%–100%, falloff reach 18%–100%, colour following the lamp toward red; a hard edge at 3.2 cells from you at full (3 charges or more), down to 0.9 at empty (`radiusFull`, `radiusEmpty`, `radiusCurve` 1), measured across the ground so walls are cut at the same distance, breathing 4% with the flicker (`breathe`), 0.03-cell anti-aliasing (`soft`); past it only the ambient fill. Optional banding (`banded`, off): 3 steps of 0.22 cells just inside the edge, the outermost at 30% (`bands`, `bandWidth`, `bandFloor`). Creepers read the edge (`lightRadius()`). Embers (`EMBER`): walking, up to 22/s spraying (0.35–0.75 s); standing, 9/s in a swaying column (0.9–1.6 s); dying, 0.7/s, red. Covered or out: the light eases to nothing, no halo or embers | |
+| Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges). Unrest by fuel (`UNREST` in `lamp.js`, blended): flicker depth 0.03 at full, 0.08 at 2, 0.38 at 1, then settling to 0.02 at empty while a slow irregular fade grows to 0.5; dying, a brightness swell of up to 35% while you move. Halo (`HALO`): flat, hard-edged, see-through, about 4x the lamp across at full, shrinking to 40%, wobbling with the flicker and fade (it can exceed its average), opacity 0.3 down to 0.12, until the lamp is out. Light (`LIGHT`): intensity 25%–100%, falloff reach 18%–100%, colour following the lamp toward red. Its pool (light.js): 3.2 cells from you at full (3 charges or more), down to 0.9 at empty (`poolFull`, `poolEmpty`, `poolCurve` 1), steady (`breathe` 0: the flicker doesn't move it). Creepers read its edge (`lightRadius()`). Embers (`EMBER`): walking, up to 22/s spraying (0.35–0.75 s); standing, 9/s in a swaying column (0.9–1.6 s); dying, 0.7/s, red. Covered or out: the light eases to nothing, no halo or embers | |
 | Entropy popup | "+◆" (one diamond per shard's worth, up to three) floats up over the head in violet; "−◆" greyer when a block takes its charge back | |
 | Ghost markers | on a ring around the figure, radius 42% of the shorter screen side | idle ghosts: a faint ghost icon, violet border |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. The wall around a doorway dithers like the rest; door panels never dither (the figure's silhouette shows through them) | side (north–south) walls never dither |
-| Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction), cut off at a hard edge around you by a mask in the lit materials' shaders (the Lamp row); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
+| Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction); on the floor it shows only inside its pool (light.js, the Lamp row); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
 | Pickups | violet octahedron (shard), a spool (thread) | bob and turn; lit by the lantern, so they hide in the dark too |
 | Tools lying | a chalk stick on its side, a doorstone on its back (doorway inset up), a gold key flat, at a seeded angle | still; walking within pickup range collects one (on the floor, not from a block) |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
@@ -508,6 +510,38 @@ you pass out and wake at your last waystone.
 | Push block | the whole block in its colour; home, it glows; stacked, it rests at 1 or 2 units (`lv` in `run.objects`); lifted, it arcs up over the head in 0.6 s (a crate 0.38 s; eased, rising a little above the straight line) and back down the same way | |
 | Crate | a wooden crate, a half-cell cube one unit tall: boards in a lighter frame, a diagonal brace | |
 | Passing out | the lamp fades out and the world goes black over ~1 s; HUD and captions stay | |
+
+## Light pools
+
+The lights themselves are plain three.js point lights and look as they
+always did: your lamp (`LIGHT`, `lamp.js`), lit sconces (`SCONCE_LIGHT`,
+`restore.js`), awake waystones (`GLOW`), sigils. Walls are lit as usual.
+
+Some lights also own a **pool**, a steady circle on the floor
+(`app/walk/light.js`): your lamp (its radius from the fuel) and lit
+sconces (`SCONCE_LIGHT.pool`, 2 cells). The pool is the look and the
+gameplay at once:
+
+- **On the floor** (any face turned up), pooled lights show only inside
+  the pools: the light as it is in the core, then `POOL.bands` (3) steps
+  of `bandWidth` (0.32 cells) down to `floor` (20%) at the edge, then
+  dark.
+- **Pools share one ground layer.** Each floor point takes the strongest
+  pool covering it, so overlapping pools merge into one shape with only
+  those few values, never an interference pattern. It's drawn for your
+  lamp and the 3 sconces that have real lights (the nearest lit ones).
+- **The game reads the pools.** A spot is lit by a pool when it's inside
+  the circle and nothing blocks the way from that light (`lightReaches`,
+  standing in for shadows). A ghost notices you inside your pool; a
+  creeper keeps to its edge (`lightRadius()`) and is dazed inside it;
+  pixies flee any pool they're in; ghosts and creepers are pushed out of
+  a lit sconce's pool; and you're sheltered while you stand in one.
+  Ecology rules about lights have no range: the pool is the range.
+- The flicker only touches the light's look, never a pool (`LIGHT.breathe`
+  can add some back).
+- **Lights without a pool** light the floor as usual and mean nothing to
+  creatures: waystones (their own kind of light; an area effect could hook
+  in later through their `waystone` presence), sigils, and your cool fill.
 
 ## Game parameters
 

@@ -626,6 +626,28 @@ All notable changes to this sketch are logged here, per
   values show in gold and stay across reloads (in their own localStorage
   key, never the save). "Copy changes" puts them on the clipboard as JSON.
   `lamp.js`, `ghosts.js` and `waystones.js` now export their tables for it.
+- 2026-10-26: **Light pools** (`app/walk/light.js`): one floor layer for
+  the look and the gameplay, replacing the lamp's mask.
+  - The lights look as they did before the mask, walls included: the
+    lamp's long falloff and subtle flicker are back.
+  - Your lamp and lit sconces own a pool: a steady circle on the floor
+    (`LIGHT.poolFull` 3.2 to `poolEmpty` 0.9 cells, `SCONCE_LIGHT.pool` 2).
+    On faces turned up, their light shows only inside the pools: the core,
+    3 bands of 0.32 cells down to 20% at the edge (`POOL`), then dark.
+  - Overlapping pools merge: each floor point takes the strongest pool, so
+    there are only those few values and no interference.
+  - The flicker no longer moves the edge (`LIGHT.breathe`, now 0).
+  - Creatures read the pools: a spot is lit inside a pool with nothing
+    blocking it. Ghosts notice you only inside your pool (was a fixed 4.5
+    cells, well outside the visible edge). Pixies flee any pool they're in
+    (was 2.5 cells). Ghosts and creepers are pushed out of lit sconces'
+    pools (was 1.6 and 2.4 cells). You're sheltered standing in one (was
+    its tile and the 8 around it).
+  - Waystones no longer push ghosts and creepers away or scare pixies.
+    They're their own kind of light, with no pool and a `waystone`
+    presence for a later area effect.
+  - `POOL` and `SCONCE_LIGHT` are in the dev panel. Screenshot:
+    `notes/screenshots/light-pool-2-charges.jpg`.
 
 ### Fixed
 

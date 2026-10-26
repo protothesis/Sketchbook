@@ -491,6 +491,12 @@ fuel you need to get there.
   as it always did; past it, only the dark. You always know how far your
   light goes, and creepers wait just past that edge. Smaller than the old
   falloff, which lit across whole rooms.
+- **Light pools** (2026-10-26): the lights look as they always did, walls
+  included. Your lamp and lit sconces also own a pool on the floor, the
+  circle where their light shows, in bands. Pools merge where they
+  overlap, and the pool is exactly what creatures read as light: what
+  you see is what they obey. Waystones are their own kind of light, with
+  no pool.
 - **Running out:** the lamp goes out and stays out until you relight it
   (R, a shard), and the dark drains your psychic stamina (section 12). Find light or entropy in time, or pass out and
   wake at your last waystone. Everything else stays: the map, what you
