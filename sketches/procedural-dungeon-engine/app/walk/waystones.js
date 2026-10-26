@@ -1,8 +1,8 @@
 // Walk mode: where you're going and how you get back (GAME-DESIGN.md,
-// sections 8 and 9). Waypoints (reserved hall footprints, a "?" on the map)
-// and waystones in halls: wake one to reveal new waypoints, and travel
-// between awake ones on the map, along ley lines, for entropy. The lamp is
-// in lamp.js.
+// sections 8, 9 and 19). Waypoints (reserved hall footprints, a "?" on the
+// map) and waystones in halls: wake one and it joins your ley lines; travel
+// between awake ones on the map, for entropy. Saving and where you wake are
+// the save lanterns' (lanterns.js); the lamp is in lamp.js.
 (function (global) {
   'use strict';
 
@@ -31,7 +31,7 @@
   function arrive(space) {
     // Shown as you step in (instead of the room's log line), so it isn't missed.
     const what = space.reserveId ? 'a waypoint' : 'an unmarked hall';
-    state.arrival = { spaceId: space.id, text: `${what} · a dormant waystone stands here` };
+    state.arrival = { spaceId: space.id, text: `${what} · a save lantern burns low here, by a dormant waystone` };
   }
 
   /** Waypoints still waiting: [{ id, pin: { x, y }, tier }]. */
@@ -173,7 +173,7 @@
     return null;
   }
 
-  /** Wake a waystone: it joins the network, becomes your hearth, and may reveal waypoints. */
+  /** Wake a waystone: it joins the network. (Saving, and revealing waypoints, are the lantern's.) */
   function wakeWaystone(st) {
     const run = state.run, cost = RULES.waystoneCharges;
     if (!W.spendFuel(cost)) { W.showCaption(`not enough entropy to wake it: ${chargeText(cost)}`); return; }
@@ -181,13 +181,8 @@
     st.awake = true;
     run.waystones[st.key] = true;
     linkStone(st);
-    run.hearth = st.key;
-    const sp = state.exp.spaces[st.spaceId];
-    const n = revealWaypoints(DP.centerOf(sp), DP.waypointCount(state.exp, sp));
-    save();
-    W.showCaption(`the waystone wakes · −${chargeText(cost)} · ` +
-      (n ? `${n} new waypoint${n === 1 ? '' : 's'} on your map` : 'nothing new stirs') + ' · checkpoint');
-    W.saveCheckpoint();
+    W.showCaption(`the waystone wakes · −${chargeText(cost)} · it joins your ley lines`);
+    W.savePlayer();
     W.refreshHud();
   }
 
@@ -294,8 +289,6 @@
 
   /** E at an awake waystone: the map opens on the others; pick one to go there. */
   function travelFrom(st) {
-    state.run.hearth = st.key;
-    W.saveCheckpoint(); // using a waystone is a checkpoint, even if you stay
     if (!state.waystones.some((o) => o.awake && o !== st)) {
       W.showCaption('the waystone hums · no other waystone is awake yet');
       return;
@@ -320,20 +313,13 @@
       return false;
     }
     placeAt(st);
-    state.run.hearth = st.key;
     state.run.travels = (state.run.travels || 0) + 1;
     state.run.chargesSpent += cost;
     W.showCaption(`you step out by the waystone in ${st.spaceId}` +
-      (route ? ` · ${route.hops} line${route.hops === 1 ? '' : 's'} · −${route.shards} shard${route.shards === 1 ? '' : 's'}` : '') + ' · checkpoint');
-    W.saveCheckpoint();
+      (route ? ` · ${route.hops} line${route.hops === 1 ? '' : 's'} · −${route.shards} shard${route.shards === 1 ? '' : 's'}` : ''));
+    W.savePlayer();
     W.refreshHud();
     return true;
-  }
-
-  /** Where you wake: your last waystone, if it's still there, else the start. */
-  function hearth() {
-    return state.waystones.find((o) => o.key === state.run.hearth && o.awake) ||
-      state.waystones.find((o) => o.spaceId === 's0') || null;
   }
 
   /** Awake markings pulse slowly and shine; the nearest awake stones get the lights. */
@@ -360,5 +346,5 @@
   }
 
   Object.assign(W, { GLOW, revealWaypoints, ensureWaypoints, arrive, waitingPins, addWaystone, waystoneNear,
-    wakeWaystone, travelFrom, travelTo, placeAt, hearth, updateWaystones, leyLines, leyRoute });
+    wakeWaystone, travelFrom, travelTo, placeAt, updateWaystones, leyLines, leyRoute });
 })(window);

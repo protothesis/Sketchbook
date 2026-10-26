@@ -25,6 +25,15 @@
       if (k === 'tab') e.preventDefault();
       return;
     }
+    // A choice is up (choice.js): A / D pick, E held confirms, Esc, W or S back out.
+    if (state.choice) {
+      if (k === 'a' || k === 'arrowleft') W.moveChoice(-1);
+      else if (k === 'd' || k === 'arrowright') W.moveChoice(1);
+      else if (k === 'escape' || k === 'w' || k === 's' || k === 'arrowup' || k === 'arrowdown') { W.releaseE(true); W.closeChoice(); }
+      else if (k === 'e' && !e.repeat) W.pressE();
+      if (k === 'e' || k.startsWith('arrow')) e.preventDefault();
+      return;
+    }
     if (k === 'escape' && state.expanded) { state.expanded = null; refreshHotbar(); return; }
     if (k === 'escape') { W.openPause(); return; }
     keys.add(k);
@@ -104,7 +113,7 @@
   if (useBtn) useBtn.addEventListener('click', (e) => { useSelected(); e.currentTarget.blur(); });
 
   function readInput() {
-    if (state.paused || state.bigmap) return { x: 0, y: 0, mag: 0 };
+    if (state.paused || state.bigmap || state.choice) return { x: 0, y: 0, mag: 0 };
     let x = 0, y = 0;
     if (keys.has('w') || keys.has('arrowup')) y -= 1;
     if (keys.has('s') || keys.has('arrowdown')) y += 1;

@@ -29,7 +29,7 @@
     floor: 0.2,     // the outermost band's brightness, of the light's (the inner ones step up to full)
     soft: 0.03,     // cells: anti-aliasing across each step (0 is razor sharp)
   };
-  const POOLS = 4;  // pools drawn at once: your lamp and the sconces that have real lights
+  const POOLS = 4;  // pools drawn at once: your lamp, then the save lanterns and sconces that have real lights
 
   // ---------------------------------------------------------------------------
   // The shader. Every material shares the one uniform object (three.js
@@ -101,7 +101,8 @@ vec3 poolLight(vec3 color, vec3 viewPos, vec3 normal, float index) {
 
   function setLampPool(pool) {
     lampPool = pool;
-    const pools = [pool].concat((W.sconcePools ? W.sconcePools() : []).slice(0, POOLS - 1));
+    const others = (W.lanternPools ? W.lanternPools() : []).concat(W.sconcePools ? W.sconcePools() : []);
+    const pools = [pool].concat(others.slice(0, POOLS - 1));
     for (let i = 0; i < POOLS; i++) {
       const o = pools[i];
       if (o && o.r > 0) lightPools['p' + i].set(o.x * S, o.y * S, o.r * S, 1);

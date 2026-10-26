@@ -663,6 +663,40 @@ All notable changes to this sketch are logged here, per
   differ. Records from before (no `moodInherit` in their params) keep their
   old moods. Waypoint halls and the root roll their own. `stress-test.js`
   checks the regions.
+- 2026-10-26: **A faint moves you, it doesn't rewind; save lanterns**
+  (GAME-DESIGN §17, §19).
+  - **Save lanterns** (`app/walk/lanterns.js`): every hall has one, beside
+    its waystone on the centre cell: a lantern on a dark stone plinth,
+    always dimly lit red. E held saves: it flares and settles. It's the
+    only respawn, and the first save at a hall reveals its waypoints (that
+    moved off waking a waystone). Its light pool shelters your lamp and
+    keeps ghosts and creepers out, like a lit sconce's. A small red flame
+    on the maps.
+  - **Waystones are for travel only:** waking or using one no longer
+    saves, or sets where you wake.
+  - **Faints don't roll the run back.** You wake by your lantern with 2
+    charges (`wakeCharges`); rooms opened since the save become a lost path
+    as they are; doors carved since stay; a retraced room's creatures roll
+    again.
+  - **Your pack** (`app/walk/packs.js`): what you carried (tools, jars,
+    keys, chalk and your lamp's entropy) stays where you fell, in a bundle
+    with a little lantern glowing at its fuel, and a flame on the maps.
+    Walk over it to take it back. It follows its room: waits on a lost
+    path, goes when the path fades or is rerolled. Something in your hands
+    is set down there.
+  - **Doors only open with E held.** Walking into one doesn't (a caption
+    says so, once per door).
+  - **A choice at the door to a lost path** (`app/walk/choice.js`, generic:
+    `W.openChoice`): hold E (0.7 s), then A / D between retrace and reroll
+    and hold E (0.8 s) to confirm. Unavailable options say why.
+  - **What's at stake shows over the hold ring:** icons for a pack or a
+    hall's lantern beyond the door, red and crossed out when the action
+    would lose them. Rerolling a room with your pack in it takes twice as
+    long (`rerollLoseFactor`).
+  - Dev panel: a faint button, the lanterns to jump to, and the
+    `SAVE_LANTERN` table.
+  - Saves carry on: run version 7 (a hall whose waystone you woke counts as
+    saved at).
 - 2026-10-26: **Design decided, not built: saves, save lanterns and
   waystone blocks** (GAME-DESIGN §17, §19). A faint moves you without
   rewinding anything; your pack stays where you fell. Save lanterns replace

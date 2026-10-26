@@ -1,9 +1,11 @@
 // Walk mode: the loop around a run (GAME-DESIGN.md, section 17). The title
-// screen, the pause menu, and what a faint costs: every room opened since
-// your last waystone checkpoint becomes a lost path, and the run rolls back
-// to that checkpoint. At a lost path's door you choose once: retrace it (with
-// the thread, for entropy) or let it go (open the door on something new,
-// and the path turns to corruption). The save slots are in saves.js.
+// screen, the pause menu, and what a faint costs. A faint moves you, it
+// doesn't rewind: you wake at the save lantern you last saved at, every room
+// opened since that save becomes a lost path (suspended, exactly as you left
+// it), and what you carried stays where you fell (packs.js). Nothing you did
+// is undone. At a lost path's door you choose: retrace it (with the thread,
+// for entropy) or reroll it (open the door on something new, and the path
+// turns to corruption). The save slots are in saves.js.
 (function (global) {
   'use strict';
 
@@ -92,33 +94,32 @@
   function letGo(path) {
     DE.tagTraces(state.exp, path.traces.map((t) => t.id), 'corrupt', false);
     state.run.pathsLetGo = (state.run.pathsLetGo || 0) + 1;
+    W.prunePacks(); // a pack on the path goes with it
   }
 
   // ---------------------------------------------------------------------------
   // Faints
 
-  // What a faint doesn't roll back: tallies, and the thread (an ability,
-  // once found). The rest of the run goes back to the checkpoint.
-  const KEEP = ['walked', 'gutters', 'collapses', 'roomsCollapsed', 'chargesSpent', 'travels', 'relights',
-    'covers', 'lampBurned', 'unmade', 'faints', 'roomsLost', 'retraces', 'pathsLetGo', 'pixiesCaught',
-    'wellDrawn', 'thread'];
-
   /**
-   * Pass out for good. Lost paths you never chose for dim, or fade. Every
-   * room that wasn't standing at the checkpoint becomes part of a lost path
-   * (deepest and latest first), doors carved since are walled up, and the
-   * run and the figure go back to the checkpoint's. Returns how many rooms
-   * were lost. Without a checkpoint for this expedition, nothing is.
+   * Pass out for good. Lost paths you never chose for dim, or fade. What you
+   * carry is packed up where you fell (and an object in your hands is set
+   * down there). Every room that wasn't standing at your last save becomes
+   * part of a lost path (deepest and latest first), as it is: nothing in it,
+   * and nothing in the run, goes back. Its creatures will roll again if you
+   * retrace it. Returns { lost (rooms), pack }.
    */
   function faint() {
-    const exp = state.exp, live = state.run;
-    const cp = SAVES.read('checkpoint');
-    if (cp.status !== 'ok' || cp.snap.rootSeed !== exp.rootSeed) return 0;
+    const exp = state.exp, run = state.run;
     const pending = Object.values(exp.traces || {}).filter((t) => PENDING.has(t.cause) && !exp.spaces[t.id]);
     DE.tagTraces(exp, pending.filter((t) => t.cause === 'lost-dim').map((t) => t.id), 'faded', true);
     DE.tagTraces(exp, pending.filter((t) => t.cause === 'lost').map((t) => t.id), 'lost-dim', true);
-    const keep = new Set(Object.keys(cp.snap.record.spaces));
+    dropCarried();
+    const pack = W.packUp();
+    const cp = SAVES.read('checkpoint');
+    const keep = cp.status === 'ok' && cp.snap.rootSeed === exp.rootSeed
+      ? new Set(Object.keys(cp.snap.record.spaces)) : new Set(Object.keys(exp.spaces));
     const left = new Set(Object.keys(exp.spaces).filter((id) => !keep.has(id)));
+    const lostIds = new Set(left);
     let lost = 0;
     while (left.size) {
       const leaf = Array.from(left).filter((id) => DE.canRevert(exp, id)).map((id) => exp.spaces[id])
@@ -128,20 +129,29 @@
       left.delete(leaf.id);
       lost++;
     }
-    // Doors cut since the checkpoint are walled up again (the doorstones
-    // come back with the run), latest first.
-    const since = exp.history.slice(cp.snap.record.history.length);
-    for (const ev of since.filter((e) => e.type === 'carve').reverse()) {
-      const sp = exp.spaces[ev.spaceId];
-      const ex = sp && sp.exits.find((e) => e.cell.x === ev.cell.x && e.cell.y === ev.cell.y &&
-        e.facing === ev.facing && (e.tags || []).includes('carved'));
-      if (ex) DE.uncarve(exp, sp.id, ex.id);
-    }
-    const run = Object.assign(freshRun(exp.rootSeed), snapRun(cp.snap));
-    for (const k of KEEP) if (live[k] !== undefined) run[k] = live[k];
+    // A lost room's ghost, pixie and creeper rolls happen again when it comes back.
+    const fresh = (k) => !lostIds.has(k.split(':')[0]);
+    run.ghostSeen = run.ghostSeen.filter(fresh);
+    run.pixieSeen = run.pixieSeen.filter(fresh);
+    run.creeperSeen = run.creeperSeen.filter(fresh);
+    if (run.closed) run.closed = run.closed.filter((id) => exp.connections[id]);
+    W.prunePacks();
     if (lost) { run.faints = (run.faints || 0) + 1; run.roomsLost = (run.roomsLost || 0) + lost; }
-    W.setExpedition(exp, { run, player: cp.snap.player });
-    return lost;
+    W.setExpedition(exp, { run, player: null });
+    return { lost, pack };
+  }
+
+  /** A faint with something in your hands: it's set down where you fell (ahead if there's room, else underfoot). */
+  function dropCarried() {
+    const run = state.run;
+    if (!run.carry) return;
+    const o = run.objects[run.carry], p = state.player;
+    if (o) {
+      const spot = W.blockSpot(p);
+      Object.assign(o, spot ? { sx: spot.sx, sy: spot.sy, lv: Math.round(spot.base / W.UNIT) } : { sx: Math.floor(p.x * 2), sy: Math.floor(p.y * 2), lv: 0 });
+      delete o.ox; delete o.oy;
+    }
+    run.carry = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -298,7 +308,7 @@
 
   // ---------------------------------------------------------------------------
   // The pause menu (Esc, or the Menu button). Quitting writes the resume
-  // slot only: the checkpoint stays where your last waystone left it.
+  // slot only: the checkpoint stays where your last save left it.
 
   function openPause() {
     if (state.paused || state.menu || !state.exp) return;
@@ -306,8 +316,8 @@
     W.openDialog({
       kicker: 'paused',
       title: 'Paused',
-      text: `Seed ${state.exp.rootSeed}. Your run saves as you play; using a waystone is a checkpoint. ` +
-        'Faint, and everything opened since your last checkpoint is lost.',
+      text: `Seed ${state.exp.rootSeed}. Your run saves as you play. Save at a hall's lantern to choose where you wake. ` +
+        'Faint, and the rooms opened since your last save are lost until you retrace them, and your pack stays where you fell.',
       buttons: [
         { label: 'Resume', primary: true },
         { label: 'Quit to main menu', onClick: quitToMenu },

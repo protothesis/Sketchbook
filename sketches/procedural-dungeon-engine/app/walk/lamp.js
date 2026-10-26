@@ -75,12 +75,13 @@
     return take;
   }
 
-  /** Is this spot sheltered by a lit sconce: inside its light's bands, nothing in the way (light.js)? */
+  /** Is this spot sheltered by a lit sconce or a save lantern: inside its light's bands, nothing in the way (light.js)? */
   function litAt(p) {
     return !!shelterAt(p);
   }
   function shelterAt(p) {
-    return state.sconces.find((sc) => sc.lit && W.light.litBy(W.sconceLight(sc), p.x, p.y, 0.5)) || null;
+    return state.sconces.find((sc) => sc.lit && W.light.litBy(W.sconceLight(sc), p.x, p.y, 0.5)) ||
+      state.lanterns.find((ln) => W.light.litBy(W.lanternLight(ln), p.x, p.y, 0.5)) || null;
   }
 
   // ---------------------------------------------------------------------------
@@ -175,6 +176,7 @@
   }
 
   function passOut(text) {
+    if (W.closeChoice) W.closeChoice();
     state.gutter = { t: 0 };
     state.paused = true;
     state.wasTouched = false;
@@ -187,9 +189,10 @@
   function wake() {
     state.gutter = null;
     state.paused = false;
-    const lost = W.faint(); // the rooms since your last checkpoint, and the run back to it
+    const out = W.faint(); // the rooms since your last save are suspended; your pack stays where you fell
+    const lost = out.lost;
     const run = state.run;
-    run.fuel = Math.max(run.fuel, RULES.chargesStart);
+    run.fuel = RULES.wakeCharges; // what you had is in your pack
     run.lampOn = true;
     run.stamina = 1;
     run.gutters = (run.gutters || 0) + 1;
@@ -199,8 +202,9 @@
     else { Object.assign(state.player, W.spawnPoint(state.exp), { z: 0, vz: 0 }); W.snapCamera(); }
     const f = $('fade');
     if (f) f.classList.remove('on');
-    W.showCaption(`you wake by the waystone in ${st ? st.spaceId : 's0'}` +
-      (lost ? ` · ${lost} room${lost === 1 ? '' : 's'} lost to the dark` : '') + ` · ${chargeText(run.fuel)} of entropy`);
+    W.showCaption(`you wake by the lantern in ${st ? st.spaceId : 's0'}` +
+      (lost ? ` · ${lost} room${lost === 1 ? '' : 's'} lost to the dark` : '') +
+      (out.pack ? ' · your pack lies where you fell' : '') + ` · ${chargeText(run.fuel)} of entropy`);
     savePlayer();
     W.refreshHud();
   }
@@ -562,6 +566,8 @@
   }
 
   Object.assign(W, { gainFuel, spendFuel, takeFuel, litAt, lampOn, toggleLamp, feedFrom, updateLamp,
-    updateLampLook, updateLampHud, lampLevel, lightRadius, lampLight, popEntropy });
-  Object.assign(W, { LIGHT, HALO, UNREST, EMBER, STREAM }); // tuning tables (the dev panel, dev.js)
+    updateLampLook, updateLampHud, lampLevel, lightRadius, lampLight, popEntropy, passOut });
+  /** The lamp's colour at this much fuel (charges), as it would show: for a pack's little lantern (packs.js). */
+  const lampColorAt = (fuel, out) => colorAt(THREE.MathUtils.clamp(fuel / RULES.lampFullCharges, 0, 1), out);
+  Object.assign(W, { LIGHT, HALO, UNREST, EMBER, STREAM, lampColorAt }); // tuning tables (the dev panel, dev.js)
 })(window);

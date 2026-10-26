@@ -30,8 +30,11 @@
       case 'light': return { text: `light the sconce from your lantern · ${RULES.sconceCost} shard` };
       case 'snuff': return { text: `snuff the sconce · its shard back to your lamp` };
       case 'close': return { text: 'close the door' };
-      case 'reopen': return { text: state.push.key ? 'opening…' : 'open the door (or push)' };
+      case 'reopen': return { text: 'open the door' };
       case 'wake': return { cls: 'collapse', text: `wake the waystone · ${chargeText(RULES.waystoneCharges)}` };
+      case 'save': return { cls: 'save', text: 'save at the lantern · you\'ll wake here' };
+      case 'choose': return near.opt.off ? { cls: 'blocked', text: `${near.opt.label} · ${near.opt.off}` }
+        : { cls: near.opt.lose ? 'lose' : 'collapse', text: `${near.opt.label} · ${near.opt.detail || ''}` };
       case 'travel': return { cls: 'collapse', text: 'travel from the waystone · a shard per ley line' };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
       case 'lift': return { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
@@ -41,13 +44,10 @@
       case 'setblock': return near.spot ? { cls: 'jar', text: `set the ${objName(near.block)} down` }
         : { cls: 'blocked', text: `no room to set it down here${near.block.spaceId !== state.exp.registry[DE.key(Math.floor(state.player.x), Math.floor(state.player.y))] ? ' · it belongs in its own room' : ''}` };
       case 'climb': return { text: state.push.key ? 'climbing…' : 'climb (or push into it)' };
-      case 'open': return { text: state.push.key ? 'opening…' : 'open the door (or push)' };
-      case 'retrace': {
-        const n = near.path.traces.length, rooms = `${n} room${n === 1 ? '' : 's'}`;
-        if (state.push.key) return { text: 'letting it go…' };
-        return !near.thread ? { cls: 'blocked', text: `your lost path · ${rooms} · no thread to retrace it · push to let it go` }
-          : near.affordable ? { cls: 'collapse', text: `retrace your lost path · ${rooms} · ${chargeText(near.price)} · push to let it go` }
-          : { cls: 'blocked', text: `your lost path · ${rooms} · ${chargeText(near.price)} to retrace · push to let it go` };
+      case 'open': return { text: 'open the door' };
+      case 'lostdoor': {
+        const n = near.path.traces.length;
+        return { cls: 'collapse', text: `your lost path · ${n} room${n === 1 ? '' : 's'} · retrace or reroll` };
       }
       case 'locked':
         return { cls: 'blocked', text: run.keys > 0 ? 'a locked door · a key in hand unlocks it' : 'a locked door · you need a key' };
@@ -55,7 +55,7 @@
         // Only a provisional room (one with no door out opened yet) offers this.
         const pr = near.price;
         return near.haunted ? { cls: 'blocked', text: `a hash ghost lingers in ${near.child.id} · no rerolling it while it's there` }
-          : near.affordable ? { cls: 'collapse', text: `close & reroll ${near.child.id} · ${chargeText(pr.charges)}` }
+          : near.affordable ? { cls: near.lose ? 'lose' : 'collapse', text: `close & reroll ${near.child.id} · ${chargeText(pr.charges)}${near.lose ? ' · what\'s yours in it goes too' : ''}` }
           : { cls: 'blocked', text: `not enough entropy to reroll · ${chargeText(pr.charges)}` };
       }
     }
@@ -105,16 +105,21 @@
     updateFocus(nearE);
     W.updatePreview(nearE);
     updateRing(state.hold.ring);
+    W.updateChoice(focusRect);
   }
 
   // The hold ring: like a ghost's, a circle that fills clockwise with the
   // action's icon inside, just above what you're acting on. The E prompt's
   // key fills with it.
   const RING_R = 15, RING_C = 2 * Math.PI * RING_R;
+  // Above it, the icons of anything of yours at stake (choice.js), red and
+  // crossed out when the action would lose them.
   const ringEl = el('div', 'holdring');
   ringEl.innerHTML = `<svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="${RING_R}"/>` +
     `<circle class="fg" cx="18" cy="18" r="${RING_R}" stroke-dasharray="${RING_C}" stroke-dashoffset="${RING_C}"/></svg><span></span>`;
   ringEl.hidden = true;
+  const ringThings = el('div', 'things');
+  ringEl.append(ringThings);
   document.body.append(ringEl);
   const ringFg = ringEl.querySelector('.fg'), ringIcon = ringEl.querySelector('span');
   function updateRing(ring) {
@@ -124,6 +129,7 @@
     if (!on) return;
     ringFg.setAttribute('stroke-dashoffset', (RING_C * (1 - ring.v)).toFixed(2));
     if (ringIcon.textContent !== ring.icon) ringIcon.textContent = ring.icon;
+    W.iconRow(ringThings, ring.things || [], ring.lose);
     ringEl.style.left = (focusRect.x0 + focusRect.x1) / 2 + 'px';
     ringEl.style.top = focusRect.y0 + 'px';
   }
@@ -401,6 +407,10 @@
       }
       ctx.restore();
     }
+    // Save lanterns (a small red flame, brighter where you'd wake) and your
+    // packs (a flame where each lies, as long as its path is there).
+    W.drawLanternMarks(ctx, ox, oy, px);
+    W.drawPackMarks(ctx, ox, oy, px);
     // Waypoints still waiting: a glowing violet "?", pinned to the edge
     // when it's off the map so you always know which way to go.
     for (const r of W.waitingPins()) {

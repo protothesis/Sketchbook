@@ -118,7 +118,7 @@
     // ghost's touch knocks off staminaHit and drains it for as long as you
     // stay in the ghost's (swollen) reach; the dark (an empty or covered
     // lamp, away from a sconce's light) drains it more slowly. Empty: you pass
-    // out and wake at your last waystone. It refills once nothing has
+    // out and wake by your save lantern. It refills once nothing has
     // drained it for staminaRegenDelay seconds and you're in light.
     staminaHit: 0.15,
     staminaDrain: 0.2,        // per second in a ghost's reach: a full meter lasts 5 s
@@ -145,6 +145,16 @@
     waystoneCharges: 1,
     leyNeighbours: 2,
     travelShardsPerHop: 1,
+    // Fainting (GAME-DESIGN.md, sections 17 and 19): you wake at the save
+    // lantern you last saved at, with wakeCharges of entropy, and what you
+    // carried stays where you fell (a pack, holding your fuel too).
+    wakeCharges: 2,
+    // Holds, in seconds (E held). A door to a lost path takes lostDoorHold to
+    // bring up its choice (retrace or reroll), then choiceHold to confirm one.
+    // A reroll that would lose something of yours takes rerollLoseFactor as long.
+    lostDoorHold: 0.7,
+    choiceHold: 0.8,
+    rerollLoseFactor: 2,
     detailChance: 0.35,
     // Hash ghosts: about 1 room in 14; rooms on cracked (imprinted) floor
     // get a boost that grows with how much of the room is cracked.
@@ -630,12 +640,11 @@
   }
 
   /**
-   * A hall's waystone: { cell, x0, y0, x1, y1, wake: { x, y, angle } }. A
-   * slab standing in the middle of the floor cell nearest the hall's centre
-   * (never a door's), facing the camera. `wake` is where you stand when you
-   * travel to it or wake there. Halls only.
+   * A hall's centre: the floor cell nearest the hall's middle (never a
+   * door's), where its save lantern and its waystone stand side by side,
+   * facing the camera. Nothing else is placed on it.
    */
-  function waystone(space) {
+  function hallCentre(space) {
     if (space.archetype !== 'hall') return null;
     const doors = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
     const c0 = centerOf(space);
@@ -646,10 +655,34 @@
       const d = Math.hypot(c.x + 0.5 - c0.x, c.y + 0.5 - c0.y);
       if (d < bd) { bd = d; best = c; }
     }
-    if (!best) return null;
+    return best;
+  }
+
+  /**
+   * A hall's waystone: { cell, x0, y0, x1, y1, wake: { x, y, angle } }. A
+   * slab on the east half of the hall's centre cell. `wake` is where you
+   * stand when you travel to it. Halls only.
+   */
+  function waystone(space) {
+    const c = hallCentre(space);
+    if (!c) return null;
     return {
-      cell: best, x0: best.x + 0.31, y0: best.y + 0.4, x1: best.x + 0.69, y1: best.y + 0.58,
-      wake: { x: best.x + 0.5, y: best.y + 0.88, angle: Math.PI },
+      cell: c, x0: c.x + 0.6, y0: c.y + 0.4, x1: c.x + 0.92, y1: c.y + 0.58,
+      wake: { x: c.x + 0.5, y: c.y + 0.88, angle: Math.PI },
+    };
+  }
+
+  /**
+   * A hall's save lantern: { cell, x0, y0, x1, y1, wake }. A dark stone
+   * plinth with a lantern on it, on the west half of the hall's centre
+   * cell. `wake` is where you stand when you wake from a faint. Halls only.
+   */
+  function saveLantern(space) {
+    const c = hallCentre(space);
+    if (!c) return null;
+    return {
+      cell: c, x0: c.x + 0.1, y0: c.y + 0.32, x1: c.x + 0.46, y1: c.y + 0.68,
+      wake: { x: c.x + 0.5, y: c.y + 0.88, angle: Math.PI },
     };
   }
 
@@ -734,5 +767,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, vessel, sigil, well, props, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, vessel, sigil, well, props, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, saveLantern, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

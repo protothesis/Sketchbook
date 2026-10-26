@@ -13,8 +13,8 @@
 // Walk mode is split into classic scripts (no modules: the page has to open
 // from file://), which play.html loads in this order:
 //
-//   saves, core, world, figure, items, restore, waystones, lamp, actions,
-//   input, ecology, creatures, markers, wells, pixies, ghosts, creepers, fx, hud, game, main
+//   saves, core, world, figure, light, items, restore, waystones, lanterns, packs, lamp, actions,
+//   input, ecology, creatures, markers, wells, pixies, ghosts, creepers, fx, hud, choice, game, main, dev
 //
 // (saves.js is the odd one out: it knows nothing of W, and hangs its save
 // slots on DungeonPlay.saves, so it can move to another client.)
@@ -129,6 +129,8 @@
     grab: null,          // the push block you have hold of, E held: { block, dir, off, moved } (restore.js)
     sconces: [],         // sconces in built rooms (see restore.js)
     waystones: [],       // waystones in built halls (see waystones.js)
+    lanterns: [],        // save lanterns in built halls (see lanterns.js)
+    choice: null,        // a choice up on screen, picked with A / D and confirmed with E held (choice.js)
     gutter: null,        // { t } while the lamp is guttering out
     lampGrace: 0,        // seconds the lamp holds its burn after a gain
     time: 0,
@@ -173,7 +175,10 @@
       despawned: [],         // objects that went with a rerolled room: [{ key, kind, color, room, at }], for later use
       lit: {},               // sconces lit: { "spaceId:seed:id": true }
       waystones: {},         // waystones woken: { "spaceId:seed": true } (the starter's is always awake)
-      hearth: null,          // "spaceId:seed" of the waystone you last woke or used: where you wake
+      lanterns: {},          // save lanterns saved at, ever: { "spaceId:seed": true } (the first save reveals waypoints)
+      hearth: null,          // "spaceId:seed" of the hall whose lantern you last saved at: where you wake
+      packs: [],             // what you carried when you fainted, where you fell (packs.js)
+      packSeq: 0,
       surfaced: false,       // went up the surface door (the record shows until you go back down)
       faints: 0,             // faints that cost rooms (see game.js)
       roomsLost: 0,          // rooms lost to them
@@ -250,7 +255,7 @@
     if (!state.exp || state.menu === 'title') return;
     SAVES.write('resume', snapshot());
   }
-  /** The checkpoint slot: progress, written when you use a waystone. */
+  /** The checkpoint slot: written when you save at a lantern. Where you wake, and which rooms stand. */
   function saveCheckpoint() {
     if (!state.exp) return;
     const snap = snapshot();
@@ -262,7 +267,7 @@
   // save slots over (game.js). Saves are stamped with DP.saves.BUILD now:
   // when `run` changes shape, bump that instead of adding a step here.
   // Saves from before versioning count as version 0.
-  const RUN_VERSION = 6;
+  const RUN_VERSION = 7;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
@@ -305,6 +310,14 @@
         run.objects['vessel:' + j.id] = { kind: 'vessel', sx: j.sx, sy: j.sy, holds: j.holds || null, n: j.holds ? 1 : 0 };
       }
       delete run.placedJars;
+    },
+    // 6 -> 7: save lanterns take over respawning from waystones. A hall whose
+    // waystone you woke counts as saved at (it already showed its waypoints),
+    // and your hearth (the same "spaceId:seed" key) is now its lantern.
+    (run) => {
+      run.lanterns = Object.assign({}, run.waystones || {});
+      run.packs = run.packs || [];
+      run.packSeq = run.packSeq || 0;
     },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */

@@ -1,6 +1,7 @@
 // Walk mode: what E does at a door or wall. Open, unlock, collapse a branch
-// for entropy, retrace a path lost to a faint (or let it go), or press a
-// doorstone to a wall.
+// for entropy, choose at the door to a path lost to a faint (retrace it or
+// reroll it), or press a doorstone to a wall. Doors only ever open with E
+// held; walking into one does nothing.
 (function (global) {
   'use strict';
 
@@ -15,12 +16,13 @@
 
   /**
    * The door in the player's own room within reach, and what can be done
-   * with it: 'open' | 'retrace' | 'locked' | 'collapse' | 'close' |
+   * with it: 'open' | 'lostdoor' | 'locked' | 'collapse' | 'close' |
    * 'reopen'. Collapse (a reroll) is what closing a door into a room
-   * that's still provisional does; retrace, at the door to a path lost to a
-   * faint (pushing it open lets the path go instead). Any other opened
+   * that's still provisional does; 'lostdoor', at the door to a path lost to
+   * a faint, puts up a choice (retrace it or reroll it). Any other opened
    * door just closes ('close'), and a door you closed opens again
-   * ('reopen'), from either side.
+   * ('reopen'), from either side. `things`: icons of what's yours beyond
+   * it (a pack, a lantern), which a reroll would lose (`lose`).
    */
   function doorNear(p) {
     const exp = state.exp;
@@ -43,20 +45,36 @@
     }
     const path = best && best.action === 'open' && W.lostPathAt(sp.id, best.exit.id);
     if (path) {
-      best.action = 'retrace';
+      best.action = 'lostdoor';
       best.path = path;
       best.price = W.retracePrice(path);
       best.thread = !!state.run.thread;
       best.affordable = best.price <= state.run.fuel + 1e-6;
+      best.things = thingsIn(new Set(path.traces.map((t) => t.id)), path.traces);
     }
     if (best && best.action === 'collapse') {
       const branch = DP.branch(exp, best.child.id);
+      const ids = new Set(branch.map((s) => s.id));
       best.price = DP.collapseCost(branch);
       best.affordable = best.price.charges <= state.run.fuel + 1e-6;
       // Ghosts stay: a room can't be rerolled while one is in it.
-      best.haunted = W.ghostIn(new Set(branch.map((s) => s.id)));
+      best.haunted = W.ghostIn(ids);
+      best.things = thingsIn(ids, branch);
+      best.lose = best.things.length > 0;
     }
     return best;
+  }
+
+  /**
+   * What's yours in these rooms (ids; `rooms`: their spaces or traces), as
+   * icon kinds (choice.js): a pack, a hall's save lantern. (Waystones join
+   * when they can be moved.)
+   */
+  function thingsIn(ids, rooms) {
+    const out = [];
+    for (let i = W.packsIn(ids).length; i > 0; i--) out.push('pack');
+    for (const r of rooms) if (r.archetype === 'hall') out.push('lantern');
+    return out;
   }
 
   /** A plain wall right in front of the figure that a doorstone could open. */
@@ -103,6 +121,7 @@
     const blk = (b, z0, z1) => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, z0, z1 });
     switch (near.action) {
       case 'wake': case 'travel': return blk(near.stone.ws, 0, near.stone.ws.top || 2.5 * UNIT);
+      case 'save': return blk(near.lantern.ws, 0, 3 * UNIT);
       case 'erase': {
         const m = near.mark, z = m.base || 0;
         return { x0: m.sx / 2, y0: m.sy / 2, x1: m.sx / 2 + 0.5, y1: m.sy / 2 + 0.5, z0: z, z1: z + 0.02 };
@@ -130,6 +149,8 @@
    */
   const FACING_WEIGHT = 0.6; // cells of distance one unit of (1 - cos) is worth
   function actionNear(p) {
+    // A choice is up (choice.js): E confirms the option picked.
+    if (state.choice) return W.choiceNear();
     // Holding on to a block: that's what E is about until you let go.
     if (state.grab) {
       if (state.grab.letGo) return null; // let go: it's coming to rest
@@ -145,7 +166,7 @@
     }
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     let best = null, bestScore = Infinity;
-    for (const find of [doorNear, waystoneNear, markNear, liftNear, sconceNear, blockNear]) {
+    for (const find of [doorNear, waystoneNear, W.lanternNear, markNear, liftNear, sconceNear, blockNear]) {
       const near = find(p);
       if (!near) continue;
       const b = near.box = focusBox(near);
@@ -160,30 +181,34 @@
   // ---------------------------------------------------------------------------
   // Hold to act: anything that changes the world needs E held (or the E
   // prompt pressed and held on touch) while a ring fills; the rest is a tap.
-  // Opening and closing a door take as long as pushing into one.
+  // Doors open only this way (walking into one does nothing).
 
   const HOLD = {
     open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME,
-    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7, travel: 0.5, lift: 0.4,
-    collapse: 1.0, retrace: 1.0, // they cost entropy and can't be undone
+    erase: 0.4, light: 0.5, snuff: 0.5, wake: 0.7, travel: 0.5, lift: 0.4, save: 0.5,
+    collapse: 1.0, // it costs entropy and can't be undone
   };
+  HOLD.lostdoor = RULES.lostDoorHold; // then a choice (choice.js)
+  HOLD.choose = RULES.choiceHold;
   // The ring's icon, per action.
   const HOLD_ICON = {
     open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
-    wake: '◆', collapse: '↻', retrace: '↺', lift: '✋', travel: '◇',
+    wake: '◆', collapse: '↻', lostdoor: '⇄', lift: '✋', travel: '◇', save: '✧',
   };
 
   /** Can't be done right now: a tap says why instead of filling a ring. */
   function blockedNow(near) {
     const a = near.action;
     return a === 'locked' || (a === 'collapse' && (near.haunted || !near.affordable)) ||
-      (a === 'retrace' && (!near.thread || !near.affordable)) || (a === 'setblock' && !near.spot);
+      (a === 'choose' && !!near.opt.off) || (a === 'setblock' && !near.spot);
   }
-  /** Seconds E must be held for this action, or 0 for a tap. */
-  const holdTime = (near) => (blockedNow(near) ? 0 : HOLD[near.action] || 0);
+  /** Seconds E must be held for this action, or 0 for a tap. Losing something of yours takes longer. */
+  const holdTime = (near) => (blockedNow(near) ? 0
+    : (HOLD[near.action] || 0) * (near.lose && near.action !== 'choose' ? RULES.rerollLoseFactor : 1));
 
-  // What's being held: the action and its box, so a different target restarts the ring.
-  const holdSig = (near) => near.action + ':' + Object.values(near.box).map((v) => v.toFixed(2)).join(',');
+  // What's being held: the action and its box (and a choice's pick), so a different target restarts the ring.
+  const holdSig = (near) => near.action + (near.sel != null ? '#' + near.sel : '') + ':' +
+    Object.values(near.box || {}).map((v) => v.toFixed(2)).join(',');
 
   /** E pressed (key down or the prompt pressed): taps act now; holds start the ring. */
   function pressE() {
@@ -202,8 +227,8 @@
   /**
    * Each frame: fill the ring while E is held on the same target, and act
    * when it's full. One hold, one action; release to go again. Returns the
-   * ring's progress (0-1) and icon, for the HUD. Pushing into a door or
-   * block fills the same ring.
+   * ring's progress (0-1), icon and what's at stake (`things`, `lose`), for
+   * the HUD. A door to a lost path shows its things from the first moment.
    */
   function tickHold(near, dt) {
     const h = state.hold;
@@ -213,11 +238,9 @@
       if (sig !== h.sig) { h.sig = sig; h.t = 0; }
       h.t += dt;
       const need = holdTime(near);
-      h.ring = { v: Math.min(1, h.t / need), icon: HOLD_ICON[near.action] || '' };
+      h.ring = { v: Math.min(1, h.t / need), icon: near.icon || HOLD_ICON[near.action] || '',
+        things: near.action === 'choose' ? null : near.things || null, lose: !!near.lose };
       if (h.t >= need) { h.spent = true; act(near); }
-    } else if (state.push.key && state.push.t > 0 && !/^(push|block):/.test(state.push.key)) {
-      // Pushing into a door fills the same ring; pushing a block or climbing doesn't.
-      h.ring = { v: Math.min(1, state.push.t / PUSH_TIME), icon: HOLD_ICON.open };
     }
     return h.ring;
   }
@@ -256,6 +279,13 @@
     if (near.action === 'climb') { climb(near.block, near.dir); return; }
     if (near.action === 'surface') { askSurface(); return; }
     if (near.action === 'wake') { wakeWaystone(near.stone); return; }
+    if (near.action === 'save') { W.saveAt(near.lantern); return; }
+    if (near.action === 'choose') {
+      if (near.opt.off) { W.showCaption(near.opt.off); return; }
+      W.closeChoice();
+      near.opt.act();
+      return;
+    }
     if (near.action === 'travel') { travelFrom(near.stone); return; }
     if (near.action === 'carve') { carveDoor(near); return; }
     if (near.action === 'lift') { W.startGrab(near.block); return; } // the ring filled: you have hold of it
@@ -276,24 +306,8 @@
     const doorKey = near.space.id + '/' + near.exit.id;
     if (near.action === 'open') {
       openDoor(near.space.id, near.exit.id);
-    } else if (near.action === 'retrace') {
-      const n = near.path.traces.length;
-      if (!near.thread) {
-        W.showCaption(`your lost path (${n} room${n === 1 ? '' : 's'}) · without a thread you can't find the way back · push to let it go`);
-        return;
-      }
-      if (!near.affordable) {
-        W.showCaption(`not enough entropy to retrace ${n} room${n === 1 ? '' : 's'}: ${chargeText(near.price)}, you have ${chargeText(run.fuel)}`);
-        return;
-      }
-      W.spendFuel(near.price);
-      run.chargesSpent += near.price;
-      run.retraces = (run.retraces || 0) + 1;
-      const r = W.retrace(near.path);
-      W.showCaption(`the thread pulls taut · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
-        (r.gone ? ` · ${r.gone} couldn't come back` : '') + ` · −${chargeText(near.price)}`);
-      savePlayer();
-      W.refreshHud();
+    } else if (near.action === 'lostdoor') {
+      lostDoorChoice(near);
     } else if (near.action === 'locked') {
       // A key in hand unlocks it (F); E can't.
       W.showCaption(run.keys > 0 ? `locked · ${W.verbF} with your key in hand to unlock it` : 'locked. you need a key');
@@ -308,6 +322,40 @@
       }
       collapseThrough(near);
     }
+  }
+
+  /**
+   * The door to a lost path: retrace it (the thread, and a shard a room) or
+   * reroll it (something new opens, and the path is gone, with whatever of
+   * yours is on it).
+   */
+  function lostDoorChoice(near) {
+    const n = near.path.traces.length, rooms = `${n} room${n === 1 ? '' : 's'}`;
+    const off = !near.thread ? 'you need the thread to find the way back'
+      : !near.affordable ? `not enough entropy: ${chargeText(near.price)}, you have ${chargeText(state.run.fuel)}` : null;
+    W.openChoice({
+      title: `your lost path · ${rooms}${near.path.dim ? ' · fading' : ''}`,
+      things: near.things,
+      box: near.box,
+      sel: off ? 1 : 0,
+      options: [
+        { label: 'retrace', icon: '↺', detail: `as you left it · ${chargeText(near.price)}`, off, act: () => retraceThrough(near) },
+        { label: 'reroll', icon: '↻', detail: 'something new · the path is gone', lose: true,
+          act: () => openDoor(near.space.id, near.exit.id) },
+      ],
+    });
+  }
+
+  function retraceThrough(near) {
+    const run = state.run;
+    W.spendFuel(near.price);
+    run.chargesSpent += near.price;
+    run.retraces = (run.retraces || 0) + 1;
+    const r = W.retrace(near.path);
+    W.showCaption(`the thread pulls taut · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
+      (r.gone ? ` · ${r.gone} couldn't come back` : '') + ` · −${chargeText(near.price)}`);
+    savePlayer();
+    W.refreshHud();
   }
 
   /** F with a key in hand at a locked door: the key turns. Open it as usual after. */
@@ -428,6 +476,7 @@
 
     const unravelled = W.banishGhostsIn(ids); // none, normally: a haunted room can't be rerolled
     const despawned = W.despawnObjectsIn(ids); // crates, blocks and vessels sitting in them; one in your hands stays
+    const packs = W.dropPacksIn(ids);
     W.dropPixiesIn(ids);
     W.dropCreepersIn(ids);
     wipeMarksIn(ids);
@@ -448,7 +497,8 @@
 
     W.showCaption(`collapsed ${spaces.length} room${spaces.length === 1 ? '' : 's'} · −${chargeText(near.price.charges)}` +
       (unravelled ? ` · ${unravelled === 1 ? 'a hash ghost comes undone' : unravelled + ' hash ghosts come undone'}` : '') +
-      (despawned ? ` · ${despawned === 1 ? 'a block goes with it' : despawned + ' blocks go with it'}` : ''));
+      (despawned ? ` · ${despawned === 1 ? 'a block goes with it' : despawned + ' blocks go with it'}` : '') +
+      (packs ? ` · ${packs === 1 ? 'your pack goes with it' : packs + ' packs go with it'}` : ''));
     save();
     savePlayer();
     W.refreshHud();

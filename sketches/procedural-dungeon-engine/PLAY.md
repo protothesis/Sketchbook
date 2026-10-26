@@ -13,7 +13,7 @@ Determinism).
 ## Pillars
 
 1. **The door is the moment.** Every unresolved exit is a closed door, and
-   nothing exists behind it until you push it open. The new space then
+   nothing exists behind it until you open it. The new space then
    assembles itself outward from the threshold.
 2. **Darkness is line of sight.** You carry the only light, and walls cast
    real shadows from it. You can't see around a corner until your lantern
@@ -28,7 +28,7 @@ Determinism).
 
 ## The loop (first pass)
 
-- **Explore.** Push doors open. Each one is a fresh, unrerollable draw.
+- **Explore.** Open doors (hold E). Each one is a fresh, unrerollable draw.
 - **Collect.** Most rooms hold a **shard**, and big chambers sometimes hold
   two. Three shards fuse into one **charge** of entropy.
 - **Lock first, key later.** A key only turns up after you've seen a lock.
@@ -57,18 +57,36 @@ Determinism).
   there, then reroll. See [`GAME-DESIGN.md`](GAME-DESIGN.md).
 - **Saves, the menu and faints.** The page opens on a title screen:
   Continue, New run, Import / Export save. Esc (or the Menu button) pauses:
-  Resume, or Quit to main menu. The run saves itself every second; using a
-  waystone (waking it, travelling, or touching an awake one) is a
-  **checkpoint** (walking through a waystone hall isn't: the room's line
-  says where you'd wake). Faint (stamina out) and you wake at your last
-  waystone: every room opened since becomes a **lost path** (violet on the
-  map, quiet: no cracks, no ghosts), doors carved since are walled up, and
-  your run rolls back to the checkpoint. The door to a lost path has a
-  **violet seam**. E there retraces it, every room as you left it, for a
-  shard per room (at least a charge), if you've found **the thread**.
-  Pushing it lets the path go: something new opens and the whole path turns
-  to corruption. A path you leave alone dims at your next faint and fades
-  at the one after. See [`GAME-DESIGN.md`](GAME-DESIGN.md), section 17.
+  Resume, or Quit to main menu. The run saves itself every second. Hold E
+  at a hall's **save lantern** to **save**: that's where you'll wake
+  (walking through a hall doesn't move it: the room's line says where you'd
+  wake). Faint (stamina out) and you wake by that lantern with 2 charges.
+  A faint moves you, it doesn't rewind: nothing you did is undone. Every
+  room opened since your save becomes a **lost path** (violet on the map,
+  quiet: no cracks, no ghosts), suspended exactly as you left it, and what
+  you carried (tools, jars, keys, chalk and your lamp's entropy) stays
+  where you fell, in a **pack** (below). The door to a lost path has a
+  **violet seam**. Hold E there (0.7 s) and a choice comes up: **retrace**
+  (every room as you left it, for a shard per room, at least a charge, if
+  you've found **the thread**) or **reroll** (something new opens and the
+  whole path turns to corruption, with anything of yours on it). A path you
+  leave alone dims at your next faint and fades at the one after, and a
+  pack on it goes with it. See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections
+  17 and 19.
+- **Save lanterns.** Every hall has one, by its waystone: a lantern on a
+  dark stone plinth, always lit with a dim, flickering red flame. E held
+  (0.5 s) saves: the flame flares bright, then settles back. The first save
+  at a hall's lantern is what reveals new waypoints (0–3, below). Like a lit
+  sconce, it has a light pool: your lamp rests in it, ghosts and creepers
+  keep out of it, pixies flee it. On the maps, a small red flame (brighter
+  where you'd wake).
+- **Your pack.** A cloth bundle with a little lantern that glows at the
+  fuel it holds, lying where you fainted, and a flame on the maps for as
+  long as it's there. Walk over it to take everything back; your lamp takes
+  what entropy it can hold, and the rest stays in the pack. It follows its
+  room: on a lost path it waits until you retrace it, dims with the path
+  and goes when the path fades, or when you reroll it (or reroll the room
+  it's in). An object in your hands is set down where you fell.
 - **Traces.** A collapsed room isn't deleted. The engine keeps its seed and
   cells as a **trace** (a branch that existed but wasn't kept), shown
   greyed on the minimap, the big map and the chart view. A new room that
@@ -120,11 +138,11 @@ Determinism).
   while a ghost is in it (the prompt says so). What you can do is move
   them: they're drawn to pixies, free or in a jar, strongly enough to turn
   away from you (the ecology, below). They also back out of steady light
-  (within about a tile and a half of a lit sconce or an awake waystone), so
+  (a lit sconce's or a save lantern's light pool), so
   a restored room pushes them back. A covered or empty lamp can't be
   noticed at all.
 - **Halls and waypoints.** New expeditions start in a **hall**: a big room
-  with notched corners, an awake **waystone**, at least two doors and a
+  with notched corners, a **save lantern** and an awake **waystone**, at least two doors and a
   pale **surface door** on a north wall. Three violet **"?" pins** on the
   map are **waypoints**, two near (25–35 cells) and one far (45–60): each
   marks a hall reserved ahead of time (the footprint isn't shown, and the
@@ -132,18 +150,20 @@ Determinism).
   edge, pointing the way. Ordinary rooms grow around a footprint, never into
   it, and any room built against one gets a door into it. Open that door
   and you're there: the hall holds from the moment you arrive (no rerolling
-  it). A hall always has three push blocks, at least one sconce and a
-  dormant waystone, plus anything else a room can hold. Rarely (1 room in
-  100, depth 3+) an ordinary door opens onto an **unmarked hall**, waystone
-  and all. See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections 8 and 9.
-- **Waystones.** A small slab with seeded glyphs, in the middle of a hall.
-  E at a dormant one wakes it for **1 charge** (the glyphs glow), and that's
-  when new waypoints appear: 0–3, seeded by the hall (0: 10%, 1: 45%, 2:
-  35%, 3: 10%; never 0 if no waypoint is left waiting), near and far by
-  turns, fanned out past it. E at an awake one opens the big map on every
-  awake waystone, glowing; tap one to travel there. The last waystone you
-  woke or used is where you wake if you pass out. The starter hall's is
-  always awake. An awake waystone is hard to miss: its glyphs shine
+  it). A hall always has three push blocks, at least one sconce, a save
+  lantern and a dormant waystone, plus anything else a room can hold.
+  Rarely (1 room in 100, depth 3+) an ordinary door opens onto an
+  **unmarked hall**, lantern, waystone and all. See
+  [`GAME-DESIGN.md`](GAME-DESIGN.md), sections 8, 9 and 19.
+- **Waystones.** A small slab with seeded glyphs, in the middle of a hall,
+  beside its save lantern. E at a dormant one wakes it for **1 charge** (the
+  glyphs glow) and it joins your ley lines. (Saving at the hall's lantern
+  for the first time is what reveals new waypoints: 0–3, seeded by the hall
+  (0: 10%, 1: 45%, 2: 35%, 3: 10%; never 0 if no waypoint is left waiting),
+  near and far by turns, fanned out past it.) E at an awake one opens the
+  big map on every awake waystone, glowing; tap one to travel there.
+  Waystones don't save, and don't set where you wake. The starter hall's
+  is always awake. An awake waystone is hard to miss: its glyphs shine
   regardless of light, a faint violet shaft rises from it, and the nearest
   two cast a violet-blue light. It still doesn't shelter the lamp.
 - **Ley lines.** Awake waystones are joined into a network. Links are made
@@ -172,9 +192,8 @@ Determinism).
   A ghost's touch knocks off 15% and drains 20% a second while you're in
   its reach; the dark (a lamp out or covered, away from a lit sconce)
   drains it more slowly, 8% a second (about 12 s from full). Empty: you pass out, the world fades to black, and you
-  wake at your last waystone with your stamina full and at least 2
-  charges. Everything else stays: the map, what you carry, what you
-  restored. It refills (12% a second) once nothing has drained it for
+  wake by the save lantern you last saved at with your stamina full and 2
+  charges; your pack stays where you fell (above). It refills (12% a second) once nothing has drained it for
   1.5 s and you're in light. The screen's edges close in as it falls, and
   the bar pulses while something drains it.
 - **Entropy wells.** A dark stone basin with a glowing pool, in about 1
@@ -346,20 +365,28 @@ Determinism).
   prompt pressed and held on touch) while a ring fills over the target,
   with the action's icon in it (on touch, the E prompt's key fills too,
   and its line ends "· hold"). Let go early and nothing happens; one hold,
-  one action. Opening and closing a door take 0.35 s (as long as
-  pushing into one, which fills the same ring; pushing a block or climbing
-  shows no ring), wiping chalk 0.4 s,
-  lighting or snuffing a sconce 0.5 s, waking a waystone 0.7 s, and the
-  ones that cost entropy and can't be undone, rerolling a room or
-  retracing a lost path, 1 s. Grabbing a block takes 0.4 s and
-  travelling from a waystone 0.5 s. Climbing, setting something down and the surface
-  door are a tap. Something
-  you can't do right now (a lock with no key, a reroll you can't afford)
-  is a tap that says why.
+  one action. **Doors only open this way**: walking into one does nothing
+  (the first time, a caption says to hold E). Opening and closing a door
+  take 0.35 s, wiping chalk 0.4 s, lighting or snuffing a sconce or saving
+  at a lantern 0.5 s, waking a waystone 0.7 s, the door to a lost path
+  0.7 s (it brings up a choice), and rerolling a room, which costs entropy
+  and can't be undone, 1 s, or 2 s if something of yours is in it (a pack).
+  Grabbing a block takes 0.4 s and travelling from a waystone 0.5 s.
+  Climbing, setting something down and the surface door are a tap.
+  Something you can't do right now (a lock with no key, a reroll you can't
+  afford) is a tap that says why. Over the ring, icons show anything of
+  yours at stake (a pack, a hall's lantern), red and crossed out when the
+  action would lose them.
+- **Choices.** Some actions put up a choice over what you're acting on
+  (today, the door to a lost path: retrace or reroll). You stand still
+  while it's up; A / D (or the arrows) pick an option, E held (0.8 s)
+  confirms it, Esc, W or S backs out. An option you can't take now is
+  muted and says why. On touch, press and hold an option (`choice.js`,
+  `W.openChoice`, for anything that needs one later).
 - **Closing doors.** Any opened door closes (hold E at it, from either
   side), for free, except a door into a provisional room: closing that one
   is the reroll. A closed door is a wall to you, to ghosts and to light
-  until you open it again (push or hold E, from either side). Closed doors
+  until you open it again (hold E, from either side). Closed doors
   are kept with the run (`run.closed`, by connection) and show on the maps
   as an orange bar.
 - **All your jars share one slot.** It's grouped by what they hold (empty,
@@ -442,7 +469,7 @@ Determinism).
   and the chart view all keep it.
 - **Locked doors.** Rare, and they appear past depth 3. Select a key (it's
   a tool on the hotbar) and press F at the door: the key turns. Then open
-  it as usual (push, or hold E). E alone at a locked door only says so. The **first room past a locked door** is special:
+  it as usual (hold E). E alone at a locked door only says so. The **first room past a locked door** is special:
   it's worked out from seeds (the door it was opened through was generated
   locked), so every client and every replay agrees. It has a faint gold
   warmth on its floor, "beyond a lock" in its caption, and a gold outline
@@ -456,7 +483,7 @@ Determinism).
 There's no passive regen, only wells. Entropy buys rerolls, waking
 waystones, travel and lighting sconces, and the lamp burns it. Running out
 isn't a loss in itself: it's the dark, and the dark wears you down until
-you pass out and wake at your last waystone.
+you pass out and wake by your save lantern.
 
 ## Visual parameters
 
@@ -505,6 +532,9 @@ you pass out and wake at your last waystone.
 | Captions | a short typewriter-style log line when you enter a space | e.g. "s7 · chamber · damp · depth 3" (the Navidson Record feel) |
 | Waypoint pin | a violet square with a "?" and a glow, on both maps; off the map, a smaller one on the edge in its direction | |
 | Waystone | a grey slab, 0.38 × 0.18 cells, 2.5 units tall, with five seeded glyphs on its north and south faces; awake, the glyphs glow violet, pulse slowly and shine (an additive copy over each face, so light and shadow don't touch them), a faint additive shaft rises 3.2 cells, and the two awake stones nearest you get a violet-blue point light (`GLOW` in `waystones.js`, pooled, no shadows) | on the maps, a small slab, glowing when awake |
+| Save lantern | a dark stone plinth 0.36 cells square and 2 units tall on the west half of the hall's centre cell, with an iron-capped lantern on top: glass glowing red, a small flame; a dim red point light (the two lanterns nearest you get one, `SAVE_LANTERN` in `lanterns.js`, pooled) that flickers slowly and unevenly, and a light pool of 1.8 cells; saving flares it (brightness 9, pool 2.6) and it eases back over 1.4 s | on the maps, a small red flame, brighter where you'd wake |
+| Pack | a cloth bundle with a knot, and beside it a little lantern whose glass and soft glow are the lamp's colour at the fuel it holds (`packs.js`) | on the maps, a flickering flame, dimmer on a dimmed path |
+| Choice | a panel over what you're acting on: a title, the icons of what's at stake, the options side by side (the picked one outlined, red when it would lose things; unavailable ones struck through, with why), and a hint line | |
 | Ley lines | between awake waystones on both maps: dashed and faint, solid and brighter on the travel map; the route to the stone under the pointer glows; fares in ◆ by each stone's id | |
 | Surface door | weathered pale panel with a daylight-white seam | white on the maps |
 | Push block | the whole block in its colour; home, it glows; stacked, it rests at 1 or 2 units (`lv` in `run.objects`); lifted, it arcs up over the head in 0.6 s (a crate 0.38 s; eased, rising a little above the straight line) and back down the same way | |
@@ -550,8 +580,8 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Parameter | Value |
 | --- | --- |
 | Move | WASD / arrows (Shift runs at 4 cells/s instead of 2.4); touch: drag for a stick |
-| Open a door | walk into it for 0.35 s, or hold E (or the E prompt) for 0.35 s; the same for a door you closed, from either side |
-| Hold to act | `HOLD` in `actions.js`: open / close / unlock 0.35 s, wipe 0.4, light / snuff 0.5, wake 0.7, reroll / retrace 1.0; anything else on E is a tap |
+| Open a door | hold E (or the E prompt) for 0.35 s; the same for a door you closed, from either side. Walking into one doesn't open it |
+| Hold to act | `HOLD` in `actions.js`: open / close 0.35 s, wipe 0.4, light / snuff / save 0.5, wake 0.7, a lost path's door 0.7 (`lostDoorHold`), confirming a choice 0.8 (`choiceHold`), reroll 1.0 (× 2, `rerollLoseFactor`, with something of yours in the room); anything else on E is a tap |
 | Entropy | a fluid amount in charges (`run.fuel`): start with 2, hold up to 6 (`chargesMax`, was 8); a shard is a third of a charge |
 | Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
 | Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 2 shards (`restoreCharges`, was 1 charge); off its mark takes back what it paid (never below 0.05) |
@@ -560,13 +590,13 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Lamp | burns a shard's worth every 18 s (`lampSeconds`, was 12), continuously, except by a lit sconce; any gain holds it 3 s (`lampGrace`); looks full at 3 charges (`lampFullCharges`), danger at 1 (`lampDanger`); out: dark, and stamina drains |
 | Lamp stages | uneasy at 2 charges (`lampUneasy`), danger at 1 (`lampDanger`), dying at 0.5 (`lampDying`) |
 | Relight / cover | R or tapping the lamp icon; relight costs 1 shard (`relightShards`); covering is free; out of fuel, the lamp stays out until relit; covered, it doesn't burn |
-| Stamina | 0..1 (`run.stamina`); a ghost's touch: −0.15 once (`staminaHit`), then 0.2/s (`staminaDrain`) while in its reach; the dark: 0.08/s (`staminaDarkDrain`); refills 0.12/s (`staminaRegen`) after 1.5 s undrained (`staminaRegenDelay`); empty: pass out, wake at your last waystone with full stamina and at least 2 charges, having lost every room opened since your last checkpoint (the run rolls back to it) |
+| Stamina | 0..1 (`run.stamina`); a ghost's touch: −0.15 once (`staminaHit`), then 0.2/s (`staminaDrain`) while in its reach; the dark: 0.08/s (`staminaDarkDrain`); refills 0.12/s (`staminaRegen`) after 1.5 s undrained (`staminaRegenDelay`); empty: pass out, wake by the lantern you last saved at with full stamina and 2 charges (`wakeCharges`); every room opened since that save becomes a lost path, and what you carried (and your fuel) becomes a pack where you fell; nothing else changes |
 | Wells | 1/20 of rooms at depth 1+ (`wellChance`, `'well'` stream; 4+ cells; not on door, item, sigil or waystone cells; blocks keep off); half surge, half trickle (`wellSurge`); 1 charge each (`wellCapacity`), poured at 0.6/s (`wellRate`) while you stand within 0.42 cells of its centre; surge: full again 90 s after the last draw (`wellSurgeCooldown`); trickle: refills from 10 s after (`wellTrickleDelay`), a full well per 120 s (`wellTrickleTime`); saved as `run.wells`; an empty jar in your hands stops the pour, and a swipe takes a full well's charge into the jar |
 | Pixies | 1/10 of rooms at depth 1+ (`pixieChance`, `'pixie'` stream), rolled once per room; wander 0.6 cells/s in their room, pausing 0.6–2 s; flee at up to 1.5 cells/s (`PIXIE` in `pixies.js`); caught within 0.75 cells |
 | Ecology | `ECOLOGY.rules` in `ecology.js`: ghost seeks pixie (90%, orbit 0.3–0.75 cells, within 12 cells and 1 room; held within 2.5 cells, pausing 0.3–1 s, at 0.55 cells/s); ghost flees steady light (1.6 cells, backing off at 0.6 cells/s, `GHOST.shySpeed`); pixie flees ghost (2.2) and light (2.5); pixie seeks well (50%, orbit 0.15–0.6, own room). A held ghost leans 0.35 rad toward what holds it (`GHOST.lean`); a jarred pixie flares within 2.5 cells of a ghost |
-| Halls | starter: 6–8 cells a side; waypoints: 7–9; unmarked: 6–8, 1% of rooms at depth 3+ (`params.hallChance`, own `'hall'` stream; was 2.5%, which older records keep); corners notched (65% each, 1–2 cells). Halls: 3 push blocks, 1–2 sconces, a waystone; loot as a chamber |
-| Waypoints | the start: two near (25–35 cells centre to centre), one far (45–60), all round the root. Waking a waystone: 0–3 (`waypointOdds`), near/far/near, fanned outward. A free ring around each footprint; pin within ±2 cells of the centre |
-| Waystones | wake: 1 charge (`waystoneCharges`), reveals waypoints; travel: awake to awake only, picked on the big map, along ley lines (a stone joins its 2 nearest awake ones, `leyNeighbours`, when it's woken; the links stay, in `run.ley`), the fewest lines first, then the shortest; 1 shard per line (`travelShardsPerHop`) |
+| Halls | starter: 6–8 cells a side; waypoints: 7–9; unmarked: 6–8, 1% of rooms at depth 3+ (`params.hallChance`, own `'hall'` stream; was 2.5%, which older records keep); corners notched (65% each, 1–2 cells). Halls: 3 push blocks, 1–2 sconces, a save lantern and a waystone (side by side on the centre cell); loot as a chamber |
+| Waypoints | the start: two near (25–35 cells centre to centre), one far (45–60), all round the root. The first save at a hall's lantern: 0–3 (`waypointOdds`), near/far/near, fanned outward. A free ring around each footprint; pin within ±2 cells of the centre |
+| Waystones | wake: 1 charge (`waystoneCharges`), joins the ley lines; travel: awake to awake only, picked on the big map, along ley lines (a stone joins its 2 nearest awake ones, `leyNeighbours`, when it's woken; the links stay, in `run.ley`), the fewest lines first, then the shortest; 1 shard per line (`travelShardsPerHop`) |
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
@@ -575,7 +605,8 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells, swelling to 0.8 while it touches you and shrinking back over 1 s (`swell`, `swellShrink`). No catching; a room with a ghost in it can't be rerolled |
 | Reroll price | 1 charge; only a provisional room (no door out of it ever opened) |
-| Checkpoint | written on waking a waystone, travelling, or E at an awake one; a faint loses every room not standing then (and every door carved since), and rolls the run back to it, keeping tallies and the thread |
+| Checkpoint | written when you save at a lantern: where you wake, and which rooms were standing. A faint makes every room opened since a lost path; it rolls nothing back (doors carved since stay, and a retraced path comes back as you left it, its ghosts, pixies and creepers rolled again) |
+| Pack | `run.packs`: [{ id, spaceId, seed, x, y, fuel, keys, doorstones, jars, chalks }]; follows its room (`packStatus`: here, lost, dim, or gone) |
 | Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), needs the thread; let go: push the door (the path turns to corruption); unchosen: dim at the next faint, fade at the one after |
 | Thread | 1 room in 20 at depth 3+ (`threadChance`, `threadMinDepth`, last on the loot stream); a pickup; kept for the rest of the run, through faints; 🧵 under the lamp meter |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |

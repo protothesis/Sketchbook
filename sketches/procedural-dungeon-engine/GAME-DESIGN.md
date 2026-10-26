@@ -699,10 +699,10 @@ the entropy, then come back.
 Waypoint distance stays as is (it played well). The thread is the first
 version of "retracing is earned"; it may become a proper ability later.
 
-### Decided: a faint moves you, it doesn't rewind (2026-10-26, not built)
+### Decided: a faint moves you, it doesn't rewind (built 2026-10-26)
 
-The design pass below is settled. Until it's built, the section above is
-still what the game does.
+The design pass below is settled and built. Where the section above says
+the run rolls back, or that you wake at a waystone, this replaces it.
 
 **Nothing in the world is undone by a faint.** What you restored, the
 rooms you opened, what you put in or took out of containers, and the
@@ -733,15 +733,27 @@ are*, not *when*.
 The cost of a faint is **ground and your pack, never the work you did**.
 Redoing a tidied room would be the worst kind of penalty for this game.
 
-**Open:**
+**Settled while building (2026-10-26):**
 
-- What the pack is: everything you carry, or only some of it (entropy?
-  tools? keys?). The thread stays with you: it's an ability in all but
-  name.
-- Do you wake with something, such as a charge from the lantern, so a faint
-  at empty doesn't strand you in the dark?
-- A second faint before you've fetched the first pack: two flames, or does
-  the older pack go with its path when that path fades?
+- **The pack is everything you carry,** your lamp's entropy included, so
+  a full lamp isn't lost, just left behind. The thread stays with you: it's
+  an ability in all but name. Your lamp takes what it can hold when you
+  pick the pack up; the rest stays in it.
+- **You wake with 2 charges** (`wakeCharges`, the starting amount), so a
+  faint never strands you in the dark.
+- **Each pack follows its path.** Faint again before fetching one and it
+  stays where it is; its path dims, and the pack goes when the path fades
+  (or is rerolled). Two packs can lie out at once.
+- **A retraced room's creatures roll again,** as if it were new: no free,
+  ghost-free path.
+- **Doors only open with E held,** and the door to a lost path brings up a
+  choice (retrace or reroll) instead of pushing it open to let it go. The
+  push and the hold meant two different things at one door, and the push
+  won by accident. The choice is generic (`choice.js`), for anything that
+  needs one later.
+- **A reroll that would lose something of yours takes twice as long,** and
+  icons over the hold ring show what (a pack; a hall's lantern on a lost
+  path), red and crossed out when it would be lost.
 
 The original problem and questions, kept for the reasoning:
 
@@ -822,18 +834,19 @@ changes the moods of saved expeditions (not their layouts).
 damp that dims the lamp), regions of material as well as mood, and
 regions that know their size (a region that has run long enough ends).
 
-## 19. Save lanterns and waystone blocks (decided 2026-10-26, not built)
+## 19. Save lanterns and waystone blocks (lanterns built 2026-10-26; blocks next)
 
 The old waystone did three jobs: travel, checkpoint and goal. Touching it
 to save felt wrong, because using it opens the travel map, and you don't
 want to travel. So the jobs split between two objects: one that only saves,
 and one that only travels.
 
-### Save lanterns
+### Save lanterns (built 2026-10-26)
 
 A lantern the size of one block, on a dark stone plinth one block wide and
-two tall. It **replaces the waystone in halls**: the starter hall and every
-setpiece hall have one.
+two tall. Every hall has one: the starter hall, every setpiece hall and
+the unmarked ones. Until waystones become blocks, the hall's old waystone
+stands beside it on the same cell, for travel only.
 
 - **Always lit, dimly:** a low red flame, flickering. Nothing to wake, no
   cost.
@@ -871,8 +884,18 @@ is yours to build. You decide what's worth travelling to, and you
   pixie, so it draws ghosts, with no new rule.
 - **Lifting a powered stone spills its power,** and its links drop.
   Re-power it where you set it down. Rewiring is a small, deliberate spend.
-- **They often spawn in or near lantern halls,** so the network tends to
-  grow outward from them.
+- **One in every hall, or within two rooms of it** (decided 2026-10-26):
+  the hall in its pristine state had one, and the ruin may have scattered
+  it nearby. Rooms grow as doors open, so the hall owes a stone, and one of
+  the first two rooms grown from its doors pays the debt (seeded, so replay
+  stays exact; a reroll keeps the debt).
+- **The starter hall starts with one, already powered,** like the awake
+  starter waystone today.
+- **Powered like a sconce is lit:** a one-off cost, and that's it. Entropy
+  doesn't drain out of it over time (this replaces "entropy lasts a while"
+  below). A powered stone stays powered while you carry it; it just leaves
+  the network while it's in your hands, and links up wherever you set it
+  down. Pixie or entropy may still differ in reach or in what they draw.
 - **Rerolls: no exception.** A stone in a provisional room that you reroll
   despawns with the room, like any block (section 3). Section 1's rule
   stays clean. The door should show that something of yours is inside
@@ -894,13 +917,13 @@ won't load (section 17's policy).
 
 **Open:**
 
-- E on a block lifts it, and E at a waystone opens the travel map. Which
-  gets the tap and which the hold? (Lifting a block that's home is already
-  a 0.5 s hold.)
-- Does the starter hall start with a powered stone, or with a stone and a
-  jar, so you learn the network in the first few minutes?
-- How long entropy power lasts, and whether pixie stones reach farther:
-  tune with the dev panel.
+- E on a block lifts it, and E at a waystone opens the travel map. Decided
+  (2026-10-26), like the vessel: hold E grabs (as every object), F with a
+  full jar powers it, and a tap of E at a powered stone opens the travel
+  map (opening a map changes nothing in the world, so it's a tap).
+- The network rebuilds from where the powered stones stand whenever one
+  moves (each links to its two nearest), so moving stones rewires it.
+- Whether pixie stones reach farther: tune with the dev panel.
 
 ## First slice (built 2026-10-21)
 
@@ -977,6 +1000,14 @@ The game loop (section 17): save slots with a build stamp, a title screen,
 a pause menu, waystones as checkpoints, faints that cost every room and
 carved door since the checkpoint (and roll the run back), and lost paths
 you retrace (with the thread) or let go.
+
+## Fifth slice (built 2026-10-26)
+
+Section 17's decision and section 19's save lanterns: faints that move you
+without rewinding, packs where you fell, save lanterns in every hall as the
+only respawn, doors that open only with E held, and a generic choice for
+the door to a lost path (retrace or reroll), with what's at stake shown
+over the hold ring.
 
 ## Open questions
 

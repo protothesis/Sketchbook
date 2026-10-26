@@ -103,6 +103,7 @@ What's already decided about containers (user, 2026-10-25):
 ## Then: build, in this order
 
 1. **Faint without rewind, and save lanterns** (GAME-DESIGN §17, §19).
+   Built 2026-10-26, with hold-only doors and a choice at lost doors.
    Drop the run rollback, leave the pack where you fell (flame on the
    maps), and swap halls' waystones for save lanterns. They go together:
    the lantern is what you wake at.
