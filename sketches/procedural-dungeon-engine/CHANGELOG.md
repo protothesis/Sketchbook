@@ -583,6 +583,23 @@ All notable changes to this sketch are logged here, per
   ring's colour). Ghosts look as before; shadow creepers get a dark disc
   with the red eye (it blinks there too), ringed red while stalking and
   faint red while lurking in your room or the next.
+- 2026-10-25: **Leave dragged objects anywhere.** Let go of a block you're
+  dragging and it stays exactly where it stopped, off the grid (saved as
+  an offset, `ox`/`oy` in `run.objects`, from its nearest half-cell). It
+  only **sockets** when it stops within 0.1 cell of a half-cell both ways,
+  with a short ease in. While you drag, a faint corner-bracket outline
+  shows the next notch ahead the way it's moving, and brightens once
+  letting go would socket it. A push block is home only socketed on its
+  mark. Stacking and set-down stay on the grid: nothing goes on top of (or
+  overlapping) an object left off it.
+- 2026-10-25: **Heaviness.**
+  - Heft: a dragged object takes a moment to get going and to stop (stone
+    more than a crate), and coasts a little when you let go.
+  - Pulling runs at 0.7 of push speed.
+  - Lifting and setting down takes 0.6 s for stone, 0.38 s for a crate
+    and 0.32 s for a vessel.
+  - Carrying overhead, you walk at 0.7 of your speed with stone and 0.85
+    with a crate.
 - 2026-10-25: **A dev panel** (`app/walk/dev.js`), toggled with `` ` `` (backquote,
   above Tab). It can give you any item or tool (shards, a full or empty
   lamp, stamina, keys, doorstones, jars empty or filled, the thread, every
@@ -599,6 +616,26 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-25: **Dragging blocks is smooth** (issue #26). It used to pop
+  and jerk for two reasons:
+  - The block's collision box stayed on its old half-cell while its mesh
+    slid up to half a cell ahead. Pushing, the figure walked into that
+    stale box, so collision and the inside-a-block safety net held it
+    still while the block slid away. Near the halfway mark the figure
+    popped out of the far side, and the block snapped back to where it
+    started. A push never got past the first half-cell.
+  - When the way ahead (or, pulling, behind you) closed mid-drag, the drag
+    offset reset to zero instead of holding, so the block jumped back as
+    much as half a cell, again and again.
+
+  Now the box is the mesh: it moves continuously and is indexed under
+  every cell it overlaps. The saved half-cell follows the nearest notch.
+  Block and figure move by the same amount, after checking the block's
+  next half-cell and probing the figure's path with the same collisions it
+  walks by. Nothing has to push either one back afterwards. Let go, and the
+  block eases into the nearest half-cell you can follow it to, at about
+  the speed it was moving, with the figure. That runs through the same
+  path as the drag, before the camera and the figure mesh update.
 - 2026-10-20: Walk mode froze for a remote playtester the moment they
   picked up chalk. Their browser had cached copies of different versions:
   an older play.html with no chalk counter, next to a newer play.js. The

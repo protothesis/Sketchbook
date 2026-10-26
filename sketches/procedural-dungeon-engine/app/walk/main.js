@@ -51,7 +51,7 @@
     }
 
     if (inp.mag > 0) {
-      const sp = (state.crouch ? CROUCH_SPEED : inp.run ? RUN : SPEED) * inp.mag;
+      const sp = (state.crouch ? CROUCH_SPEED : inp.run ? RUN : SPEED) * inp.mag * (state.carry ? W.carryPace(state.carry) : 1);
       p.x += inp.x * sp * dt;
       p.y += inp.y * sp * dt;
       const target = Math.atan2(inp.x, inp.y);
