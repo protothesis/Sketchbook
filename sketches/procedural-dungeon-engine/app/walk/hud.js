@@ -49,7 +49,7 @@
       case 'letgo': {
         // Retracing is the hourglass's (F with it in hand), shown on its own line.
         const n = near.path.traces.length;
-        return { cls: near.lose ? 'lose' : 'collapse', text: `hold: reroll your lost path · ${n} room${n === 1 ? '' : 's'} · the path is gone` +
+        return { cls: near.lose ? 'lose' : 'collapse', text: `reroll your lost path · ${n} room${n === 1 ? '' : 's'} · the path is gone` +
           (near.lose ? ` · what's yours on it goes too` : '') +
           (near.charged && state.sel !== 'hourglass' ? ' · or your hourglass in hand to retrace it' : '') };
       }
