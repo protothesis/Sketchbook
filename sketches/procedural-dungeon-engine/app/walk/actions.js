@@ -352,27 +352,31 @@
     const n = near.path.traces.length, rooms = `${n} room${n === 1 ? '' : 's'}`;
     const off = !near.thread ? 'you need the thread to find the way back'
       : !near.affordable ? `not enough entropy: ${chargeText(near.price)}, you have ${chargeText(state.run.fuel)}` : null;
+    // A side door: it opens onto ground the path holds, not the path's own door.
+    const own = near.path.door && near.path.door.spaceId === near.space.id && near.path.door.exitId === near.exit.id;
     W.openChoice({
-      title: `your lost path · ${rooms}${near.path.dim ? ' · fading' : ''}`,
+      title: own ? `your lost path · ${rooms}${near.path.dim ? ' · fading' : ''}`
+        : `your lost path lies beyond this door · ${rooms}${near.path.dim ? ' · fading' : ''}`,
       things: near.things,
       box: near.box,
       sel: off ? 1 : 0,
       options: [
-        { label: 'retrace', icon: '↺', detail: `as you left it · ${chargeText(near.price)}`, off, act: () => retraceThrough(near) },
-        { label: 'reroll', icon: '↻', detail: 'something new · the path is gone', lose: true,
+        { label: 'retrace', icon: '↺', detail: `as you left it · ${chargeText(near.price)}`, off, act: () => retraceThrough(near, !own) },
+        { label: own ? 'reroll' : 'open anyway', icon: '↻', detail: own ? 'something new · the path is gone' : 'the path is gone', lose: true,
           act: () => openDoor(near.space.id, near.exit.id) },
       ],
     });
   }
 
-  function retraceThrough(near) {
+  function retraceThrough(near, side) {
     const run = state.run;
     W.spendFuel(near.price);
     run.chargesSpent += near.price;
     run.retraces = (run.retraces || 0) + 1;
     const r = W.retrace(near.path);
     W.showCaption(`the thread pulls taut · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
-      (r.gone ? ` · ${r.gone} couldn't come back` : '') + ` · −${chargeText(near.price)}`);
+      (r.gone ? ` · ${r.gone} couldn't come back` : '') + ` · −${chargeText(near.price)}` +
+      (side && r.back ? ' · this door opens onto it now' : ''));
     savePlayer();
     W.refreshHud();
   }

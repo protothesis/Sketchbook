@@ -175,13 +175,15 @@
   // ---------------------------------------------------------------------------
   // Space construction
 
-  function exitSlotOk(exp, rng, ownSet, slot, forbidKey) {
+  function exitSlotOk(exp, rng, ownSet, slot, forbidKey, restoring) {
     const b = step(slot.cell, slot.facing);
     const bk = key(b.x, b.y);
     if (ownSet.has(bk) || bk === forbidKey) return false;
     if (reservedAt(exp, bk)) return true; // a way into a reserved footprint
-    // Facing into an existing space: keep it only sometimes, as a loop door.
-    if (exp.registry[bk] !== undefined) return rng.chance(exp.params.loopChance);
+    // Facing into an existing space, or ground a lost path holds: keep it
+    // only sometimes, as a loop door. (A room coming back is built as it
+    // first was, when that ground was free: held ground doesn't count.)
+    if (exp.registry[bk] !== undefined || (!restoring && heldAt(exp, bk))) return rng.chance(exp.params.loopChance);
     return true;
   }
 
@@ -232,7 +234,7 @@
       if (o.placed.end) {
         const slot = o.placed.end;
         if (!usedCells.has(key(slot.cell.x, slot.cell.y)) &&
-            exitSlotOk(exp, rng, ownSet, slot, forbid)) {
+            exitSlotOk(exp, rng, ownSet, slot, forbid, o.restoring)) {
           addExit(slot.cell, slot.facing);
         }
       }
@@ -251,7 +253,7 @@
       for (const slot of slots) {
         if (count <= 0) break;
         if (usedCells.has(key(slot.cell.x, slot.cell.y))) continue;
-        if (!exitSlotOk(exp, rng, ownSet, slot, forbid)) continue;
+        if (!exitSlotOk(exp, rng, ownSet, slot, forbid, o.restoring)) continue;
         addExit(slot.cell, slot.facing);
         count--;
       }
@@ -304,12 +306,43 @@
   // ---------------------------------------------------------------------------
   // Placement
 
-  function fits(exp, placed) {
+  /** Can these cells be built on? Not on a space, a reserve, or ground a lost path holds (but its own, `ownTrace`). */
+  function fits(exp, placed, ownTrace) {
     for (const c of placed.cells) {
       const k = key(c.x, c.y);
       if (exp.registry[k] !== undefined || reservedAt(exp, k)) return false;
+      const h = heldAt(exp, k);
+      if (h && h.id !== ownTrace) return false;
     }
     return true;
+  }
+
+  /**
+   * The lost path's trace holding this cell, or null. A room lost to a
+   * faint (a trace tagged 'lost' or 'lost-dim', not standing again) keeps
+   * its ground while it waits: nothing else is built there, so it can come
+   * back. Only once `params.holdLost` is on (a 'hold' event in the history,
+   * so older records replay as they were). Cached by history length.
+   */
+  function heldAt(exp, cellKey) {
+    if (!exp.params.holdLost) return null;
+    const n = exp.history.length;
+    if (!exp._held || exp._held.n !== n) {
+      const idx = {};
+      for (const id in exp.traces || {}) {
+        const t = exp.traces[id];
+        if ((t.cause === 'lost' || t.cause === 'lost-dim') && !exp.spaces[t.id]) for (const k of t.cells) idx[k] = t;
+      }
+      Object.defineProperty(exp, '_held', { value: { n, idx }, writable: true, configurable: true, enumerable: false });
+    }
+    return exp._held.idx[cellKey] || null;
+  }
+
+  /** From now on, lost paths hold their ground (see heldAt). Recorded in history. */
+  function holdLostPaths(exp) {
+    if (exp.params.holdLost) return;
+    exp.params.holdLost = true;
+    exp.history.push({ type: 'hold' });
   }
 
   /**
@@ -430,7 +463,7 @@
     if (res) {
       const space = buildSpace(exp, createRng(res.seed), {
         id: restore ? restore.id : 's' + exp.counters.space, seed: res.seed, parentId: spaceId, viaExitId: exitId,
-        entropy: null, depth: parent.depth + 1, deadEnd: false, reserveId: res.id,
+        entropy: null, depth: parent.depth + 1, deadEnd: false, reserveId: res.id, restoring: !!restore,
         placed: { archetype: res.kind, cells: res.cells.map(parseKey), end: null },
         entry: { cell: beyond, facing: facingBack },
       });
@@ -438,6 +471,10 @@
       if (restore) rc.restore = restore.id;
       return rc;
     }
+
+    // Ground a lost path holds: only that room itself, coming back.
+    const held = heldAt(exp, bk);
+    if (held && !(restore && restore.id === held.id)) throw new Error('A lost path holds that ground');
 
     const occupant = exp.registry[bk];
     if (occupant !== undefined) {
@@ -457,7 +494,7 @@
     // do. The rng draws the same either way, so its doors come out the same
     // when its neighbours are.
     const want = restore && restore.cells.slice().sort().join(';');
-    const ok = (candidate) => fits(exp, candidate) &&
+    const ok = (candidate) => fits(exp, candidate, restore && restore.id) &&
       (!want || candidate.cells.map((c) => key(c.x, c.y)).sort().join(';') === want);
     const rng = createRng(seed);
     const depth = parent.depth + 1;
@@ -499,7 +536,7 @@
 
     const space = buildSpace(exp, rng, {
       id: restore ? restore.id : 's' + exp.counters.space, seed, parentId: spaceId, viaExitId: exitId,
-      entropy: ent, depth, placed, deadEnd,
+      entropy: ent, depth, placed, deadEnd, restoring: !!restore,
       entry: { cell: beyond, facing: facingBack },
     });
     const cand = { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: ent, space };
@@ -730,6 +767,7 @@
     // Params as they were at the start; caps are re-applied from history.
     const p = Object.assign({}, record.params);
     p.maxSpaces = null; p.maxArea = null; p.maxDepth = null;
+    delete p.holdLost; // switched on by its 'hold' event, where it happened
     return p;
   }
 
@@ -755,6 +793,8 @@
         setCaps(exp, ev.caps);
       } else if (ev.type === 'reserve') {
         reserve(exp, ev.reserve);
+      } else if (ev.type === 'hold') {
+        holdLostPaths(exp);
       }
     }
     return exp;
@@ -839,6 +879,6 @@
   Object.assign(DE, {
     MOODS, MOOD_REGIONS, MOOD_JUNCTIONS, deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
     canCarve, carve, uncarve, restorable, restore, tagTraces, replay, exportRecord, importRecord, rebuildRegistry,
-    pathToRoot, cycleCount, stats, parseKey, imprintAt, reservedAt, canReserve, reserve,
+    pathToRoot, cycleCount, stats, parseKey, imprintAt, reservedAt, heldAt, holdLostPaths, canReserve, reserve,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

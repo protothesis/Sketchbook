@@ -663,6 +663,15 @@ All notable changes to this sketch are logged here, per
   differ. Records from before (no `moodInherit` in their params) keep their
   old moods. Waypoint halls and the root roll their own. `stress-test.js`
   checks the regions.
+- 2026-10-26: **Lost paths hold their ground.** A room opened next to a lost
+  path could grow over it, and then the path couldn't come back. Now no new
+  room is placed on a lost path's cells while it waits (the engine's
+  `heldAt`, like a waypoint's reserve; a room coming back ignores it), and a
+  door whose far side is that ground joins the path's choice: retrace (then
+  it opens onto the path like a loop) or open anyway (the path is let go).
+  Switched on by a 'hold' event in the history (`DE.holdLostPaths`, called
+  when a run loads), so older records replay exactly and follow the rule
+  from then on. `stress-test.js` checks it.
 - 2026-10-26: **Doors are a tap; rerolling is a hold.**
   - E opens or closes a door with a tap, from either side, when you're
     close to it and facing it. Any opened door closes for free, a door into

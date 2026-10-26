@@ -55,9 +55,17 @@
     return paths;
   }
 
-  /** The lost path waiting behind this unopened door, or null. */
+  /**
+   * The lost path waiting behind this unopened door, or null: its own door,
+   * or any door that opens onto ground the path holds (DE.heldAt).
+   */
   function lostPathAt(spaceId, exitId) {
-    return lostPaths().find((p) => p.door && p.door.spaceId === spaceId && p.door.exitId === exitId) || null;
+    const own = lostPaths().find((p) => p.door && p.door.spaceId === spaceId && p.door.exitId === exitId);
+    if (own) return own;
+    const sp = state.exp.spaces[spaceId], ex = sp && sp.exits.find((e) => e.id === exitId);
+    if (!ex || ex.connectionId || ex.kind === 'surface') return null;
+    const b = DE.step(ex.cell, ex.facing), t = DE.heldAt(state.exp, DE.key(b.x, b.y));
+    return (t && lostPaths().find((p) => p.traces.includes(t))) || null;
   }
 
   /** What retracing a path costs: a shard per room, at least a charge. */

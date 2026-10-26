@@ -261,6 +261,7 @@
    */
   function setExpedition(exp, saved) {
     state.exp = exp;
+    DE.holdLostPaths(exp); // lost paths hold their ground (recorded once, so older history replays as it was)
     const same = !!(saved && saved.run && saved.run.rootSeed === exp.rootSeed);
     state.run = same ? Object.assign(freshRun(exp.rootSeed), saved.run) : freshRun(exp.rootSeed);
     const savedPlayer = same ? saved.player : null;

@@ -749,6 +749,13 @@ Redoing a tidied room would be the worst kind of penalty for this game.
   (or is rerolled). Two packs can lie out at once.
 - **A retraced room's creatures roll again,** as if it were new: no free,
   ghost-free path.
+- **A lost path holds its ground,** like a waypoint's reserved footprint:
+  no new room grows over it, so it can always come back (a room opened
+  next to one used to grow over it and spoil the retrace). A door onto that
+  ground is a second door to the path, with the same choice: retrace (then
+  it opens onto the path like a loop) or open anyway (the path is let go).
+  The engine's `heldAt`; on from a 'hold' event in the history, so records
+  from before replay as they were.
 - **Doors only open with E held,** and the door to a lost path brings up a
   choice (retrace or reroll) instead of pushing it open to let it go. The
   push and the hold meant two different things at one door, and the push

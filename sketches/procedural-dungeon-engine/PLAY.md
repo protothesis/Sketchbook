@@ -72,7 +72,12 @@ Determinism).
   you've found **the thread**) or **reroll** (something new opens and the
   whole path turns to corruption, with anything of yours on it). A path you
   leave alone dims at your next faint and fades at the one after, and a
-  pack on it goes with it. See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections
+  pack on it goes with it. **A lost path holds its ground** while it waits:
+  no new room grows over it, so it can always come back. A door that opens
+  onto that ground gets the violet seam too, and the same choice:
+  **retrace** (the path comes back, and that door then opens onto it like
+  any loop) or **open anyway** (the path is let go, with anything of yours
+  on it, and something new opens there). See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections
   17 and 19.
 - **Save lanterns.** Every hall has one, on its centre cell: a lantern on a
   dark stone plinth, always lit with a dim, flickering red flame. E held
