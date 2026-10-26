@@ -86,8 +86,10 @@ Determinism).
   sconce, it has a light pool: your lamp rests in it, ghosts and creepers
   keep out of it, pixies flee it. On the maps, a small red flame (brighter
   where you'd wake).
-- **Your pack.** A cloth bundle with a little lantern that glows at the
-  fuel it holds, lying where you fainted, and a flame on the maps for as
+- **Your pack.** A cloth bundle with a little lantern that shines like your
+  lamp would at the fuel it holds (a real light, without shadows, and a
+  pool on the floor; even a pack with next to no fuel glows dimly, as if it
+  held half a charge), lying where you fainted, and a flame on the maps for as
   long as it's there. Walk over it to take everything back; your lamp takes
   what entropy it can hold, and the rest stays in the pack. It follows its
   room: on a lost path it waits until you retrace it, dims with the path
@@ -512,7 +514,7 @@ you pass out and wake by your save lantern.
 | Lost-path door | violet seam and arrow; on the panel, both faces, an additive violet glow strongest at its edges, rippling, and 16 sparks drifting up its sides and top, twinkling (`lostFx` in `world.js`, all in shaders off one clock) | |
 | Closed door | dark panel with a warm orange seam of light under it | the same orange as the chart view's open doorways |
 | Locked door | iron-grey panel with two bands and a cold blue seam | blue on the minimap; once unlocked it keeps its bands and gets an orange seam |
-| Minimap | unopened doors orange, locked doors blue, opened doors green; traces grey; lost paths violet (dimmer once dimmed; faded ones not drawn); imprinted cells get a violet tick | so overlapping rooms stay readable |
+| Minimap | unopened doors orange, locked doors blue, opened doors green, doors to a lost path (its own, or onto ground it holds) violet; traces grey; lost paths violet and hatched, by stage: since your last faint, a fill that breathes, close hatching and a solid glowing edge; dimmed (it fades at the next faint), fainter, sparse hatching and a dashed edge (faded ones not drawn); imprinted cells get a violet tick | so overlapping rooms stay readable |
 | Big map | Tab or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close | walking pauses while it's open |
 | Cracks | canvas-drawn fissures with a violet core on imprinted tiles; more trace layers, more cracks | seeded per cell; glows faintly even in the dark |
 | Blocks | flat-shaded boxes a shade darker than the walls, filling half-cell subgrid squares flush (no gaps between neighbours), 1–3 units of 0.43 cells tall, one seamless box each | cast shadows; never dither. The figure shows through them instead |
@@ -549,7 +551,7 @@ you pass out and wake by your save lantern.
 | Waypoint pin | a violet square with a "?" and a glow, on both maps; off the map, a smaller one on the edge in its direction | |
 | Waystone | a half-cell block, one unit tall, of dark glass (Phong, a cool specular); a seeded star in a ring ({5–8/2–3}) on each side, drawn additively: a faint etching while dormant, violet while awake (paler for a pixie), pulsing slowly; the two awake stones nearest you get a violet point light (`GLOW` in `waystones.js`, pooled, no shadows) | on the maps, a small slab, glowing when awake |
 | Save lantern | a dark stone plinth 0.36 cells square and 2 units tall on the west half of the hall's centre cell, with an iron-capped lantern on top: glass glowing red, a small flame; a dim red point light (the two lanterns nearest you get one, `SAVE_LANTERN` in `lanterns.js`, pooled) that flickers slowly and unevenly, and a light pool of 1.8 cells; saving flares it (brightness 9, pool 2.6) and it eases back over 1.4 s | on the maps, a small red flame, brighter where you'd wake |
-| Pack | a cloth bundle with a knot, and beside it a little lantern whose glass and soft glow are the lamp's colour at the fuel it holds (`packs.js`) | on the maps, a flickering flame, dimmer on a dimmed path |
+| Pack | a cloth bundle with a knot, and beside it a little lantern whose glass and soft glow are the lamp's colour at the fuel it holds; the nearest pack gets a real light like your lamp's at that fuel (`W.lampLightAt`: same brightness, reach, colour and pool), 0.35 cells up, no shadows, at least as bright as half a charge (`PACK_LIGHT` in `packs.js`) | on the maps, a flickering flame, dimmer on a dimmed path |
 | Choice | a panel over what you're acting on: a title, the icons of what's at stake, the options side by side (the picked one outlined, red when it would lose things; unavailable ones struck through, with why), and a hint line | |
 | Ley lines | between awake waystones on both maps: dashed and faint, solid and brighter on the travel map; the route to the stone under the pointer glows; fares in ◆ by each stone's id | |
 | Surface door | weathered pale panel with a daylight-white seam | white on the maps |

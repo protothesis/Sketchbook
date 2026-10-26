@@ -569,5 +569,20 @@
     updateLampLook, updateLampHud, lampLevel, lightRadius, lampLight, popEntropy, passOut });
   /** The lamp's colour at this much fuel (charges), as it would show: for a pack's little lantern (packs.js). */
   const lampColorAt = (fuel, out) => colorAt(THREE.MathUtils.clamp(fuel / RULES.lampFullCharges, 0, 1), out);
-  Object.assign(W, { LIGHT, HALO, UNREST, EMBER, STREAM, lampColorAt }); // tuning tables (the dev panel, dev.js)
+  /**
+   * Your lamp's light at this much fuel (charges), steady (no flicker):
+   * { intensity, distance, pool (cells) }, and its colour into `color`. For
+   * a pack's little lantern, which shines like yours would (packs.js).
+   */
+  function lampLightAt(fuel, color) {
+    const level = THREE.MathUtils.clamp(fuel / RULES.lampFullCharges, 0, 1);
+    colorAt(Math.max(level, 0.3), lightTint);
+    color.copy(WARM).lerp(lightTint, LIGHT.redden * (1 - level) + 0.3);
+    return {
+      intensity: LANTERN * lerp(LIGHT.minIntensity, 1, level),
+      distance: LANTERN_RANGE * lerp(LIGHT.minRange, 1, smooth(0, 1, level)),
+      pool: lerp(LIGHT.poolEmpty, LIGHT.poolFull, Math.pow(level, LIGHT.poolCurve)),
+    };
+  }
+  Object.assign(W, { LIGHT, HALO, UNREST, EMBER, STREAM, lampColorAt, lampLightAt }); // tuning tables (the dev panel, dev.js)
 })(window);

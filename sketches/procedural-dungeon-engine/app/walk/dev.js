@@ -24,7 +24,7 @@
   const DEV_KEY = 'dungeon-engine:dev';
   // Shown in this order; a table that isn't exported is skipped.
   const TABLES = ['RULES', 'POOL', 'LIGHT', 'HALO', 'UNREST', 'EMBER', 'STREAM', 'CREEPER', 'GHOST', 'PIXIE', 'CREATURE',
-    'ECOLOGY', 'WELL', 'GLOW', 'SCONCE_LIGHT', 'SAVE_LANTERN'];
+    'ECOLOGY', 'WELL', 'GLOW', 'SCONCE_LIGHT', 'SAVE_LANTERN', 'PACK_LIGHT'];
   // Numbers that size arrays or pools when the game starts: changing them live breaks things.
   const FIXED = new Set(['STREAM.count', 'GLOW.lights', 'WELL.motes', 'WELL.notches']);
 

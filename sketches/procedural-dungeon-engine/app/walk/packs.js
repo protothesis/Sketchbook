@@ -9,7 +9,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, THREE, S, PICKUP_RANGE, state, savePlayer, chargeText } = W;
+  const { DE, THREE, S, PICKUP_RANGE, scene, state, savePlayer, chargeText } = W;
 
   const PENDING = new Set(['lost', 'lost-dim']);
 
@@ -95,6 +95,16 @@
   const meshes = new Map(); // pack id -> { group, glassMat, glow, tile }
   const tint = new THREE.Color();
 
+  // The pack's lantern shines like yours would at the fuel it holds (W.lampLightAt):
+  // a real light on the nearest pack, no shadows, with a pool on the floor
+  // like your lamp's (light.js). A pack with next to no fuel still glows,
+  // dimly, as if it held PACK_LIGHT.minFuel, so it can be found.
+  const PACK_LIGHT = { minFuel: 0.5, height: 0.35 }; // charges; cells above the floor
+  const packLight = new THREE.PointLight(0xffb36b, 0, 1, 2);
+  scene.add(packLight);
+  W.light.addPooledLight(packLight);
+  let litPack = null; // { pk, pool } this frame
+
   function makeMesh(pk) {
     const group = new THREE.Group();
     const bundle = new THREE.Mesh(geo.bundle, clothMat);
@@ -124,6 +134,7 @@
   /** Each frame: packs in built rooms are in the world, glowing; walk over one to take it back. */
   function updatePacks() {
     const run = state.run, p = state.player;
+    shinePack();
     for (const pk of run.packs) {
       const rec = state.spaces.get(pk.spaceId);
       const tile = rec && rec.tileAt && rec.tileAt[DE.key(Math.floor(pk.x), Math.floor(pk.y))];
@@ -148,6 +159,26 @@
       if (p.z <= 0.05 && Math.hypot(p.x - pk.x, p.y - pk.y) <= PICKUP_RANGE) takePack(pk);
     }
   }
+
+  /** The real light goes to the nearest pack lying in a built room. */
+  function shinePack() {
+    const p = state.player;
+    let best = null, bd = 14;
+    for (const pk of state.run.packs) {
+      const m = meshes.get(pk.id);
+      if (!m || !m.tile || m.tile.scale.x < 0.5) continue;
+      const d = Math.hypot(pk.x - p.x, pk.y - p.y);
+      if (d < bd) { bd = d; best = pk; }
+    }
+    if (!best) { packLight.intensity = 0; litPack = null; return; }
+    const l = W.lampLightAt(Math.max(best.fuel, PACK_LIGHT.minFuel), packLight.color);
+    packLight.intensity = l.intensity;
+    packLight.distance = l.distance;
+    packLight.position.set(best.x * S, PACK_LIGHT.height * S, best.y * S);
+    litPack = { pk: best, pool: { x: best.x, y: best.y, r: l.pool, from: { x: best.x, y: best.y, h: PACK_LIGHT.height } } };
+  }
+  /** The lit pack's pool (light.js), if one is lit. */
+  const packPools = () => (litPack ? [litPack.pool] : []);
 
   /** Take a pack back: everything in it, and as much of its entropy as your lamp holds (the rest stays in it). */
   function takePack(pk) {
@@ -194,5 +225,5 @@
     }
   }
 
-  Object.assign(W, { packUp, packStatus, prunePacks, packsIn, dropPacksIn, updatePacks, drawPackMarks });
+  Object.assign(W, { PACK_LIGHT, packUp, packStatus, prunePacks, packsIn, dropPacksIn, updatePacks, drawPackMarks, packPools });
 })(window);

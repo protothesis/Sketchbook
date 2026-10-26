@@ -663,6 +663,15 @@ All notable changes to this sketch are logged here, per
   differ. Records from before (no `moodInherit` in their params) keep their
   old moods. Waypoint halls and the root roll their own. `stress-test.js`
   checks the regions.
+- 2026-10-26: **Lost paths read on the maps; packs shine.**
+  - Doors to a lost path (its own door, or one onto ground it holds) are
+    violet on the maps, like their seam.
+  - Lost paths are hatched, by stage: since your last faint, a violet fill
+    that breathes, close hatching and a solid glowing edge; dimmed (gone at
+    the next faint), fainter, sparse hatching and a dashed edge.
+  - A pack's little lantern is a real light now: like your lamp at the fuel
+    it holds (brightness, reach, colour, floor pool), without shadows, on
+    the nearest pack; even an empty one glows dimly (`PACK_LIGHT`).
 - 2026-10-26: **Lost paths hold their ground.** A room opened next to a lost
   path could grow over it, and then the path couldn't come back. Now no new
   room is placed on a lost path's cells while it waits (the engine's
