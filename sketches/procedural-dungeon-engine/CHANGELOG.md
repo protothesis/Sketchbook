@@ -663,6 +663,17 @@ All notable changes to this sketch are logged here, per
   differ. Records from before (no `moodInherit` in their params) keep their
   old moods. Waypoint halls and the root roll their own. `stress-test.js`
   checks the regions.
+- 2026-10-26: **Doors are a tap; rerolling is a hold.**
+  - E opens or closes a door with a tap, from either side, when you're
+    close to it and facing it. Any opened door closes for free, a door into
+    a provisional room included: closing no longer rerolls.
+  - To reroll, close the door into a provisional room, then hold E at it
+    (1 s, twice that with something of yours inside) from the side you came
+    in by. A tap there opens it again. The ring shows after 0.15 s, so a tap
+    doesn't flash it; an awake waystone works the same way (tap travels).
+  - Closed doors stop you, ghosts, pixies, creepers and light, as before,
+    so shutting a door now traps or holds back what's on the other side.
+  - Lost-path doors are unchanged: a 0.7 s hold, then the choice.
 - 2026-10-26: **Waystones are blocks you carry** (GAME-DESIGN §19).
   - A one-unit block of dark glass with a seeded sigil on its sides, handled
     like a crate (grab, lift, drag; heavy as stone). The fixed monolith is

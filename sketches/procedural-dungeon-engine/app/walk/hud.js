@@ -30,7 +30,9 @@
       case 'light': return { text: `light the sconce from your lantern · ${RULES.sconceCost} shard` };
       case 'snuff': return { text: `snuff the sconce · its shard back to your lamp` };
       case 'close': return { text: 'close the door' };
-      case 'reopen': return { text: 'open the door' };
+      case 'reopen': return { text: 'open the door' + (near.why ? ' · ' + near.why : '') };
+      case 'reroll': return { cls: near.lose ? 'lose' : 'collapse',
+        text: `open the door · hold: reroll ${near.child.id} · ${chargeText(near.price.charges)}${near.lose ? ' · what\'s yours in it goes too' : ''}` };
       case 'save': return { cls: 'save', text: 'save at the lantern · you\'ll wake here' };
       case 'choose': return near.opt.off ? { cls: 'blocked', text: `${near.opt.label} · ${near.opt.off}` }
         : { cls: near.opt.lose ? 'lose' : 'collapse', text: `${near.opt.label} · ${near.opt.detail || ''}` };
@@ -50,13 +52,6 @@
       }
       case 'locked':
         return { cls: 'blocked', text: run.keys > 0 ? 'a locked door · a key in hand unlocks it' : 'a locked door · you need a key' };
-      case 'collapse': {
-        // Only a provisional room (one with no door out opened yet) offers this.
-        const pr = near.price;
-        return near.haunted ? { cls: 'blocked', text: `a hash ghost lingers in ${near.child.id} · no rerolling it while it's there` }
-          : near.affordable ? { cls: near.lose ? 'lose' : 'collapse', text: `close & reroll ${near.child.id} · ${chargeText(pr.charges)}${near.lose ? ' · what\'s yours in it goes too' : ''}` }
-          : { cls: 'blocked', text: `not enough entropy to reroll · ${chargeText(pr.charges)}` };
-      }
     }
     return null;
   }

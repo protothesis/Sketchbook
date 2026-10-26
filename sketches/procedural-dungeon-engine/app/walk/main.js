@@ -99,7 +99,7 @@
         const dk = s.door && !s.door.exit.connectionId && s.door.spaceId + '/' + s.door.exit.id;
         if (dk && state.hintedDoor !== dk) {
           state.hintedDoor = dk; // walking into a closed door says how it opens, once per door
-          showCaption('hold E to open the door');
+          showCaption('E opens the door');
         }
         if (!s.block) continue;
         const d = DE.DIRS[s.facing];

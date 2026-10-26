@@ -1,7 +1,9 @@
 // Walk mode: what E does at a door or wall. Open, unlock, collapse a branch
 // for entropy, choose at the door to a path lost to a faint (retrace it or
-// reroll it), or press a doorstone to a wall. Doors only ever open with E
-// held; walking into one does nothing.
+// reroll it), or press a doorstone to a wall. A tap of E opens or closes a
+// door, from either side, like any door (walking into one does nothing).
+// Rerolling is its own act: E held at a closed door into a room that's
+// still provisional, from the side you came in by.
 (function (global) {
   'use strict';
 
@@ -15,30 +17,32 @@
   // Doors: open, unlock, or close + collapse
 
   /**
-   * The door in the player's own room within reach, and what can be done
-   * with it: 'open' | 'lostdoor' | 'locked' | 'collapse' | 'close' |
-   * 'reopen'. Collapse (a reroll) is what closing a door into a room
-   * that's still provisional does; 'lostdoor', at the door to a path lost to
-   * a faint, puts up a choice (retrace it or reroll it). Any other opened
-   * door just closes ('close'), and a door you closed opens again
-   * ('reopen'), from either side. `things`: icons of what's yours beyond
-   * it (a pack, a lantern), which a reroll would lose (`lose`).
+   * The door in the player's own room right in front of you, close, and
+   * what can be done with it: 'open' | 'lostdoor' | 'locked' | 'close' |
+   * 'reopen' | 'reroll'. An opened door closes ('close') and a closed one
+   * opens again ('reopen'), from either side, with a tap. A closed door
+   * into a room that's still provisional, from the side you came in by,
+   * is 'reroll': a tap opens it, E held rerolls the room (`onTap`).
+   * 'lostdoor', at the door to a path lost to a faint, puts up a choice
+   * (retrace it or reroll it). `things`: icons of what's yours beyond it (a
+   * pack, a lantern, a waystone), which a reroll would lose (`lose`).
    */
   function doorNear(p) {
     const exp = state.exp;
     const sp = exp.spaces[exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))]];
     if (!sp) return null;
     let best = null, bestD = USE_RANGE;
+    const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     for (const ex of sp.exits) {
       const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);
-      const d = Math.hypot(p.x - (ax + bx) / 2, p.y - (ay + by) / 2);
-      if (d >= bestD) continue;
+      const dx = (ax + bx) / 2 - p.x, dy = (ay + by) / 2 - p.y, d = Math.hypot(dx, dy);
+      if (d >= bestD || (dx * fx + dy * fy) / (d || 1) < DOOR_FACING) continue; // close, and facing it
       let action = null, child = null;
       if (p.z > 0.05) continue; // no doors from on top of a block
       if (!ex.connectionId) action = ex.kind === 'surface' ? 'surface' : isLockedNow(sp, ex) ? 'locked' : 'open';
-      else if (W.isClosed(ex.connectionId)) action = 'reopen';
-      else if ((child = DP.rerollThrough(exp, sp.id, ex))) action = 'collapse';
-      else action = 'close';
+      else if (!W.isClosed(ex.connectionId)) action = 'close';
+      else if ((child = DP.rerollThrough(exp, sp.id, ex))) action = 'reroll';
+      else action = 'reopen';
       if (!action) continue;
       bestD = d;
       best = { space: sp, exit: ex, action, child };
@@ -52,7 +56,7 @@
       best.affordable = best.price <= state.run.fuel + 1e-6;
       best.things = thingsIn(new Set(path.traces.map((t) => t.id)), path.traces);
     }
-    if (best && best.action === 'collapse') {
+    if (best && best.action === 'reroll') {
       const branch = DP.branch(exp, best.child.id);
       const ids = new Set(branch.map((s) => s.id));
       best.price = DP.collapseCost(branch);
@@ -61,9 +65,18 @@
       best.haunted = W.ghostIn(ids);
       best.things = thingsIn(ids, branch);
       best.lose = best.things.length > 0;
+      const cid = best.exit.connectionId;
+      best.onTap = () => reopenDoor(cid);
+      // Can't reroll it now: it's a plain door (the prompt says why).
+      if (best.haunted || !best.affordable) {
+        best.action = 'reopen';
+        best.why = best.haunted ? `a hash ghost lingers in ${best.child.id} · no rerolling it`
+          : `not enough entropy to reroll it · ${chargeText(best.price.charges)}`;
+      }
     }
     return best;
   }
+  const DOOR_FACING = 0.5; // cos of how far off straight at a door you can be and still use it
 
   /**
    * What's yours in these rooms (ids; `rooms`: their spaces or traces), as
@@ -174,31 +187,39 @@
       const score = d + FACING_WEIGHT * (1 - cos);
       if (score < bestScore) { bestScore = score; best = near; }
     }
+    // A powered waystone: E held grabs it, as any object; a tap travels.
+    if (best && best.action === 'lift' && best.block.waystone && best.block.holds) {
+      const blk = best.block;
+      best.onTap = () => W.travelFrom(W.stoneOf(blk));
+    }
     return best;
   }
 
   // ---------------------------------------------------------------------------
   // Hold to act: anything that changes the world needs E held (or the E
   // prompt pressed and held on touch) while a ring fills; the rest is a tap.
-  // Doors open only this way (walking into one does nothing).
+  // Doors are the exception, everyday enough for a tap: open, close, open
+  // again. Where a thing has both (a closed door you could reroll, a powered
+  // waystone), letting go before the ring fills is the tap (`onTap`), and
+  // the ring only shows once you've held a moment.
 
   const HOLD = {
-    open: PUSH_TIME, reopen: PUSH_TIME, close: PUSH_TIME,
     erase: 0.4, light: 0.5, snuff: 0.5, lift: 0.4, save: 0.5,
-    collapse: 1.0, // it costs entropy and can't be undone
+    reroll: 1.0, // it costs entropy and can't be undone
   };
+  const TAP_GRACE = 0.15; // seconds of a hold before its ring shows, where a tap does something else
   HOLD.lostdoor = RULES.lostDoorHold; // then a choice (choice.js)
   HOLD.choose = RULES.choiceHold;
   // The ring's icon, per action.
   const HOLD_ICON = {
     open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
-    collapse: '↻', lostdoor: '⇄', lift: '✋', save: '✧',
+    reroll: '↻', lostdoor: '⇄', lift: '✋', save: '✧',
   };
 
   /** Can't be done right now: a tap says why instead of filling a ring. */
   function blockedNow(near) {
     const a = near.action;
-    return a === 'locked' || (a === 'collapse' && (near.haunted || !near.affordable)) ||
+    return a === 'locked' ||
       (a === 'choose' && !!near.opt.off) || (a === 'setblock' && !near.spot);
   }
   /** Seconds E must be held for this action, or 0 for a tap. Losing something of yours takes longer. */
@@ -211,23 +232,23 @@
 
   /**
    * E pressed (key down or the prompt pressed): taps act now; holds start
-   * the ring. At a powered waystone the hold grabs it, as at any object, and
-   * a tap (let go before the ring fills) opens the travel map.
+   * the ring. Where a hold has a tap of its own (`onTap`: a closed door you
+   * could reroll, a powered waystone), the tap happens on letting go.
    */
   function pressE() {
     const near = actionNear(state.player);
     const h = state.hold;
     h.sig = null; h.t = 0; h.spent = false; h.down = true;
-    h.tap = near && near.action === 'lift' && near.block.waystone && near.block.holds ? near.block : null;
+    h.tap = near && near.onTap && holdTime(near) ? near : null;
     if (near && !holdTime(near)) { h.spent = true; act(near); }
   }
-  /** E let go: a grabbed block is lifted (or let go, if you moved it); a tap at a powered waystone travels. `cancel` (focus lost): just let go. */
+  /** E let go: a grabbed block is lifted (or let go, if you moved it); a hold let go early does its tap. `cancel` (focus lost): just let go. */
   function releaseE(cancel) {
     const h = state.hold;
     const tap = !cancel && h.down && !h.spent && h.tap;
     h.down = false; h.sig = null; h.t = 0; h.spent = false; h.tap = null;
     if (state.grab) W.endGrab(cancel);
-    if (tap) W.travelFrom(W.stoneOf(tap));
+    if (tap && !state.paused) tap.onTap();
   }
 
   /**
@@ -244,8 +265,10 @@
       if (sig !== h.sig) { h.sig = sig; h.t = 0; }
       h.t += dt;
       const need = holdTime(near);
-      h.ring = { v: Math.min(1, h.t / need), icon: near.icon || HOLD_ICON[near.action] || '',
-        things: near.action === 'choose' ? null : near.things || null, lose: !!near.lose };
+      if (!near.onTap || h.t >= TAP_GRACE) {
+        h.ring = { v: Math.min(1, h.t / need), icon: near.icon || HOLD_ICON[near.action] || '',
+          things: near.action === 'choose' ? null : near.things || null, lose: !!near.lose };
+      }
       if (h.t >= need) { h.spent = true; act(near); }
     }
     return h.ring;
@@ -315,15 +338,7 @@
     } else if (near.action === 'locked') {
       // A key in hand unlocks it (F); E can't.
       W.showCaption(run.keys > 0 ? `locked · ${W.verbF} with your key in hand to unlock it` : 'locked. you need a key');
-    } else if (near.action === 'collapse') {
-      if (near.haunted) {
-        W.showCaption(`a hash ghost lingers in ${near.child.id} · it won't let the room unmake`);
-        return;
-      }
-      if (!near.affordable) {
-        W.showCaption(`not enough entropy to reroll: ${chargeText(near.price.charges)}, you have ${chargeText(run.fuel)}`);
-        return;
-      }
+    } else if (near.action === 'reroll') {
       collapseThrough(near);
     }
   }

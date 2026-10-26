@@ -28,7 +28,7 @@ Determinism).
 
 ## The loop (first pass)
 
-- **Explore.** Open doors (hold E). Each one is a fresh, unrerollable draw.
+- **Explore.** Open doors (E). Each one is a fresh draw.
 - **Collect.** Most rooms hold a **shard**, and big chambers sometimes hold
   two. Three shards fuse into one **charge** of entropy.
 - **Lock first, key later.** A key only turns up after you've seen a lock.
@@ -47,10 +47,11 @@ Determinism).
   shadow play and the hook.
 - **Rerolling (collapse).** A new room is **provisional** until you open a
   door out of it (or a loop opens one into it); from then on it's
-  **committed** for good (`DP.committed`, derived from history). Stand at
-  the door into a provisional room and hold E (1 s): the
-  door shuts and that one room dissolves, for **1 charge**. Reopening the
-  door draws fresh entropy: that's the reroll. A provisional room never has
+  **committed** for good (`DP.committed`, derived from history). Close the
+  door into a provisional room (a tap of E), then, from the side you came
+  in by, hold E at it (1 s): that one room dissolves, for **1 charge**.
+  Opening the door again draws fresh entropy: that's the reroll. (A tap at
+  that closed door just opens it again.) A provisional room never has
   rooms beyond it, so a reroll is always one room. Doors into committed
   rooms offer nothing. Green arrows (on the floor and the maps) mark only
   the doors into provisional rooms. Scouting is fine: walk in, take what's
@@ -371,14 +372,17 @@ Determinism).
   prompt pressed and held on touch) while a ring fills over the target,
   with the action's icon in it (on touch, the E prompt's key fills too,
   and its line ends "· hold"). Let go early and nothing happens; one hold,
-  one action. **Doors only open this way**: walking into one does nothing
-  (the first time, a caption says to hold E). Opening and closing a door
-  take 0.35 s, wiping chalk 0.4 s, lighting or snuffing a sconce or saving
-  at a lantern 0.5 s, waking a waystone 0.7 s, the door to a lost path
-  0.7 s (it brings up a choice), and rerolling a room, which costs entropy
-  and can't be undone, 1 s, or 2 s if something of yours is in it (a pack).
-  Grabbing a block takes 0.4 s and travelling from a waystone 0.5 s.
-  Climbing, setting something down and the surface door are a tap.
+  one action. **Doors are the exception**, everyday enough for a tap: E
+  opens or closes a door you're close to and facing, from either side
+  (walking into one does nothing; the first time, a caption says E opens
+  it). Wiping chalk takes 0.4 s, lighting or snuffing a sconce or saving at
+  a lantern 0.5 s, the door to a lost path 0.7 s (it brings up a choice),
+  and rerolling a room, which costs entropy and can't be undone, 1 s, or
+  2 s if something of yours is in it. Grabbing a block takes 0.4 s.
+  Where one thing takes both (a closed door you could reroll, an awake
+  waystone), letting go before the ring fills is the tap (open it, travel),
+  and the ring only shows after 0.15 s. Climbing, setting something down
+  and the surface door are a tap.
   Something you can't do right now (a lock with no key, a reroll you can't
   afford) is a tap that says why. Over the ring, icons show anything of
   yours at stake (a pack, a hall's lantern), red and crossed out when the
@@ -389,10 +393,11 @@ Determinism).
   confirms it, Esc, W or S backs out. An option you can't take now is
   muted and says why. On touch, press and hold an option (`choice.js`,
   `W.openChoice`, for anything that needs one later).
-- **Closing doors.** Any opened door closes (hold E at it, from either
-  side), for free, except a door into a provisional room: closing that one
-  is the reroll. A closed door is a wall to you, to ghosts and to light
-  until you open it again (hold E, from either side). Closed doors
+- **Closing doors.** Any opened door closes (E, from either side), for
+  free, a door into a provisional room included (rerolling is its own act,
+  above). A closed door is a wall to you, to ghosts, pixies and creepers
+  and to light until you open it again (E, from either side): shut one to
+  keep something in, or out. Closed doors
   are kept with the run (`run.closed`, by connection) and show on the maps
   as an orange bar.
 - **All your jars share one slot.** It's grouped by what they hold (empty,
@@ -475,7 +480,7 @@ Determinism).
   and the chart view all keep it.
 - **Locked doors.** Rare, and they appear past depth 3. Select a key (it's
   a tool on the hotbar) and press F at the door: the key turns. Then open
-  it as usual (hold E). E alone at a locked door only says so. The **first room past a locked door** is special:
+  it as usual (E). E alone at a locked door only says so. The **first room past a locked door** is special:
   it's worked out from seeds (the door it was opened through was generated
   locked), so every client and every replay agrees. It has a faint gold
   warmth on its floor, "beyond a lock" in its caption, and a gold outline
@@ -586,8 +591,8 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Parameter | Value |
 | --- | --- |
 | Move | WASD / arrows (Shift runs at 4 cells/s instead of 2.4); touch: drag for a stick |
-| Open a door | hold E (or the E prompt) for 0.35 s; the same for a door you closed, from either side. Walking into one doesn't open it |
-| Hold to act | `HOLD` in `actions.js`: open / close 0.35 s, wipe 0.4, light / snuff / save 0.5, wake 0.7, a lost path's door 0.7 (`lostDoorHold`), confirming a choice 0.8 (`choiceHold`), reroll 1.0 (× 2, `rerollLoseFactor`, with something of yours in the room); anything else on E is a tap |
+| Open a door | a tap of E (or the E prompt), within 0.6 cells of its middle and facing it (within 60°); the same to close it, or open it again, from either side. Walking into one doesn't open it |
+| Hold to act | `HOLD` in `actions.js`: wipe 0.4, light / snuff / save 0.5, grab 0.4, a lost path's door 0.7 (`lostDoorHold`), confirming a choice 0.8 (`choiceHold`), reroll 1.0 at a closed door into a provisional room (× 2, `rerollLoseFactor`, with something of yours in the room); a hold with a tap of its own shows its ring after 0.15 s (`TAP_GRACE`); anything else on E is a tap |
 | Entropy | a fluid amount in charges (`run.fuel`): start with 2, hold up to 6 (`chargesMax`, was 8); a shard is a third of a charge |
 | Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
 | Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 2 shards (`restoreCharges`, was 1 charge); off its mark takes back what it paid (never below 0.05) |

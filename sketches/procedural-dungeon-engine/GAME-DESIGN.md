@@ -67,8 +67,11 @@ door into a room that already exists. A committed room can't be rerolled.
   room's doors from inside it, and opening one commits it. So a reroll only
   ever touches **one room**, and its price is always the same. There's no
   "you just erased fifteen rooms" surprise, and no price preview to read.
-- **Rerolling** happens from the door you came through, as collapsing does
-  now: close it, the room dissolves, and reopening it rolls a fresh room.
+- **Rerolling** happens from the door you came through: close it (a tap,
+  like closing any door), then hold E at it, and the room dissolves;
+  opening it again rolls a fresh room. (Until 2026-10-26, closing that
+  door was the reroll; now any door closes for free, and the reroll is a
+  deliberate hold.)
 - **The cost** is one entropy charge (today's per-room price) plus
   **corruption**. The collapsed room leaves its footprint (a trace), and a
   new room over a footprint has cracked tiles and a higher ghost chance.
