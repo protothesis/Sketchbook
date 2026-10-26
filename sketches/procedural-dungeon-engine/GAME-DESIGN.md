@@ -492,8 +492,8 @@ fuel you need to get there.
   light goes, and creepers wait just past that edge. Smaller than the old
   falloff, which lit across whole rooms. The edge is where a sphere of
   light around the lamp meets the floor, so on walls it curves like a pool
-  of light. On the floor it steps down to it in three bands; walls get the
-  plain edge (2026-10-26).
+  of light. On the floor it steps down to it in three bands; walls have no
+  edge and fade smoothly to dark over the same stretch (2026-10-26).
 - **Running out:** the lamp goes out and stays out until you relight it
   (R, a shard), and the dark drains your psychic stamina (section 12). Find light or entropy in time, or pass out and
   wake at your last waystone. Everything else stays: the map, what you

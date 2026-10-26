@@ -633,9 +633,10 @@ All notable changes to this sketch are logged here, per
   (centred over you at the lamp's height). On the floor nothing changes
   and creepers read the same edge. On walls the edge and the bands curve
   like a pool of light. `LIGHT.sphere` (on) switches back to the cylinder
-  for comparison. Bands only on faces turned up (the floor, block tops),
-  blending out as a face turns upright, so walls get the plain curved edge
-  (`LIGHT.wallBands`, 0; 1 bands walls too). Banding is on by default, with the playtest settings: 3
+  for comparison. The hard edge and bands are only on faces turned up (the
+  floor, block tops). Walls and other upright faces fade smoothly to dark
+  across the bands' stretch instead, a ramp that roughly follows the
+  bands' steps (`LIGHT.wallSmooth` 1, `wallCurve` 1). Banding is on by default, with the playtest settings: 3
   bands of 0.32 cells on the floor, the outermost at 20% (was 0.22 and
   30%, off). Screenshots in `notes/screenshots/lamp-edge-sphere-*.png`
   (`-floor-bands` is the default)
