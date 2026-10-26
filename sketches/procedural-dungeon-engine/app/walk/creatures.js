@@ -17,7 +17,7 @@
   const CREATURE = {
     tall: 1.5 * UNIT,    // default: blocks taller than this are obstacles; lower ones it floats over
     radius: 0.14,        // kept this far from the sides of blocks in its way
-    lightRange: 4.5,     // cells: how far the lantern "touches" (lightReaches' default)
+    lightRange: 4.5,     // cells: lightReaches' default range, when no light is involved (a creeper's line of sight to you)
   };
 
   const blocksAt = (cx, cy) => state.blockAt.get(DE.key(cx, cy)) || [];

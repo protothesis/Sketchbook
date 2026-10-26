@@ -5,7 +5,7 @@
 
   const W = global.DungeonPlay.walk;
   const { DE, THREE, S, UNIT, scene, state, lantern, noteUnmade, roomGap,
-    lowBlockTop, driftToward, followPath, lightReaches } = W;
+    lowBlockTop, driftToward, followPath } = W;
 
   // ---------------------------------------------------------------------------
   // Hash ghosts
@@ -185,14 +185,14 @@
   function updateGhosts(dt) {
     const p = state.player;
     const frozen = state.paused || !!state.bigmap;
-    const lamp = { x: lantern.position.x / S, y: lantern.position.z / S, h: lantern.position.y / S };
+    const lamp = W.lampLight(); // your light's pool: a ghost notices you inside it (light.js)
     let nearest = Infinity, touching = false;
     for (const g of state.ghosts.slice()) {
       // A covered or empty lamp can't be noticed. A ghost held by something
       // it's drawn to (a pixie, by the ecology's rules) forgets you.
       const held = frozen ? g.held : W.ecology.heldBy('ghost', g);
       g.held = held;
-      const lit = W.lampOn() && lightReaches(lamp, { x: g.x, y: g.y, h: g.h }) && !held;
+      const lit = W.light.litBy(lamp, g.x, g.y, g.h) && !held;
       g.litNow = lit;
       if (!frozen && held && g.mode !== 'wander' && g.stun <= 0) {
         g.mode = 'wander'; g.lit = 0; g.ring = 0; g.dark = 0; g.target = null; g.pause = 0;

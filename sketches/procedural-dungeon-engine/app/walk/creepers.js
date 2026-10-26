@@ -307,7 +307,7 @@
     // Caught in your light, inside its edge: flinch, blink it off, dash for the edge.
     // (A bold one's edge is inside the light; it doesn't flinch there.)
     c.dazeT -= dt;
-    if (c.dazeT <= 0 && d < Math.min(W.lightRadius(), keep - CREEPER.postTol) && W.lightReaches(lamp, { x: c.x, y: c.y, h: CREEPER.lightH }, keep + 1)) {
+    if (c.dazeT <= 0 && d < keep - CREEPER.postTol && W.light.litBy(lamp, c.x, c.y, CREEPER.lightH)) {
       c.dazeT = CREEPER.daze.cooldown;
       c.burst = CREEPER.daze.burst; c.gap = 0;
       Object.assign(h, { phase: 'windup', t: 0, dur: CREEPER.daze.windup, dashTo: c.post });
@@ -349,7 +349,7 @@
   function updateCreepers(dt) {
     const p = state.player;
     const frozen = state.paused || !!state.bigmap;
-    const lamp = { x: lantern.position.x / S, y: lantern.position.z / S, h: lantern.position.y / S };
+    const lamp = W.lampLight(); // your light's pool (light.js)
     const eyes = { x: p.x, y: p.y, h: p.z + 0.45 };
     let drain = 0;
     for (const c of state.creepers) {

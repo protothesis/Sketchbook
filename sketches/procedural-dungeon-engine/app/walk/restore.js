@@ -751,6 +751,8 @@
   const SCONCE_OUT = 0.12;   // cells from the wall's inner face to the flame
   const SCONCE_REACH = 0.65; // cells, E reach to a sconce
   const SCONCE_LIGHTS = 3;   // real lights, given to the lit sconces nearest you
+  // A lit sconce's light, and its pool (light.js): where its light shows on the floor, in bands, and what creatures read as its light.
+  const SCONCE_LIGHT = { color: 0xffa04f, intensity: 5, reach: 4, decay: 1.6, pool: 2 }; // reach, pool: cells
   const sconceGeo = {
     plate: new THREE.BoxGeometry(0.11 * S, 0.17 * S, 0.02 * S),
     arm: new THREE.BoxGeometry(0.025 * S, 0.025 * S, SCONCE_OUT * S),
@@ -762,8 +764,9 @@
   // A fixed pool, always in the scene (intensity 0 when idle): changing the
   // number of lights would recompile every material.
   const sconceLights = Array.from({ length: SCONCE_LIGHTS }, () => {
-    const l = new THREE.PointLight(0xffa04f, 0, 4 * S, 1.6);
+    const l = new THREE.PointLight(SCONCE_LIGHT.color, 0, SCONCE_LIGHT.reach * S, SCONCE_LIGHT.decay);
     scene.add(l);
+    W.light.addPooledLight(l);
     return l;
   });
 
@@ -846,18 +849,27 @@
     for (const sc of state.sconces) {
       if (sc.lit) sc.flame.scale.set(1, 1 + 0.18 * Math.sin(t * 13 + sc.phase) + 0.08 * Math.sin(t * 29 + sc.phase * 2), 1);
     }
+    shown = near.slice(0, SCONCE_LIGHTS).map((o) => o.sc);
     sconceLights.forEach((l, i) => {
       const o = near[i];
       if (!o) { l.intensity = 0; return; }
       l.position.set(o.sc.x * S, (SCONCE_Y + 0.08) * S, o.sc.y * S);
-      l.intensity = 5 * (1 + 0.08 * Math.sin(t * 17 + o.sc.phase));
+      l.intensity = SCONCE_LIGHT.intensity * (1 + 0.08 * Math.sin(t * 17 + o.sc.phase));
     });
   }
+
+  /** A sconce's pool (light.js), whether or not it has one of the real lights now; no radius unless it's lit. */
+  function sconceLight(sc) {
+    return { x: sc.x, y: sc.y, r: sc.lit ? SCONCE_LIGHT.pool : 0, from: { x: sc.x, y: sc.y, h: SCONCE_Y + 0.08 } };
+  }
+  /** The pools of the sconces that have real lights this frame, nearest first (the ones drawn). */
+  let shown = [];
+  const sconcePools = () => shown.map(sconceLight);
 
   /** Your walking speed carrying `b`, as a share of the usual. */
   const carryPace = (b) => CARRY_PACE[kindOf(b)];
 
   Object.assign(W, { SCONCE_Y, carryPace, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
     setDownBlock, updatePushBlocks, addSconces,
-    sconceNear, lightSconce, snuffSconce, updateSconces });
+    sconceNear, lightSconce, snuffSconce, updateSconces, SCONCE_LIGHT, sconceLight, sconcePools });
 })(window);
