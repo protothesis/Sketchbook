@@ -583,6 +583,19 @@ All notable changes to this sketch are logged here, per
   ring's colour). Ghosts look as before; shadow creepers get a dark disc
   with the red eye (it blinks there too), ringed red while stalking and
   faint red while lurking in your room or the next.
+- 2026-10-25: **A dev panel** (`app/walk/dev.js`), toggled with `` ` `` (backquote,
+  above Tab). It can give you any item or tool (shards, a full or empty
+  lamp, stamina, keys, doorstones, jars empty or filled, the thread, every
+  chalk colour, a crate, block or vessel in your hands). It can spawn a
+  ghost, pixie or creeper in front of you, or clear them all, and teleport
+  you to a waystone or wherever you click on the big map. It also has live
+  tuning: sliders, number boxes and checkboxes built from the tuning tables
+  on `DungeonPlay.walk` (`RULES`, `LIGHT`, `HALO`, `UNREST`, `EMBER`,
+  `STREAM`, `CREEPER`, `GHOST`, `PIXIE`, `CREATURE`, `ECOLOGY`, `WELL`,
+  `GLOW`), grouped per table with a reset per table and overall. Changed
+  values show in gold and stay across reloads (in their own localStorage
+  key, never the save). "Copy changes" puts them on the clipboard as JSON.
+  `lamp.js`, `ghosts.js` and `waystones.js` now export their tables for it.
 
 ### Fixed
 

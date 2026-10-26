@@ -565,4 +565,5 @@
 
   Object.assign(W, { gainFuel, spendFuel, takeFuel, litAt, lampOn, toggleLamp, feedFrom, updateLamp,
     updateLampLook, updateLampHud, lampLevel, lightRadius, popEntropy });
+  Object.assign(W, { LIGHT, HALO, UNREST, EMBER, STREAM }); // tuning tables (the dev panel, dev.js)
 })(window);
