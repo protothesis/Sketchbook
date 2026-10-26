@@ -29,12 +29,17 @@ decisions, see [`NOTES.md`](NOTES.md).
    lamp a place to rest (snuff it and its shard comes back).
 7. **Arrive.** The waypoint is a setpiece, a big hall. Wake its waystone
    and it joins your fast-travel network, and new waypoints may appear.
-8. **Using a waystone is a checkpoint.** If you faint (your psychic
+   *(Decided 2026-10-26, not built: halls get a save lantern instead, and
+   waystones become blocks you place. Section 19.)*
+8. **Using a waystone is a checkpoint.** *(Decided 2026-10-26, not built:
+   you save at a save lantern, and a faint moves you without rewinding the
+   run; your pack stays where you fell. Section 17.)* If you faint (your psychic
    stamina runs out, in the dark or in a ghost's reach), you wake at the
    last waystone you used, and everything opened since becomes a **lost
    path**. Your run (what you carry, what you lit and pushed) goes back
    to how it was there. At a lost path's door you choose once: retrace it
-   (with a charged hourglass, for entropy) or let it go (section 17).
+   (F with a charged hourglass, for entropy and its pixie) or reroll it (E
+   held: something new opens) (section 17).
 9. **Harvest and plant seeds** (later) to shape the map with a scarcer
    resource than entropy.
 
@@ -63,8 +68,11 @@ door into a room that already exists. A committed room can't be rerolled.
   room's doors from inside it, and opening one commits it. So a reroll only
   ever touches **one room**, and its price is always the same. There's no
   "you just erased fifteen rooms" surprise, and no price preview to read.
-- **Rerolling** happens from the door you came through, as collapsing does
-  now: close it, the room dissolves, and reopening it rolls a fresh room.
+- **Rerolling** happens from the door you came through: close it (a tap,
+  like closing any door), then hold E at it, and the room dissolves;
+  opening it again rolls a fresh room. (Until 2026-10-26, closing that
+  door was the reroll; now any door closes for free, and the reroll is a
+  deliberate hold.)
 - **The cost** is one entropy charge (today's per-room price) plus
   **corruption**. The collapsed room leaves its footprint (a trace), and a
   new room over a footprint has cracked tiles and a higher ghost chance.
@@ -374,7 +382,8 @@ push-your-luck option.
   not at its centre, so you know roughly where, not exactly.
 - **Far apart.** Opening doors costs nothing, so a waypoint has to be a
   journey: two near (25–35 cells) and one far (45–60) to start.
-- **Waking a waystone reveals more,** not arriving: 0–3, with 0 and 3
+- **Waking a waystone reveals more** (to become: saving at a hall's
+  lantern for the first time, section 19), not arriving: 0–3, with 0 and 3
   rare, and never 0 while no pin is left waiting. Arriving at every hall
   and adding three each time filled the map with pins (playtest,
   2026-10-22).
@@ -404,6 +413,10 @@ push-your-luck option.
   stops being fun or fast.
 
 ## 9. Setpieces, the starter hall and waystones
+
+> **Changing (decided 2026-10-26, not built):** halls get a save lantern
+> instead of a waystone, and waystones become blocks you carry and power.
+> See section 19. Ley lines and fares carry over.
 
 **Halls** are a new room archetype: large (7–9 cells a side for setpieces,
 6–8 for the starter), a rectangle with notched corners so it reads
@@ -501,7 +514,9 @@ fuel you need to get there.
   (R, a shard), and the dark drains your psychic stamina (section 12). Find light or entropy in time, or pass out and
   wake at your last waystone. Everything else stays: the map, what you
   carry, what you restored. **You lose only your position.** Start gentle;
-  add bite (dropped items, a corpse run) only if it's too soft.
+  add bite (dropped items, a corpse run) only if it's too soft. *(The bite
+  is decided, 2026-10-26: you wake at your last save lantern, and your pack
+  stays where you fell. Section 17.)*
 
 **Covering the lamp** (R, built 2026-10-22): no light, no burn, and
 ghosts can't notice you, at the price of the dark wearing on your stamina
@@ -538,7 +553,8 @@ but name:
 - **The dark** drains it more slowly (about 12 s from full): an empty or
   covered lamp, away from a lit sconce.
 - **Empty: you pass out** and wake at your last waystone, with only your
-  position lost.
+  position lost. *(To become: your last save lantern, with your pack left
+  where you fell. Section 17.)*
 - **It comes back** in light, once nothing has drained it for a moment.
 
 **Why a meter, not a respawn on contact:** you can push a door open into a
@@ -669,13 +685,13 @@ they're apart now:
 
 - **A lost path** is quiet: drawn in violet on the map, no cracks, no
   ghosts. Its door has a violet seam. It waits for your choice.
-- **Retrace it** (E at the door): the whole path comes back as you left it
+- **Retrace it** (F at the door with a charged hourglass in hand): the whole path comes back as you left it
   (same rooms, same ids and seeds), for **a shard per room, at least a
   charge**. Rooms whose footprint has since been taken can't come back,
   and neither can anything beyond them: those turn to corruption. Only
   with a **charged hourglass** (below). Without one, a lost path can only
   be let go.
-- **Let it go** (push the door): something new opens, and the whole path
+- **Let it go** (E held at the door, a reroll): something new opens, and the whole path
   turns to corruption, loud traces like a reroll's, so the new room grows
   over cracked, haunted ground.
 - **Ignore it**, and each later faint dims it; the second one fades it:
@@ -700,17 +716,84 @@ what's in them. A faint keeps them, whatever it does with the rest of what
 you carry (the coin purse will be equipment too). Code: `hourglass.js`,
 with `canRetrace()` and `spendHourglass()` for the door code.
 
-**Next, after the door rework is tested:** *use* the charged hourglass on
-a lost path's door to lock in the choice to restore it, the way a key is
-used on a locked door (F with it in hand). That spends the pixie, and
-still costs entropy. For now the door just checks for a charged hourglass
-when you retrace with E.
+**The hourglass is the key (built 2026-10-26, after the door rework).**
+With the choice at a lost path's door (below) working, the hourglass took
+over retracing: F with a charged hourglass in hand at the door retraces the
+path, the way a key in hand unlocks a locked door. It spends the pixie, and
+still costs entropy. E held at the door just rerolls the path (the reroll
+ring and its loss icons). So without a charged hourglass all you see there
+is the reroll, which is the point: the hourglass is how retracing is earned,
+and a door with one option doesn't need a menu. The choice (retrace or
+reroll) is kept behind `RULES.lostDoorChoice`, off, in case the
+item-as-key doesn't feel right; on, its retrace needs a charged hourglass
+and spends the pixie too.
 
-### Needs a design pass: what a save keeps (open, 2026-10-24)
+### Decided: a faint moves you, it doesn't rewind (built 2026-10-26)
 
-Found in playtesting, deliberately not fixed yet. Checkpoints, progress and
-waystone interactions are tangled, and want thinking through together, in
-one place, before anything changes.
+The design pass below is settled and built. Where the section above says
+the run rolls back, or that you wake at a waystone, this replaces it.
+
+**Nothing in the world is undone by a faint.** What you restored, the
+rooms you opened, what you put in or took out of containers, and the
+waystones you placed all stay as you left them. A faint resets *where you
+are*, not *when*.
+
+- **You wake at the save lantern you last used** (section 19). Saving is
+  its own act, at its own object, so it no longer hides inside a waystone
+  that's really for travel.
+- **The ground since your save is suspended.** Rooms that weren't standing
+  at your last save become a lost path, as today, but exactly as you left
+  them: blocks home, vessels moved, chests stocked. Retrace, let go and
+  ignore work as above.
+- **Your pack stays where you fell.** What you were carrying drops at the
+  spot you fainted. If that's on the suspended path, you retrace it to get
+  your things back. The spot shows on the maps as a **flame** while the
+  path is still there, and clears when the path fades or you let it go,
+  and your pack goes with it. This should make carrying everything
+  everywhere a risk, and venturing out a deliberate act.
+- **The run doesn't roll back,** so there's no snapshot for it to roll back
+  to. Resume stays an autosave (where you are). The second slot shrinks to
+  your respawn: which lantern, and which rooms were standing when you saved
+  there.
+- **No duplication, by construction.** You and the containers follow the
+  same rule (nothing is undone), so storing something and fainting can't
+  copy it.
+
+The cost of a faint is **ground and your pack, never the work you did**.
+Redoing a tidied room would be the worst kind of penalty for this game.
+
+**Settled while building (2026-10-26):**
+
+- **The pack is everything you carry,** your lamp's entropy included, so
+  a full lamp isn't lost, just left behind. The hourglass (once the
+  thread) stays with you: it's equipment (above). Your lamp takes what it can hold when you
+  pick the pack up; the rest stays in it.
+- **You wake with 2 charges** (`wakeCharges`, the starting amount), so a
+  faint never strands you in the dark.
+- **Each pack follows its path.** Faint again before fetching one and it
+  stays where it is; its path dims, and the pack goes when the path fades
+  (or is rerolled). Two packs can lie out at once.
+- **A retraced room's creatures roll again,** as if it were new: no free,
+  ghost-free path.
+- **A lost path holds its ground,** like a waypoint's reserved footprint:
+  no new room grows over it, so it can always come back (a room opened
+  next to one used to grow over it and spoil the retrace). A door onto that
+  ground is a second door to the path, with the same choice: retrace (then
+  it opens onto the path like a loop) or open anyway (the path is let go).
+  The engine's `heldAt`; on from a 'hold' event in the history, so records
+  from before replay as they were.
+- **Doors only open with E held,** and the door to a lost path brought up a
+  choice (retrace or reroll) instead of pushing it open to let it go (since
+  the hourglass became the key, E held there rerolls, and the choice is
+  behind `lostDoorChoice`). The
+  push and the hold meant two different things at one door, and the push
+  won by accident. The choice is generic (`choice.js`), for anything that
+  needs one later.
+- **A reroll that would lose something of yours takes twice as long,** and
+  icons over the hold ring show what (a pack; a hall's lantern on a lost
+  path), red and crossed out when it would be lost.
+
+The original problem and questions, kept for the reasoning:
 
 **The symptom.** You wake in a waystone hall and the blocks you pushed home
 and the sconces you lit there are undone, every time.
@@ -789,6 +872,90 @@ changes the moods of saved expeditions (not their layouts).
 damp that dims the lamp), regions of material as well as mood, and
 regions that know their size (a region that has run long enough ends).
 
+## 19. Save lanterns and waystone blocks (built 2026-10-26)
+
+The old waystone did three jobs: travel, checkpoint and goal. Touching it
+to save felt wrong, because using it opens the travel map, and you don't
+want to travel. So the jobs split between two objects: one that only saves,
+and one that only travels.
+
+### Save lanterns (built 2026-10-26)
+
+A lantern the size of one block, on a dark stone plinth one block wide and
+two tall. Every hall has one: the starter hall, every setpiece hall and
+the unmarked ones, on the hall's centre cell.
+
+- **Always lit, dimly:** a low red flame, flickering. Nothing to wake, no
+  cost.
+- **E saves.** The flame burns bright for a moment (a flash, a "saved"
+  notice), then settles back to its slow, dim flame. That's all it does.
+- **It's your only respawn** (section 17's decision): you wake at the last
+  lantern you saved at.
+- **It shelters the lamp,** like a lit sconce: it owns a light pool, and
+  standing in it your lamp doesn't burn. Lantern halls are oases.
+- **On the minimap,** like waystones today.
+- **Waypoints are lantern halls** (for now). Saving at a hall's lantern
+  for the first time is what reveals new waypoints (section 8's 0–3 rule
+  moves here from waking a waystone).
+- In the ecology it acts like a sconce: its pool pushes ghosts and
+  creepers out, and pixies flee it.
+
+### Waystone blocks (built 2026-10-26)
+
+Waystones become **1x1 blocks you can carry**, so the fast-travel network
+is yours to build. You decide what's worth travelling to, and you
+"refactor" the network by moving stones around in the world.
+
+- **The look:** a dark, glassy block with a random sigil on its face that
+  glows while it's powered.
+- **Carried like any block:** one at a time, it slows you, no running or
+  climbing. Less free than a doorstone, on purpose.
+- **Powered with F, once:** a full jar in hand pours its entropy or its
+  pixie in; the lamp in hand gives it a charge. Each ley line still costs a
+  shard to ride.
+- **A pixie's stone still counts as a pixie,** so it draws ghosts, with no
+  new rule. (Whether it should also reach farther is for tuning.)
+- **One in every hall, or within two rooms of it** (decided 2026-10-26):
+  the hall in its pristine state had one, and the ruin may have scattered
+  it nearby. Rooms grow as doors open, so the hall owes a stone, and one of
+  the first two rooms grown from its doors pays the debt (seeded, so replay
+  stays exact; a reroll keeps the debt).
+- **The starter hall starts with one, already powered,** like the awake
+  starter waystone today.
+- **Powered like a sconce is lit:** a one-off cost, and that's it. Entropy
+  doesn't drain out of it over time (this replaces "entropy lasts a while"
+  below). A powered stone stays powered while you carry it; it just leaves
+  the network while it's in your hands, and links up wherever you set it
+  down. Pixie or entropy may still differ in reach or in what they draw.
+- **Rerolls: no exception.** A stone in a provisional room that you reroll
+  despawns with the room, like any block (section 3). Section 1's rule
+  stays clean. The door should show that something of yours is inside
+  before you reroll (section 15). If losing things that way stings in
+  play, the "kept for later" list could hand them back at your feet.
+- **Faints:** a stone you're carrying drops with your pack. A stone on a
+  suspended path goes dark in the network until you retrace it, which is
+  one more reason to go back.
+- **Later:** a **vortex satchel**, equipment that stashes a few blocks in
+  another dimension, so they weigh nothing. It takes an equipment slot,
+  not a hand. With the coin purse, that makes two things that want
+  equipment slots: part of the inventory conversation.
+
+This replaces the doorstone-style "placed waystone" (pick up, place once,
+fixed for good) from the 2026-10-25 memo.
+
+**Saves:** halls change, so this bumps the build stamp, and older saves
+won't load (section 17's policy).
+
+**Open:**
+
+- E on a block lifts it, and E at a waystone opens the travel map. Decided
+  (2026-10-26), like the vessel: hold E grabs (as every object), F with a
+  full jar powers it, and a tap of E at a powered stone opens the travel
+  map (opening a map changes nothing in the world, so it's a tap).
+- The network rebuilds from where the powered stones stand whenever one
+  moves (each links to its two nearest), so moving stones rewires it.
+- Whether pixie stones reach farther: tune with the dev panel.
+
 ## First slice (built 2026-10-21)
 
 Built as planned; kept for the record.
@@ -863,7 +1030,15 @@ of waypoints; seeds (section 4); secrets.
 The game loop (section 17): save slots with a build stamp, a title screen,
 a pause menu, waystones as checkpoints, faints that cost every room and
 carved door since the checkpoint (and roll the run back), and lost paths
-you retrace (with the thread, now a charged hourglass) or let go.
+you retrace (with the thread, later a charged hourglass) or let go.
+
+## Fifth slice (built 2026-10-26)
+
+Section 17's decision and section 19's save lanterns: faints that move you
+without rewinding, packs where you fell, save lanterns in every hall as the
+only respawn, doors that open only with E held, and a generic choice for
+the door to a lost path (retrace or reroll), with what's at stake shown
+over the hold ring.
 
 ## Open questions
 
@@ -885,5 +1060,5 @@ you retrace (with the thread, now a charged hourglass) or let go.
 - Is a shard per room the right retrace price? Is the hourglass too rare
   now that it needs a pixie too, or should retracing become an earned
   ability instead?
-- Should touching a waystone stay the only way to move your respawn, or
-  should something else (resting? lighting a sconce?) set it too?
+- ~~Should touching a waystone stay the only way to move your respawn?~~
+  Decided 2026-10-26: saving at a save lantern is the only way (section 19).

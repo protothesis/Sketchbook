@@ -209,6 +209,35 @@ kbd {
 .holdring .bg { stroke: rgba(20, 12, 30, 0.7); }
 .holdring .fg { fill: none; stroke: var(--accent); stroke-linecap: round; }
 .holdring span { position: absolute; inset: 0; display: grid; place-items: center; color: #ffe8d2; font-size: 15px; line-height: 1; }
+/* What's yours at stake, over the ring and in a choice: red and crossed out when it would be lost. */
+.things { display: flex; gap: 4px; justify-content: center; }
+.things[hidden] { display: none; }
+.holdring .things { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 4px; }
+.things .thing { position: relative; width: 24px; height: 24px; padding: 2px; border-radius: 5px;
+  background: rgba(14, 10, 8, 0.7); color: #ffd9a8; box-sizing: border-box; }
+.things .thing svg { width: 100%; height: 100%; display: block; }
+.things.lose .thing { color: #ff6b5a; background: rgba(40, 8, 6, 0.8); }
+.things.lose .thing::after { content: ''; position: absolute; inset: 1px;
+  background: linear-gradient(45deg, transparent 46.5%, rgba(255, 59, 47, 0.9) 46.5%, rgba(255, 59, 47, 0.9) 53.5%, transparent 53.5%),
+    linear-gradient(-45deg, transparent 46.5%, rgba(255, 59, 47, 0.9) 46.5%, rgba(255, 59, 47, 0.9) 53.5%, transparent 53.5%); }
+/* A choice in the world (choice.js): options side by side over what it's about. */
+.choice { position: fixed; z-index: 4; transform: translate(-50%, -100%); display: grid; gap: 6px; justify-items: center;
+  padding: 8px 10px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border);
+  color: var(--text); font-size: 12px; max-width: calc(100vw - 32px); }
+.choice[hidden] { display: none; }
+.choice-title { color: var(--muted); }
+.choice-opts { display: flex; gap: 6px; }
+.choice-opt { display: grid; gap: 1px; justify-items: center; min-width: 84px; padding: 5px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: rgba(14, 10, 8, 0.6); color: var(--text); font: inherit; cursor: pointer; }
+.choice-opt .ico { font-size: 15px; line-height: 1; }
+.choice-opt small { color: var(--muted); font-size: 10.5px; }
+.choice-opt.sel { border-color: var(--entropy); box-shadow: 0 0 0 1px var(--entropy) inset; }
+.choice-opt.sel.lose { border-color: #ff6b5a; box-shadow: 0 0 0 1px #ff6b5a inset; color: #ffc2b8; }
+.choice-opt.off { color: var(--muted); }
+.choice-opt.off b { text-decoration: line-through; }
+.choice-hint { color: var(--muted); font-size: 10.5px; }
+.prompt.save { color: #ffb08f; border-color: rgba(255, 110, 70, 0.55); }
+.prompt.lose { color: #ffb2a6; border-color: rgba(255, 107, 90, 0.6); }
 .prompt.lock { color: #9cc6ea; border-color: rgba(111, 168, 216, 0.6); }
 .prompt.collapse { color: var(--entropy); border-color: rgba(181, 156, 255, 0.6); }
 .prompt.surface { color: #dcebff; border-color: rgba(220, 235, 255, 0.55); }

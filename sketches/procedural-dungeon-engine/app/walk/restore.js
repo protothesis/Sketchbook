@@ -14,9 +14,9 @@
     inDoorMouth } = W;
 
   // Seconds for the arc up over your head, or back down: stone is heavier.
-  const LIFT_TIME = { crate: 0.38, vessel: 0.32, block: 0.6 };
+  const LIFT_TIME = { crate: 0.38, vessel: 0.32, block: 0.6, waystone: 0.6 };
   // How fast you walk with it over your head (no running with anything).
-  const CARRY_PACE = { crate: 0.85, vessel: 1, block: 0.7 };
+  const CARRY_PACE = { crate: 0.85, vessel: 1, block: 0.7, waystone: 0.7 };
 
   const pushGeo = {
     block: new THREE.BoxGeometry(0.5 * S * 0.98, UNIT * S, 0.5 * S * 0.98),
@@ -128,7 +128,24 @@
     for (const pr of DP.props(space).blocks) if (pr.crate) out.push({ key: id(pr.crate.id), kind: 'crate', from: pr.crate });
     const v = DP.vessel(space);
     if (v) out.push({ key: id('vessel'), kind: 'vessel', from: v });
+    if (DP.hallKeepsStone(space)) out.push({ key: id('waystone'), kind: 'waystone', from: DP.hallStone(space) });
     return out;
+  }
+
+  /**
+   * The hall within two rooms of this one that lost its waystone and hasn't
+   * had it turn up yet (run.stonePaid), or null. The first room grown that
+   * near it holds the stone (a reroll before you take it owes it again).
+   */
+  function owingHall(space) {
+    const exp = state.exp, run = state.run;
+    let p = exp.spaces[space.parentId];
+    for (let n = 0; n < 2 && p; n++, p = exp.spaces[p.parentId]) {
+      if (p.archetype !== 'hall') continue;
+      if (DP.hallKeepsStone(p) || run.stonePaid[p.id + ':' + p.seed]) return null;
+      return p;
+    }
+    return null;
   }
 
   /**
@@ -144,12 +161,21 @@
       const rec = o || { sx: d.from.sx, sy: d.from.sy };
       rec.kind = d.kind;
       if (d.kind === 'vessel') { rec.holds = rec.holds || null; rec.n = rec.n || 0; }
+      // A hall's own stone: the starter's comes powered, and so does one whose old fixed stone you woke.
+      if (d.kind === 'waystone' && !o) rec.holds = !space.parentId || run.waystones[space.id + ':' + space.seed] ? 'entropy' : null;
       if (d.kind === 'block') {
         Object.assign(rec, { color: d.color, to: d.to, done: !!rec.done });
         // (Saves from before blocks could move: a block home has paid.)
         rec.paid = rec.paid != null ? rec.paid : rec.done ? RULES.restoreCharges : 0;
       }
       run.objects[d.key] = rec;
+    }
+    // A hall's scattered waystone, turning up near it.
+    const hall = owingHall(space), spot = hall && DP.stoneSpot(space);
+    if (spot) {
+      const hk = hall.id + ':' + hall.seed, key = space.id + ':' + space.seed + ':waystone';
+      run.objects[key] = { kind: 'waystone', sx: spot.sx, sy: spot.sy, lv: 0, holds: run.waystones[hk] ? 'entropy' : null, debt: hk };
+      run.stonePaid[hk] = key;
     }
   }
 
@@ -165,7 +191,8 @@
     if (!o) return;
     o.sx = b.sx; o.sy = b.sy; o.lv = Math.round(b.base / UNIT);
     if (b.ox || b.oy) { o.ox = +b.ox.toFixed(4); o.oy = +b.oy.toFixed(4); } else { delete o.ox; delete o.oy; }
-    if (b.vessel) { o.holds = b.holds || null; o.n = b.n || 0; } else if (!b.crate) { o.done = b.done; o.paid = +b.paid.toFixed(4); }
+    if (b.vessel) { o.holds = b.holds || null; o.n = b.n || 0; } else if (b.waystone) { o.holds = b.holds || null; }
+    else if (!b.crate) { o.done = b.done; o.paid = +b.paid.toFixed(4); }
   }
 
   /** The mark materials of push blocks whose home room is built, by key (a block may be elsewhere). */
@@ -212,6 +239,12 @@
 
   /** A built object (mesh and collision box) from its run.objects entry. Not yet in any room. */
   function makeObject(key, o) {
+    if (o.kind === 'waystone') {
+      const base = (o.lv || 0) * UNIT;
+      const b = { key, push: true, waystone: true, units: 1, base, top: base + UNIT, holds: o.holds || null, mesh: W.makeStoneMesh(key) };
+      placeSaved(b, o);
+      return b;
+    }
     if (o.kind === 'vessel') {
       const base = (o.lv || 0) * UNIT;
       const b = {
@@ -275,6 +308,7 @@
       const room = state.exp.registry[cellOf(o.sx, o.sy)];
       if (!ids.has(room)) continue;
       run.despawned.push({ key, kind: o.kind, color: o.color || null, holds: o.holds || null, n: o.n || 0, room, at: Math.round(run.walked) });
+      if (o.debt) delete run.stonePaid[o.debt]; // a hall's scattered stone, lost before it was found a home: it turns up again
       if (run.despawned.length > 200) run.despawned.shift();
       delete run.objects[key];
       n++;
@@ -319,12 +353,12 @@
     g.letGo = true; // it slows to a stop (grabInput), then maybe settles
   }
 
-  const kindOf = (b) => b.crate ? 'crate' : b.vessel ? 'vessel' : 'block';
+  const kindOf = (b) => b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block';
   // Dragging speed, cells a second: lighter things move quicker; pulling is slower.
-  const DRAG = { crate: 0.55 * W.SPEED, vessel: 0.6 * W.SPEED, block: 0.35 * W.SPEED };
+  const DRAG = { crate: 0.55 * W.SPEED, vessel: 0.6 * W.SPEED, block: 0.35 * W.SPEED, waystone: 0.35 * W.SPEED };
   const PULL = 0.7;
   // Heft: how fast it gets going (cells/s²); it stops HEFT_STOP times as fast.
-  const HEFT = { crate: 8, vessel: 9, block: 3 };
+  const HEFT = { crate: 8, vessel: 9, block: 3, waystone: 3 };
   const HEFT_STOP = 1.5;
   const SOCKET = 0.1; // cells: stopped this close to a notch (both ways), it settles in
 
@@ -557,7 +591,8 @@
     const p = state.player;
     b.liftedFrom = { sx: b.sx, sy: b.sy, base: b.base || 0, px: p.x, py: p.y, pz: p.z };
     hold(b);
-    W.showCaption(b.crate ? 'you lift the crate' : b.vessel ? 'you lift the vessel' : 'you lift the block');
+    W.showCaption(b.crate ? 'you lift the crate' : b.vessel ? 'you lift the vessel'
+      : b.waystone ? (b.holds ? 'you lift the waystone · it leaves your ley lines until you set it down' : 'you lift the waystone') : 'you lift the block');
     savePlayer();
   }
 

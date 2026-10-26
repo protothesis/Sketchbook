@@ -1,18 +1,19 @@
 // Walk mode: the hourglass (GAME-DESIGN.md, section 17). Part jar, part
 // key: a rare find (1 room in 20, depth 3+), one per run. It holds one
 // pixie, caught the way an empty jar catches one (F near it), or taken from
-// a vessel of pixies; F at a vessel pours it back. Charged, it lets you
-// retrace a path lost to a faint, and the retrace spends the pixie.
+// a vessel of pixies; F at a vessel pours it back. Charged, it's the key to a
+// path lost to a faint: F with it in hand at the path's door retraces the
+// path, and spends the pixie (and the entropy). E held there rerolls it.
 //
 // It's equipment: always with you, kept through faints along with what's
-// in it (run.equipment, the class items.js describes). The door code asks
-// canRetrace() and calls spendHourglass(); nothing else here knows doors.
+// in it (run.equipment, the class items.js describes). The door code
+// (actions.js) does the retrace, and asks canRetrace() / calls spendHourglass().
 // Loaded right after items.js (it adds itself to W.ITEMS).
 (function (global) {
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { RULES, THREE, S, state, el, ITEMS } = W;
+  const { RULES, THREE, S, state, el, ITEMS, chargeText } = W;
 
   /** The hourglass you carry ({ holds: null | 'pixie' }), or null. */
   const hourglass = () => (state.run.equipment && state.run.equipment.hourglass) || null;
@@ -82,7 +83,7 @@
     cls: 'equipment',
     take(run) {
       run.equipment.hourglass = { holds: null };
-      return `an hourglass · empty · ${W.verbF} with it near a pixie to catch one · charged, it can retrace a path lost to a faint`;
+      return `an hourglass · empty · ${W.verbF} with it near a pixie to catch one · charged, it's the key to a path lost to a faint`;
     },
     mesh: makeMesh,
     slot(run) {
@@ -90,15 +91,22 @@
       if (!hg) return null;
       return { key: 'hourglass', kind: 'hourglass', sig: hg.holds || 'empty', item: { kind: 'hourglass', holds: hg.holds } };
     },
-    title: (slot) => `hourglass (${slot.item.holds ? 'charged' : 'empty'}): F near a pixie catches it, F at a vessel pours it in or takes one out; charged, it lets you retrace a lost path`,
+    title: (slot) => `hourglass (${slot.item.holds ? 'charged' : 'empty'}): F near a pixie catches it, F at a vessel pours it in or takes one out; charged, F at a lost path's door retraces it`,
     icon(slot) {
       const ic = el('span', 'ic' + (slot.item.holds ? ' charged' : ''));
       ic.innerHTML = icon(!!slot.item.holds);
       return ic;
     },
-    /** What F does with it: the jar's catch and vessel moves, for pixies only. */
+    /** What F does with it: retrace a lost path at its door, or the jar's catch and vessel moves, for pixies only. */
     use(p, slot) {
       const hg = hourglass();
+      const door = W.doorNear(p);
+      const lost = door && (door.action === 'letgo' || door.action === 'lostdoor') ? door : null;
+      if (lost && hg.holds) {
+        const n = lost.path.traces.length, why = W.retraceBlocked(lost);
+        return why ? { action: 'retraceno', slot, why, line: { cls: 'blocked', text: `retrace your lost path · ${why}` } }
+          : { action: 'retrace', slot, door: lost, line: { cls: 'collapse', text: `retrace your lost path · ${n} room${n === 1 ? '' : 's'} · ${chargeText(lost.price)} and the hourglass's pixie` } };
+      }
       const v = W.vesselAhead(p);
       if (v) {
         if (hg.holds && (!v.n || (v.holds === 'pixie' && v.n < RULES.vesselCapacity))) {
@@ -112,10 +120,12 @@
       }
       const px = !hg.holds && W.pixieNear(p);
       if (px) return { action: 'catch', slot, jar: hg, pixie: px, line: { cls: 'jar', text: 'swipe the hourglass to catch the pixie' } };
+      if (lost) return { action: 'retraceno', slot, why: W.retraceWant(), line: { cls: 'blocked', text: `retrace your lost path · ${W.retraceWant()}` } };
       return null;
     },
     act(u) {
-      if (u.action === 'catch') W.catchPixie(u.pixie, u.jar, 'you catch the pixie in the hourglass · now it can find a lost path');
+      if (u.action === 'retrace') W.retraceThrough(u.door, !u.door.own);
+      else if (u.action === 'catch') W.catchPixie(u.pixie, u.jar, 'you catch the pixie in the hourglass · now it can find a lost path');
       else if (u.action === 'deposit') W.deposit(u.jar, u.vessel, 'hourglass');
       else if (u.action === 'withdraw') W.withdraw(u.jar, u.vessel, 'hourglass');
       else W.showCaption(u.why);

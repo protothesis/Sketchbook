@@ -24,7 +24,7 @@
   const DEV_KEY = 'dungeon-engine:dev';
   // Shown in this order; a table that isn't exported is skipped.
   const TABLES = ['RULES', 'POOL', 'LIGHT', 'HALO', 'UNREST', 'EMBER', 'STREAM', 'CREEPER', 'GHOST', 'PIXIE', 'CREATURE',
-    'ECOLOGY', 'WELL', 'GLOW', 'SCONCE_LIGHT'];
+    'ECOLOGY', 'WELL', 'GLOW', 'SCONCE_LIGHT', 'SAVE_LANTERN', 'PACK_LIGHT'];
   // Numbers that size arrays or pools when the game starts: changing them live breaks things.
   const FIXED = new Set(['STREAM.count', 'GLOW.lights', 'WELL.motes', 'WELL.notches']);
 
@@ -110,6 +110,7 @@
     ['fill lamp', () => { state.run.fuel = W.maxCharges(); after('lamp full'); }],
     ['empty lamp', () => { state.run.fuel = 0; after('lamp empty'); }],
     ['stamina', () => { state.run.stamina = 1; after('stamina full'); }],
+    ['faint', () => { W.passOut('dev · you faint'); }],
     ['key', () => { state.run.keys++; after('a key'); }],
     ['doorstone', () => { state.run.doorstones++; after('a doorstone'); }],
     ['jar', () => { state.run.jars.push({ id: 'j' + (++state.run.jarSeq), holds: null }); after('an empty jar'); }],
@@ -124,6 +125,8 @@
     ['crate', () => giveObject('crate')],
     ['block', () => giveObject('block', { color: RULES.pushColors[seq % RULES.pushColors.length] })],
     ['vessel', () => giveObject('vessel', { holds: null, n: 0 })],
+    ['waystone', () => giveObject('waystone', { holds: null })],
+    ['waystone: awake', () => giveObject('waystone', { holds: 'entropy' })],
   ];
 
   const SPAWN = [
@@ -206,12 +209,16 @@
   chip.addEventListener('click', () => toggle(true));
   const changesBox = el('textarea', { readOnly: true, placeholder: 'no changes from the defaults' });
 
-  // Waystones change as you explore, so the list is rebuilt each time the panel opens.
+  // Lanterns change as you explore, so the list is rebuilt each time the panel opens.
+  // (◉: where you'd wake; ✦: its waystone is awake.)
   const stoneBox = el('div', { class: 'btns' });
   function fillStones() {
-    stoneBox.replaceChildren(...state.waystones.map((st) =>
-      button(st.spaceId + (st.awake ? ' ✦' : ''), () => { W.placeAt(st); after('at the waystone in ' + st.spaceId); })));
-    if (!state.waystones.length) stoneBox.append(el('span', { class: 'note' }, 'no waystones found yet'));
+    const home = W.hearth();
+    stoneBox.replaceChildren(...state.lanterns.map((ln) => {
+      const st = state.waystones.find((o) => o.spaceId === ln.spaceId);
+      return button(ln.spaceId + (ln === home ? ' ◉' : '') + (st && st.awake ? ' ✦' : ''), () => { W.placeAt(ln); after('at the lantern in ' + ln.spaceId); });
+    }));
+    if (!state.lanterns.length) stoneBox.append(el('span', { class: 'note' }, 'no halls found yet'));
   }
   const mapBox = el('input', { type: 'checkbox', onchange: (e) => { mapTeleport = e.target.checked; } });
 

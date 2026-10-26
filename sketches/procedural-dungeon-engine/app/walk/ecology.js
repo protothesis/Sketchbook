@@ -54,12 +54,16 @@
     for (const o of state.pixies) out.push({ tags: ['pixie'], x: o.x, y: o.y, ref: o });
     for (const c of state.creepers) out.push({ tags: ['creeper'], x: c.x, y: c.y, ref: c });
     for (const v of state.pushBlocks) if (v.vessel && !v.carried && v.holds === 'pixie' && v.n) out.push({ tags: ['pixie', 'jarred'], x: v.sx / 2 + 0.25, y: v.sy / 2 + 0.25, ref: v });
+    // A waystone woken by a pixie still holds one: it draws ghosts like a jar does.
+    for (const v of state.pushBlocks) if (v.waystone && !v.carried && v.holds === 'pixie') out.push({ tags: ['pixie', 'jarred'], x: (v.x0 + v.x1) / 2, y: (v.y0 + v.y1) / 2, ref: v });
     for (const w of state.wells) out.push({ tags: ['well'], x: w.cell.x + 0.5, y: w.cell.y + 0.5, ref: w });
     const p = state.player;
     // Lights carry their light (light.js), which is what fleeing them tests.
     out.push(W.lampOn() ? { tags: ['player', 'light', 'lamp'], x: p.x, y: p.y, ref: p, light: W.lampLight() }
       : { tags: ['player'], x: p.x, y: p.y, ref: p });
     for (const sc of state.sconces) if (sc.lit) out.push({ tags: ['light', 'steady'], x: sc.x, y: sc.y, ref: sc, light: W.sconceLight(sc) });
+    // Save lanterns are always lit: a sconce in all but name (lanterns.js).
+    for (const ln of state.lanterns) out.push({ tags: ['light', 'steady'], x: ln.x, y: ln.y, ref: ln, light: W.lanternLight(ln) });
     for (const st of state.waystones) {
       if (st.awake) out.push({ tags: ['waystone'], x: (st.ws.x0 + st.ws.x1) / 2, y: (st.ws.y0 + st.ws.y1) / 2, ref: st });
     }

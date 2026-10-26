@@ -19,7 +19,7 @@
   const promptF = $('prompt-f') || document.createElement('button');
 
   /** "crate", "block", "vessel" (with what's in it). */
-  const objName = (b) => (b.crate ? 'crate' : !b.vessel ? 'block'
+  const objName = (b) => (b.crate ? 'crate' : b.waystone ? (b.holds ? 'waystone' : 'dormant waystone') : !b.vessel ? 'block'
     : !b.n ? 'empty vessel' : `vessel (${b.n} ${b.holds === 'pixie' ? (b.n === 1 ? 'pixie' : 'pixies') : (b.n === 1 ? 'charge' : 'charges')})`);
 
   /** E's line for the focused thing: { text, cls }. */
@@ -30,34 +30,35 @@
       case 'light': return { text: `light the sconce from your lantern · ${RULES.sconceCost} shard` };
       case 'snuff': return { text: `snuff the sconce · its shard back to your lamp` };
       case 'close': return { text: 'close the door' };
-      case 'reopen': return { text: state.push.key ? 'opening…' : 'open the door (or push)' };
-      case 'wake': return { cls: 'collapse', text: `wake the waystone · ${chargeText(RULES.waystoneCharges)}` };
-      case 'travel': return { cls: 'collapse', text: 'travel from the waystone · a shard per ley line' };
+      case 'reopen': return { text: 'open the door' + (near.why ? ' · ' + near.why : '') };
+      case 'reroll': return { cls: near.lose ? 'lose' : 'collapse',
+        text: `open the door · hold: reroll ${near.child.id} · ${chargeText(near.price.charges)}${near.lose ? ' · what\'s yours in it goes too' : ''}` };
+      case 'save': return { cls: 'save', text: 'save at the lantern · you\'ll wake here' };
+      case 'choose': return near.opt.off ? { cls: 'blocked', text: `${near.opt.label} · ${near.opt.off}` }
+        : { cls: near.opt.lose ? 'lose' : 'collapse', text: `${near.opt.label} · ${near.opt.detail || ''}` };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
-      case 'lift': return { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
+      case 'lift': return near.block.waystone && near.block.holds ? { cls: 'collapse', text: 'tap: travel from the waystone · hold: grab it' }
+        : { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
       case 'grabbed': return { cls: 'jar', text: state.grab && state.grab.moved
         ? `pushing or pulling the ${objName(near.block)} · let go of E to let go`
         : `holding the ${objName(near.block)} · let go of E to lift it · move to push or pull` };
       case 'setblock': return near.spot ? { cls: 'jar', text: `set the ${objName(near.block)} down` }
         : { cls: 'blocked', text: `no room to set it down here${near.block.spaceId !== state.exp.registry[DE.key(Math.floor(state.player.x), Math.floor(state.player.y))] ? ' · it belongs in its own room' : ''}` };
       case 'climb': return { text: state.push.key ? 'climbing…' : 'climb (or push into it)' };
-      case 'open': return { text: state.push.key ? 'opening…' : 'open the door (or push)' };
-      case 'retrace': {
-        const n = near.path.traces.length, rooms = `${n} room${n === 1 ? '' : 's'}`;
-        if (state.push.key) return { text: 'letting it go…' };
-        return !near.thread ? { cls: 'blocked', text: `your lost path · ${rooms} · ${W.retraceWant()} · push to let it go` }
-          : near.affordable ? { cls: 'collapse', text: `retrace your lost path · ${rooms} · ${chargeText(near.price)} · push to let it go` }
-          : { cls: 'blocked', text: `your lost path · ${rooms} · ${chargeText(near.price)} to retrace · push to let it go` };
+      case 'open': return { text: 'open the door' };
+      case 'letgo': {
+        // Retracing is the hourglass's (F with it in hand), shown on its own line.
+        const n = near.path.traces.length;
+        return { cls: near.lose ? 'lose' : 'collapse', text: `hold: reroll your lost path · ${n} room${n === 1 ? '' : 's'} · the path is gone` +
+          (near.lose ? ` · what's yours on it goes too` : '') +
+          (near.charged && state.sel !== 'hourglass' ? ' · or your hourglass in hand to retrace it' : '') };
+      }
+      case 'lostdoor': {
+        const n = near.path.traces.length;
+        return { cls: 'collapse', text: `your lost path · ${n} room${n === 1 ? '' : 's'} · retrace or reroll` };
       }
       case 'locked':
         return { cls: 'blocked', text: run.keys > 0 ? 'a locked door · a key in hand unlocks it' : 'a locked door · you need a key' };
-      case 'collapse': {
-        // Only a provisional room (one with no door out opened yet) offers this.
-        const pr = near.price;
-        return near.haunted ? { cls: 'blocked', text: `a hash ghost lingers in ${near.child.id} · no rerolling it while it's there` }
-          : near.affordable ? { cls: 'collapse', text: `close & reroll ${near.child.id} · ${chargeText(pr.charges)}` }
-          : { cls: 'blocked', text: `not enough entropy to reroll · ${chargeText(pr.charges)}` };
-      }
     }
     return null;
   }
@@ -78,6 +79,8 @@
     if (near.action === 'withdraw') return { cls: 'jar', text: `take ${near.vessel.holds === 'pixie' ? 'a pixie' : 'a charge'} out of the vessel into the jar` };
     if (near.action === 'vesselno') return { cls: 'blocked', text: near.vessel.n >= RULES.vesselCapacity ? 'the vessel is full' : 'the vessel holds something else' };
     if (near.action === 'pour') return { cls: 'collapse', text: `pour the jar into your lamp · 1 charge${W.lampRoom() < 0.99 ? ' (your lamp takes only ' + chargeText(W.lampRoom()) + ')' : ''}` };
+    if (near.action === 'powerlamp') return { cls: 'collapse', text: `wake the waystone from your lamp · ${chargeText(RULES.waystoneCharges)}` };
+    if (near.action === 'power') return { cls: 'jar', text: `pour the jar into the waystone · its ${near.jar.holds === 'pixie' ? 'pixie' : 'entropy'} wakes it` };
     if (near.action === 'unlock') return { cls: 'lock', text: `unlock the door · 1 of ${state.run.keys} key${state.run.keys === 1 ? '' : 's'}` };
     return null;
   }
@@ -106,16 +109,21 @@
     updateFocus(nearE);
     W.updatePreview(nearE);
     updateRing(state.hold.ring);
+    W.updateChoice(focusRect);
   }
 
   // The hold ring: like a ghost's, a circle that fills clockwise with the
   // action's icon inside, just above what you're acting on. The E prompt's
   // key fills with it.
   const RING_R = 15, RING_C = 2 * Math.PI * RING_R;
+  // Above it, the icons of anything of yours at stake (choice.js), red and
+  // crossed out when the action would lose them.
   const ringEl = el('div', 'holdring');
   ringEl.innerHTML = `<svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="${RING_R}"/>` +
     `<circle class="fg" cx="18" cy="18" r="${RING_R}" stroke-dasharray="${RING_C}" stroke-dashoffset="${RING_C}"/></svg><span></span>`;
   ringEl.hidden = true;
+  const ringThings = el('div', 'things');
+  ringEl.append(ringThings);
   document.body.append(ringEl);
   const ringFg = ringEl.querySelector('.fg'), ringIcon = ringEl.querySelector('span');
   function updateRing(ring) {
@@ -125,6 +133,7 @@
     if (!on) return;
     ringFg.setAttribute('stroke-dashoffset', (RING_C * (1 - ring.v)).toFixed(2));
     if (ringIcon.textContent !== ring.icon) ringIcon.textContent = ring.icon;
+    W.iconRow(ringThings, ring.things || [], ring.lose);
     ringEl.style.left = (focusRect.x0 + focusRect.x1) / 2 + 'px';
     ringEl.style.top = focusRect.y0 + 'px';
   }
@@ -209,16 +218,15 @@
     const visible = (c) => ox + (c.x + 1) * px > 0 && ox + c.x * px < w && oy + (c.y + 1) * px > 0 && oy + c.y * px < h;
     const gap = px > 4 ? 1 : 0;
     const cell = (c) => ctx.fillRect(ox + c.x * px + gap / 2, oy + c.y * px + gap / 2, px - gap, px - gap);
-    // Traces of collapsed rooms: greyed, under everything live. Lost paths
-    // (a faint's, waiting for a choice) in violet, dimmer once dimmed;
-    // faded ones not at all.
+    // Traces of collapsed rooms: greyed, under everything live. Faded ones
+    // not at all. Lost paths (a faint's, waiting) are drawn after, below.
     for (const id in exp.traces || {}) {
       const t = exp.traces[id];
-      if (t.cause === 'faded') continue;
-      ctx.fillStyle = t.cause === 'lost' ? 'rgba(165, 140, 255, 0.3)'
-        : t.cause === 'lost-dim' ? 'rgba(165, 140, 255, 0.14)' : 'rgba(150, 146, 160, 0.22)';
+      if (t.cause === 'faded' || t.cause === 'lost' || t.cause === 'lost-dim' || exp.spaces[t.id]) continue;
+      ctx.fillStyle = 'rgba(150, 146, 160, 0.22)';
       for (const k of t.cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
     }
+    drawLostPaths(ctx, ox, oy, px, visible, cell);
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
       ctx.fillStyle = `hsla(${sp.meta.hue}, 18%, ${id === p.spaceId ? 46 : 30}%, 0.95)`;
@@ -303,7 +311,9 @@
           continue;
         }
         if (conn && !conn.loop && !DP.childThrough(exp, id, ex)) continue; // the side that opened it draws it
-        ctx.fillStyle = conn ? (W.isClosed(ex.connectionId) ? '#c4502a' : '#5fbf7a') : ex.kind === 'surface' ? '#dcebff' : isLockedNow(sp, ex) ? '#6fa8d8' : '#c4502a';
+        // A door to a lost path (its own, or one onto ground it holds): violet, like its seam.
+        ctx.fillStyle = conn ? (W.isClosed(ex.connectionId) ? '#c4502a' : '#5fbf7a') : ex.kind === 'surface' ? '#dcebff'
+          : isLockedNow(sp, ex) ? '#6fa8d8' : W.lostPathAt(id, ex.id) ? '#b59cff' : '#c4502a';
         ctx.fillRect(ox + Math.min(ax, bx) * px - (ay === by ? 0 : t), oy + Math.min(ay, by) * px - (ay === by ? t : 0),
           Math.abs(bx - ax) * px + (ay === by ? 0 : 2 * t), Math.abs(by - ay) * px + (ay === by ? 2 * t : 0));
         if (!conn) {
@@ -400,6 +410,10 @@
       }
       ctx.restore();
     }
+    // Save lanterns (a small red flame, brighter where you'd wake) and your
+    // packs (a flame where each lies, as long as its path is there).
+    W.drawLanternMarks(ctx, ox, oy, px);
+    W.drawPackMarks(ctx, ox, oy, px);
     // Waypoints still waiting: a glowing violet "?", pinned to the edge
     // when it's off the map so you always know which way to go.
     for (const r of W.waitingPins()) {
@@ -449,6 +463,73 @@
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+  }
+
+  // Lost paths, by stage. Waiting since your last faint ('lost'): a violet
+  // fill that breathes, close hatching, and a solid glowing edge. Dimmed by
+  // a second faint ('lost-dim', it fades at the next): fainter, sparse
+  // hatching, a dashed edge, a slower breath. Hatching is pinned to the map.
+  const HATCH = {};
+  function hatch(ctx, gap, alpha) {
+    const k = gap + ':' + alpha;
+    if (!HATCH[k]) {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = gap;
+      const g = cv.getContext('2d');
+      g.strokeStyle = `rgba(200, 180, 255, ${alpha})`;
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(-1, gap + 1); g.lineTo(gap + 1, -1); // one stroke per tile, so the tiles join into diagonals
+      g.moveTo(-1, 1); g.lineTo(1, -1);
+      g.moveTo(gap - 1, gap + 1); g.lineTo(gap + 1, gap - 1);
+      g.stroke();
+      HATCH[k] = cv;
+    }
+    return ctx.createPattern(HATCH[k], 'repeat');
+  }
+  const LOST_STAGE = {
+    lost: { fill: [0.22, 0.4], hz: 2.2, gap: 6, hatch: 0.55, edge: [0.55, 0.95], dash: [] },
+    'lost-dim': { fill: [0.08, 0.16], hz: 1.1, gap: 11, hatch: 0.35, edge: [0.25, 0.45], dash: [3, 3] },
+  };
+  function drawLostPaths(ctx, ox, oy, px, visible, cell) {
+    const exp = state.exp;
+    for (const cause of ['lost-dim', 'lost']) {
+      const st = LOST_STAGE[cause];
+      const cells = new Set();
+      for (const id in exp.traces || {}) {
+        const t = exp.traces[id];
+        if (t.cause === cause && !exp.spaces[t.id]) for (const k of t.cells) cells.add(k);
+      }
+      if (!cells.size) continue;
+      const b = 0.5 + 0.5 * Math.sin(state.time * st.hz);
+      ctx.save();
+      ctx.fillStyle = `rgba(165, 140, 255, ${st.fill[0] + (st.fill[1] - st.fill[0]) * b})`;
+      for (const k of cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
+      const pat = hatch(ctx, st.gap, st.hatch);
+      if (pat.setTransform && global.DOMMatrix) pat.setTransform(new DOMMatrix().translateSelf(ox % st.gap, oy % st.gap));
+      ctx.fillStyle = pat;
+      for (const k of cells) { const c = DE.parseKey(k); if (visible(c)) ctx.fillRect(ox + c.x * px, oy + c.y * px, px, px); }
+      // The edge: every side of a lost cell that isn't another lost cell.
+      ctx.strokeStyle = `rgba(190, 165, 255, ${st.edge[0] + (st.edge[1] - st.edge[0]) * b})`;
+      ctx.shadowColor = 'rgba(165, 140, 255, 0.9)';
+      ctx.shadowBlur = cause === 'lost' ? 6 * b : 0;
+      ctx.lineWidth = Math.max(1, px * 0.08);
+      ctx.setLineDash(st.dash);
+      ctx.beginPath();
+      for (const k of cells) {
+        const c = DE.parseKey(k);
+        if (!visible(c)) continue;
+        for (const f of DE.FACINGS) {
+          const n = DE.step(c, f);
+          if (cells.has(DE.key(n.x, n.y))) continue;
+          const [ax, ay, bx, by] = edgeEnds(c.x, c.y, f);
+          ctx.moveTo(ox + ax * px, oy + ay * px);
+          ctx.lineTo(ox + bx * px, oy + by * px);
+        }
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   const mm = $('minimap');
