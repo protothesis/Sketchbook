@@ -27,7 +27,7 @@
   function maxCharges() { return RULES.chargesMax + state.buff; }
 
   // ---------------------------------------------------------------------------
-  // Item kinds. Every item in a room's loot belongs to one of three classes,
+  // Item kinds. Every item in a room's loot belongs to one of four classes,
   // and the class decides how it lives in the world and in your hands:
   //
   //   pickup  floats and turns where it lies; walk into it to collect it.
@@ -39,8 +39,15 @@
   //   object  a thing in the world as itself (crates, push blocks and
   //           vessels, restore.js). Never in the bag: hold E to lift it,
   //           E again to set it down.
+  //   equipment  always with you, kept through faints (run.equipment), and
+  //           so is what's in it. One of each, ever. Collected like a tool;
+  //           on the hotbar if it has a use. A draft: the hourglass is the
+  //           first (hourglass.js), the coin purse will be next.
   //
   // `take(run, item)` adds a pickup or tool to the run and returns its caption.
+  // A kind defined in its own file can bring its own `mesh(item)`, and for
+  // the hotbar `slot(run)`, `icon(slot)`, `title(slot)`, `use(p, slot)` (F's
+  // target, with an optional prompt `line`) and `act(u)`.
   const ITEMS = {
     shard: {
       cls: 'pickup',
@@ -74,13 +81,6 @@
         return `a stick of ${color} chalk · ${W.verbF} to draw a ${CHALK[color].name}`;
       },
     },
-    thread: {
-      cls: 'pickup',
-      take(run) {
-        run.thread = true;
-        return 'a spool of thread · now a path lost to a faint can be retraced, at its door';
-      },
-    },
     jar: {
       cls: 'tool',
       take(run) {
@@ -93,8 +93,6 @@
   const shardMat = new THREE.MeshLambertMaterial({ color: 0xb59cff, emissive: 0x2c1a66 });
   const keyMat = new THREE.MeshLambertMaterial({ color: 0xe2b84a, emissive: 0x3a2606 });
   const chalkMat = new THREE.MeshLambertMaterial({ color: 0xf2efe6, emissive: 0x3a3a3a });
-  const threadMat = new THREE.MeshLambertMaterial({ color: 0xcdbcff, emissive: 0x3a2a7a });
-  const threadGeo = new THREE.TorusGeometry(0.07 * S, 0.035 * S, 8, 16);
 
   /**
    * A pickup's or tool's mesh, centred on its spot. Pickups float (see
@@ -127,9 +125,8 @@
       const jar = makeJarMesh();
       jar.scale.setScalar(0.55);
       mesh.add(jar);
-    } else if (item.kind === 'thread') {
-      const spool = new THREE.Mesh(threadGeo, threadMat); // a coil, standing on its edge
-      mesh.add(spool);
+    } else if (ITEMS[item.kind].mesh) {
+      mesh.add(ITEMS[item.kind].mesh(item));
     } else if (item.kind === 'chalk') {
       const stick = new THREE.Mesh(geo.chalk, new THREE.MeshLambertMaterial({
         color: (CHALK[item.color] || CHALK.silver).hex, emissive: 0x2a2a2a,
@@ -139,7 +136,7 @@
       mesh.add(stick);
     }
     for (const m of mesh.children) m.castShadow = true;
-    if (ITEMS[item.kind].cls === 'tool') mesh.rotation.y = parseInt(DE.hash(key, 'yaw').slice(-4), 16) / 65536 * Math.PI * 2;
+    if (ITEMS[item.kind].cls !== 'pickup') mesh.rotation.y = parseInt(DE.hash(key, 'yaw').slice(-4), 16) / 65536 * Math.PI * 2;
     return mesh;
   }
 
@@ -201,6 +198,10 @@
     }
     if (run.doorstones > 0) out.push({ key: 'doorstone', kind: 'doorstone', count: run.doorstones });
     if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
+    for (const k in ITEMS) {
+      const slot = ITEMS[k].slot && ITEMS[k].slot(run);
+      if (slot) out.push(slot);
+    }
     return out;
   }
   function selectedSlot() {
@@ -301,6 +302,9 @@
         const ic = el('span', 'ic');
         ic.innerHTML = LANTERN_SVG;
         b.append(ic);
+      } else if (ITEMS[slot.kind] && ITEMS[slot.kind].icon) {
+        b.title = ITEMS[slot.kind].title(slot);
+        b.append(ITEMS[slot.kind].icon(slot));
       } else {
         b.title = NAME[slot.kind];
         b.append(el('span', 'ic', ICON[slot.kind]));
@@ -604,6 +608,7 @@
       const w = W.wallNear(p);
       return w ? Object.assign(w, { slot }) : null;
     }
+    if (ITEMS[slot.kind] && ITEMS[slot.kind].use) return ITEMS[slot.kind].use(p, slot);
     return null;
   }
 
@@ -614,6 +619,13 @@
     if (!u) { shakeHotbar(); return; } // "that didn't work"
     if (u.action === 'lamp') { W.toggleLamp(); return; }
     if (u.action === 'unlock') { W.unlockDoor(u.door); return; }
+    if (ITEMS[u.slot.kind] && ITEMS[u.slot.kind].act) { // its own file says what F does
+      swipeAt = state.time;
+      ITEMS[u.slot.kind].act(u);
+      savePlayer();
+      W.refreshHud();
+      return;
+    }
     if (u.slot && u.slot.kind === 'jar') { // every jar action is a swipe of it
       swipeAt = state.time;
       if (u.action === 'catch') W.catchPixie(u.pixie, u.jar);
@@ -661,19 +673,20 @@
     return best;
   }
   const holdsName = (h, n) => (h === 'pixie' ? (n === 1 ? 'a pixie' : n + ' pixies') : (n === 1 ? 'a charge of entropy' : n + ' charges of entropy'));
-  function deposit(jar, v) {
+  function deposit(jar, v, name = 'jar') {
     v.holds = jar.holds;
     v.n = (v.n || 0) + 1;
     jar.holds = null;
     W.saveObject(v);
-    W.showCaption(`you pour the jar into the vessel · it holds ${holdsName(v.holds, v.n)}`);
+    W.showCaption(`you pour the ${name} into the vessel · it holds ${holdsName(v.holds, v.n)}`);
   }
-  function withdraw(jar, v) {
+  function withdraw(jar, v, name = 'jar') {
     jar.holds = v.holds;
     v.n--;
     if (!v.n) v.holds = null;
     W.saveObject(v);
-    W.showCaption(v.n ? `you take ${jar.holds === 'pixie' ? 'a pixie' : 'a charge'} back out · ${holdsName(v.holds, v.n)} left` : 'you take the last one out · the vessel is empty');
+    W.showCaption((v.n ? `you take ${jar.holds === 'pixie' ? 'a pixie' : 'a charge'} back out` : 'you take the last one out') +
+      ` into the ${name} · ` + (v.n ? `${holdsName(v.holds, v.n)} left` : 'the vessel is empty'));
   }
 
   // A vessel: a squat clay urn. What's inside shows at its mouth: pixies
@@ -731,7 +744,7 @@
   function resetHeld() { heldRig.clear(); heldSig = null; }
   function updateHeld(slot) {
     const sig = state.carry ? (state.carry.anim ? '' : 'carry:' + state.carry.key) // mid-arc: not in your hands yet
-      : !slot || slot.kind === 'lantern' ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : '');
+      : !slot || slot.kind === 'lantern' ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : slot.sig || '');
     if (sig === heldSig) return;
     heldSig = sig;
     heldRig.clear();
@@ -748,7 +761,7 @@
       m.scale.setScalar(0.55);
       m.position.set(-0.17 * S, 0.2 * S, 0.1 * S);
     } else {
-      const item = slot.kind === 'chalk' ? { kind: 'chalk', color: slot.cur.color } : { kind: slot.kind };
+      const item = slot.kind === 'chalk' ? { kind: 'chalk', color: slot.cur.color } : slot.item || { kind: slot.kind };
       m = itemMesh(item, 'held');
       m.rotation.set(-0.5, 0, 0.35); // tilted up in the hand
       m.position.set(-0.15 * S, 0.27 * S, 0.1 * S);
@@ -1039,7 +1052,7 @@
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, heldRig, resetHeld, quarterAhead, quarterReachable, updatePreview, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });

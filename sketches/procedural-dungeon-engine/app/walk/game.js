@@ -2,7 +2,7 @@
 // screen, the pause menu, and what a faint costs: every room opened since
 // your last waystone checkpoint becomes a lost path, and the run rolls back
 // to that checkpoint. At a lost path's door you choose once: retrace it (with
-// the thread, for entropy) or let it go (open the door on something new,
+// a charged hourglass, for entropy) or let it go (open the door on something new,
 // and the path turns to corruption). The save slots are in saves.js.
 (function (global) {
   'use strict';
@@ -97,11 +97,11 @@
   // ---------------------------------------------------------------------------
   // Faints
 
-  // What a faint doesn't roll back: tallies, and the thread (an ability,
-  // once found). The rest of the run goes back to the checkpoint.
+  // What a faint doesn't roll back: tallies, and your equipment (the
+  // hourglass, pixie and all). The rest of the run goes back to the checkpoint.
   const KEEP = ['walked', 'gutters', 'collapses', 'roomsCollapsed', 'chargesSpent', 'travels', 'relights',
     'covers', 'lampBurned', 'unmade', 'faints', 'roomsLost', 'retraces', 'pathsLetGo', 'pixiesCaught',
-    'wellDrawn', 'thread'];
+    'wellDrawn', 'equipment'];
 
   /**
    * Pass out for good. Lost paths you never chose for dim, or fade. Every

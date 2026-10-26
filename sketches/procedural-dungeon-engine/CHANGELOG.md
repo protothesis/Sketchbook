@@ -663,6 +663,22 @@ All notable changes to this sketch are logged here, per
   differ. Records from before (no `moodInherit` in their params) keep their
   old moods. Waypoint halls and the root roll their own. `stress-test.js`
   checks the regions.
+- 2026-10-26: **The thread is now the hourglass**, part jar, part key
+  (`app/walk/hourglass.js`). Same find (1 room in 20, depth 3+, one per
+  run), but it starts empty and holds one pixie: F with it near a pixie
+  catches it (the jar's catch), F at a vessel pours it in or takes one
+  out of a vessel of pixies. Retracing a lost path needs it charged and
+  spends the pixie (the entropy price is unchanged). A pixie glows in its
+  lower bulb and its hotbar glyph when charged; the 🧵 under the lamp is
+  gone. It's the first **equipment**, a draft item class that's always
+  with you: a faint keeps it, pixie and all (`run.equipment`, on the
+  faint's keep list in place of `thread`). The door code asks
+  `W.canRetrace()` and calls `W.spendHourglass()`, ready for the door
+  rework to wire it in properly; next (GAME-DESIGN.md, section 17) is
+  using it on a lost path's door, like a key. Run saves go to version 7:
+  a thread you'd found becomes an empty hourglass. The loot roll is
+  unchanged (its id is still `thread`), so there's no new build. Dev
+  panel: "hourglass" and "hourglass: pixie" in place of "thread".
 
 ### Fixed
 

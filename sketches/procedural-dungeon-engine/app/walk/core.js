@@ -179,7 +179,7 @@
       roomsLost: 0,          // rooms lost to them
       retraces: 0,           // lost paths retraced
       pathsLetGo: 0,         // lost paths let go
-      thread: false,         // found the thread: lost paths can be retraced (kept through faints)
+      equipment: {},         // always with you, kept through faints: { hourglass: { holds } } (hourglass.js)
     };
   }
 
@@ -259,10 +259,11 @@
   }
 
   // The old run save's format versions, for bringing a save from before
-  // save slots over (game.js). Saves are stamped with DP.saves.BUILD now:
-  // when `run` changes shape, bump that instead of adding a step here.
-  // Saves from before versioning count as version 0.
-  const RUN_VERSION = 6;
+  // save slots over (game.js). Saves are stamped with DP.saves.BUILD too,
+  // but that's for changes to what a history builds: when `run` changes
+  // shape, add a step here (NOTES.md, "Saves"). Saves from before
+  // versioning count as version 0.
+  const RUN_VERSION = 7;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
@@ -305,6 +306,13 @@
         run.objects['vessel:' + j.id] = { kind: 'vessel', sx: j.sx, sy: j.sy, holds: j.holds || null, n: j.holds ? 1 : 0 };
       }
       delete run.placedJars;
+    },
+    // 6 -> 7: the thread became the hourglass, equipment that starts empty
+    // (it needs a pixie to retrace a lost path).
+    (run) => {
+      run.equipment = run.equipment || {};
+      if (run.thread) run.equipment.hourglass = { holds: null };
+      delete run.thread;
     },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */

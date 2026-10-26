@@ -45,7 +45,7 @@
       case 'retrace': {
         const n = near.path.traces.length, rooms = `${n} room${n === 1 ? '' : 's'}`;
         if (state.push.key) return { text: 'letting it go…' };
-        return !near.thread ? { cls: 'blocked', text: `your lost path · ${rooms} · no thread to retrace it · push to let it go` }
+        return !near.thread ? { cls: 'blocked', text: `your lost path · ${rooms} · ${W.retraceWant()} · push to let it go` }
           : near.affordable ? { cls: 'collapse', text: `retrace your lost path · ${rooms} · ${chargeText(near.price)} · push to let it go` }
           : { cls: 'blocked', text: `your lost path · ${rooms} · ${chargeText(near.price)} to retrace · push to let it go` };
       }
@@ -64,6 +64,7 @@
 
   /** F's line for the item in hand; setting a jar down or drawing a mark never prompts. */
   function fLine(near) {
+    if (near.line) return near.line; // an item kind with its own prompt (hourglass.js)
     if (near.action === 'carve') {
       const n = state.run.doorstones;
       return { cls: 'chalk', text: `open a door in this wall · ${n} doorstone${n === 1 ? '' : 's'}` };
@@ -168,11 +169,9 @@
     // in its own elements (the lamp, the hotbar).
     setText('stats', `seed ${state.exp.rootSeed} · ${s.spaces} rooms · ${s.openExits} closed doors`);
     W.updateLampHud(true);
-    // Keys are a tool on the hotbar now; the thread is still shown by the lamp.
+    // Keys are a tool on the hotbar now, and the hourglass is on it too.
     const keyEl = $('keys');
     if (keyEl) keyEl.hidden = true;
-    const threadEl = $('thread');
-    if (threadEl) threadEl.hidden = !run.thread;
     refreshHotbar();
   }
 

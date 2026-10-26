@@ -133,12 +133,12 @@
     return best;
   }
 
-  /** Catch a pixie in a carried empty jar (a swipe of it, F). */
-  function catchPixie(px, jar) {
+  /** Catch a pixie in a carried empty jar, or the hourglass (a swipe of it, F). */
+  function catchPixie(px, jar, caption = 'you catch the pixie in a jar · ghosts are drawn to it') {
     jar.holds = 'pixie';
     removePixie(px);
     state.run.pixiesCaught = (state.run.pixiesCaught || 0) + 1;
-    W.showCaption('you catch the pixie in a jar · ghosts are drawn to it');
+    W.showCaption(caption);
     savePlayer();
     W.refreshHud();
   }

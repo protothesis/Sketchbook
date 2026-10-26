@@ -46,7 +46,7 @@
       best.action = 'retrace';
       best.path = path;
       best.price = W.retracePrice(path);
-      best.thread = !!state.run.thread;
+      best.thread = W.canRetrace(); // a charged hourglass (hourglass.js)
       best.affordable = best.price <= state.run.fuel + 1e-6;
     }
     if (best && best.action === 'collapse') {
@@ -279,7 +279,7 @@
     } else if (near.action === 'retrace') {
       const n = near.path.traces.length;
       if (!near.thread) {
-        W.showCaption(`your lost path (${n} room${n === 1 ? '' : 's'}) · without a thread you can't find the way back · push to let it go`);
+        W.showCaption(`your lost path (${n} room${n === 1 ? '' : 's'}) · ${W.retraceWant()} · push to let it go`);
         return;
       }
       if (!near.affordable) {
@@ -287,10 +287,11 @@
         return;
       }
       W.spendFuel(near.price);
+      W.spendHourglass();
       run.chargesSpent += near.price;
       run.retraces = (run.retraces || 0) + 1;
       const r = W.retrace(near.path);
-      W.showCaption(`the thread pulls taut · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
+      W.showCaption(`the hourglass runs back · its pixie is spent · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
         (r.gone ? ` · ${r.gone} couldn't come back` : '') + ` · −${chargeText(near.price)}`);
       savePlayer();
       W.refreshHud();
