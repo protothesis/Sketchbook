@@ -654,6 +654,12 @@ Whether a key-capable room actually shows its key depends on the run (were
 there locks waiting?), so it's run state (`run.keyRooms`), not seed state.
 Traces are engine state, rebuilt by replay from the history's reverts.
 
+A room's mood and hue come from `deriveRng(space.seed, 'meta')`, then the
+mood-region decision (keep the parent's mood or start a new one) from
+`'region'`. The knobs (`DungeonEngine.MOOD_REGIONS`) are copied into a new
+expedition's params, so a replay uses the values it was made with, and
+records from before regions keep their old moods. See GAME-DESIGN §18.
+
 Whether a room starts with a hash ghost is seeded (`'ghost'` stream, plus
 the room's imprint, which is fixed once the room exists). Where ghosts drift
 afterwards is run state: their positions are saved with the run, and each

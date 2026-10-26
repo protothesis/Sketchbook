@@ -62,10 +62,38 @@
 
   const MOODS = ['still', 'damp', 'humming', 'cold', 'echoing', 'dusty', 'breathing', 'tilted', 'warm', 'hollow'];
 
+  // Mood regions: a room usually carries on its parent's mood (and a hue
+  // near its parent's), so a branch has stretches of one character. When it
+  // doesn't, the new mood starts a region of its own, and sometimes it's one
+  // the old mood tends to lead into (MOOD_JUNCTIONS).
+  //
+  // Tuning, read when an expedition is created (so it needs a new one, not
+  // a reload): copied into its params, which its record keeps, so a replay
+  // always uses the values it was made with.
+  //   inherit   chance a room keeps its parent's mood. 0 = off: params and
+  //             every room are exactly as before regions existed.
+  //   junction  chance a new mood is one the old one leads into (else any)
+  //   hueDrift  how far (degrees, either way) an inherited hue wanders
+  // The decision has its own stream ('region'), so the 'meta' draws, and
+  // everything else seeded, are unchanged either way.
+  const MOOD_REGIONS = { inherit: 0.8, junction: 0.6, hueDrift: 14 };
+  const MOOD_JUNCTIONS = {
+    still: ['hollow', 'cold', 'dusty'],
+    damp: ['cold', 'breathing', 'echoing'],
+    humming: ['warm', 'breathing', 'tilted'],
+    cold: ['still', 'damp', 'echoing'],
+    echoing: ['hollow', 'damp', 'still'],
+    dusty: ['still', 'warm', 'hollow'],
+    breathing: ['damp', 'humming', 'warm'],
+    tilted: ['humming', 'hollow', 'echoing'],
+    warm: ['humming', 'dusty', 'breathing'],
+    hollow: ['echoing', 'still', 'tilted'],
+  };
+
   /** Global generation parameters, set by the root seed (caps by the user). */
   function deriveParams(rootSeed) {
     const r = deriveRng(rootSeed, 'params');
-    return {
+    const p = {
       chamberMin: r.int(2, 3),
       chamberMax: r.int(5, 8),
       corridorMin: 3,
@@ -87,6 +115,14 @@
       hallChance: 0.01,
       hallMinDepth: 3,
     };
+    // Only when on, so with regions off the params are as they always were
+    // (and records from before regions, without `moodInherit`, stay off).
+    if (MOOD_REGIONS.inherit > 0) {
+      p.moodInherit = MOOD_REGIONS.inherit;
+      p.moodJunction = MOOD_REGIONS.junction;
+      p.moodHueDrift = MOOD_REGIONS.hueDrift;
+    }
+    return p;
   }
 
   function createExpedition(rootSeed, caps, paramsOverride) {
@@ -233,7 +269,31 @@
     // Seed-derived extras on their own stream, so they never shift layouts.
     const m = deriveRng(space.seed, 'meta');
     space.meta = { hue: m.int(0, 359), mood: m.pick(MOODS) };
+    regionMeta(exp, space);
     return space;
+  }
+
+  /**
+   * Mood regions (MOOD_REGIONS): carry on the parent's mood, or start a new
+   * region. Reserved spaces (waypoints) and the root keep their own roll, so
+   * a reserved space is the same whichever door reaches it.
+   */
+  function regionMeta(exp, space) {
+    const p = exp.params;
+    const parent = space.parentId && exp.spaces[space.parentId];
+    if (!p.moodInherit || !parent || space.reserveId) return;
+    const r = deriveRng(space.seed, 'region');
+    if (r.chance(p.moodInherit)) {
+      space.meta.mood = parent.meta.mood;
+    } else if (r.chance(p.moodJunction || 0) && MOOD_JUNCTIONS[parent.meta.mood]) {
+      space.meta.mood = r.pick(MOOD_JUNCTIONS[parent.meta.mood]);
+    }
+    // Same mood as the parent (inherited, or rolled again): a hue near its
+    // parent's, so the region reads as one. A new region keeps its own hue.
+    if (space.meta.mood === parent.meta.mood) {
+      const d = p.moodHueDrift || 0;
+      space.meta.hue = (((parent.meta.hue + r.int(-d, d)) % 360) + 360) % 360;
+    }
   }
 
   function writeSpace(exp, space) {
@@ -777,7 +837,7 @@
   }
 
   Object.assign(DE, {
-    deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
+    MOODS, MOOD_REGIONS, MOOD_JUNCTIONS, deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
     canCarve, carve, uncarve, restorable, restore, tagTraces, replay, exportRecord, importRecord, rebuildRegistry,
     pathToRoot, cycleCount, stats, parseKey, imprintAt, reservedAt, canReserve, reserve,
   });

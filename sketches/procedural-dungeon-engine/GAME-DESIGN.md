@@ -155,7 +155,7 @@ hold, carry and plant.
 `H(parent seed | exit index | entropy)`, where entropy is 64 random bits
 drawn when the door opens. Everything about the room comes from that seed,
 each on its own stream: archetype and shape, loot, props, sigil, ghost roll,
-mood and colour. The shape is built relative to the door you came through,
+mood and colour. (Mood and colour also lean on the parent room's: see §18.) The shape is built relative to the door you came through,
 then placed. If it doesn't fit beside existing rooms, the engine tries other
 entry points, then smaller shapes, then the other archetype, and finally
 falls back to a one-cell dead end.
@@ -727,6 +727,48 @@ Options already on the table: (1) restoration survives faints (pushed,
 lit, wells kept; inventory and entropy roll back); (2) restoring inside a
 waystone hall writes a checkpoint; (3) keep it and teach "touch the stone
 after tidying".
+
+## 18. Mood regions (built 2026-10-25)
+
+The atmosphere is the game's main character, so areas should have one,
+not a fresh mood behind every door. A first, simplest step, before moods
+do anything:
+
+- A room **inherits its parent's mood** with high odds (`inherit`, 0.8), so
+  a branch has stretches of one mood. Its hue stays within `hueDrift`
+  (14°) of the parent's, so a region reads as one colour on the map and
+  in the walls.
+- Otherwise it **starts a new region**: a new mood (with its own hue) that
+  then tends to persist in turn. With odds `junction` (0.6) the new mood is
+  one the old mood leads into, from a small table: still → hollow, cold,
+  dusty; damp → cold, breathing, echoing; humming → warm, breathing,
+  tilted; cold → still, damp, echoing; echoing → hollow, damp, still;
+  dusty → still, warm, hollow; breathing → damp, humming, warm; tilted →
+  humming, hollow, echoing; warm → humming, dusty, breathing; hollow →
+  echoing, still, tilted. Else any mood.
+- The root, and a waypoint hall (built from its reserve's own seed, so it's
+  the same whichever door reaches it), roll their own mood as before.
+
+**Seeds and replay.** The room's own mood and hue are still drawn from
+`deriveRng(seed, 'meta')` exactly as before; the region decision is drawn
+after, from `deriveRng(seed, 'region')`, and only overrides them. So
+layouts, loot and every other seeded thing are identical with regions on
+or off. Since a room's mood now depends on its parent's, it's no longer a
+property of its seed alone: a planted seed (§4) would take on the mood of
+the door it's planted in, unless planting carries the mood with it. Decide
+that when seeds are built.
+
+**Tuning and turning it off.** The knobs are `DungeonEngine.MOOD_REGIONS`.
+A new expedition copies them into its params (`moodInherit`,
+`moodJunction`, `moodHueDrift`), so changing them needs a new expedition,
+and a replay always uses what the record was made with. `inherit: 0` is
+off: the params then carry no mood keys, and generation is byte for byte
+what it was before regions. The junction table isn't copied, so editing it
+changes the moods of saved expeditions (not their layouts).
+
+**Next** (not built): moods with mechanics (dust that shows footprints,
+damp that dims the lamp), regions of material as well as mood, and
+regions that know their size (a region that has run long enough ends).
 
 ## First slice (built 2026-10-21)
 
