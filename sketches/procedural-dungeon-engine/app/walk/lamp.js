@@ -303,7 +303,8 @@
     breathe: 0.04,      // of the radius: how much the flame's flicker moves the edge
     soft: 0.03,         // cells: anti-aliasing across the edge (0 is razor sharp)
     sphere: true,       // the edge is a sphere around the lamp (off: a cylinder, cut straight up walls)
-    banded: true,       // step the light down in bands just inside the edge
+    banded: true,       // step the light down in bands just inside the edge (on the floor and block tops)
+    wallBands: 0,       // how much walls and other upright faces band too (0: the plain edge, 1: as the floor)
     bands: 3,           // how many
     bandWidth: 0.32,    // cells each, on the floor
     bandFloor: 0.2,     // the outermost band's brightness (the inner ones step up to full)
@@ -327,7 +328,8 @@
   // Every material shares the one uniform object (three.js copies a
   // uniform's value by reference when it isn't a vector, colour, matrix or
   // texture), so setting it once a frame reaches them all.
-  // center: the lamp's world xyz, radius on the floor; band: count, width, floor, soft; shape: sphere (1) or cylinder (0)
+  // center: the lamp's world xyz, radius on the floor; band: count, width, floor, soft;
+  // shape: sphere (1) or cylinder (0), how much upright faces band
   const lampMask = { center: new THREE.Vector4(), band: new THREE.Vector4(), shape: new THREE.Vector4() };
   for (const k of ['lambert', 'phong', 'standard', 'physical', 'toon']) {
     if (THREE.ShaderLib[k]) THREE.ShaderLib[k].uniforms.lampMask = { value: lampMask };
@@ -339,7 +341,9 @@ uniform LampMask lampMask;
 // of the sphere around the lamp through this point: across the floor it's
 // just the distance from you; up a wall it grows with the height off the
 // lamp's, so the edge curves. As a cylinder, it's the distance across the floor.
-float lampMaskAt(vec3 viewPos) {
+// Bands only on faces turned up (the floor, block tops), blending out as a
+// face turns upright, so walls get the plain edge (shape.y of the banding).
+float lampMaskAt(vec3 viewPos, vec3 normal) {
   float R = lampMask.center.w;
   if (R <= 0.0) return 1.0;
   vec3 c = (viewMatrix * vec4(lampMask.center.xyz, 1.0)).xyz;
@@ -352,7 +356,9 @@ float lampMaskAt(vec3 viewPos) {
   float n = lampMask.band.x;
   if (n > 0.5) {
     float i = ceil((R - d) / lampMask.band.y); // 1 in the outermost band
-    if (i <= n) m *= mix(lampMask.band.z, 1.0, (max(i, 1.0) - 1.0) / n);
+    float flatness = smoothstep(0.55, 0.85, abs(dot(normalize(normal), up)));
+    float k = mix(lampMask.shape.y, 1.0, flatness);
+    if (i <= n) m *= mix(1.0, mix(lampMask.band.z, 1.0, (max(i, 1.0) - 1.0) / n), k);
   }
   return m;
 }
@@ -361,7 +367,7 @@ float lampMaskAt(vec3 viewPos) {
     'getPointLightInfo( pointLight, geometryPosition, directLight );',
     `getPointLightInfo( pointLight, geometryPosition, directLight );
 		#if ( UNROLLED_LOOP_INDEX == 0 ) && ( NUM_POINT_LIGHT_SHADOWS > 0 )
-		directLight.color *= lampMaskAt( geometryPosition );
+		directLight.color *= lampMaskAt( geometryPosition, geometryNormal );
 		#endif`);
 
   // Embers: points rising off the lamp. Walking, they spray and trail
@@ -481,7 +487,7 @@ float lampMaskAt(vec3 viewPos) {
     const edge = edgeRadius() * (1 - LIGHT.breathe + LIGHT.breathe * Math.min(1.2, bright));
     // Centred over you at the lamp's height, so the floor circle is the edge creatures read (lightRadius).
     lampMask.center.set(p.x * S, Math.max(0, lampWorld.y), p.y * S, Math.max(0.01, edge * S));
-    lampMask.shape.set(LIGHT.sphere ? 1 : 0, 0, 0, 0);
+    lampMask.shape.set(LIGHT.sphere ? 1 : 0, LIGHT.wallBands, 0, 0);
     lampMask.band.set(LIGHT.banded ? Math.round(LIGHT.bands) : 0, Math.max(0.01, LIGHT.bandWidth * S),
       LIGHT.bandFloor, Math.max(0, LIGHT.soft * S));
 
