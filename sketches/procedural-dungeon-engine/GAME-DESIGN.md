@@ -485,8 +485,12 @@ fuel you need to get there.
   (a little more flicker and wobble), danger at 1 (a clear flicker),
   dying at half a charge (the flicker settles into a slow, irregular fade
   that swells as you move, and the odd red ember). Blended, never stepped.
-  The light reddens and its reach shrinks hard; near the end a faint ring
-  on the floor shows where it ends.
+  The light reddens and its reach shrinks hard.
+- **The light has a hard edge** (2026-10-25): a circle around you, there
+  at a full lamp too, that shrinks with the fuel. Inside, the light looks
+  as it always did; past it, only the dark. You always know how far your
+  light goes, and creepers wait just past that edge. Smaller than the old
+  falloff, which lit across whole rooms.
 - **Running out:** the lamp goes out and stays out until you relight it
   (R, a shard), and the dark drains your psychic stamina (section 12). Find light or entropy in time, or pass out and
   wake at your last waystone. Everything else stays: the map, what you

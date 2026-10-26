@@ -20,8 +20,8 @@
 // flicker settles into a slow irregular fade that swells as you move, and
 // the odd red ember. Through all of it the colour slides from yellow to
 // red, the halo shrinks (but can still wobble out past its average), the
-// light gets dimmer, redder and shorter, and near the end a faint ring on
-// the floor shows how far it still reaches.
+// light gets dimmer, redder and shorter, and its hard edge (a circle around
+// you, there at a full lamp too) closes in.
 (function (global) {
   'use strict';
 
@@ -208,7 +208,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // How the lamp looks: colour, halo, light, floor ring, embers, streams
+  // How the lamp looks: colour, halo, light and its edge, embers, streams
 
   /** 0..1: full at RULES.lampFullCharges or more, 0 when empty. */
   function lampLevel() {
@@ -285,36 +285,75 @@
   halo.renderOrder = 5;
   scene.add(halo); // follows the lamp in world space (the figure's rig squashes when crouched)
 
-  // The light's reach and colour. Dimming, it goes redder and much shorter
-  // (LIGHT.minRange of full when empty), and from LIGHT.ringBelow charges a
-  // faint ring on the floor fakes the edge of what it still lights.
+  // The light's reach and colour. Dimming, it goes redder and dimmer. It
+  // ends at a hard edge: a circle around you (on the ground plan, so walls
+  // are cut at the same distance), past which there's only the ambient
+  // fill. The circle is always there and shrinks with the fuel. Optionally
+  // the last stretch inside it steps down in bands, like a creeper's discs.
   const LIGHT = {
     minIntensity: 0.25, // of full, when empty
-    minRange: 0.18,     // of full, when empty
+    minRange: 0.18,     // of full, when empty: the point light's own falloff, inside the edge
     redden: 0.5,        // how far the light's colour follows the lamp's toward red
-    ringBelow: 1,       // charges
-    ringRadius: [1.1, 3.2], // cells, at empty and at ringBelow
-    ringOpacity: 0.22,
     swell: 0.35,        // dying: brightness swell while you move
-    fullRadius: 4.5,    // cells: what creatures count as lit at a full lamp (ghosts' lightRange)
+    radiusFull: 3.2,    // cells: the edge at a full lamp (RULES.lampFullCharges or more)
+    radiusEmpty: 0.9,   // cells: the edge as it empties
+    radiusCurve: 1,     // over 1 holds it wide and shrinks it late; under 1, early
+    breathe: 0.04,      // of the radius: how much the flame's flicker moves the edge
+    soft: 0.03,         // cells: anti-aliasing across the edge (0 is razor sharp)
+    banded: false,      // step the light down in bands just inside the edge
+    bands: 3,           // how many
+    bandWidth: 0.22,    // cells each
+    bandFloor: 0.3,     // the outermost band's brightness (the inner ones step up to full)
   };
 
   /**
-   * How far the light reaches, in cells, for creatures that keep to its
-   * edge (creepers.js); 0 while it's out or covered. At ringBelow charges
-   * or less it's the floor ring you see; above, it grows to fullRadius at
-   * a full lamp.
+   * How far the light reaches, in cells: the hard edge, without the
+   * flicker. Creatures that keep to its edge read it (creepers.js); 0 while
+   * the lamp is out or covered.
    */
   function lightRadius() {
-    if (!lampOn()) return 0;
-    const fuel = state.run.fuel;
-    if (fuel <= LIGHT.ringBelow) return lerp(LIGHT.ringRadius[0], LIGHT.ringRadius[1], fuel / LIGHT.ringBelow);
-    return lerp(LIGHT.ringRadius[1], LIGHT.fullRadius, smooth(LIGHT.ringBelow, RULES.lampFullCharges, fuel));
+    return lampOn() ? edgeRadius() : 0;
   }
-  const ringMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 64), ringMat);
-  ring.rotation.x = -Math.PI / 2;
-  scene.add(ring);
+  function edgeRadius() {
+    return lerp(LIGHT.radiusEmpty, LIGHT.radiusFull, Math.pow(lampLevel(), LIGHT.radiusCurve));
+  }
+
+  // The edge is a mask on the lantern's light in every lit material's
+  // shader: three.js sorts shadow-casting lights first, and the lantern is
+  // the only point light that casts shadows, so it's always pointLights[0].
+  // Every material shares the one uniform object (three.js copies a
+  // uniform's value by reference when it isn't a vector, colour, matrix or
+  // texture), so setting it once a frame reaches them all.
+  const lampMask = { center: new THREE.Vector4(), band: new THREE.Vector4() }; // center: world xyz, radius; band: count, width, floor, soft
+  for (const k of ['lambert', 'phong', 'standard', 'physical', 'toon']) {
+    if (THREE.ShaderLib[k]) THREE.ShaderLib[k].uniforms.lampMask = { value: lampMask };
+  }
+  THREE.ShaderChunk.lights_pars_begin += `
+struct LampMask { vec4 center; vec4 band; };
+uniform LampMask lampMask;
+// 1 inside the lamp's edge, 0 past it; the distance is across the ground, from you.
+float lampMaskAt(vec3 viewPos) {
+  float R = lampMask.center.w;
+  if (R <= 0.0) return 1.0;
+  vec3 c = (viewMatrix * vec4(lampMask.center.xyz, 1.0)).xyz;
+  vec3 up = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+  vec3 dv = viewPos - c;
+  float d = length(dv - dot(dv, up) * up);
+  float m = 1.0 - smoothstep(R - lampMask.band.w, R, d);
+  float n = lampMask.band.x;
+  if (n > 0.5) {
+    float i = ceil((R - d) / lampMask.band.y); // 1 in the outermost band
+    if (i <= n) m *= mix(lampMask.band.z, 1.0, (max(i, 1.0) - 1.0) / n);
+  }
+  return m;
+}
+`;
+  THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begin.replace(
+    'getPointLightInfo( pointLight, geometryPosition, directLight );',
+    `getPointLightInfo( pointLight, geometryPosition, directLight );
+		#if ( UNROLLED_LOOP_INDEX == 0 ) && ( NUM_POINT_LIGHT_SHADOWS > 0 )
+		directLight.color *= lampMaskAt( geometryPosition );
+		#endif`);
 
   // Embers: points rising off the lamp. Walking, they spray and trail
   // behind you; standing still, they rise in a slow, swaying column, like
@@ -429,16 +468,11 @@
     halo.scale.setScalar(HALO.full * (HALO.minScale + (1 - HALO.minScale) * level) * Math.max(0.3, wob));
     haloMat.opacity = lerp(HALO.lowOpacity, HALO.opacity, smooth(0, 0.66, level)) * Math.min(1.2, bright) * on;
 
-    // The floor ring: the edge of the light, once it's low.
-    const ringOn = (1 - smooth(LIGHT.ringBelow * 0.6, LIGHT.ringBelow, fuel)) * on * (fuel > 0 ? 1 : 0);
-    ring.visible = ringOn > 0.01;
-    if (ring.visible) {
-      const r = lerp(LIGHT.ringRadius[0], LIGHT.ringRadius[1], Math.min(1, fuel / LIGHT.ringBelow)) * (0.95 + 0.05 * bright);
-      ring.scale.setScalar(r * S);
-      ring.position.set(p.x * S, (p.z + 0.012) * S, p.y * S);
-      ringMat.color.copy(lampColor);
-      ringMat.opacity = LIGHT.ringOpacity * ringOn * Math.min(1, bright);
-    }
+    // The light's edge, breathing a little with the flame.
+    const edge = edgeRadius() * (1 - LIGHT.breathe + LIGHT.breathe * Math.min(1.2, bright));
+    lampMask.center.set(p.x * S, p.z * S, p.y * S, Math.max(0.01, edge * S));
+    lampMask.band.set(LIGHT.banded ? Math.round(LIGHT.bands) : 0, Math.max(0.01, LIGHT.bandWidth * S),
+      LIGHT.bandFloor, Math.max(0, LIGHT.soft * S));
 
     // Embers: fewer, dimmer and shorter-lived as the lamp fails; how still
     // you are (eased) blends the walking spray into the idle column; dying,
