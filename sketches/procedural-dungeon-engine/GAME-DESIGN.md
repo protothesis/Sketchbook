@@ -38,7 +38,8 @@ decisions, see [`NOTES.md`](NOTES.md).
    last waystone you used, and everything opened since becomes a **lost
    path**. Your run (what you carry, what you lit and pushed) goes back
    to how it was there. At a lost path's door you choose once: retrace it
-   (if you've found the thread, for entropy) or let it go (section 17).
+   (F with a charged hourglass, for entropy and its pixie) or reroll it (E
+   held: something new opens) (section 17).
 9. **Harvest and plant seeds** (later) to shape the map with a scarcer
    resource than entropy.
 
@@ -675,7 +676,7 @@ Now every room that wasn't standing at your checkpoint is lost, and so is
 every door carved since (the doorstones come back with the run). The run
 rolls back to the checkpoint too: inventory, entropy, keys, lit sconces,
 pushed blocks, wells, ghosts. Tallies (time walked, faints, collapses)
-carry on, and so does the thread.
+carry on, and so does your equipment (the hourglass, pixie and all).
 
 **Two kinds of trace.** A reroll is a choice, one room at a time, and its
 trace cracks the floor and draws ghosts. A faint is a failure, and loses a
@@ -684,13 +685,13 @@ they're apart now:
 
 - **A lost path** is quiet: drawn in violet on the map, no cracks, no
   ghosts. Its door has a violet seam. It waits for your choice.
-- **Retrace it** (E at the door): the whole path comes back as you left it
+- **Retrace it** (F at the door with a charged hourglass in hand): the whole path comes back as you left it
   (same rooms, same ids and seeds), for **a shard per room, at least a
   charge**. Rooms whose footprint has since been taken can't come back,
   and neither can anything beyond them: those turn to corruption. Only
-  with **the thread**, a rare find (1 room in 20, depth 3+) that's yours
-  for the rest of the run. Without it, a lost path can only be let go.
-- **Let it go** (push the door): something new opens, and the whole path
+  with a **charged hourglass** (below). Without one, a lost path can only
+  be let go.
+- **Let it go** (E held at the door, a reroll): something new opens, and the whole path
   turns to corruption, loud traces like a reroll's, so the new room grows
   over cracked, haunted ground.
 - **Ignore it**, and each later faint dims it; the second one fades it:
@@ -699,8 +700,33 @@ they're apart now:
 You might not afford a retrace when you wake. That's fine: go and find
 the entropy, then come back.
 
-Waypoint distance stays as is (it played well). The thread is the first
-version of "retracing is earned"; it may become a proper ability later.
+Waypoint distance stays as is (it played well).
+
+**The hourglass (2026-10-26).** Retracing used to need the thread, found
+once and kept. It's the hourglass now: part jar, part key. Still a rare
+find (1 room in 20, depth 3+, one per run), but it starts empty and holds
+one pixie, caught the way an empty jar catches one, or taken from a vessel
+of pixies (and poured back into one). Only a charged hourglass retraces,
+and the retrace spends the pixie, so every path you bring back costs a
+pixie as well as entropy.
+
+It's the first piece of **equipment**, a draft fourth item class beside
+pickups, tools and objects: things that are always with you, and so is
+what's in them. A faint keeps them, whatever it does with the rest of what
+you carry (the coin purse will be equipment too). Code: `hourglass.js`,
+with `canRetrace()` and `spendHourglass()` for the door code.
+
+**The hourglass is the key (built 2026-10-26, after the door rework).**
+With the choice at a lost path's door (below) working, the hourglass took
+over retracing: F with a charged hourglass in hand at the door retraces the
+path, the way a key in hand unlocks a locked door. It spends the pixie, and
+still costs entropy. E held at the door just rerolls the path (the reroll
+ring and its loss icons). So without a charged hourglass all you see there
+is the reroll, which is the point: the hourglass is how retracing is earned,
+and a door with one option doesn't need a menu. The choice (retrace or
+reroll) is kept behind `RULES.lostDoorChoice`, off, in case the
+item-as-key doesn't feel right; on, its retrace needs a charged hourglass
+and spends the pixie too.
 
 ### Decided: a faint moves you, it doesn't rewind (built 2026-10-26)
 
@@ -739,8 +765,8 @@ Redoing a tidied room would be the worst kind of penalty for this game.
 **Settled while building (2026-10-26):**
 
 - **The pack is everything you carry,** your lamp's entropy included, so
-  a full lamp isn't lost, just left behind. The thread stays with you: it's
-  an ability in all but name. Your lamp takes what it can hold when you
+  a full lamp isn't lost, just left behind. The hourglass (once the
+  thread) stays with you: it's equipment (above). Your lamp takes what it can hold when you
   pick the pack up; the rest stays in it.
 - **You wake with 2 charges** (`wakeCharges`, the starting amount), so a
   faint never strands you in the dark.
@@ -756,8 +782,10 @@ Redoing a tidied room would be the worst kind of penalty for this game.
   it opens onto the path like a loop) or open anyway (the path is let go).
   The engine's `heldAt`; on from a 'hold' event in the history, so records
   from before replay as they were.
-- **Doors only open with E held,** and the door to a lost path brings up a
-  choice (retrace or reroll) instead of pushing it open to let it go. The
+- **Doors only open with E held,** and the door to a lost path brought up a
+  choice (retrace or reroll) instead of pushing it open to let it go (since
+  the hourglass became the key, E held there rerolls, and the choice is
+  behind `lostDoorChoice`). The
   push and the hold meant two different things at one door, and the push
   won by accident. The choice is generic (`choice.js`), for anything that
   needs one later.
@@ -781,7 +809,7 @@ it's backwards.
 **The wider questions:**
 
 - **What is progress, and what is the run?** Today a faint rolls back
-  everything in `run` except tallies and the thread. Restoration (the
+  everything in `run` except tallies and equipment. Restoration (the
   "leave it better than you found it" ethos) arguably belongs to the world,
   not to the run, and shouldn't be undone by failing. Inventory and entropy
   probably should be.
@@ -1002,7 +1030,7 @@ of waypoints; seeds (section 4); secrets.
 The game loop (section 17): save slots with a build stamp, a title screen,
 a pause menu, waystones as checkpoints, faints that cost every room and
 carved door since the checkpoint (and roll the run back), and lost paths
-you retrace (with the thread) or let go.
+you retrace (with the thread, later a charged hourglass) or let go.
 
 ## Fifth slice (built 2026-10-26)
 
@@ -1029,7 +1057,8 @@ over the hold ring.
 - With faints costing rooms: does the lamp drain too fast, should sconces
   shelter more? (Waypoint distance felt right, 2026-10-24.) Tune by
   playing.
-- Is a shard per room the right retrace price? Is the thread too rare, or
-  should retracing become an earned ability instead?
+- Is a shard per room the right retrace price? Is the hourglass too rare
+  now that it needs a pixie too, or should retracing become an earned
+  ability instead?
 - ~~Should touching a waystone stay the only way to move your respawn?~~
   Decided 2026-10-26: saving at a save lantern is the only way (section 19).

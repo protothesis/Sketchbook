@@ -140,7 +140,8 @@ Each one is a default that can change.
   lost room's children were all opened after it). Carve events since the
   checkpoint are undone (`uncarve`), latest first. Then the run and the
   figure load from the checkpoint, keeping tallies (`walked`, `gutters`,
-  `collapses`, ...) and `thread`. The checkpoint itself doesn't move.
+  `collapses`, ...) and `equipment` (the hourglass). The checkpoint itself
+  doesn't move.
 - **Lost paths** (`lostPaths()` in `game.js`, cached by history length):
   pending traces grouped by root, a pending trace whose parent isn't
   pending, so its door is the parent's exit. Retracing restores the path

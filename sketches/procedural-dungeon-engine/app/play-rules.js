@@ -69,12 +69,12 @@
     wellTrickleTime: 120,
     chargesPerRoom: 1,        // collapse price: a flat charge per room in the branch
     // Lost paths (GAME-DESIGN.md, section 17): retracing one costs a shard
-    // per room, at least a charge, and needs the thread: a rare find at
-    // depth 3+, kept for good once found.
+    // per room, at least a charge, and needs a charged hourglass: a rare
+    // find at depth 3+, one per run, charged with a pixie.
     retracePerRoom: 1 / 3,
     retraceMin: 1,
-    threadChance: 1 / 20,
-    threadMinDepth: 3,
+    hourglassChance: 1 / 20,
+    hourglassMinDepth: 3,
     // Props: blocks on a half-cell subgrid, stacked in half-cell-ish units
     // (3 units = floor to ceiling), plus flat floor detail.
     propAttempts: 0.32,       // placement attempts per chamber cell
@@ -155,9 +155,15 @@
     // lantern you last saved at, with wakeCharges of entropy, and what you
     // carried stays where you fell (a pack, holding your fuel too).
     wakeCharges: 2,
-    // Holds, in seconds (E held). A door to a lost path takes lostDoorHold to
-    // bring up its choice (retrace or reroll), then choiceHold to confirm one.
-    // A reroll that would lose something of yours takes rerollLoseFactor as long.
+    // The door to a lost path. Off (the default), E held rerolls it and F
+    // with a charged hourglass in hand retraces it (hourglass.js). On, E
+    // held brings up a choice instead, retrace or reroll (choice.js): kept
+    // in case the hourglass-as-key doesn't play well.
+    lostDoorChoice: false,
+    // Holds, in seconds (E held). With lostDoorChoice on, a door to a lost
+    // path takes lostDoorHold to bring up its choice, then choiceHold to
+    // confirm one. A reroll that would lose something of yours takes
+    // rerollLoseFactor as long.
     lostDoorHold: 0.7,
     choiceHold: 0.8,
     rerollLoseFactor: 2,
@@ -204,9 +210,9 @@
     if (r.chance(RULES.stickChance) && space.depth >= RULES.stickMinDepth) {
       items.push({ id: 'pin', kind: 'chalk', color: r.pick(RULES.chalkColors), cell: spots[(n + 4) % spots.length] }); // id kept from 'map pin'
     }
-    // The thread (retrace lost paths), drawn last.
-    if (r.chance(RULES.threadChance) && space.depth >= RULES.threadMinDepth) {
-      items.push({ id: 'thread', kind: 'thread', cell: spots[(n + 5) % spots.length] });
+    // The hourglass (retrace lost paths), drawn last.
+    if (r.chance(RULES.hourglassChance) && space.depth >= RULES.hourglassMinDepth) {
+      items.push({ id: 'thread', kind: 'hourglass', cell: spots[(n + 5) % spots.length] }); // id kept from 'the thread'
     }
     return items;
   }

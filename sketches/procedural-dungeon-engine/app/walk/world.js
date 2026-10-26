@@ -294,7 +294,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       const key = itemKey(space, item);
       if (state.run.collected.includes(key)) continue;
       if (item.kind === 'key' && !state.run.keyRooms.includes(spaceKey)) continue;
-      if (item.kind === 'thread' && state.run.thread) continue; // found once, kept for good
+      if (W.ITEMS[item.kind].cls === 'equipment' && state.run.equipment[item.kind]) continue; // one of each, kept for good
       const tile = tileAt[DE.key(item.cell.x, item.cell.y)];
       const mesh = W.itemMesh(item, key);
       mesh.position.set((item.cell.x + 0.5) * S, W.ITEMS[item.kind].cls === 'pickup' ? 0.45 * S : 0, (item.cell.y + 0.5) * S);

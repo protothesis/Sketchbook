@@ -1,6 +1,6 @@
 // Walk mode: what E does at a door or wall. Open, unlock, collapse a branch
-// for entropy, choose at the door to a path lost to a faint (retrace it or
-// reroll it), or press a doorstone to a wall. A tap of E opens or closes a
+// for entropy, reroll a path lost to a faint (E held at its door; a charged
+// hourglass in hand retraces it instead, F), or press a doorstone to a wall. A tap of E opens or closes a
 // door, from either side, like any door (walking into one does nothing).
 // Rerolling is its own act: E held at a closed door into a room that's
 // still provisional, from the side you came in by.
@@ -19,13 +19,16 @@
   /**
    * The door in the player's own room right in front of you, close, and
    * what can be done with it: 'open' | 'lostdoor' | 'locked' | 'close' |
-   * 'reopen' | 'reroll'. An opened door closes ('close') and a closed one
+   * 'reopen' | 'reroll' | 'letgo'. An opened door closes ('close') and a closed one
    * opens again ('reopen'), from either side, with a tap. A closed door
    * into a room that's still provisional, from the side you came in by,
    * is 'reroll': a tap opens it, E held rerolls the room (`onTap`).
-   * 'lostdoor', at the door to a path lost to a faint, puts up a choice
-   * (retrace it or reroll it). `things`: icons of what's yours beyond it (a
-   * pack, a lantern, a waystone), which a reroll would lose (`lose`).
+   * 'letgo', at the door to a path lost to a faint: E held rerolls it (the
+   * path is gone); retracing it is the hourglass's, F with it in hand
+   * (hourglass.js). With RULES.lostDoorChoice on, it's 'lostdoor' instead,
+   * which puts up a choice (retrace it or reroll it). `things`: icons of
+   * what's yours beyond it (a pack, a lantern, a waystone), which a reroll
+   * would lose (`lose`).
    */
   function doorNear(p) {
     const exp = state.exp;
@@ -49,12 +52,15 @@
     }
     const path = best && best.action === 'open' && W.lostPathAt(sp.id, best.exit.id);
     if (path) {
-      best.action = 'lostdoor';
+      best.action = RULES.lostDoorChoice ? 'lostdoor' : 'letgo';
       best.path = path;
       best.price = W.retracePrice(path);
-      best.thread = !!state.run.thread;
+      best.charged = W.canRetrace(); // a charged hourglass (hourglass.js)
       best.affordable = best.price <= state.run.fuel + 1e-6;
       best.things = thingsIn(new Set(path.traces.map((t) => t.id)), path.traces);
+      if (best.action === 'letgo') best.lose = best.things.length > 0;
+      // A side door: it opens onto ground the path holds, not the path's own door.
+      best.own = !!path.door && path.door.spaceId === sp.id && path.door.exitId === best.exit.id;
     }
     if (best && best.action === 'reroll') {
       const branch = DP.branch(exp, best.child.id);
@@ -205,15 +211,15 @@
 
   const HOLD = {
     erase: 0.4, light: 0.5, snuff: 0.5, lift: 0.4, save: 0.5,
-    reroll: 1.0, // it costs entropy and can't be undone
+    reroll: 1.0, letgo: 1.0, // they can't be undone (a reroll costs entropy too)
   };
   const TAP_GRACE = 0.15; // seconds of a hold before its ring shows, where a tap does something else
-  HOLD.lostdoor = RULES.lostDoorHold; // then a choice (choice.js)
+  HOLD.lostdoor = RULES.lostDoorHold; // then a choice (choice.js), with RULES.lostDoorChoice
   HOLD.choose = RULES.choiceHold;
   // The ring's icon, per action.
   const HOLD_ICON = {
     open: '⇥', reopen: '⇥', close: '⇤', locked: '⚷', erase: '✕', light: '✦', snuff: '○',
-    reroll: '↻', lostdoor: '⇄', lift: '✋', save: '✧',
+    reroll: '↻', letgo: '↻', lostdoor: '⇄', lift: '✋', save: '✧',
   };
 
   /** Can't be done right now: a tap says why instead of filling a ring. */
@@ -333,6 +339,8 @@
     const doorKey = near.space.id + '/' + near.exit.id;
     if (near.action === 'open') {
       openDoor(near.space.id, near.exit.id);
+    } else if (near.action === 'letgo') {
+      openDoor(near.space.id, near.exit.id); // the path is gone (game.js, letGo)
     } else if (near.action === 'lostdoor') {
       lostDoorChoice(near);
     } else if (near.action === 'locked') {
@@ -343,17 +351,21 @@
     }
   }
 
+  /** Why a lost path can't be retraced right now (no charged hourglass, or entropy), or null. */
+  function retraceBlocked(near) {
+    return !near.charged ? W.retraceWant()
+      : !near.affordable ? `not enough entropy: ${chargeText(near.price)}, you have ${chargeText(state.run.fuel)}` : null;
+  }
+
   /**
-   * The door to a lost path: retrace it (the thread, and a shard a room) or
-   * reroll it (something new opens, and the path is gone, with whatever of
-   * yours is on it).
+   * With RULES.lostDoorChoice on, the door to a lost path puts up a choice:
+   * retrace it (a charged hourglass, and a shard a room) or reroll it
+   * (something new opens, and the path is gone, with whatever of yours is
+   * on it). Off (the default), E held rerolls it and the hourglass retraces.
    */
   function lostDoorChoice(near) {
     const n = near.path.traces.length, rooms = `${n} room${n === 1 ? '' : 's'}`;
-    const off = !near.thread ? 'you need the thread to find the way back'
-      : !near.affordable ? `not enough entropy: ${chargeText(near.price)}, you have ${chargeText(state.run.fuel)}` : null;
-    // A side door: it opens onto ground the path holds, not the path's own door.
-    const own = near.path.door && near.path.door.spaceId === near.space.id && near.path.door.exitId === near.exit.id;
+    const off = retraceBlocked(near), own = near.own;
     W.openChoice({
       title: own ? `your lost path · ${rooms}${near.path.dim ? ' · fading' : ''}`
         : `your lost path lies beyond this door · ${rooms}${near.path.dim ? ' · fading' : ''}`,
@@ -368,13 +380,15 @@
     });
   }
 
+  /** Retrace a lost path: its rooms come back as you left them, for entropy and the hourglass's pixie. */
   function retraceThrough(near, side) {
     const run = state.run;
     W.spendFuel(near.price);
+    W.spendHourglass();
     run.chargesSpent += near.price;
     run.retraces = (run.retraces || 0) + 1;
     const r = W.retrace(near.path);
-    W.showCaption(`the thread pulls taut · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
+    W.showCaption(`the hourglass runs back · its pixie is spent · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
       (r.gone ? ` · ${r.gone} couldn't come back` : '') + ` · −${chargeText(near.price)}` +
       (side && r.back ? ' · this door opens onto it now' : ''));
     savePlayer();
@@ -527,6 +541,6 @@
     W.refreshHud();
   }
 
-  Object.assign(W, { doorNear, wallNear, carveDoor, unlockDoor, focusBox, actionNear, holdTime, pressE, releaseE, tickHold,
+  Object.assign(W, { doorNear, wallNear, carveDoor, unlockDoor, retraceThrough, retraceBlocked, focusBox, actionNear, holdTime, pressE, releaseE, tickHold,
     closeDoor, reopenDoor, act, openDoor, askSurface });
 })(window);

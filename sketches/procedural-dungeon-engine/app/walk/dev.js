@@ -116,7 +116,8 @@
     ['jar', () => { state.run.jars.push({ id: 'j' + (++state.run.jarSeq), holds: null }); after('an empty jar'); }],
     ['jar: pixie', () => { state.run.jars.push({ id: 'j' + (++state.run.jarSeq), holds: 'pixie' }); after('a jarred pixie'); }],
     ['jar: entropy', () => { state.run.jars.push({ id: 'j' + (++state.run.jarSeq), holds: 'entropy' }); after('a jar of entropy'); }],
-    ['thread', () => { state.run.thread = true; after('the thread'); }],
+    ['hourglass', () => { state.run.equipment.hourglass = { holds: null }; after('an empty hourglass'); }],
+    ['hourglass: pixie', () => { state.run.equipment.hourglass = { holds: 'pixie' }; after('a charged hourglass'); }],
     ...RULES.chalkColors.map((c) => [c + ' chalk', () => {
       state.run.chalks[c] = (state.run.chalks[c] || 0) + W.STROKES;
       after('a stick of ' + c + ' chalk');

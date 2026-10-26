@@ -67,17 +67,21 @@ Determinism).
   quiet: no cracks, no ghosts), suspended exactly as you left it, and what
   you carried (tools, jars, keys, chalk and your lamp's entropy) stays
   where you fell, in a **pack** (below). The door to a lost path has a
-  **violet seam**. Hold E there (0.7 s) and a choice comes up: **retrace**
-  (every room as you left it, for a shard per room, at least a charge, if
-  you've found **the thread**) or **reroll** (something new opens and the
-  whole path turns to corruption, with anything of yours on it). A path you
+  **violet seam**. Hold E there (1 s, twice that with something of yours on
+  the path) to **reroll** it: something new opens and the whole path turns
+  to corruption, with anything of yours on it (the ring shows what). To
+  **retrace** it instead, every room as you left it, for a shard per room
+  (at least a charge), hold a **charged hourglass** and press F at the door:
+  the retrace spends its pixie. (`lostDoorChoice` in the rules brings back
+  the older way: hold E for a choice between the two.) A path you
   leave alone dims at your next faint and fades at the one after, and a
   pack on it goes with it. **A lost path holds its ground** while it waits:
   no new room grows over it, so it can always come back. A door that opens
-  onto that ground gets the violet seam too, and the same choice:
-  **retrace** (the path comes back, and that door then opens onto it like
-  any loop) or **open anyway** (the path is let go, with anything of yours
-  on it, and something new opens there). See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections
+  onto that ground gets the violet seam too, and works the same way: the
+  hourglass retraces (the path comes back, and that door then opens onto it
+  like any loop), E held opens it anyway (the path is let go, with anything
+  of yours on it, and something new opens there). Your hourglass isn't in
+  the pack: equipment stays with you, pixie and all. See [`GAME-DESIGN.md`](GAME-DESIGN.md), sections
   17 and 19.
 - **Save lanterns.** Every hall has one, on its centre cell: a lantern on a
   dark stone plinth, always lit with a dim, flickering red flame. E held
@@ -237,7 +241,7 @@ Determinism).
   lit sconce the icon shimmers gold, and a stream of warm motes flows from
   the sconce's flame into your lamp; drinking from a well, it shimmers
   violet. No words, except when the lamp is off: how to relight it. Under
-  the meter, the stamina bar (and the thread, once you have it). The top-left panel is
+  the meter, the stamina bar. The top-left panel is
   information and settings only.
 - **You can feel the lamp.** Three stages, blended so none of them pops:
   - **Uneasy** (2 charges and below): a little more flicker, and the halo
@@ -339,11 +343,10 @@ Determinism).
   three lit sconces nearest you get real lights (a fixed pool, so lighting
   more never recompiles materials). Doors carved later through a sconce's
   wall take the sconce's place.
-- **Three kinds of item.** Every item belongs to one class, and the class
+- **Four kinds of item.** Every item belongs to one class, and the class
   decides how it behaves (`ITEMS` in `app/walk/items.js`):
-  - **Pickups** (shards, the thread) float and turn where they lie. Walk
-    into one to collect it. They're on the HUD (entropy, 🧵), never hotbar
-    slots.
+  - **Pickups** (shards) float and turn where they lie. Walk into one to
+    collect it. They're on the HUD (entropy), never hotbar slots.
   - **Tools** (chalk, doorstones, keys) lie flat on the floor. Walk over
     one to collect it. They live on the hotbar and work only in your hand,
     with F, used up and never put back. Collected, a tool goes in the
@@ -351,6 +354,14 @@ Determinism).
   - **Objects** (crates, push blocks, vessels) are things in the world as
     themselves, never in the bag. Hold E to grab one and lift it, E to set
     it down again, with whatever's inside.
+  - **Equipment** (the hourglass; a draft class) is always with you, kept
+    through faints along with what's in it. One of each, collected like a
+    tool, on the hotbar if it has a use. **The hourglass**
+    (`app/walk/hourglass.js`) holds one pixie: F near a pixie catches it,
+    F at a vessel pours it in or takes one out of a vessel of pixies. A
+    pixie glows in its lower bulb (and its hotbar glyph) when it's
+    charged. Charged, it's the key to a lost path: F with it in hand at
+    the path's door retraces it, and spends the pixie.
   - **Creatures** (ghosts, pixies) aren't items: they move on their own,
     by the ecology's rules.
 - **The hotbar.** Tools and objects sit in slots at the bottom of the
@@ -383,9 +394,8 @@ Determinism).
   opens or closes a door you're close to and facing, from either side
   (walking into one does nothing; the first time, a caption says E opens
   it). Wiping chalk takes 0.4 s, lighting or snuffing a sconce or saving at
-  a lantern 0.5 s, the door to a lost path 0.7 s (it brings up a choice),
-  and rerolling a room, which costs entropy and can't be undone, 1 s, or
-  2 s if something of yours is in it. Grabbing a block takes 0.4 s.
+  a lantern 0.5 s, and rerolling a room or a lost path, which can't be
+  undone, 1 s, or 2 s if something of yours is in it. Grabbing a block takes 0.4 s.
   Where one thing takes both (a closed door you could reroll, an awake
   waystone), letting go before the ring fills is the tap (open it, travel),
   and the ring only shows after 0.15 s. Climbing, setting something down
@@ -395,7 +405,8 @@ Determinism).
   yours at stake (a pack, a hall's lantern), red and crossed out when the
   action would lose them.
 - **Choices.** Some actions put up a choice over what you're acting on
-  (today, the door to a lost path: retrace or reroll). You stand still
+  (today, only the door to a lost path, retrace or reroll, and only with
+  `lostDoorChoice` on in the rules; it's off by default). You stand still
   while it's up; A / D (or the arrows) pick an option, E held (0.8 s)
   confirms it, Esc, W or S backs out. An option you can't take now is
   muted and says why. On touch, press and hold an option (`choice.js`,
@@ -536,7 +547,7 @@ you pass out and wake by your save lantern.
 | Beyond a lock | a faint gold warmth on the floor, "beyond a lock" in the caption, a gold outline on the maps | |
 | Sigil | a seeded star polygon (pentagram, hexagram, {7/3}, {8/3}) in a double ring with glyph marks, drawn additively | stage 0 a faint violet trace; 1 a dim glow; 2 brighter and flickering; 3 pulsing gold. A +1 max shows as a gold-edged ninth charge slot |
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
-| Lamp HUD | bottom left: a lantern icon (92 px; 64 on phones) in the lamp's colour, its flame scaled to 100 / 80 / 62 / 45% by stage; a fluid meter of 6 sections (32 × 20 px; more with sigils), the burning one dimmer; the stamina bar, then the thread (and relight words when the lamp is off). The icon shimmers gold by a sconce, violet at a well; tap it to cover or relight | violet liquid, gold for a sigil's extra sections |
+| Lamp HUD | bottom left: a lantern icon (92 px; 64 on phones) in the lamp's colour, its flame scaled to 100 / 80 / 62 / 45% by stage; a fluid meter of 6 sections (32 × 20 px; more with sigils), the burning one dimmer; the stamina bar (and relight words when the lamp is off). The icon shimmers gold by a sconce, violet at a well; tap it to cover or relight | violet liquid, gold for a sigil's extra sections |
 | Lamp streams | motes flowing in an arc into the lamp from what feeds it: a lit sconce's flame (warm) while it shelters you, a well's pool (its colour) while you drink (`STREAM` in `lamp.js`, 16/s, 0.6 s each) | |
 | Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges). Unrest by fuel (`UNREST` in `lamp.js`, blended): flicker depth 0.03 at full, 0.08 at 2, 0.38 at 1, then settling to 0.02 at empty while a slow irregular fade grows to 0.5; dying, a brightness swell of up to 35% while you move. Halo (`HALO`): flat, hard-edged, see-through, about 4x the lamp across at full, shrinking to 40%, wobbling with the flicker and fade (it can exceed its average), opacity 0.3 down to 0.12, until the lamp is out. Light (`LIGHT`): intensity 25%–100%, falloff reach 18%–100%, colour following the lamp toward red. Its pool (light.js): 3.2 cells from you at full (3 charges or more), down to 0.9 at empty (`poolFull`, `poolEmpty`, `poolCurve` 1), steady (`breathe` 0: the flicker doesn't move it). Creepers read its edge (`lightRadius()`). Embers (`EMBER`): walking, up to 22/s spraying (0.35–0.75 s); standing, 9/s in a swaying column (0.9–1.6 s); dying, 0.7/s, red. Covered or out: the light eases to nothing, no halo or embers | |
 | Entropy popup | "+◆" (one diamond per shard's worth, up to three) floats up over the head in violet; "−◆" greyer when a block takes its charge back | |
@@ -544,7 +555,7 @@ you pass out and wake by your save lantern.
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. The wall around a doorway dithers like the rest; door panels never dither (the figure's silhouette shows through them) | side (north–south) walls never dither |
 | Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction); on the floor it shows only inside its pool (light.js, the Lamp row); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
-| Pickups | violet octahedron (shard), a spool (thread) | bob and turn; lit by the lantern, so they hide in the dark too |
+| Pickups | violet octahedron (shard) | bob and turn; lit by the lantern, so they hide in the dark too |
 | Tools lying | a chalk stick on its side, a doorstone on its back (doorway inset up), a gold key flat, at a seeded angle | still; walking within pickup range collects one (on the floor, not from a block) |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
 | Captions | a short typewriter-style log line when you enter a space | e.g. "s7 · chamber · damp · depth 3" (the Navidson Record feel) |
@@ -599,7 +610,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | --- | --- |
 | Move | WASD / arrows (Shift runs at 4 cells/s instead of 2.4); touch: drag for a stick |
 | Open a door | a tap of E (or the E prompt), within 0.6 cells of its middle and facing it (within 60°); the same to close it, or open it again, from either side. Walking into one doesn't open it |
-| Hold to act | `HOLD` in `actions.js`: wipe 0.4, light / snuff / save 0.5, grab 0.4, a lost path's door 0.7 (`lostDoorHold`), confirming a choice 0.8 (`choiceHold`), reroll 1.0 at a closed door into a provisional room (× 2, `rerollLoseFactor`, with something of yours in the room); a hold with a tap of its own shows its ring after 0.15 s (`TAP_GRACE`); anything else on E is a tap |
+| Hold to act | `HOLD` in `actions.js`: wipe 0.4, light / snuff / save 0.5, grab 0.4, reroll 1.0 at a closed door into a provisional room or at a lost path's door (× 2, `rerollLoseFactor`, with something of yours there); with `lostDoorChoice` on, a lost path's door 0.7 (`lostDoorHold`) brings up a choice, confirmed in 0.8 (`choiceHold`); a hold with a tap of its own shows its ring after 0.15 s (`TAP_GRACE`); anything else on E is a tap |
 | Entropy | a fluid amount in charges (`run.fuel`): start with 2, hold up to 6 (`chargesMax`, was 8); a shard is a third of a charge |
 | Shard | in 30% of chambers, 15% of corridors, 20% of dead ends; chambers of 20+ cells can hold a second |
 | Push block | 25% roll per room at depth 1+, kept if a straight push fits (about 1 room in 5); halls always try for 3, in different colours; home = 2 shards (`restoreCharges`, was 1 charge); off its mark takes back what it paid (never below 0.05) |
@@ -625,8 +636,8 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Reroll price | 1 charge; only a provisional room (no door out of it ever opened) |
 | Checkpoint | written when you save at a lantern: where you wake, and which rooms were standing. A faint makes every room opened since a lost path; it rolls nothing back (doors carved since stay, and a retraced path comes back as you left it, its ghosts, pixies and creepers rolled again) |
 | Pack | `run.packs`: [{ id, spaceId, seed, x, y, fuel, keys, doorstones, jars, chalks }]; follows its room (`packStatus`: here, lost, dim, or gone) |
-| Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), needs the thread; let go: push the door (the path turns to corruption); unchosen: dim at the next faint, fade at the one after |
-| Thread | 1 room in 20 at depth 3+ (`threadChance`, `threadMinDepth`, last on the loot stream); a pickup; kept for the rest of the run, through faints; 🧵 under the lamp meter |
+| Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), F with a charged hourglass in hand, which spends its pixie; reroll: E held at the door (the path turns to corruption); `lostDoorChoice`: a choice between the two instead; unchosen: dim at the next faint, fade at the one after |
+| Hourglass | 1 room in 20 at depth 3+ (`hourglassChance`, `hourglassMinDepth`, last on the loot stream; loot id still `thread`), one per run; equipment: kept for the rest of the run, never in your pack, pixie and all; holds one pixie (F: catch one, pour into / take from a vessel of pixies, or retrace a lost path at its door); a hotbar slot, an hourglass glyph with the lower bulb lit when charged; in the world, two glass bulbs in a wooden frame, a pixie glowing in the lower one when charged |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded on the loot stream, drawn after chalk); a tool, collected by walking over it; holds one pixie or one charge |
 | Vessels | 1/10 of rooms at depth 1+, not dead ends (`vesselChance`, own `'vessel'` stream; a free half-cell, off doors, items, sigils, wells, waystones, props and push blocks' starts and marks); up to 3 of one kind (`vesselCapacity`); a loose object in `run.objects` |

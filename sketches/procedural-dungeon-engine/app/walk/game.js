@@ -3,9 +3,10 @@
 // doesn't rewind: you wake at the save lantern you last saved at, every room
 // opened since that save becomes a lost path (suspended, exactly as you left
 // it), and what you carried stays where you fell (packs.js). Nothing you did
-// is undone. At a lost path's door you choose: retrace it (with the thread,
-// for entropy) or reroll it (open the door on something new, and the path
-// turns to corruption). The save slots are in saves.js.
+// is undone. At a lost path's door: retrace it (F with a charged hourglass
+// in hand, for entropy and its pixie) or reroll it (E held: the door opens on
+// something new, and the path turns to corruption). Your equipment (the
+// hourglass) isn't in the pack: it stays with you. The save slots are in saves.js.
 (function (global) {
   'use strict';
 

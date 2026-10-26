@@ -663,6 +663,28 @@ All notable changes to this sketch are logged here, per
   differ. Records from before (no `moodInherit` in their params) keep their
   old moods. Waypoint halls and the root roll their own. `stress-test.js`
   checks the regions.
+- 2026-10-26: **The thread is now the hourglass, and it's the key to a lost
+  path** (`app/walk/hourglass.js`).
+  - Same find (1 room in 20, depth 3+, one per run), but it starts empty and
+    holds one pixie: F with it near a pixie catches it (the jar's catch), F
+    at a vessel pours it in or takes one out of a vessel of pixies. A pixie
+    glows in its lower bulb and its hotbar glyph when charged; the 🧵 under
+    the lamp is gone.
+  - **At a lost path's door, E held rerolls** (1 s, twice that with
+    something of yours on the path; the ring shows what's lost), and **F
+    with a charged hourglass in hand retraces** (a shard a room, as before,
+    and the pixie). Without a charged hourglass the reroll is all there is.
+    A door onto ground the path holds works the same way.
+  - The retrace-or-reroll choice is kept behind a switch,
+    `RULES.lostDoorChoice` (off; on the dev panel), in case this doesn't
+    play well. On, it's the choice as before, its retrace needing a charged
+    hourglass and spending the pixie.
+  - It's the first **equipment**, a draft item class that's always with you
+    (`run.equipment`): a faint leaves it out of your pack, pixie and all.
+  - Saves carry on: run version 9; a thread you'd found becomes an empty
+    hourglass. The loot roll is unchanged (its id is still `thread`), so
+    there's no new build. Dev panel: "hourglass" and "hourglass: pixie" in
+    place of "thread".
 - 2026-10-26: **Lost paths read on the maps; packs shine.**
   - Doors to a lost path (its own door, or one onto ground it holds) are
     violet on the maps, like their seam.

@@ -46,6 +46,13 @@
         : { cls: 'blocked', text: `no room to set it down here${near.block.spaceId !== state.exp.registry[DE.key(Math.floor(state.player.x), Math.floor(state.player.y))] ? ' · it belongs in its own room' : ''}` };
       case 'climb': return { text: state.push.key ? 'climbing…' : 'climb (or push into it)' };
       case 'open': return { text: 'open the door' };
+      case 'letgo': {
+        // Retracing is the hourglass's (F with it in hand), shown on its own line.
+        const n = near.path.traces.length;
+        return { cls: near.lose ? 'lose' : 'collapse', text: `reroll your lost path · ${n} room${n === 1 ? '' : 's'} · the path is gone` +
+          (near.lose ? ` · what's yours on it goes too` : '') +
+          (near.charged && state.sel !== 'hourglass' ? ' · or your hourglass in hand to retrace it' : '') };
+      }
       case 'lostdoor': {
         const n = near.path.traces.length;
         return { cls: 'collapse', text: `your lost path · ${n} room${n === 1 ? '' : 's'} · retrace or reroll` };
@@ -58,6 +65,7 @@
 
   /** F's line for the item in hand; setting a jar down or drawing a mark never prompts. */
   function fLine(near) {
+    if (near.line) return near.line; // an item kind with its own prompt (hourglass.js)
     if (near.action === 'carve') {
       const n = state.run.doorstones;
       return { cls: 'chalk', text: `open a door in this wall · ${n} doorstone${n === 1 ? '' : 's'}` };
@@ -170,11 +178,9 @@
     // in its own elements (the lamp, the hotbar).
     setText('stats', `seed ${state.exp.rootSeed} · ${s.spaces} rooms · ${s.openExits} closed doors`);
     W.updateLampHud(true);
-    // Keys are a tool on the hotbar now; the thread is still shown by the lamp.
+    // Keys are a tool on the hotbar now, and the hourglass is on it too.
     const keyEl = $('keys');
     if (keyEl) keyEl.hidden = true;
-    const threadEl = $('thread');
-    if (threadEl) threadEl.hidden = !run.thread;
     refreshHotbar();
   }
 
