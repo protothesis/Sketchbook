@@ -29,7 +29,11 @@ decisions, see [`NOTES.md`](NOTES.md).
    lamp a place to rest (snuff it and its shard comes back).
 7. **Arrive.** The waypoint is a setpiece, a big hall. Wake its waystone
    and it joins your fast-travel network, and new waypoints may appear.
-8. **Using a waystone is a checkpoint.** If you faint (your psychic
+   *(Decided 2026-10-26, not built: halls get a save lantern instead, and
+   waystones become blocks you place. Section 19.)*
+8. **Using a waystone is a checkpoint.** *(Decided 2026-10-26, not built:
+   you save at a save lantern, and a faint moves you without rewinding the
+   run; your pack stays where you fell. Section 17.)* If you faint (your psychic
    stamina runs out, in the dark or in a ghost's reach), you wake at the
    last waystone you used, and everything opened since becomes a **lost
    path**. Your run (what you carry, what you lit and pushed) goes back
@@ -374,7 +378,8 @@ push-your-luck option.
   not at its centre, so you know roughly where, not exactly.
 - **Far apart.** Opening doors costs nothing, so a waypoint has to be a
   journey: two near (25–35 cells) and one far (45–60) to start.
-- **Waking a waystone reveals more,** not arriving: 0–3, with 0 and 3
+- **Waking a waystone reveals more** (to become: saving at a hall's
+  lantern for the first time, section 19), not arriving: 0–3, with 0 and 3
   rare, and never 0 while no pin is left waiting. Arriving at every hall
   and adding three each time filled the map with pins (playtest,
   2026-10-22).
@@ -404,6 +409,10 @@ push-your-luck option.
   stops being fun or fast.
 
 ## 9. Setpieces, the starter hall and waystones
+
+> **Changing (decided 2026-10-26, not built):** halls get a save lantern
+> instead of a waystone, and waystones become blocks you carry and power.
+> See section 19. Ley lines and fares carry over.
 
 **Halls** are a new room archetype: large (7–9 cells a side for setpieces,
 6–8 for the starter), a rectangle with notched corners so it reads
@@ -501,7 +510,9 @@ fuel you need to get there.
   (R, a shard), and the dark drains your psychic stamina (section 12). Find light or entropy in time, or pass out and
   wake at your last waystone. Everything else stays: the map, what you
   carry, what you restored. **You lose only your position.** Start gentle;
-  add bite (dropped items, a corpse run) only if it's too soft.
+  add bite (dropped items, a corpse run) only if it's too soft. *(The bite
+  is decided, 2026-10-26: you wake at your last save lantern, and your pack
+  stays where you fell. Section 17.)*
 
 **Covering the lamp** (R, built 2026-10-22): no light, no burn, and
 ghosts can't notice you, at the price of the dark wearing on your stamina
@@ -538,7 +549,8 @@ but name:
 - **The dark** drains it more slowly (about 12 s from full): an empty or
   covered lamp, away from a lit sconce.
 - **Empty: you pass out** and wake at your last waystone, with only your
-  position lost.
+  position lost. *(To become: your last save lantern, with your pack left
+  where you fell. Section 17.)*
 - **It comes back** in light, once nothing has drained it for a moment.
 
 **Why a meter, not a respawn on contact:** you can push a door open into a
@@ -687,11 +699,51 @@ the entropy, then come back.
 Waypoint distance stays as is (it played well). The thread is the first
 version of "retracing is earned"; it may become a proper ability later.
 
-### Needs a design pass: what a save keeps (open, 2026-10-24)
+### Decided: a faint moves you, it doesn't rewind (2026-10-26, not built)
 
-Found in playtesting, deliberately not fixed yet. Checkpoints, progress and
-waystone interactions are tangled, and want thinking through together, in
-one place, before anything changes.
+The design pass below is settled. Until it's built, the section above is
+still what the game does.
+
+**Nothing in the world is undone by a faint.** What you restored, the
+rooms you opened, what you put in or took out of containers, and the
+waystones you placed all stay as you left them. A faint resets *where you
+are*, not *when*.
+
+- **You wake at the save lantern you last used** (section 19). Saving is
+  its own act, at its own object, so it no longer hides inside a waystone
+  that's really for travel.
+- **The ground since your save is suspended.** Rooms that weren't standing
+  at your last save become a lost path, as today, but exactly as you left
+  them: blocks home, vessels moved, chests stocked. Retrace, let go and
+  ignore work as above.
+- **Your pack stays where you fell.** What you were carrying drops at the
+  spot you fainted. If that's on the suspended path, you retrace it to get
+  your things back. The spot shows on the maps as a **flame** while the
+  path is still there, and clears when the path fades or you let it go,
+  and your pack goes with it. This should make carrying everything
+  everywhere a risk, and venturing out a deliberate act.
+- **The run doesn't roll back,** so there's no snapshot for it to roll back
+  to. Resume stays an autosave (where you are). The second slot shrinks to
+  your respawn: which lantern, and which rooms were standing when you saved
+  there.
+- **No duplication, by construction.** You and the containers follow the
+  same rule (nothing is undone), so storing something and fainting can't
+  copy it.
+
+The cost of a faint is **ground and your pack, never the work you did**.
+Redoing a tidied room would be the worst kind of penalty for this game.
+
+**Open:**
+
+- What the pack is: everything you carry, or only some of it (entropy?
+  tools? keys?). The thread stays with you: it's an ability in all but
+  name.
+- Do you wake with something, such as a charge from the lantern, so a faint
+  at empty doesn't strand you in the dark?
+- A second faint before you've fetched the first pack: two flames, or does
+  the older pack go with its path when that path fades?
+
+The original problem and questions, kept for the reasoning:
 
 **The symptom.** You wake in a waystone hall and the blocks you pushed home
 and the sconces you lit there are undone, every time.
@@ -769,6 +821,86 @@ changes the moods of saved expeditions (not their layouts).
 **Next** (not built): moods with mechanics (dust that shows footprints,
 damp that dims the lamp), regions of material as well as mood, and
 regions that know their size (a region that has run long enough ends).
+
+## 19. Save lanterns and waystone blocks (decided 2026-10-26, not built)
+
+The old waystone did three jobs: travel, checkpoint and goal. Touching it
+to save felt wrong, because using it opens the travel map, and you don't
+want to travel. So the jobs split between two objects: one that only saves,
+and one that only travels.
+
+### Save lanterns
+
+A lantern the size of one block, on a dark stone plinth one block wide and
+two tall. It **replaces the waystone in halls**: the starter hall and every
+setpiece hall have one.
+
+- **Always lit, dimly:** a low red flame, flickering. Nothing to wake, no
+  cost.
+- **E saves.** The flame burns bright for a moment (a flash, a "saved"
+  notice), then settles back to its slow, dim flame. That's all it does.
+- **It's your only respawn** (section 17's decision): you wake at the last
+  lantern you saved at.
+- **It shelters the lamp,** like a lit sconce: it owns a light pool, and
+  standing in it your lamp doesn't burn. Lantern halls are oases.
+- **On the minimap,** like waystones today.
+- **Waypoints are lantern halls** (for now). Saving at a hall's lantern
+  for the first time is what reveals new waypoints (section 8's 0–3 rule
+  moves here from waking a waystone).
+- In the ecology it acts like a sconce: its pool pushes ghosts and
+  creepers out, and pixies flee it.
+
+### Waystone blocks
+
+Waystones become **1x1 blocks you can carry**, so the fast-travel network
+is yours to build. You decide what's worth travelling to, and you
+"refactor" the network by moving stones around in the world.
+
+- **The look:** a dark, glassy block with a random sigil on its face that
+  glows while it's powered.
+- **Carried like any block:** one at a time, it slows you, no running or
+  climbing. Less free than a doorstone, on purpose.
+- **Powered from a jar,** like a vessel: pour in entropy or a pixie. A
+  powered stone links to its two nearest powered stones (the ley lines of
+  section 9, unchanged), and E at it opens the travel map. Each line still
+  costs a shard to ride.
+- **Entropy and pixies power it differently** (to tune; a first shape):
+  entropy lasts a while (a time, or a number of trips), so an all-entropy
+  network needs upkeep; a pixie powers it for good, and maybe reaches
+  farther (three links), but a stone with a pixie in it still counts as a
+  pixie, so it draws ghosts, with no new rule.
+- **Lifting a powered stone spills its power,** and its links drop.
+  Re-power it where you set it down. Rewiring is a small, deliberate spend.
+- **They often spawn in or near lantern halls,** so the network tends to
+  grow outward from them.
+- **Rerolls: no exception.** A stone in a provisional room that you reroll
+  despawns with the room, like any block (section 3). Section 1's rule
+  stays clean. The door should show that something of yours is inside
+  before you reroll (section 15). If losing things that way stings in
+  play, the "kept for later" list could hand them back at your feet.
+- **Faints:** a stone you're carrying drops with your pack. A stone on a
+  suspended path goes dark in the network until you retrace it, which is
+  one more reason to go back.
+- **Later:** a **vortex satchel**, equipment that stashes a few blocks in
+  another dimension, so they weigh nothing. It takes an equipment slot,
+  not a hand. With the coin purse, that makes two things that want
+  equipment slots: part of the inventory conversation.
+
+This replaces the doorstone-style "placed waystone" (pick up, place once,
+fixed for good) from the 2026-10-25 memo.
+
+**Saves:** halls change, so this bumps the build stamp, and older saves
+won't load (section 17's policy).
+
+**Open:**
+
+- E on a block lifts it, and E at a waystone opens the travel map. Which
+  gets the tap and which the hold? (Lifting a block that's home is already
+  a 0.5 s hold.)
+- Does the starter hall start with a powered stone, or with a stone and a
+  jar, so you learn the network in the first few minutes?
+- How long entropy power lasts, and whether pixie stones reach farther:
+  tune with the dev panel.
 
 ## First slice (built 2026-10-21)
 
@@ -865,5 +997,5 @@ you retrace (with the thread) or let go.
   playing.
 - Is a shard per room the right retrace price? Is the thread too rare, or
   should retracing become an earned ability instead?
-- Should touching a waystone stay the only way to move your respawn, or
-  should something else (resting? lighting a sconce?) set it too?
+- ~~Should touching a waystone stay the only way to move your respawn?~~
+  Decided 2026-10-26: saving at a save lantern is the only way (section 19).

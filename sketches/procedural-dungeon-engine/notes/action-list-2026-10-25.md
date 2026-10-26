@@ -15,9 +15,13 @@ The problem under most of it, in the Oct 25 memo's words: the dungeon still
 feels random and flat, and the only goal is the next waystone. Containers,
 regions and depth are all answers to that.
 
-## Now: three pieces, in parallel
+## Now: three pieces, in parallel (all merged)
 
 They don't share files, and none of them waits on #26.
+
+- A: dev panel, PR #28.
+- B: lamp edge, PR #30, then reworked into light pools in PR #31.
+- C: mood regions, PR #32 (GAME-DESIGN §18).
 
 ### A. Dev panel, first iteration (Oct 25)
 
@@ -65,11 +69,25 @@ for edits.
 - Not yet: mechanics per mood (dusty → dusting, §3's broom), layered
   material regions (the memo itself asks for the simple version first).
 
-## Next: a design conversation
+## Next: a design conversation (held 2026-10-26)
 
 **What a save keeps** (GAME-DESIGN §17), together with **containers**.
 They're the same question: do a chest's contents and a filled shelf
 survive a faint? Is a container's contents world or run?
+
+**Decided** (written up in GAME-DESIGN §17 and §19):
+
+- **A faint moves you, it doesn't rewind.** Nothing in the world is undone:
+  restoration, rooms, container contents, placed stones. Rooms since your
+  save are suspended exactly as you left them; retrace to get them back.
+- **Your pack stays where you fell,** marked with a flame on the maps
+  while its path is still there.
+- **Save lanterns** replace waystones in halls: dim, always lit, E saves
+  (a bright flash, then back to dim). The only respawn. They shelter the
+  lamp. Waypoints are lantern halls.
+- **Waystones become carried 1x1 blocks,** powered from a jar (entropy and
+  pixies differ). You build and rewire the travel network yourself.
+- **Rerolls: no exception** to the commit rule.
 
 What's already decided about containers (user, 2026-10-25):
 
@@ -84,14 +102,17 @@ What's already decided about containers (user, 2026-10-25):
 
 ## Then: build, in this order
 
-1. **Placed waystones** (Oct 25). Like a doorstone: you pick it up as an
-   item, it's fixed once placed, you wake it with entropy (from a jar or
-   the lamp), and it shows on the minimap. It links into the ley lines (§9).
-   Open: does a placed stone move your respawn (§17)?
-2. **Inventory menu.** Parked in INTERACTION-PLAN until now.
-3. **Chest** (Oct 24). Opens to show a number of slots. Seeded: some empty,
+1. **Faint without rewind, and save lanterns** (GAME-DESIGN §17, §19).
+   Drop the run rollback, leave the pack where you fell (flame on the
+   maps), and swap halls' waystones for save lanterns. They go together:
+   the lantern is what you wake at.
+2. **Waystone blocks** (§19). Replaces the doorstone-style "placed
+   waystones" from the Oct 25 memo. Settle tap vs. hold for E (lift vs.
+   travel) first.
+3. **Inventory menu.** Parked in INTERACTION-PLAN until now.
+4. **Chest** (Oct 24). Opens to show a number of slots. Seeded: some empty,
    some junk, some useful.
-4. **Storeroom** (Oct 25). A late room with crates and places to stash
+5. **Storeroom** (Oct 25). A late room with crates and places to stash
    them. Bring enough crates and it wakes or pays a bonus, never said
    outright. It needs block hauling, so it comes after #26 (fixed in
    PR #27). Watch for tedium: the memo itself worries that hauling crates
@@ -108,6 +129,9 @@ equipment could raise capacity and strength later.
 - Keep inventory weight only if there's a simple hook to layer it on (one
   carried-load value feeding movement, which blocks would also use);
   otherwise park it.
+- **Equipment slots** belong here too. The coin purse and the vortex
+  satchel (carry a few blocks weightlessly, §19) both want one. The dropped
+  pack on a faint (§17) also raises the stakes of carrying a lot.
 
 ## Later (each needs more thought)
 

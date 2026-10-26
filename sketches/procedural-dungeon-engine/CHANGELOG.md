@@ -663,6 +663,12 @@ All notable changes to this sketch are logged here, per
   differ. Records from before (no `moodInherit` in their params) keep their
   old moods. Waypoint halls and the root roll their own. `stress-test.js`
   checks the regions.
+- 2026-10-26: **Design decided, not built: saves, save lanterns and
+  waystone blocks** (GAME-DESIGN §17, §19). A faint moves you without
+  rewinding anything; your pack stays where you fell. Save lanterns replace
+  waystones in halls and are the only respawn. Waystones become 1x1 blocks
+  you carry and power from a jar. The action list
+  (`notes/action-list-2026-10-25.md`) has the new build order.
 
 ### Fixed
 
