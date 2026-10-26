@@ -121,16 +121,16 @@
   /**
    * Wall, door and block edges around a point. Blocks only count if their
    * top rises above `above` (cells): for the figure that's its feet, for the
-   * lamp its own height.
+   * lamp its own height. `ignore`: a block left out (the one you're dragging).
    */
-  function nearbySegments(p, above) {
+  function nearbySegments(p, above, ignore) {
     const segs = [];
     const cx = Math.floor(p.x), cy = Math.floor(p.y);
     const seen = new Set();
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       edgeSegments(cx + dx, cy + dy, segs);
       for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
-        if (seen.has(b) || b.top <= above) continue;
+        if (seen.has(b) || b === ignore || b.top <= above) continue;
         seen.add(b);
         // facing = the side's outward direction, for push-to-climb.
         segs.push({ ax: b.x0, ay: b.y0, bx: b.x1, by: b.y0, block: b, facing: 'N' },
@@ -143,8 +143,8 @@
   }
 
   /** Push the player out of every nearby wall; returns the doors and blocks touched. */
-  function resolveCollisions(p) {
-    const segs = nearbySegments(p, p.z + 0.05); // at or below your feet: walkable
+  function resolveCollisions(p, ignore) {
+    const segs = nearbySegments(p, p.z + 0.05, ignore); // at or below your feet: walkable
     const touched = [];
     for (let iter = 0; iter < 3; iter++) {
       for (const s of segs) {

@@ -252,9 +252,11 @@ Determinism).
     (if there's room behind you). It slides smoothly, off the grid, slower
     than you walk (a crate at 0.55 of walking speed, a vessel 0.6, a stone
     block 0.35), and you move with it; it stops against anything in the
-    way. Sideways does nothing. Let go of E and it eases into the nearest
-    half-cell, the notch it stays aligned to. *(Known issue: dragging is
-    still glitchy in play; see GitHub issue #26.)*
+    way, or against anything in yours (pulling, you need room to back up).
+    Sideways does nothing. What collides is where you see it, all the way.
+    Let go of E and it eases into the nearest half-cell you can follow it
+    to (the notch it stays aligned to), at about the speed it was moving,
+    and you with it.
   Pushed or pulled, a block stays in its room, on the floor; carried, it
   goes anywhere: set it down in any room, never in a doorway's mouth. Set
   down or pushed onto its mark (in its home room), it's home.

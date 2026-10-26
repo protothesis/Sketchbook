@@ -13,7 +13,6 @@
   const { DE, DP, RULES, THREE, S, RADIUS, UNIT, WALL_T, ekey, scene, state, savePlayer, easeOut,
     inDoorMouth } = W;
 
-  const SLIDE_TIME = 0.22; // seconds for a push to slide one half-cell
   const LIFT_TIME = 0.38;  // seconds for the arc up over your head, or back down
 
   const pushGeo = {
@@ -66,11 +65,26 @@
   const sub = (sx, sy) => ({ x0: sx / 2, y0: sy / 2, x1: sx / 2 + 0.5, y1: sy / 2 + 0.5 });
   const cellOf = (sx, sy) => DE.key(Math.floor(sx / 2), Math.floor(sy / 2));
 
+  /**
+   * (Re)index a block under every cell its box overlaps (b.cells
+   * remembers which), or take it out. Dragged, its box is off the
+   * half-cell grid and can straddle two cells.
+   */
   function indexBlock(b, add) {
-    const k = cellOf(b.sx, b.sy);
-    const list = (state.blockAt.get(k) || []).filter((o) => o !== b);
-    if (add) list.push(b);
-    if (list.length) state.blockAt.set(k, list); else state.blockAt.delete(k);
+    for (const k of b.cells || []) {
+      const list = (state.blockAt.get(k) || []).filter((o) => o !== b);
+      if (list.length) state.blockAt.set(k, list); else state.blockAt.delete(k);
+    }
+    b.cells = null;
+    if (!add) return;
+    b.cells = [];
+    for (let cy = Math.floor(b.y0); cy < Math.ceil(b.y1); cy++) {
+      for (let cx = Math.floor(b.x0); cx < Math.ceil(b.x1); cx++) {
+        const k = DE.key(cx, cy);
+        b.cells.push(k);
+        state.blockAt.set(k, (state.blockAt.get(k) || []).concat(b));
+      }
+    }
   }
 
   function place(b, sx, sy) {
@@ -183,7 +197,7 @@
       const base = (o.lv || 0) * UNIT;
       const b = {
         key, push: true, vessel: true, jar: true, units: 1, base, top: base + VESSEL_H,
-        holds: o.holds || null, n: o.n || 0, mesh: W.makeVesselMesh(), slide: null,
+        holds: o.holds || null, n: o.n || 0, mesh: W.makeVesselMesh(),
       };
       place(b, o.sx, o.sy);
       return b;
@@ -205,7 +219,7 @@
     const base = (o.lv || 0) * UNIT;
     const b = {
       key, push: true, crate: o.kind === 'crate', units: 1, base, top: base + UNIT, color: col, bodyMat,
-      to: o.to || null, done: !!o.done, paid: o.paid || 0, mesh, slide: null,
+      to: o.to || null, done: !!o.done, paid: o.paid || 0, mesh,
     };
     place(b, o.sx, o.sy);
     if (b.done) settle(b, false);
@@ -253,7 +267,6 @@
   /** A block in your hands: out of the world (nothing collides with it), its mesh over your head. */
   function hold(b) {
     b.carried = true;
-    b.slide = null;
     b.spaceId = null; // in your hands, not in any room: a reroll can't take it
     state.carry = b;
     state.run.carry = b.key;
@@ -268,25 +281,42 @@
     const p = state.player;
     const cx = (b.x0 + b.x1) / 2 - p.x, cy = (b.y0 + b.y1) / 2 - p.y;
     const dir = Math.abs(cx) > Math.abs(cy) ? { x: Math.sign(cx), y: 0 } : { x: 0, y: Math.sign(cy) };
-    // t: how far (cells, along dir) the block has been dragged off its half-cell.
-    state.grab = { block: b, dir, off: { x: -cx, y: -cy }, moved: false, t: 0 };
+    // t: how far (cells, along dir) the block is off its half-cell, within
+    // a quarter cell either way. release: easing into a half-cell after.
+    state.grab = { block: b, dir, moved: false, t: 0, release: null };
     p.angle = Math.atan2(dir.x, dir.y);
   }
 
   /**
    * E let go: lift it, or (if you dragged it) let go of it, and it eases
-   * into the nearest half-cell: the notch it stays aligned to. `cancel`:
-   * let go either way.
+   * into a half-cell, the notch it stays aligned to: the nearest one you
+   * can follow it to. `cancel`: let go either way.
    */
   function endGrab(cancel) {
     const g = state.grab;
-    if (!g) return;
-    state.grab = null;
+    if (!g || g.release) return;
     const b = g.block;
-    if (!g.moved) { if (!cancel && !b.slide) liftBlock(b); return; }
-    if (Math.abs(g.t) >= 0.25) step(b, g.t > 0 ? g.dir : { x: -g.dir.x, y: -g.dir.y }); // (the way was checked as it moved)
-    b.slide = { from: b.mesh.position.clone(), t: 0 };
-    b.follow = g.off; // you stay with it as it settles
+    if (!g.moved) {
+      state.grab = null;
+      if (!cancel) liftBlock(b);
+      return;
+    }
+    const tos = [0];
+    if (g.t && canMoveTo(b, b.sx + Math.sign(g.t) * g.dir.x, b.sy + Math.sign(g.t) * g.dir.y, false, b.base || 0, true)) tos.push(Math.sign(g.t) * 0.5);
+    tos.sort((a, c) => Math.abs(a - g.t) - Math.abs(c - g.t));
+    const to = tos.find((x) => figureRoom(g, x - g.t) >= Math.abs(x - g.t) - 1e-6);
+    const dist = Math.abs((to === undefined ? 0 : to) - g.t);
+    // At about the speed it was moving, slowing into the notch.
+    const T = THREE.MathUtils.clamp(2 * dist / dragSpeed(b), 0.08, 0.3);
+    // (In cells moved, not t: t starts again from the next half-cell as it passes a quarter.)
+    g.release = { d: (to === undefined ? 0 : to) - g.t, done: 0, k: 0, T, follow: to !== undefined };
+  }
+
+  /** Eased into its half-cell: done with it. On its mark, it's home. */
+  function finishGrab() {
+    const g = state.grab, b = g.block;
+    state.grab = null;
+    moveBox(g, 0);
     if (b.to) {
       if (b.sx === b.to.sx && b.sy === b.to.sy) { if (!b.done) settle(b, true); }
       else if (b.done) unsettle(b);
@@ -297,57 +327,85 @@
 
   // Dragging speed, cells a second: lighter things move quicker.
   const DRAG = { crate: 0.55 * W.SPEED, vessel: 0.6 * W.SPEED, block: 0.35 * W.SPEED };
+  const dragSpeed = (b) => DRAG[b.crate ? 'crate' : b.vessel ? 'vessel' : 'block'];
 
-  /** Could the block be dragged one half-cell along `d`? Pulling, you need room behind you too. */
-  function canDrag(b, d, pulling) {
-    const p = state.player;
-    if (!canMoveTo(b, b.sx + d.x, b.sy + d.y, false, b.base || 0, pulling)) return false;
-    if (!pulling) return true;
-    const back = { x: p.x + d.x * 0.5, y: p.y + d.y * 0.5 };
-    const bsx = Math.floor(back.x * 2), bsy = Math.floor(back.y * 2);
-    return state.exp.registry[cellOf(bsx, bsy)] === b.spaceId &&
-      !(state.blockAt.get(cellOf(bsx, bsy)) || []).some((o) => o !== b && o.top > p.z + 0.05 &&
-        back.x > o.x0 - RADIUS && back.x < o.x1 + RADIUS && back.y > o.y0 - RADIUS && back.y < o.y1 + RADIUS);
+  /**
+   * How far (cells) the figure can follow a block that moves `d` along the
+   * grab axis: probed with the same collisions the figure walks by, the
+   * block itself left out (it moves the same way).
+   */
+  function figureRoom(g, d) {
+    if (!d) return 0;
+    const p = state.player, q = { x: p.x + g.dir.x * d, y: p.y + g.dir.y * d, z: p.z };
+    W.resolveCollisions(q, g.block);
+    if (state.exp.registry[DE.key(Math.floor(q.x), Math.floor(q.y))] === undefined) return 0;
+    return Math.max(0, ((q.x - p.x) * g.dir.x + (q.y - p.y) * g.dir.y) * Math.sign(d));
   }
 
-  /** The block's half-cell moves one along `d` (its collision box with it). */
-  function step(b, d) {
-    indexBlock(b, false);
-    place(b, b.sx + d.x, b.sy + d.y);
+  /**
+   * The block's box (what collides, what you see) at t along the grab axis
+   * from its half-cell. Past a quarter cell, its half-cell (what's saved)
+   * moves on, the box staying where it is.
+   */
+  function moveBox(g, t) {
+    const b = g.block;
+    if (Math.abs(t) > 0.25 + 1e-9) {
+      const d = t > 0 ? g.dir : { x: -g.dir.x, y: -g.dir.y };
+      place(b, b.sx + d.x, b.sy + d.y);
+      t -= Math.sign(t) * 0.5;
+      const home = state.spaces.get(b.spaceId);
+      b.tile = (home && home.tileAt[cellOf(b.sx, b.sy)]) || b.tile;
+      saveObject(b);
+    }
+    g.t = t;
+    const r = sub(b.sx, b.sy);
+    Object.assign(b, { x0: r.x0 + g.dir.x * t, x1: r.x1 + g.dir.x * t, y0: r.y0 + g.dir.y * t, y1: r.y1 + g.dir.y * t });
     indexBlock(b, true);
-    const home = state.spaces.get(b.spaceId);
-    b.tile = (home && home.tileAt[cellOf(b.sx, b.sy)]) || b.tile;
+    b.mesh.position.set((b.x0 + 0.25) * S, b.base * S, (b.y0 + 0.25) * S);
   }
 
   /**
    * While you have hold of a block, movement along its axis drags it,
    * smoothly, off the grid: toward it pushes, away pulls, slower than you
    * walk (stone slower than a crate), and you move with it. Sideways does
-   * nothing. It stops against anything in the way. Its half-cell (what
-   * collides, and what's saved) moves on as it passes halfway.
+   * nothing. It stops against anything in its way, or yours. Block and
+   * figure move by the same amount, each checked first, so nothing has to
+   * push either of them back afterwards.
    */
   function grabInput(inp, dt) {
     const g = state.grab, b = g.block, p = state.player;
-    if (b.slide) return;
-    const along = inp.mag > 0.3 ? (inp.x * g.dir.x + inp.y * g.dir.y) * inp.mag : 0;
-    if (Math.abs(along) < 0.3) return;
-    if (p.z > 0.05 || b.base > 0.01) { // dragging: on the floor only
-      if (!g.warned) W.showCaption('you can only push or pull on the floor · let go of E to lift it instead');
-      g.warned = true;
-      return;
+    let d = 0;
+    if (g.release) {
+      const r = g.release;
+      r.k = Math.min(1, r.k + dt / r.T);
+      d = r.d * easeOut(r.k) - r.done;
+      r.done += d;
+      if (!r.follow) { moveBox(g, g.t + d); d = 0; }
+    } else {
+      const along = inp.mag > 0.3 ? (inp.x * g.dir.x + inp.y * g.dir.y) * inp.mag : 0;
+      if (Math.abs(along) < 0.3) return;
+      if (p.z > 0.05 || b.base > 0.01) { // dragging: on the floor only
+        if (!g.warned) W.showCaption('you can only push or pull on the floor · let go of E to lift it instead');
+        g.warned = true;
+        return;
+      }
+      d = along * dragSpeed(b) * dt;
+      // The block: on into the next half-cell only if that's free.
+      const t = g.t + d, s = Math.sign(t);
+      if (s && !canMoveTo(b, b.sx + s * g.dir.x, b.sy + s * g.dir.y, false, b.base || 0, true)) {
+        d = (s > 0 ? Math.min(t, Math.max(g.t, 0)) : Math.max(t, Math.min(g.t, 0))) - g.t;
+      }
+      // You: as far as you can follow it.
+      d = Math.sign(d) * Math.min(Math.abs(d), figureRoom(g, d));
+      if (Math.abs(d) < 1e-6) return;
+      g.moved = true;
     }
-    const back = { x: -g.dir.x, y: -g.dir.y };
-    let t = g.t + along * (DRAG[b.crate ? 'crate' : b.vessel ? 'vessel' : 'block'] || DRAG.block) * dt;
-    if (t > 0 && !canDrag(b, g.dir, false)) t = Math.min(t, 0);
-    if (t < 0 && !canDrag(b, back, true)) t = Math.max(t, 0);
-    if (t !== g.t) g.moved = true;
-    if (t >= 0.5) { step(b, g.dir); t -= 0.5; }
-    else if (t <= -0.5) { step(b, back); t += 0.5; }
-    g.t = t;
-    const cx = b.x0 + 0.25 + g.dir.x * t, cy = b.y0 + 0.25 + g.dir.y * t;
-    b.mesh.position.set(cx * S, b.base * S, cy * S);
-    p.x = cx + g.off.x;
-    p.y = cy + g.off.y;
+    if (d) {
+      moveBox(g, g.t + d);
+      p.x += g.dir.x * d;
+      p.y += g.dir.y * d;
+    }
+    if (g.release && g.release.k >= 1) finishGrab();
   }
 
   /** E held at a block, and let go without moving: lift it, in an arc up over your head. Off its mark, it takes its entropy back. */
@@ -515,25 +573,12 @@
     return best;
   }
 
-  /** Slides, lift arcs, and growing and shrinking with the floor as the room assembles. */
+  /** Lift arcs, and growing and shrinking with the floor as the room assembles. */
   const overhead = new THREE.Vector3();
   function updatePushBlocks(dt) {
     for (const b of state.pushBlocks) {
       if (b.anim) { animateLift(b, dt); continue; }
       if (b.carried) continue; // over your head (items.js updateHeld)
-      const tx = (b.x0 + 0.25) * S, tz = (b.y0 + 0.25) * S;
-      if (b.slide) {
-        b.slide.t = Math.min(1, b.slide.t + dt / SLIDE_TIME);
-        const k = easeOut(b.slide.t);
-        b.mesh.position.set(b.slide.from.x + (tx - b.slide.from.x) * k, b.base * S, b.slide.from.z + (tz - b.slide.from.z) * k);
-        if (b.slide.t >= 1) b.slide = null;
-        // Let go after dragging, it eases into its half-cell, and you with it.
-        if (b.follow) {
-          state.player.x = b.mesh.position.x / S + b.follow.x;
-          state.player.y = b.mesh.position.z / S + b.follow.y;
-          if (!b.slide) b.follow = null;
-        }
-      }
       b.mesh.scale.setScalar(Math.max(0.001, b.tile ? b.tile.scale.x : 1));
     }
   }

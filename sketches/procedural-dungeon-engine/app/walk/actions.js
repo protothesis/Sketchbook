@@ -132,6 +132,7 @@
   function actionNear(p) {
     // Holding on to a block: that's what E is about until you let go.
     if (state.grab) {
+      if (state.grab.release) return null; // let go: it's easing into its half-cell
       const near = { action: 'grabbed', block: state.grab.block };
       near.box = focusBox(Object.assign({}, near, { action: 'lift' }));
       return near;

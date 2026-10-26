@@ -110,8 +110,9 @@ built; this file is the plan until it's all in.
       starts with empty hands; the checkpoint says what you carry).
 - [x] Travelling from an awake waystone is a hold (0.5 s).
 - Kept: the set-down preview box.
-- **Known issue:** dragging is still glitchy in play (popping, jerks).
-  Needs a thorough investigation, not another patch: issue #26.
+- [x] Dragging glitches (popping, jerks) fixed: the collision box now moves
+      with the block, and block and figure move together, both checked
+      first (issue #26).
 
 ## Playtest round 1 (2026-10-24)
 

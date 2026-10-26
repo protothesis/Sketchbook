@@ -586,6 +586,26 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-25: **Dragging blocks is smooth** (issue #26). It used to pop
+  and jerk for two reasons:
+  - The block's collision box stayed on its old half-cell while its mesh
+    slid up to half a cell ahead. Pushing, the figure walked into that
+    stale box, so collision and the inside-a-block safety net held it
+    still while the block slid away. Near the halfway mark the figure
+    popped out of the far side, and the block snapped back to where it
+    started. A push never got past the first half-cell.
+  - When the way ahead (or, pulling, behind you) closed mid-drag, the drag
+    offset reset to zero instead of holding, so the block jumped back as
+    much as half a cell, again and again.
+
+  Now the box is the mesh: it moves continuously and is indexed under
+  every cell it overlaps. The saved half-cell follows the nearest notch.
+  Block and figure move by the same amount, after checking the block's
+  next half-cell and probing the figure's path with the same collisions it
+  walks by. Nothing has to push either one back afterwards. Let go, and the
+  block eases into the nearest half-cell you can follow it to, at about
+  the speed it was moving, with the figure. That runs through the same
+  path as the drag, before the camera and the figure mesh update.
 - 2026-10-20: Walk mode froze for a remote playtester the moment they
   picked up chalk. Their browser had cached copies of different versions:
   an older play.html with no chalk counter, next to a newer play.js. The
