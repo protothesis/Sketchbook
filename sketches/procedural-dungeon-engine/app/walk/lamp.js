@@ -283,43 +283,41 @@
   halo.renderOrder = 5;
   scene.add(halo); // follows the lamp in world space (the figure's rig squashes when crouched)
 
-  // The light's reach and colour. Dimming, it goes redder and dimmer, and
-  // its reach (the point light's cutoff distance) shrinks. That light is
-  // all there is: light.js bands it on the floor and works out, from the
-  // same falloff, where its edge is and what it lights for the game.
+  // The light's look: the lantern, a plain point light that goes redder,
+  // dimmer and shorter as the fuel drops, flickering with the flame. Its
+  // pool is separate (light.js): a steady circle on the floor around you
+  // where the light shows in bands, and what creatures read as your light.
   const LIGHT = {
     minIntensity: 0.25, // of full, when empty
+    minRange: 0.18,     // of full, when empty: how far the point light's falloff reaches
     redden: 0.5,        // how far the light's colour follows the lamp's toward red
     swell: 0.35,        // dying: brightness swell while you move
-    reachFull: 4,       // cells: the light's reach at a full lamp (RULES.lampFullCharges or more)
-    reachEmpty: 1.25,   // cells: its reach as it empties
-    reachCurve: 1,      // over 1 holds it wide and shrinks it late; under 1, early
-    decay: 1,           // how fast it dims with distance (three.js; 2 is physical): lower is flatter, brighter near its edge
-    breathe: 0.04,      // of the reach: how much the flame's flicker moves it
+    poolFull: 3.2,      // cells: the pool's radius at a full lamp (RULES.lampFullCharges or more)
+    poolEmpty: 0.9,     // cells: its radius as the lamp empties
+    poolCurve: 1,       // over 1 holds it wide and shrinks it late; under 1, early
+    breathe: 0,         // of the radius: how much the flame's flicker moves the pool (0: steady)
   };
 
   /**
-   * The lamp's light without the flicker, as a light.js source: what the
-   * game reads (creatures, the edge). Covered or out, it has no intensity.
+   * The lamp's pool, as a light.js pool: centred on you, its radius from
+   * the fuel (steady), and the lamp as where its light comes from (what
+   * blocks it). Covered or out, it has no radius.
    */
-  const steadyTint = new THREE.Color();
   function lampLight() {
-    const level = lampLevel(), q = lantern.position;
+    const p = state.player, q = lantern.position;
     return {
-      x: q.x / S, y: q.z / S, h: q.y / S, decay: lantern.decay,
-      intensity: lampOn() ? LANTERN * lerp(LIGHT.minIntensity, 1, level) : 0,
-      reach: lerp(LIGHT.reachEmpty, LIGHT.reachFull, Math.pow(level, LIGHT.reachCurve)),
-      lum: W.light.lumOf(steadyTint.copy(lantern.color)),
+      x: p.x, y: p.y, from: { x: q.x / S, y: q.z / S, h: q.y / S },
+      r: lampOn() ? lerp(LIGHT.poolEmpty, LIGHT.poolFull, Math.pow(lampLevel(), LIGHT.poolCurve)) : 0,
     };
   }
 
   /**
-   * How far the light reaches across the floor, in cells: the outer edge of
-   * its bands (light.js), without the flicker. Creatures that keep to its
-   * edge read it (creepers.js); 0 while the lamp is out or covered.
+   * How far your light reaches across the floor, in cells: its pool's edge.
+   * Creatures that keep to its edge read it (creepers.js); 0 while the lamp
+   * is out or covered.
    */
   function lightRadius() {
-    return lampOn() ? W.light.edge(lampLight()) : 0;
+    return lampLight().r;
   }
 
   // Embers: points rising off the lamp. Walking, they spray and trail
@@ -425,9 +423,8 @@
     colorAt(Math.max(level, 0.3), lightTint);
     lantern.color.copy(WARM).lerp(lightTint, LIGHT.redden * (1 - level) + 0.3);
     lantern.intensity = LANTERN * lerp(LIGHT.minIntensity, 1, level) * bright * on * (0.96 + 0.04 * Math.sin(t * 9.3));
-    const reach = lerp(LIGHT.reachEmpty, LIGHT.reachFull, Math.pow(level, LIGHT.reachCurve));
-    lantern.decay = LIGHT.decay;
-    lantern.distance = reach * S * (1 - LIGHT.breathe + LIGHT.breathe * Math.min(1.2, bright));
+    const reach = lerp(LIGHT.minRange, 1, smooth(0, 1, level)) * (0.92 + 0.08 * bright);
+    lantern.distance = LANTERN_RANGE * reach;
 
     lanternMesh.getWorldPosition(lampWorld);
     haloMat.color.copy(lampColor);
@@ -436,7 +433,10 @@
     halo.scale.setScalar(HALO.full * (HALO.minScale + (1 - HALO.minScale) * level) * Math.max(0.3, wob));
     haloMat.opacity = lerp(HALO.lowOpacity, HALO.opacity, smooth(0, 0.66, level)) * Math.min(1.2, bright) * on;
 
-    W.light.updateBands();
+    // The pool on the floor, breathing with the flame only as much as LIGHT.breathe says.
+    const pool = lampLight();
+    pool.r *= 1 - LIGHT.breathe + LIGHT.breathe * Math.min(1.2, bright);
+    W.light.setLampPool(pool);
 
     // Embers: fewer, dimmer and shorter-lived as the lamp fails; how still
     // you are (eased) blends the walking spray into the idle column; dying,

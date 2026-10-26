@@ -91,15 +91,13 @@
     color: 0x8f86ff,
     lights: 2,           // pooled
     intensity: 5,
-    range: 3.6,          // cells: the light's reach (light.js: its edge keeps creatures off)
-    decay: 1.6,
-    height: 1.1,         // cells: the light, over the stone
+    range: 3.6,          // cells
     shaftRadius: 0.32,   // cells
     shaftHeight: 3.2,    // cells
     shaftOpacity: 0.16,
   };
   const glowLights = Array.from({ length: GLOW.lights }, () => {
-    const l = new THREE.PointLight(GLOW.color, 0, GLOW.range * S, GLOW.decay);
+    const l = new THREE.PointLight(GLOW.color, 0, GLOW.range * S, 1.6);
     scene.add(l);
     return l;
   });
@@ -356,20 +354,11 @@
       const it = lit[i];
       if (!it) { l.intensity = 0; return; }
       const c = centre(it.o);
-      l.position.set(c.x * S, GLOW.height * S, c.y * S);
+      l.position.set(c.x * S, 1.1 * S, c.y * S);
       l.intensity = GLOW.intensity * (0.85 + 0.15 * Math.sin(t * 1.6 + it.o.phase));
     });
   }
 
-  /** An awake waystone's light, steady, as a light.js source. */
-  let glowLum = null;
-  function waystoneLight(st) {
-    glowLum = glowLum || W.light.lumOf(new THREE.Color(GLOW.color));
-    const c = centre(st);
-    return { x: c.x, y: c.y, h: GLOW.height, intensity: st.awake ? GLOW.intensity : 0,
-      reach: GLOW.range, decay: GLOW.decay, lum: glowLum };
-  }
-
-  Object.assign(W, { GLOW, waystoneLight, revealWaypoints, ensureWaypoints, arrive, waitingPins, addWaystone, waystoneNear,
+  Object.assign(W, { GLOW, revealWaypoints, ensureWaypoints, arrive, waitingPins, addWaystone, waystoneNear,
     wakeWaystone, travelFrom, travelTo, placeAt, hearth, updateWaystones, leyLines, leyRoute });
 })(window);

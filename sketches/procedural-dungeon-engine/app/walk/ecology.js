@@ -1,9 +1,10 @@
 // Walk mode: the ecology, a first pass at emergent behaviour (see
 // EMERGENCE.md). Creatures don't know each other by name. Everything in
 // the world that matters to a creature is a *presence*: a point with tags
-// ('ghost', 'pixie', 'creeper', 'well', 'light', 'lamp', 'player', 'steady'). Your lamp
+// ('ghost', 'pixie', 'creeper', 'well', 'light', 'lamp', 'player', 'steady', 'waystone'). Your lamp
 // is one ('light', 'lamp', 'player', while it's lit), and so are lit
-// sconces and awake waystones ('light', 'steady'). A small table of rules says how a creature
+// sconces ('light', 'steady'). Awake waystones are their own kind
+// ('waystone'): nothing reacts to them yet. A small table of rules says how a creature
 // of one kind responds to a tag: seek it (go and circle it, for a while)
 // or flee it (keep away while it's close). Creatures ask the ecology what
 // to do; they never ask "is there a pixie jar here".
@@ -30,8 +31,8 @@
   //   flee: while one is within `range` cells in the same room, it's pushed
   //         away, harder the closer it is, and won't pick a goal there.
   //         Fleeing a light ('light', 'steady', 'lamp') has no range: it's
-  //         being inside that light's bands, with nothing blocking it
-  //         (light.js), in any room. Tune the light, and its pull goes with it.
+  //         being inside that light's pool, with nothing blocking it
+  //         (light.js), in any room. Tune the pool, and its pull goes with it.
   const ECOLOGY = {
     rules: [
       { who: 'ghost', what: 'pixie', does: 'seek', chance: 0.9, orbit: [0.3, 0.75], range: 12, rooms: 1,
@@ -40,7 +41,7 @@
       { who: 'pixie', what: 'ghost', does: 'flee', range: 2.2 },
       { who: 'pixie', what: 'light', does: 'flee' },    // so you have to chase them down
       { who: 'pixie', what: 'well', does: 'seek', chance: 0.5, orbit: [0.15, 0.6], range: 10, rooms: 0 },
-      { who: 'creeper', what: 'steady', does: 'flee' }, // shadows keep off lit sconces and waystones
+      { who: 'creeper', what: 'steady', does: 'flee' }, // shadows keep off lit sconces
     ],
   };
 
@@ -60,7 +61,7 @@
       : { tags: ['player'], x: p.x, y: p.y, ref: p });
     for (const sc of state.sconces) if (sc.lit) out.push({ tags: ['light', 'steady'], x: sc.x, y: sc.y, ref: sc, light: W.sconceLight(sc) });
     for (const st of state.waystones) {
-      if (st.awake) out.push({ tags: ['light', 'steady'], x: (st.ws.x0 + st.ws.x1) / 2, y: (st.ws.y0 + st.ws.y1) / 2, ref: st, light: W.waystoneLight(st) });
+      if (st.awake) out.push({ tags: ['waystone'], x: (st.ws.x0 + st.ws.x1) / 2, y: (st.ws.y0 + st.ws.y1) / 2, ref: st });
     }
     for (const o of out) o.spaceId = spaceAt(o.x, o.y);
     return out;
@@ -136,7 +137,7 @@
 
   /**
    * How hard a flee rule pushes off presence `o` at (x, y): 0 (not at all)
-   * to 1 (right on it). A light pushes inside its bands, if it reaches you;
+   * to 1 (right on it). A light pushes inside its pool, if it reaches you;
    * anything else inside the rule's range, in the same room.
    */
   function fleeFrom(rule, o, x, y, here) {

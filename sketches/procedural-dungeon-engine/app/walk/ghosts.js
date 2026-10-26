@@ -185,7 +185,7 @@
   function updateGhosts(dt) {
     const p = state.player;
     const frozen = state.paused || !!state.bigmap;
-    const lamp = W.lampLight(); // your light, steady: a ghost notices you inside its bands (light.js)
+    const lamp = W.lampLight(); // your light's pool: a ghost notices you inside it (light.js)
     let nearest = Infinity, touching = false;
     for (const g of state.ghosts.slice()) {
       // A covered or empty lamp can't be noticed. A ghost held by something

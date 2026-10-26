@@ -491,11 +491,12 @@ fuel you need to get there.
   as it always did; past it, only the dark. You always know how far your
   light goes, and creepers wait just past that edge. Smaller than the old
   falloff, which lit across whole rooms.
-- **One light for the eye and the game** (2026-10-26): every light
-  (lamp, sconces, waystones) bands on the floor where its own brightness
-  steps down, walls shaded as usual, and that outer band is what every
-  creature reads as lit. Anything that casts light acts as far as you can
-  see it: tune the light, and what it does follows.
+- **Light pools** (2026-10-26): the lights look as they always did, walls
+  included. Your lamp and lit sconces also own a pool on the floor, the
+  circle where their light shows, in bands. Pools merge where they
+  overlap, and the pool is exactly what creatures read as light: what
+  you see is what they obey. Waystones are their own kind of light, with
+  no pool.
 - **Running out:** the lamp goes out and stays out until you relight it
   (R, a shard), and the dark drains your psychic stamina (section 12). Find light or entropy in time, or pass out and
   wake at your last waystone. Everything else stays: the map, what you

@@ -349,7 +349,7 @@
   function updateCreepers(dt) {
     const p = state.player;
     const frozen = state.paused || !!state.bigmap;
-    const lamp = W.lampLight(); // your light, steady (light.js)
+    const lamp = W.lampLight(); // your light's pool (light.js)
     const eyes = { x: p.x, y: p.y, h: p.z + 0.45 };
     let drain = 0;
     for (const c of state.creepers) {
