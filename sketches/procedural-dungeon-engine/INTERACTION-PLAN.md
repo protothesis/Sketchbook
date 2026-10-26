@@ -114,6 +114,17 @@ built; this file is the plan until it's all in.
       with the block, and block and figure move together, both checked
       first (issue #26).
 
+## Playtest round 3 (2026-10-25)
+
+- [x] No snap to the grid on release: a dragged object stays where it
+      stops. It sockets only within 0.1 cell of a half-cell (both ways),
+      with a short ease. A faint outline shows the next notch ahead while
+      dragging, brighter once it would socket.
+- [x] Stacking and marks need a socketed object; set-down stays on the grid.
+- [x] Heaviness: drag heft (ramp up and down by weight), pulling at 0.7
+      of push speed, lift time by weight, slower walking with stone or a
+      crate overhead.
+
 ## Playtest round 1 (2026-10-24)
 
 Agreed after the first play of steps 1-6.
