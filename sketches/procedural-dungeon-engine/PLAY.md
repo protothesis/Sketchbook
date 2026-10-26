@@ -564,6 +564,38 @@ frontier by room 80. About 2.6 blocks land per room. A fine-grained
 flood fill with the player's real radius, over ~360 rooms, found every free
 half-cell reachable from the entry.
 
+## Dev panel
+
+`` ` `` (backquote, above Tab) opens a dev panel on the right
+(`app/walk/dev.js`). The game keeps running under it, so you can walk
+with WASD while you tune.
+
+- **Give**: any item or tool, straight into the run. A crate, block or
+  vessel lands in your hands (E sets it down as usual). There are also
+  fill/empty lamp and full stamina buttons.
+- **Spawn**: a ghost, pixie or creeper about a cell in front of you, or
+  clear every creature.
+- **Teleport**: to any waystone (✦ marks awake ones), or tick "click the
+  big map" and click a floor cell on the big map (Tab).
+- **Tuning**: one collapsible group per tuning table on `DungeonPlay.walk`,
+  built from the tables themselves: numbers get a slider plus a box, on/off
+  switches a checkbox, colours a colour picker. Changes apply at once.
+  Gold names are changed values; double-click a name to reset it, or use
+  a table's reset or "reset all". `RULES` chances (loot, locks, creatures)
+  only affect rooms generated after the change. A few numbers that size
+  pools at startup are shown but fixed.
+- Tweaks stay across reloads in their own storage key (never the save),
+  and a "dev tweaks · N" chip shows while any are active. **Copy changes**
+  copies them as JSON, to paste to Claude as new defaults.
+
+A table shows up by being exported on `DungeonPlay.walk` and listed in
+`TABLES` in `dev.js`. Cheats change the run you're in, and it saves as
+usual.
+
+Not yet: regenerating rooms from here to try new generation numbers
+(today they only reach rooms generated after the change), a test level,
+hand-authored rooms.
+
 ## Determinism
 
 Loot uses `deriveRng(space.seed, 'loot')`. A lock uses

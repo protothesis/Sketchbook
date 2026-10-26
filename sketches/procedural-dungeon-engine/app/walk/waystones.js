@@ -359,6 +359,6 @@
     });
   }
 
-  Object.assign(W, { revealWaypoints, ensureWaypoints, arrive, waitingPins, addWaystone, waystoneNear,
+  Object.assign(W, { GLOW, revealWaypoints, ensureWaypoints, arrive, waitingPins, addWaystone, waystoneNear,
     wakeWaystone, travelFrom, travelTo, placeAt, hearth, updateWaystones, leyLines, leyRoute });
 })(window);
