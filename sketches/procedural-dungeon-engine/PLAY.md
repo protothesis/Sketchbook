@@ -218,11 +218,10 @@ Determinism).
   red; the halo (a flat, see-through disc with a hard edge) shrinks but
   wobbles with the flame, more as it fails, sometimes out past its average,
   and lasts until the lamp is out; the light turns redder and gets dimmer
-  and much shorter; and it ends at a hard edge, a circle around you that's
-  there even at a full lamp and closes in as the fuel drops, stepping
-  down in three bands on the floor just inside it. It's where a sphere of
-  light meets the floor, and walls fade into the dark
-  smoothly instead, as they did before the edge. Past it, only the dark. Walking, the
+  and much shorter. On the floor it steps down in three bands to a hard
+  edge, a circle that closes in as the fuel drops; past it, only the dark.
+  Walls are shaded as usual. That edge is what every creature reads as your
+  light (see "Light, for the eye and the game" below). Walking, the
   embers trail behind you; standing still, they rise in a slow, swaying
   column. Gaining entropy pops a purple +◆ over your head (+◆◆◆ for a
   charge).
@@ -493,12 +492,12 @@ you pass out and wake at your last waystone.
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
 | Lamp HUD | bottom left: a lantern icon (92 px; 64 on phones) in the lamp's colour, its flame scaled to 100 / 80 / 62 / 45% by stage; a fluid meter of 6 sections (32 × 20 px; more with sigils), the burning one dimmer; the stamina bar, then the thread (and relight words when the lamp is off). The icon shimmers gold by a sconce, violet at a well; tap it to cover or relight | violet liquid, gold for a sigil's extra sections |
 | Lamp streams | motes flowing in an arc into the lamp from what feeds it: a lit sconce's flame (warm) while it shelters you, a well's pool (its colour) while you drink (`STREAM` in `lamp.js`, 16/s, 0.6 s each) | |
-| Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges). Unrest by fuel (`UNREST` in `lamp.js`, blended): flicker depth 0.03 at full, 0.08 at 2, 0.38 at 1, then settling to 0.02 at empty while a slow irregular fade grows to 0.5; dying, a brightness swell of up to 35% while you move. Halo (`HALO`): flat, hard-edged, see-through, about 4x the lamp across at full, shrinking to 40%, wobbling with the flicker and fade (it can exceed its average), opacity 0.3 down to 0.12, until the lamp is out. Light (`LIGHT`): intensity 25%–100%, falloff reach 18%–100%, colour following the lamp toward red; a hard edge at 3.2 cells from you at full (3 charges or more), down to 0.9 at empty (`radiusFull`, `radiusEmpty`, `radiusCurve` 1), a sphere around you at the lamp's height that meets the floor in that circle, so on walls the edge curves like a pool of light (`sphere`; off, a cylinder cut straight up the walls), breathing 4% with the flicker (`breathe`), 0.03-cell anti-aliasing (`soft`); past it only the ambient fill. Banding (`banded`, on): 3 steps of 0.32 cells on the floor just inside the edge, the outermost at 20% (`bands`, `bandWidth`, `bandFloor`), each a smaller sphere. The hard edge and bands are only on faces turned up (the floor, block tops). Walls and other upright faces have no edge: they fade smoothly to dark across the bands' stretch, a straight ramp that averages about each band's brightness (`wallSmooth` 1; 0 cuts them like the floor; `wallCurve` 1, over 1 darkens sooner). Creepers read the edge (`lightRadius()`). Embers (`EMBER`): walking, up to 22/s spraying (0.35–0.75 s); standing, 9/s in a swaying column (0.9–1.6 s); dying, 0.7/s, red. Covered or out: the light eases to nothing, no halo or embers | |
+| Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges). Unrest by fuel (`UNREST` in `lamp.js`, blended): flicker depth 0.03 at full, 0.08 at 2, 0.38 at 1, then settling to 0.02 at empty while a slow irregular fade grows to 0.5; dying, a brightness swell of up to 35% while you move. Halo (`HALO`): flat, hard-edged, see-through, about 4x the lamp across at full, shrinking to 40%, wobbling with the flicker and fade (it can exceed its average), opacity 0.3 down to 0.12, until the lamp is out. Light (`LIGHT`): intensity 25%–100%, colour following the lamp toward red, reach (the point light's cutoff) 4 cells at full (3 charges or more) down to 1.25 at empty (`reachFull`, `reachEmpty`, `reachCurve` 1), decay 1, breathing 4% with the flicker (`breathe`). Banded on the floor by light.js (`BANDS`), its edge lands at about 3.3 cells at full, 2.5 at 2 charges, 1.7 at 1 and 1 near empty (`lightRadius()`). Embers (`EMBER`): walking, up to 22/s spraying (0.35–0.75 s); standing, 9/s in a swaying column (0.9–1.6 s); dying, 0.7/s, red. Covered or out: the light eases to nothing, no halo or embers | |
 | Entropy popup | "+◆" (one diamond per shard's worth, up to three) floats up over the head in violet; "−◆" greyer when a block takes its charge back | |
 | Ghost markers | on a ring around the figure, radius 42% of the shorter screen side | idle ghosts: a faint ghost icon, violet border |
 | Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. The wall around a doorway dithers like the rest; door panels never dither (the figure's silhouette shows through them) | side (north–south) walls never dither |
-| Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction), cut off at a hard edge around you by a mask in the lit materials' shaders (the Lamp row); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
+| Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction); its reach and decay set its size (the Lamp row), and light.js bands it on the floor; ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
 | Pickups | violet octahedron (shard), a spool (thread) | bob and turn; lit by the lantern, so they hide in the dark too |
 | Tools lying | a chalk stick on its side, a doorstone on its back (doorway inset up), a gold key flat, at a seeded angle | still; walking within pickup range collects one (on the floor, not from a block) |
 | Reveal | floor tiles appear outward from the door, then the walls rise, over about 1 s | collapse plays it in reverse, deepest rooms first |
@@ -510,6 +509,39 @@ you pass out and wake at your last waystone.
 | Push block | the whole block in its colour; home, it glows; stacked, it rests at 1 or 2 units (`lv` in `run.objects`); lifted, it arcs up over the head in 0.6 s (a crate 0.38 s; eased, rising a little above the straight line) and back down the same way | |
 | Crate | a wooden crate, a half-cell cube one unit tall: boards in a lighter frame, a diagonal brace | |
 | Passing out | the lamp fades out and the world goes black over ~1 s; HUD and captions stay | |
+
+## Light, for the eye and the game
+
+Every light is a plain three.js point light: your lamp (`LIGHT` in
+`lamp.js`), lit sconces (`SCONCE_LIGHT`, `restore.js`), awake waystones
+(`GLOW`, `waystones.js`) and sigils. A light's intensity, reach (its
+cutoff distance) and decay are the only things that set how big it is.
+`app/walk/light.js` does the rest, the same way for all of them.
+
+- **On the floor** (and block tops: any face turned up), each light's
+  brightness is rounded down to steps (`BANDS`): under `lit` (0.07) it's
+  dark, then `count` (3) bands each `step` (2×) brighter, then the light
+  as it is. The bands fall wherever the light's own falloff crosses those
+  steps, so they grow and shrink with the light. There are no sizes in
+  `BANDS`.
+- **Walls and other upright faces** are shaded as usual, unbanded. They
+  fade out at the light's reach, a little past the floor's last band.
+- **The game asks the same light.** `floorLight(source, x, y)` is the
+  renderer's falloff, worked out in JavaScript from the light's real
+  height. A spot counts as lit at `BANDS.lit` or over, with nothing in the
+  way (`lightReaches`, the stand-in for shadows). So the outer edge of the
+  bands you see is exactly where a creature counts as lit. Creatures read
+  lights steady, without the flicker.
+- **Who reads it:** a ghost notices you when your light under it is lit;
+  a creeper keeps to your light's edge (`lightRadius()`, worked out from
+  the light) and is dazed inside it; pixies flee any light they're in;
+  ghosts and creepers are pushed out of a lit sconce's or awake
+  waystone's light; and you're sheltered while you stand in a lit
+  sconce's light. Ecology rules about lights have no range: a light's
+  reach is its range.
+- At these numbers a sconce's edge is about 2 cells, a waystone's 1.7.
+- The cool fill around you (`fill`, `figure.js`) is the one light that
+  isn't banded or read: it only helps nearby walls read.
 
 ## Game parameters
 

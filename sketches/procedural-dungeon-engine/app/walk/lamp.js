@@ -75,14 +75,12 @@
     return take;
   }
 
-  /** Is this spot sheltered by a lit sconce (its tile, or one of the 8 around it, same room)? */
+  /** Is this spot sheltered by a lit sconce: inside its light's bands, nothing in the way (light.js)? */
   function litAt(p) {
     return !!shelterAt(p);
   }
   function shelterAt(p) {
-    const cx = Math.floor(p.x), cy = Math.floor(p.y);
-    return state.sconces.find((sc) => sc.lit && sc.spaceId === p.spaceId &&
-      Math.abs(sc.cell.x - cx) <= 1 && Math.abs(sc.cell.y - cy) <= 1) || null;
+    return state.sconces.find((sc) => sc.lit && W.light.litBy(W.sconceLight(sc), p.x, p.y, 0.5)) || null;
   }
 
   // ---------------------------------------------------------------------------
@@ -285,92 +283,44 @@
   halo.renderOrder = 5;
   scene.add(halo); // follows the lamp in world space (the figure's rig squashes when crouched)
 
-  // The light's reach and colour. Dimming, it goes redder and dimmer. It
-  // ends at a hard edge, past which there's only the ambient fill: a
-  // sphere around the lamp, sized so it meets the floor in a circle of the
-  // edge's radius. On a wall the edge curves like a pool of light rather
-  // than a vertical line. The circle is always there and shrinks with the
-  // fuel. The last stretch inside it steps down in bands, like a creeper's
-  // discs (each band a smaller sphere meeting the floor a band further in).
+  // The light's reach and colour. Dimming, it goes redder and dimmer, and
+  // its reach (the point light's cutoff distance) shrinks. That light is
+  // all there is: light.js bands it on the floor and works out, from the
+  // same falloff, where its edge is and what it lights for the game.
   const LIGHT = {
     minIntensity: 0.25, // of full, when empty
-    minRange: 0.18,     // of full, when empty: the point light's own falloff, inside the edge
     redden: 0.5,        // how far the light's colour follows the lamp's toward red
     swell: 0.35,        // dying: brightness swell while you move
-    radiusFull: 3.2,    // cells: the edge at a full lamp (RULES.lampFullCharges or more)
-    radiusEmpty: 0.9,   // cells: the edge as it empties
-    radiusCurve: 1,     // over 1 holds it wide and shrinks it late; under 1, early
-    breathe: 0.04,      // of the radius: how much the flame's flicker moves the edge
-    soft: 0.03,         // cells: anti-aliasing across the edge (0 is razor sharp)
-    sphere: true,       // the edge is a sphere around the lamp (off: a cylinder, cut straight up walls)
-    banded: true,       // step the light down in bands just inside the edge (on the floor and block tops)
-    wallSmooth: 1,      // walls and other upright faces: 1 a smooth falloff over the bands' stretch, 0 cut like the floor
-    wallCurve: 1,       // the walls' falloff: 1 a straight ramp (about the bands' average); over 1 darker sooner
-    bands: 3,           // how many
-    bandWidth: 0.32,    // cells each, on the floor
-    bandFloor: 0.2,     // the outermost band's brightness (the inner ones step up to full)
+    reachFull: 4,       // cells: the light's reach at a full lamp (RULES.lampFullCharges or more)
+    reachEmpty: 1.25,   // cells: its reach as it empties
+    reachCurve: 1,      // over 1 holds it wide and shrinks it late; under 1, early
+    decay: 1,           // how fast it dims with distance (three.js; 2 is physical): lower is flatter, brighter near its edge
+    breathe: 0.04,      // of the reach: how much the flame's flicker moves it
   };
 
   /**
-   * How far the light reaches, in cells: the hard edge, without the
-   * flicker. Creatures that keep to its edge read it (creepers.js); 0 while
-   * the lamp is out or covered.
+   * The lamp's light without the flicker, as a light.js source: what the
+   * game reads (creatures, the edge). Covered or out, it has no intensity.
    */
-  function lightRadius() {
-    return lampOn() ? edgeRadius() : 0;
-  }
-  function edgeRadius() {
-    return lerp(LIGHT.radiusEmpty, LIGHT.radiusFull, Math.pow(lampLevel(), LIGHT.radiusCurve));
+  const steadyTint = new THREE.Color();
+  function lampLight() {
+    const level = lampLevel(), q = lantern.position;
+    return {
+      x: q.x / S, y: q.z / S, h: q.y / S, decay: lantern.decay,
+      intensity: lampOn() ? LANTERN * lerp(LIGHT.minIntensity, 1, level) : 0,
+      reach: lerp(LIGHT.reachEmpty, LIGHT.reachFull, Math.pow(level, LIGHT.reachCurve)),
+      lum: W.light.lumOf(steadyTint.copy(lantern.color)),
+    };
   }
 
-  // The edge is a mask on the lantern's light in every lit material's
-  // shader: three.js sorts shadow-casting lights first, and the lantern is
-  // the only point light that casts shadows, so it's always pointLights[0].
-  // Every material shares the one uniform object (three.js copies a
-  // uniform's value by reference when it isn't a vector, colour, matrix or
-  // texture), so setting it once a frame reaches them all.
-  // center: the lamp's world xyz, radius on the floor; band: count, width, floor, soft;
-  // shape: sphere (1) or cylinder (0), wallSmooth, the walls' ramp width, wallCurve
-  const lampMask = { center: new THREE.Vector4(), band: new THREE.Vector4(), shape: new THREE.Vector4() };
-  for (const k of ['lambert', 'phong', 'standard', 'physical', 'toon']) {
-    if (THREE.ShaderLib[k]) THREE.ShaderLib[k].uniforms.lampMask = { value: lampMask };
+  /**
+   * How far the light reaches across the floor, in cells: the outer edge of
+   * its bands (light.js), without the flicker. Creatures that keep to its
+   * edge read it (creepers.js); 0 while the lamp is out or covered.
+   */
+  function lightRadius() {
+    return lampOn() ? W.light.edge(lampLight()) : 0;
   }
-  THREE.ShaderChunk.lights_pars_begin += `
-struct LampMask { vec4 center; vec4 band; vec4 shape; };
-uniform LampMask lampMask;
-// 1 inside the lamp's edge, 0 past it. d is the radius on the floor (y = 0)
-// of the sphere around the lamp through this point: across the floor it's
-// just the distance from you; up a wall it grows with the height off the
-// lamp's, so the edge curves. As a cylinder, it's the distance across the floor.
-// Faces turned up (the floor, block tops) get the hard edge and its bands.
-// Upright faces (walls) instead fade smoothly to dark across the same
-// stretch, like the light before the mask; faces in between blend.
-float lampMaskAt(vec3 viewPos, vec3 normal) {
-  float R = lampMask.center.w;
-  if (R <= 0.0) return 1.0;
-  vec3 c = (viewMatrix * vec4(lampMask.center.xyz, 1.0)).xyz;
-  vec3 up = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
-  vec3 dv = viewPos - c;
-  float h = dot(dv, up), flat2 = dot(dv, dv) - h * h;
-  float lampH = lampMask.center.y; // the lamp's height over the floor
-  float d = lampMask.shape.x > 0.5 ? sqrt(max(flat2 + h * h - lampH * lampH, 0.0)) : sqrt(max(flat2, 0.0));
-  float m = 1.0 - smoothstep(R - lampMask.band.w, R, d);
-  float n = lampMask.band.x;
-  if (n > 0.5) {
-    float i = ceil((R - d) / lampMask.band.y); // 1 in the outermost band
-    if (i <= n) m *= mix(lampMask.band.z, 1.0, (max(i, 1.0) - 1.0) / n);
-  }
-  float upright = (1.0 - smoothstep(0.55, 0.85, abs(dot(normalize(normal), up)))) * lampMask.shape.y;
-  float wall = pow(clamp((R - d) / max(lampMask.shape.z, 0.001), 0.0, 1.0), lampMask.shape.w);
-  return mix(m, wall, upright);
-}
-`;
-  THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begin.replace(
-    'getPointLightInfo( pointLight, geometryPosition, directLight );',
-    `getPointLightInfo( pointLight, geometryPosition, directLight );
-		#if ( UNROLLED_LOOP_INDEX == 0 ) && ( NUM_POINT_LIGHT_SHADOWS > 0 )
-		directLight.color *= lampMaskAt( geometryPosition, geometryNormal );
-		#endif`);
 
   // Embers: points rising off the lamp. Walking, they spray and trail
   // behind you; standing still, they rise in a slow, swaying column, like
@@ -475,8 +425,9 @@ float lampMaskAt(vec3 viewPos, vec3 normal) {
     colorAt(Math.max(level, 0.3), lightTint);
     lantern.color.copy(WARM).lerp(lightTint, LIGHT.redden * (1 - level) + 0.3);
     lantern.intensity = LANTERN * lerp(LIGHT.minIntensity, 1, level) * bright * on * (0.96 + 0.04 * Math.sin(t * 9.3));
-    const reach = lerp(LIGHT.minRange, 1, smooth(0, 1, level)) * (0.92 + 0.08 * bright);
-    lantern.distance = LANTERN_RANGE * reach;
+    const reach = lerp(LIGHT.reachEmpty, LIGHT.reachFull, Math.pow(level, LIGHT.reachCurve));
+    lantern.decay = LIGHT.decay;
+    lantern.distance = reach * S * (1 - LIGHT.breathe + LIGHT.breathe * Math.min(1.2, bright));
 
     lanternMesh.getWorldPosition(lampWorld);
     haloMat.color.copy(lampColor);
@@ -485,13 +436,7 @@ float lampMaskAt(vec3 viewPos, vec3 normal) {
     halo.scale.setScalar(HALO.full * (HALO.minScale + (1 - HALO.minScale) * level) * Math.max(0.3, wob));
     haloMat.opacity = lerp(HALO.lowOpacity, HALO.opacity, smooth(0, 0.66, level)) * Math.min(1.2, bright) * on;
 
-    // The light's edge, breathing a little with the flame.
-    const edge = edgeRadius() * (1 - LIGHT.breathe + LIGHT.breathe * Math.min(1.2, bright));
-    // Centred over you at the lamp's height, so the floor circle is the edge creatures read (lightRadius).
-    lampMask.center.set(p.x * S, Math.max(0, lampWorld.y), p.y * S, Math.max(0.01, edge * S));
-    lampMask.shape.set(LIGHT.sphere ? 1 : 0, LIGHT.wallSmooth, Math.max(0.01, LIGHT.bands * LIGHT.bandWidth * S), Math.max(0.05, LIGHT.wallCurve));
-    lampMask.band.set(LIGHT.banded ? Math.round(LIGHT.bands) : 0, Math.max(0.01, LIGHT.bandWidth * S),
-      LIGHT.bandFloor, Math.max(0, LIGHT.soft * S));
+    W.light.updateBands();
 
     // Embers: fewer, dimmer and shorter-lived as the lamp fails; how still
     // you are (eased) blends the walking spray into the idle column; dying,
@@ -617,6 +562,6 @@ float lampMaskAt(vec3 viewPos, vec3 normal) {
   }
 
   Object.assign(W, { gainFuel, spendFuel, takeFuel, litAt, lampOn, toggleLamp, feedFrom, updateLamp,
-    updateLampLook, updateLampHud, lampLevel, lightRadius, popEntropy });
+    updateLampLook, updateLampHud, lampLevel, lightRadius, lampLight, popEntropy });
   Object.assign(W, { LIGHT, HALO, UNREST, EMBER, STREAM }); // tuning tables (the dev panel, dev.js)
 })(window);

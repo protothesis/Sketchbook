@@ -626,21 +626,26 @@ All notable changes to this sketch are logged here, per
   values show in gold and stay across reloads (in their own localStorage
   key, never the save). "Copy changes" puts them on the clipboard as JSON.
   `lamp.js`, `ghosts.js` and `waystones.js` now export their tables for it.
-- 2026-10-26: **The lamp's edge is a sphere, and banded by default.**
-  The mask measured distance across the ground, so it was a cylinder: on
-  walls it cut straight up in hard vertical lines. Now each point's
-  distance is the floor radius of the sphere around the lamp through it
-  (centred over you at the lamp's height). On the floor nothing changes
-  and creepers read the same edge. On walls the edge and the bands curve
-  like a pool of light. `LIGHT.sphere` (on) switches back to the cylinder
-  for comparison. The hard edge and bands are only on faces turned up (the
-  floor, block tops). Walls and other upright faces fade smoothly to dark
-  across the bands' stretch instead, a ramp that roughly follows the
-  bands' steps (`LIGHT.wallSmooth` 1, `wallCurve` 1). Banding is on by default, with the playtest settings: 3
-  bands of 0.32 cells on the floor, the outermost at 20% (was 0.22 and
-  30%, off). Screenshots in `notes/screenshots/lamp-edge-sphere-*.png`
-  (`-floor-bands` is the default)
-  and `lamp-edge-cylinder-banded.png`.
+- 2026-10-26: **One light for the eye and the game** (`app/walk/light.js`).
+  The lamp's mask is gone: no set radius sits on top of the light any more.
+  - Every light (lamp, lit sconces, awake waystones, sigils) is a plain
+    point light. Its intensity, reach and decay are what make it big or
+    small. The lamp's reach now shrinks with the fuel (`LIGHT.reachFull`
+    4, `reachEmpty` 1.25 cells, decay 1).
+  - On faces turned up (the floor, block tops) each light's brightness is
+    rounded down to bands (`BANDS`: dark under `lit` 0.07, then 3 bands, 2×
+    apart). Walls and other upright faces are shaded as usual.
+  - The game reads the same light: `floorLight()` mirrors the renderer's
+    falloff, and "lit" is the outermost band with nothing in the way. So
+    ghosts notice you only inside the bands you see (they used a fixed 4.5
+    cells, well outside them). Pixies flee any light they're in (was 2.5
+    cells). Ghosts and creepers are pushed out of a sconce's or waystone's
+    light (was 1.6 and 2.4 cells). You're sheltered while standing in a
+    sconce's light (was its tile and the 8 around it). Creepers' edge
+    (`lightRadius()`) is worked out from the light.
+  - Creatures read lights steady, without the flicker.
+  - `BANDS` and `SCONCE_LIGHT` are in the dev panel. Screenshots:
+    `notes/screenshots/light-bands-full.png` and `light-bands-low.png`.
 
 ### Fixed
 
