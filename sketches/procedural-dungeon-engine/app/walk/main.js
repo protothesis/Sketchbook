@@ -91,19 +91,20 @@
       } else { p.z = support; p.vz = 0; }
     }
 
-    // Pushing into a closed (unlocked) door, or a climbable block, for a
-    // beat opens it / steps up onto it. A wall is a block's way of saying no.
-    let pushing = null, pushingBlock = null, pk = null;
+    // Pushing into a climbable block for a beat steps up onto it. A wall is
+    // a block's way of saying no. (Doors only open with E held.)
+    let pushingBlock = null, pk = null;
     if (inp.mag > 0) {
       for (const s of touched) {
-        const d = DE.DIRS[s.facing];
-        // Doors face out of their room; block sides face out of the block.
-        const into = s.block ? -(d.x * inp.x + d.y * inp.y) : d.x * inp.x + d.y * inp.y;
-        if (into <= 0.5) continue;
-        if (s.door && p.z <= 0.05 && !isLockedNow(exp.spaces[s.door.spaceId], s.door.exit)) {
-          pushing = s.door; pk = s.door.spaceId + '/' + s.door.exit.id; break;
+        const dk = s.door && !s.door.exit.connectionId && s.door.spaceId + '/' + s.door.exit.id;
+        if (dk && state.hintedDoor !== dk) {
+          state.hintedDoor = dk; // walking into a closed door says how it opens, once per door
+          showCaption('E opens the door');
         }
-        if (s.block && canClimb(s.block) && !state.carry) { // not with a block in your hands
+        if (!s.block) continue;
+        const d = DE.DIRS[s.facing];
+        if (-(d.x * inp.x + d.y * inp.y) <= 0.5) continue; // block sides face out of the block
+        if (canClimb(s.block) && !state.carry) { // not with a block in your hands
           pushingBlock = s.block; pk = 'block:' + s.block.x0 + ',' + s.block.y0; break;
         }
       }
@@ -112,12 +113,7 @@
     else { state.push.key = pk; state.push.t = 0; }
     if (pk && state.push.t >= PUSH_TIME) {
       state.push.key = null;
-      if (pushing) {
-        if (pushing.exit.kind === 'surface') W.askSurface();
-        else if (pushing.exit.connectionId) W.reopenDoor(pushing.exit.connectionId);
-        else openDoor(pushing.spaceId, pushing.exit.id);
-      }
-      else climb(pushingBlock, { x: inp.x, y: inp.y });
+      climb(pushingBlock, { x: inp.x, y: inp.y });
     }
 
     collectPickups(p);
@@ -133,11 +129,11 @@
       } else if (sp) {
         const kind = sp.deadEnd ? 'dead end' : sp.archetype;
         const sealed = DP.pastLock(exp, sp) ? ' · beyond a lock' : '';
-        // A hall with an awake waystone that isn't your hearth: passing
-        // through doesn't move where you wake; touching the stone does.
-        const st = state.waystones.find((o) => o.spaceId === sp.id && o.awake);
+        // A hall whose lantern isn't where you'd wake: passing through
+        // doesn't move it; saving at the lantern does.
+        const ln = state.lanterns.find((o) => o.spaceId === sp.id);
         const home = W.hearth();
-        const hint = st && home && st !== home ? ` · you'd still wake in ${home.spaceId} · touch the waystone to wake here` : '';
+        const hint = ln && home && ln !== home ? ` · you'd still wake in ${home.spaceId} · save at the lantern to wake here` : '';
         showCaption(`${sp.id} · ${kind}${sealed} · ${sp.meta.mood} · depth ${sp.depth}${hint}`);
       }
     }
@@ -224,6 +220,8 @@
     updatePushBlocks(dt);
     updateSconces();
     W.updateWaystones();
+    W.updateLanterns(dt);
+    W.updatePacks();
     W.lostFx.uTime.value = state.time; // lost-path doors shimmer
     W.updateLamp(dt);
     W.updateLampLook(dt); // the lamp's colour, halo, sparks and light (after placeLamp)
@@ -244,7 +242,7 @@
   }
 
   function spawnPoint(exp) {
-    const ws = DP.waystone(exp.spaces.s0); // the starter hall: by its waystone
+    const ws = DP.saveLantern(exp.spaces.s0); // the starter hall: by its lantern
     if (ws) return Object.assign({}, ws.wake);
     const cells = exp.spaces.s0.cells.map(DE.parseKey);
     const mx = cells.reduce((a, c) => a + c.x, 0) / cells.length;
@@ -263,6 +261,7 @@
    */
   function setExpedition(exp, saved) {
     state.exp = exp;
+    DE.holdLostPaths(exp); // lost paths hold their ground (recorded once, so older history replays as it was)
     const same = !!(saved && saved.run && saved.run.rootSeed === exp.rootSeed);
     state.run = same ? Object.assign(freshRun(exp.rootSeed), saved.run) : freshRun(exp.rootSeed);
     const savedPlayer = same ? saved.player : null;
@@ -290,6 +289,7 @@
     state.creeperDrain = 0;
     state.gutter = null;
     state.arrival = null;
+    W.closeChoice();
     state.paused = false;
     const fade = $('fade');
     if (fade) fade.classList.remove('on');

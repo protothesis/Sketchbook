@@ -244,7 +244,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     W.addWell(space, tileAt);
     W.addPushBlocks(space, rec, tileAt);
     W.addSconces(space, edgeAt);
-    W.addWaystone(space, rec, tileAt);
+    W.addLantern(space, rec, tileAt);
 
     // Props ride on their cell's tile, so they assemble and dissolve with it.
     const pr = DP.props(space);
@@ -445,6 +445,7 @@ void main() {
   function forgetSpace(id) {
     state.sconces = state.sconces.filter((sc) => sc.spaceId !== id);
     state.waystones = state.waystones.filter((st) => st.spaceId !== id);
+    state.lanterns = state.lanterns.filter((ln) => ln.spaceId !== id);
     state.pushBlocks = state.pushBlocks.filter((b) => b.spaceId !== id);
     state.wells = state.wells.filter((w) => w.spaceId !== id);
     const sg = state.sigils.get(id);

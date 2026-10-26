@@ -136,4 +136,57 @@ assert(totalCycles > 0, 'no cycles in any run');
   DE.MOOD_REGIONS.inherit = was;
   console.log(`mood regions: ${(100 * same).toFixed(0)}% of rooms keep their parent's mood`);
 }
+
+// Lost paths hold their ground: once 'hold' is on, rooms lost to a faint
+// keep their cells; nothing else is built there (or opens into them), the
+// path comes back whole, and the history replays exactly.
+{
+  let held = 0, blocked = 0;
+  for (let run = 0; run < 5; run++) {
+    const exp = DE.createExpedition(DE.randomRootSeed());
+    DE.holdLostPaths(exp);
+    const openExits = () => {
+      const out = [];
+      for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId && e.kind !== 'surface') out.push([id, e.id]);
+      return out;
+    };
+    const grow = (n) => {
+      for (let i = 0; i < n; i++) {
+        const open = openExits();
+        if (!open.length) return;
+        const [sid, eid] = pick(open);
+        try { DE.commit(exp, DE.expand(exp, sid, eid)); } catch (e) { assert(/lost path/.test(e.message), e.message); blocked++; }
+      }
+    };
+    grow(60);
+    // Lose a branch, deepest first, as a faint does.
+    const root = pick(Object.values(exp.spaces).filter((s) => s.parentId && s.depth >= 2));
+    const branch = [];
+    const walk = (id) => { branch.push(exp.spaces[id]); for (const s of Object.values(exp.spaces)) if (s.parentId === id) walk(s.id); };
+    walk(root.id);
+    const lostCells = new Map();
+    for (const s of branch) for (const k of s.cells) lostCells.set(k, s.id);
+    const left = new Set(branch.map((s) => s.id));
+    while (left.size) {
+      const leaf = Array.from(left).find((id) => DE.canRevert(exp, id));
+      assert(leaf, 'lost branch: nothing revertible');
+      DE.revert(exp, leaf, 'lost', true);
+      left.delete(leaf);
+    }
+    for (const k of lostCells.keys()) assert(DE.heldAt(exp, k), 'lost cell not held: ' + k);
+    held += lostCells.size;
+    grow(200);
+    for (const id in exp.spaces) for (const k of exp.spaces[id].cells) assert(!lostCells.has(k), 'built on held ground: ' + k);
+    // It all comes back, parents first, on its own ground.
+    const traces = branch.map((s) => exp.traces[s.id]).sort((a, b) => a.depth - b.depth);
+    for (const t of traces) {
+      assert(DE.restorable(exp, t.id), 'held path would not come back: ' + t.id);
+      DE.restore(exp, t.id);
+      assert(exp.spaces[t.id].cells.join(';') === t.cells.join(';'), 'came back on other ground: ' + t.id);
+    }
+    const res = DE.importRecord(DE.exportRecord(exp));
+    assert(res.verified, 'held: replay mismatch ' + res.mismatches.slice(0, 5).join(', '));
+  }
+  console.log(`held ground: ${held} cells held across 5 runs, ${blocked} doors onto held ground left shut; all paths came back; replay OK`);
+}
 console.log('all checks passed');

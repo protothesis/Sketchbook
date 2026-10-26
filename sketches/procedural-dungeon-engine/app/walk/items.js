@@ -569,6 +569,14 @@
   function useNear(p) {
     const slot = selectedSlot();
     if (!slot || state.paused || state.climb || state.carry) return null; // a block fills your hands
+    // An unpowered waystone right in front of you comes first: your lamp's
+    // flame (a charge) or a full jar (its entropy or its pixie) wakes it.
+    const st = stoneAhead(p);
+    if (st && slot.kind === 'lantern') return { action: 'powerlamp', slot, stone: st };
+    if (st && slot.kind === 'jar') {
+      const jar = heldJar();
+      if (jar && jar.holds) return { action: 'power', slot, jar, stone: st };
+    }
     if (slot.kind === 'lantern') return { action: 'lamp', slot };
     if (slot.kind === 'key') {
       const door = W.doorNear(p);
@@ -613,6 +621,14 @@
     if (!u && state.carry) W.showCaption('your hands are full · E to set it down');
     if (!u) { shakeHotbar(); return; } // "that didn't work"
     if (u.action === 'lamp') { W.toggleLamp(); return; }
+    if (u.action === 'powerlamp') { W.powerStone(u.stone, null); return; }
+    if (u.action === 'power') {
+      swipeAt = state.time;
+      W.powerStone(u.stone, u.jar);
+      state.variant.jar = 'empty';
+      W.refreshHotbar();
+      return;
+    }
     if (u.action === 'unlock') { W.unlockDoor(u.door); return; }
     if (u.slot && u.slot.kind === 'jar') { // every jar action is a swipe of it
       swipeAt = state.time;
@@ -644,11 +660,14 @@
   // RULES.vesselCapacity of one kind. A jar pours into one, or takes one out.
 
   /** A vessel right in front of you, in reach (your level or one up). */
-  function vesselAhead(p) {
+  function vesselAhead(p) { return objectAhead(p, (b) => b.vessel); }
+  /** An unpowered waystone right in front of you, in reach. */
+  function stoneAhead(p) { return objectAhead(p, (b) => b.waystone && !b.holds); }
+  function objectAhead(p, want) {
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle), mine = Math.round(p.z / W.UNIT);
     let best = null, bestD = RADIUS + 0.35;
     for (const b of state.pushBlocks) {
-      if (!b.vessel || b.carried) continue;
+      if (!want(b) || b.carried || b.anim) continue;
       const lv = Math.round((b.base || 0) / W.UNIT);
       if (lv !== mine && lv !== mine + 1) continue;
       const qx = THREE.MathUtils.clamp(p.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(p.y, b.y0, b.y1);

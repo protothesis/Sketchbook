@@ -663,6 +663,94 @@ All notable changes to this sketch are logged here, per
   differ. Records from before (no `moodInherit` in their params) keep their
   old moods. Waypoint halls and the root roll their own. `stress-test.js`
   checks the regions.
+- 2026-10-26: **Lost paths read on the maps; packs shine.**
+  - Doors to a lost path (its own door, or one onto ground it holds) are
+    violet on the maps, like their seam.
+  - Lost paths are hatched, by stage: since your last faint, a violet fill
+    that breathes, close hatching and a solid glowing edge; dimmed (gone at
+    the next faint), fainter, sparse hatching and a dashed edge.
+  - A pack's little lantern is a real light now: like your lamp at the fuel
+    it holds (brightness, reach, colour, floor pool), without shadows, on
+    the nearest pack; even an empty one glows dimly (`PACK_LIGHT`).
+- 2026-10-26: **Lost paths hold their ground.** A room opened next to a lost
+  path could grow over it, and then the path couldn't come back. Now no new
+  room is placed on a lost path's cells while it waits (the engine's
+  `heldAt`, like a waypoint's reserve; a room coming back ignores it), and a
+  door whose far side is that ground joins the path's choice: retrace (then
+  it opens onto the path like a loop) or open anyway (the path is let go).
+  Switched on by a 'hold' event in the history (`DE.holdLostPaths`, called
+  when a run loads), so older records replay exactly and follow the rule
+  from then on. `stress-test.js` checks it.
+- 2026-10-26: **Doors are a tap; rerolling is a hold.**
+  - E opens or closes a door with a tap, from either side, when you're
+    close to it and facing it. Any opened door closes for free, a door into
+    a provisional room included: closing no longer rerolls.
+  - To reroll, close the door into a provisional room, then hold E at it
+    (1 s, twice that with something of yours inside) from the side you came
+    in by. A tap there opens it again. The ring shows after 0.15 s, so a tap
+    doesn't flash it; an awake waystone works the same way (tap travels).
+  - Closed doors stop you, ghosts, pixies, creepers and light, as before,
+    so shutting a door now traps or holds back what's on the other side.
+  - Lost-path doors are unchanged: a 0.7 s hold, then the choice.
+- 2026-10-26: **Waystones are blocks you carry** (GAME-DESIGN §19).
+  - A one-unit block of dark glass with a seeded sigil on its sides, handled
+    like a crate (grab, lift, drag; heavy as stone). The fixed monolith is
+    gone.
+  - **Where:** half the halls keep theirs on the centre cell
+    (`hallStoneChance`); for the rest it turns up in the first room grown
+    within two rooms of the hall, and again if that room is rerolled before
+    you take it (`run.stonePaid`). The starter hall's is already awake.
+  - **F wakes one, once:** a charge from your lamp (lamp in hand), or a full
+    jar's entropy or pixie. A pixie's stone draws ghosts like a jar.
+  - **A tap of E at an awake stone travels** (the map, as before); a hold
+    grabs it.
+  - **The network is worked out from where awake stones stand** (each to its
+    two nearest, plus a spanning tree), so moving stones rewires it; a stone
+    in your hands or on a lost path is out of it. `run.ley` is gone.
+  - Loss icons and the longer reroll cover waystones too. Dev panel: give a
+    waystone, dormant or awake.
+  - Saves carry on: run version 8; a hall whose old stone you woke gets its
+    block awake.
+- 2026-10-26: **A faint moves you, it doesn't rewind; save lanterns**
+  (GAME-DESIGN §17, §19).
+  - **Save lanterns** (`app/walk/lanterns.js`): every hall has one, beside
+    its waystone on the centre cell: a lantern on a dark stone plinth,
+    always dimly lit red. E held saves: it flares and settles. It's the
+    only respawn, and the first save at a hall reveals its waypoints (that
+    moved off waking a waystone). Its light pool shelters your lamp and
+    keeps ghosts and creepers out, like a lit sconce's. A small red flame
+    on the maps.
+  - **Waystones are for travel only:** waking or using one no longer
+    saves, or sets where you wake.
+  - **Faints don't roll the run back.** You wake by your lantern with 2
+    charges (`wakeCharges`); rooms opened since the save become a lost path
+    as they are; doors carved since stay; a retraced room's creatures roll
+    again.
+  - **Your pack** (`app/walk/packs.js`): what you carried (tools, jars,
+    keys, chalk and your lamp's entropy) stays where you fell, in a bundle
+    with a little lantern glowing at its fuel, and a flame on the maps.
+    Walk over it to take it back. It follows its room: waits on a lost
+    path, goes when the path fades or is rerolled. Something in your hands
+    is set down there.
+  - **Doors only open with E held.** Walking into one doesn't (a caption
+    says so, once per door).
+  - **A choice at the door to a lost path** (`app/walk/choice.js`, generic:
+    `W.openChoice`): hold E (0.7 s), then A / D between retrace and reroll
+    and hold E (0.8 s) to confirm. Unavailable options say why.
+  - **What's at stake shows over the hold ring:** icons for a pack or a
+    hall's lantern beyond the door, red and crossed out when the action
+    would lose them. Rerolling a room with your pack in it takes twice as
+    long (`rerollLoseFactor`).
+  - Dev panel: a faint button, the lanterns to jump to, and the
+    `SAVE_LANTERN` table.
+  - Saves carry on: run version 7 (a hall whose waystone you woke counts as
+    saved at).
+- 2026-10-26: **Design decided, not built: saves, save lanterns and
+  waystone blocks** (GAME-DESIGN §17, §19). A faint moves you without
+  rewinding anything; your pack stays where you fell. Save lanterns replace
+  waystones in halls and are the only respawn. Waystones become 1x1 blocks
+  you carry and power from a jar. The action list
+  (`notes/action-list-2026-10-25.md`) has the new build order.
 
 ### Fixed
 
