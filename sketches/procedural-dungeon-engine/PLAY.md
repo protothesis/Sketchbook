@@ -243,7 +243,9 @@ Determinism).
   **climb** it, like any one-unit block. **Hold E** facing it and a ring
   fills (0.4 s): you've **grabbed** it. Then:
   - let go of E without moving and you **lift** it: it swings up in an
-    arc over your head (0.38 s), and you carry it. E again sets it down
+    arc over your head (0.38 s for a crate, 0.32 s for a vessel, 0.6 s for
+    stone), and you carry it, walking slower with stone (0.7 of your speed)
+    or a crate (0.85). E again sets it down
     (a faint box shows where), arcing back down: right back where it was
     if you haven't moved, otherwise on the half-cell straight ahead along
     the way you most face (never a diagonal). So a block shoved into a
@@ -252,12 +254,21 @@ Determinism).
     (if there's room behind you). It slides smoothly, off the grid, slower
     than you walk (a crate at 0.55 of walking speed, a vessel 0.6, a stone
     block 0.35), and you move with it; it stops against anything in the
-    way. Sideways does nothing. Let go of E and it eases into the nearest
-    half-cell, the notch it stays aligned to. *(Known issue: dragging is
-    still glitchy in play; see GitHub issue #26.)*
+    way, or against anything in yours (pulling, you need room to back up).
+    Sideways does nothing. What collides is where you see it, all the way.
+    It has heft: it takes a moment to get going and to stop (stone more
+    than a crate), and pulling is slower than pushing (0.7). Let go of E
+    and it coasts to a stop and **stays there**, off the grid if that's
+    where it is. Stopped within 0.1 cell of a half-cell both ways, it
+    **sockets**: it eases the last bit in, and you with it. While you drag,
+    a faint outline marks the next half-cell ahead the way it's moving,
+    brighter once letting go would socket it. (Off the grid across the
+    way you're dragging, it can't line up, so there's no outline.)
   Pushed or pulled, a block stays in its room, on the floor; carried, it
   goes anywhere: set it down in any room, never in a doorway's mouth. Set
-  down or pushed onto its mark (in its home room), it's home.
+  down or pushed onto its mark (in its home room), socketed, it's home.
+  Nothing can be set down on top of, or overlapping, an object left off
+  the grid.
 - **Stacking.** A carried block can be set down at the level you stand on
   or one level up: on the floor, or on top of anything that covers the
   whole half-cell (a fixed block, another crate). From the floor that's
@@ -493,7 +504,7 @@ you pass out and wake at your last waystone.
 | Waystone | a grey slab, 0.38 × 0.18 cells, 2.5 units tall, with five seeded glyphs on its north and south faces; awake, the glyphs glow violet, pulse slowly and shine (an additive copy over each face, so light and shadow don't touch them), a faint additive shaft rises 3.2 cells, and the two awake stones nearest you get a violet-blue point light (`GLOW` in `waystones.js`, pooled, no shadows) | on the maps, a small slab, glowing when awake |
 | Ley lines | between awake waystones on both maps: dashed and faint, solid and brighter on the travel map; the route to the stone under the pointer glows; fares in ◆ by each stone's id | |
 | Surface door | weathered pale panel with a daylight-white seam | white on the maps |
-| Push block | the whole block in its colour; home, it glows; stacked, it rests at 1 or 2 units (`lv` in `run.objects`); lifted, it arcs up over the head in 0.38 s (eased, rising a little above the straight line) and back down the same way | |
+| Push block | the whole block in its colour; home, it glows; stacked, it rests at 1 or 2 units (`lv` in `run.objects`); lifted, it arcs up over the head in 0.6 s (a crate 0.38 s; eased, rising a little above the straight line) and back down the same way | |
 | Crate | a wooden crate, a half-cell cube one unit tall: boards in a lighter frame, a diagonal brace | |
 | Passing out | the lamp fades out and the world goes black over ~1 s; HUD and captions stay | |
 
