@@ -626,6 +626,17 @@ All notable changes to this sketch are logged here, per
   values show in gold and stay across reloads (in their own localStorage
   key, never the save). "Copy changes" puts them on the clipboard as JSON.
   `lamp.js`, `ghosts.js` and `waystones.js` now export their tables for it.
+- 2026-10-26: **The lamp's edge is a sphere, and banded by default.**
+  The mask measured distance across the ground, so it was a cylinder: on
+  walls it cut straight up in hard vertical lines. Now each point's
+  distance is the floor radius of the sphere around the lamp through it
+  (centred over you at the lamp's height). On the floor nothing changes
+  and creepers read the same edge. On walls the edge and the bands curve
+  like a pool of light. `LIGHT.sphere` (on) switches back to the cylinder
+  for comparison. Banding is on by default, with the playtest settings: 3
+  bands of 0.32 cells on the floor, the outermost at 20% (was 0.22 and
+  30%, off). Screenshots in `notes/screenshots/lamp-edge-sphere-*.png`
+  and `lamp-edge-cylinder-banded.png`.
 
 ### Fixed
 

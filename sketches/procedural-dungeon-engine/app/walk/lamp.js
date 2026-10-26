@@ -286,10 +286,12 @@
   scene.add(halo); // follows the lamp in world space (the figure's rig squashes when crouched)
 
   // The light's reach and colour. Dimming, it goes redder and dimmer. It
-  // ends at a hard edge: a circle around you (on the ground plan, so walls
-  // are cut at the same distance), past which there's only the ambient
-  // fill. The circle is always there and shrinks with the fuel. Optionally
-  // the last stretch inside it steps down in bands, like a creeper's discs.
+  // ends at a hard edge, past which there's only the ambient fill: a
+  // sphere around the lamp, sized so it meets the floor in a circle of the
+  // edge's radius. On a wall the edge curves like a pool of light rather
+  // than a vertical line. The circle is always there and shrinks with the
+  // fuel. The last stretch inside it steps down in bands, like a creeper's
+  // discs (each band a smaller sphere meeting the floor a band further in).
   const LIGHT = {
     minIntensity: 0.25, // of full, when empty
     minRange: 0.18,     // of full, when empty: the point light's own falloff, inside the edge
@@ -300,10 +302,11 @@
     radiusCurve: 1,     // over 1 holds it wide and shrinks it late; under 1, early
     breathe: 0.04,      // of the radius: how much the flame's flicker moves the edge
     soft: 0.03,         // cells: anti-aliasing across the edge (0 is razor sharp)
-    banded: false,      // step the light down in bands just inside the edge
+    sphere: true,       // the edge is a sphere around the lamp (off: a cylinder, cut straight up walls)
+    banded: true,       // step the light down in bands just inside the edge
     bands: 3,           // how many
-    bandWidth: 0.22,    // cells each
-    bandFloor: 0.3,     // the outermost band's brightness (the inner ones step up to full)
+    bandWidth: 0.32,    // cells each, on the floor
+    bandFloor: 0.2,     // the outermost band's brightness (the inner ones step up to full)
   };
 
   /**
@@ -324,21 +327,27 @@
   // Every material shares the one uniform object (three.js copies a
   // uniform's value by reference when it isn't a vector, colour, matrix or
   // texture), so setting it once a frame reaches them all.
-  const lampMask = { center: new THREE.Vector4(), band: new THREE.Vector4() }; // center: world xyz, radius; band: count, width, floor, soft
+  // center: the lamp's world xyz, radius on the floor; band: count, width, floor, soft; shape: sphere (1) or cylinder (0)
+  const lampMask = { center: new THREE.Vector4(), band: new THREE.Vector4(), shape: new THREE.Vector4() };
   for (const k of ['lambert', 'phong', 'standard', 'physical', 'toon']) {
     if (THREE.ShaderLib[k]) THREE.ShaderLib[k].uniforms.lampMask = { value: lampMask };
   }
   THREE.ShaderChunk.lights_pars_begin += `
-struct LampMask { vec4 center; vec4 band; };
+struct LampMask { vec4 center; vec4 band; vec4 shape; };
 uniform LampMask lampMask;
-// 1 inside the lamp's edge, 0 past it; the distance is across the ground, from you.
+// 1 inside the lamp's edge, 0 past it. d is the radius on the floor (y = 0)
+// of the sphere around the lamp through this point: across the floor it's
+// just the distance from you; up a wall it grows with the height off the
+// lamp's, so the edge curves. As a cylinder, it's the distance across the floor.
 float lampMaskAt(vec3 viewPos) {
   float R = lampMask.center.w;
   if (R <= 0.0) return 1.0;
   vec3 c = (viewMatrix * vec4(lampMask.center.xyz, 1.0)).xyz;
   vec3 up = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
   vec3 dv = viewPos - c;
-  float d = length(dv - dot(dv, up) * up);
+  float h = dot(dv, up), flat2 = dot(dv, dv) - h * h;
+  float lampH = lampMask.center.y; // the lamp's height over the floor
+  float d = lampMask.shape.x > 0.5 ? sqrt(max(flat2 + h * h - lampH * lampH, 0.0)) : sqrt(max(flat2, 0.0));
   float m = 1.0 - smoothstep(R - lampMask.band.w, R, d);
   float n = lampMask.band.x;
   if (n > 0.5) {
@@ -470,7 +479,9 @@ float lampMaskAt(vec3 viewPos) {
 
     // The light's edge, breathing a little with the flame.
     const edge = edgeRadius() * (1 - LIGHT.breathe + LIGHT.breathe * Math.min(1.2, bright));
-    lampMask.center.set(p.x * S, p.z * S, p.y * S, Math.max(0.01, edge * S));
+    // Centred over you at the lamp's height, so the floor circle is the edge creatures read (lightRadius).
+    lampMask.center.set(p.x * S, Math.max(0, lampWorld.y), p.y * S, Math.max(0.01, edge * S));
+    lampMask.shape.set(LIGHT.sphere ? 1 : 0, 0, 0, 0);
     lampMask.band.set(LIGHT.banded ? Math.round(LIGHT.bands) : 0, Math.max(0.01, LIGHT.bandWidth * S),
       LIGHT.bandFloor, Math.max(0, LIGHT.soft * S));
 
