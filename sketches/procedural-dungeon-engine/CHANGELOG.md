@@ -626,6 +626,21 @@ All notable changes to this sketch are logged here, per
   values show in gold and stay across reloads (in their own localStorage
   key, never the save). "Copy changes" puts them on the clipboard as JSON.
   `lamp.js`, `ghosts.js` and `waystones.js` now export their tables for it.
+- 2026-10-25: **Moods form regions.** A room now usually carries on its
+  parent's mood, with a hue near its parent's, so a branch has stretches of
+  one character (about 80% of rooms keep their parent's mood, against about
+  10% by chance before). When it doesn't, the new mood starts a region of its
+  own, and more often than not it's one the old mood leads into (a small
+  table, `DungeonEngine.MOOD_JUNCTIONS`: damp leads to cold, breathing or
+  echoing, and so on). Tuning is `DungeonEngine.MOOD_REGIONS` (`inherit`,
+  `junction`, `hueDrift`), copied into a new expedition's params, so a
+  change needs a new expedition and a replay uses the values it was made
+  with. `inherit: 0` turns it off: params and rooms then come out exactly as
+  before. The decision is on its own stream (`'region'`), so layouts, loot
+  and everything else seeded are unchanged either way; only moods and hues
+  differ. Records from before (no `moodInherit` in their params) keep their
+  old moods. Waypoint halls and the root roll their own. `stress-test.js`
+  checks the regions.
 
 ### Fixed
 

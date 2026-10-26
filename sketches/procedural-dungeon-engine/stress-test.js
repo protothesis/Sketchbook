@@ -115,4 +115,25 @@ for (let run = 0; run < RUNS; run++) {
     `${s.spaces} spaces, ${s.cells} cells, ${s.cycles} cycles, ${s.openExits} open exits; replay OK`);
 }
 assert(totalCycles > 0, 'no cycles in any run');
+
+// Mood regions: on (the default), most rooms carry on their parent's mood;
+// off, the params carry no mood keys (rooms roll as they did before).
+{
+  const exp = DE.createExpedition(DE.randomRootSeed());
+  for (let i = 0; i < 200; i++) {
+    const open = [];
+    for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId && e.kind !== 'surface') open.push([id, e.id]);
+    if (!open.length) break;
+    const [sid, eid] = pick(open);
+    DE.commit(exp, DE.expand(exp, sid, eid));
+  }
+  const kids = Object.values(exp.spaces).filter((s) => s.parentId && !s.reserveId);
+  const same = kids.filter((s) => s.meta.mood === exp.spaces[s.parentId].meta.mood).length / kids.length;
+  assert(same > 0.5, 'mood regions: only ' + (100 * same).toFixed(0) + '% of rooms keep their parent\'s mood');
+  const was = DE.MOOD_REGIONS.inherit;
+  DE.MOOD_REGIONS.inherit = 0;
+  assert(!Object.keys(DE.deriveParams('x')).some((k) => k.startsWith('mood')), 'mood regions off still sets params');
+  DE.MOOD_REGIONS.inherit = was;
+  console.log(`mood regions: ${(100 * same).toFixed(0)}% of rooms keep their parent's mood`);
+}
 console.log('all checks passed');
