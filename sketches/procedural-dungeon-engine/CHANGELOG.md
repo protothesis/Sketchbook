@@ -913,7 +913,18 @@ All notable changes to this sketch are logged here, per
     chunky glitches break in now and then, at irregular moments, more
     often the emptier you are. All the tearing jumps at an uneven pace in
     slices of varying height, so it doesn't repeat. The dark's and the
-    distress's static is half as bright as before.
+    distress's static is half as bright as before. The static itself is
+    coarser (3 px grain) and mostly a boiling noise, not fresh random dots
+    each frame. Glitch blocks across it vary its strength, coming and going
+    at uneven moments. The random function behind all of it no longer
+    uses `sin()`, whose patterns started to repeat as play time grew.
+  - **No more hitch as effects start.** The first frame any effect showed
+    took about half a second: the effect shader, a second version of every
+    scene material's shader (drawn into the effect's buffer) and the
+    buffer itself were all created on the spot. They're now prepared in
+    the background ahead of time, and kept up as new materials appear. The
+    effect's adaptive resolution moves between a few fixed steps, slowly,
+    because every resize was a small hitch too.
   - **The dark** has its own look. Static and tearing keep to the outer
     edge, and a ragged near-black violet rim of shadow drifts and curls
     inward. The shadow follows the meter directly: a thin rim at first,
