@@ -373,7 +373,7 @@
       box: near.box,
       sel: off ? 1 : 0,
       options: [
-        { label: 'retrace', icon: '↺', detail: `as you left it · ${chargeText(near.price)}`, off, act: () => retraceThrough(near, !own) },
+        { label: 'retrace', icon: '↺', detail: `as you left it · ${chargeText(near.price)}`, cost: near.price, off, act: () => retraceThrough(near, !own) },
         { label: own ? 'reroll' : 'open anyway', icon: '↻', detail: own ? 'something new · the path is gone' : 'the path is gone', lose: true,
           act: () => openDoor(near.space.id, near.exit.id) },
       ],

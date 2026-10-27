@@ -2,7 +2,7 @@
 // your light and your rerolls. It's a fluid amount in charges
 // (`run.fuel`): a shard adds a third of a charge, rerolls and waystones
 // spend whole charges, and the lamp burns it steadily, except within a tile
-// of a lit sconce. A gain holds the burn for a moment (RULES.lampGrace), so
+// of an entropy light (a lit sconce, a save lantern: light.js). A gain holds the burn for a moment (RULES.lampGrace), so
 // a charge you just earned doesn't start draining that instant.
 //
 // When the fuel runs out the lamp goes out, and stays out until you relight
@@ -75,13 +75,9 @@
     return take;
   }
 
-  /** Is this spot sheltered by a lit sconce or a save lantern: inside its light's bands, nothing in the way (light.js)? */
+  /** Is this spot sheltered by an entropy light (a lit sconce, a save lantern): inside its pool, nothing in the way (light.js)? */
   function litAt(p) {
-    return !!shelterAt(p);
-  }
-  function shelterAt(p) {
-    return state.sconces.find((sc) => sc.lit && W.light.litBy(W.sconceLight(sc), p.x, p.y, 0.5)) ||
-      state.lanterns.find((ln) => W.light.litBy(W.lanternLight(ln), p.x, p.y, 0.5)) || null;
+    return !!W.light.shelterAt(p.x, p.y);
   }
 
   // ---------------------------------------------------------------------------
@@ -273,7 +269,11 @@
     opacity: 0.3,     // at full
     lowOpacity: 0.12, // at the very end
     wobble: 0.6,      // how far the flicker pushes its size around
+    fedScale: 1.35,   // fed by an entropy light: it swells this much
+    fedOpacity: 0.16, // and gets this much more solid
   };
+  // Fed by an entropy light, that light gets a halo too, in its colour.
+  const FEED_GLOW = { size: 0.4 * S, opacity: 0.36, ease: 4 };
   function hardDisc() {
     const n = 128, cv = document.createElement('canvas');
     cv.width = cv.height = n;
@@ -286,6 +286,12 @@
   const halo = new THREE.Sprite(haloMat);
   halo.renderOrder = 5;
   scene.add(halo); // follows the lamp in world space (the figure's rig squashes when crouched)
+  const feedGlowMat = new THREE.SpriteMaterial({ map: haloMat.map, transparent: true, depthWrite: false, opacity: 0 });
+  const feedGlow = new THREE.Sprite(feedGlowMat);
+  feedGlow.renderOrder = 5;
+  feedGlow.visible = false;
+  scene.add(feedGlow);
+  let fedAmt = 0; // eased: 1 while an entropy light feeds the lamp
 
   // The light's look: the lantern, a plain point light that goes redder,
   // dimmer and shorter as the fuel drops, flickering with the flame. Its
@@ -351,10 +357,18 @@
   const lampWorld = new THREE.Vector3();
   const lastPos = { x: 0, y: 0 };
 
-  // Streams: motes flowing into the lamp from whatever is feeding it (a lit
-  // sconce sheltering it, a well you're drinking from). A source calls
-  // feedFrom(worldPos, colour) every frame it's feeding.
+  // Streams: motes flowing into the lamp from whatever is feeding it. A
+  // well you're drinking from pours (STREAM); an entropy light sheltering
+  // you only drips (DRIP), now and then, slow: a hint of the link, not a
+  // pull. A source calls feedFrom(worldPos, colour, drip) every frame it's
+  // feeding.
   const STREAM = { rate: 16, travel: 0.6, arc: 0.25 * S, count: 40 };
+  const DRIP = {
+    every: [1.3, 2.8], // seconds between drops
+    travel: 1.4,       // seconds a drop takes to reach the lamp
+    arc: 0.12 * S,     // how far it bows up on the way
+    size: 1.6,         // of a stream mote's brightness
+  };
   const streamPos = new Float32Array(STREAM.count * 3), streamCol = new Float32Array(STREAM.count * 3);
   const streamGeo = new THREE.BufferGeometry();
   streamGeo.setAttribute('position', new THREE.BufferAttribute(streamPos, 3));
@@ -364,35 +378,46 @@
   }));
   streamPts.frustumCulled = false;
   scene.add(streamPts);
-  const motes = Array.from({ length: STREAM.count }, () => ({ t: 1, from: new THREE.Vector3(), col: new THREE.Color(), off: 0 }));
-  const feeds = [];
-  let streamClock = 0;
-  function feedFrom(pos, color) { feeds.push({ pos: pos.clone(), color: new THREE.Color(color) }); }
+  const motes = Array.from({ length: STREAM.count }, () => ({ t: 1, from: new THREE.Vector3(), col: new THREE.Color(), off: 0, travel: 1, arc: 0, k: 1 }));
+  const feeds = [], drips = [];
+  let streamClock = 0, dripClock = 0;
+  function feedFrom(pos, color, drip) { (drip ? drips : feeds).push({ pos: pos.clone(), color: new THREE.Color(color) }); }
   const scPos = new THREE.Vector3();
+  function launch(f, travel, arc, k) {
+    const m = motes.find((o) => o.t >= 1);
+    if (!m) return;
+    m.t = 0; m.from.copy(f.pos); m.col.copy(f.color); m.off = (Math.random() - 0.5) * 0.3 * (arc / STREAM.arc);
+    m.travel = travel; m.arc = arc; m.k = k;
+  }
 
-  function updateStreams(dt) {
-    if (state.paused) feeds.length = 0;
-    if (lampMode === 'sheltered' && !state.paused) {
-      const sc = shelterAt(state.player);
-      if (sc) { sc.flame.getWorldPosition(scPos); feedFrom(scPos, 0xffc06a); }
-    }
+  /** The entropy light feeding your lamp now (light.js), or null. */
+  const feeder = () => (lampMode === 'sheltered' && !state.paused && lampOn() ? W.light.shelterAt(state.player.x, state.player.y) : null);
+
+  function updateStreams(dt, fed) {
+    if (state.paused) feeds.length = drips.length = 0;
+    if (fed) { fed.flame.getWorldPosition(scPos); feedFrom(scPos, fed.color, true); }
     streamClock += dt;
     while (feeds.length && streamClock >= 1 / STREAM.rate) {
       streamClock -= 1 / STREAM.rate;
-      const m = motes.find((o) => o.t >= 1);
-      if (!m) break;
-      const f = feeds[Math.floor(Math.random() * feeds.length)];
-      m.t = 0; m.from.copy(f.pos); m.col.copy(f.color); m.off = (Math.random() - 0.5) * 0.3;
+      launch(feeds[Math.floor(Math.random() * feeds.length)], STREAM.travel, STREAM.arc, 1);
     }
     if (!feeds.length) streamClock = 0;
-    feeds.length = 0;
+    // Drips: the first comes soon after you step in, then one every so often.
+    if (drips.length) {
+      dripClock -= dt;
+      if (dripClock <= 0) {
+        launch(drips[Math.floor(Math.random() * drips.length)], DRIP.travel, DRIP.arc, DRIP.size);
+        dripClock = between(DRIP.every);
+      }
+    } else dripClock = 0.25;
+    feeds.length = drips.length = 0;
     motes.forEach((m, i) => {
-      if (m.t < 1) m.t = Math.min(1, m.t + dt / STREAM.travel);
-      const k = m.t * m.t * (3 - 2 * m.t), up = Math.sin(Math.PI * m.t) * (STREAM.arc + m.off);
+      if (m.t < 1) m.t = Math.min(1, m.t + dt / m.travel);
+      const k = m.t * m.t * (3 - 2 * m.t), up = Math.sin(Math.PI * m.t) * (m.arc + m.off);
       streamPos[i * 3] = lerp(m.from.x, lampWorld.x, k);
       streamPos[i * 3 + 1] = lerp(m.from.y, lampWorld.y, k) + up;
       streamPos[i * 3 + 2] = lerp(m.from.z, lampWorld.z, k);
-      const a = m.t < 1 ? Math.sin(Math.PI * m.t) : 0;
+      const a = m.t < 1 ? Math.sin(Math.PI * m.t) * m.k : 0;
       streamCol[i * 3] = m.col.r * a; streamCol[i * 3 + 1] = m.col.g * a; streamCol[i * 3 + 2] = m.col.b * a;
     });
     streamGeo.attributes.position.needsUpdate = true;
@@ -430,12 +455,23 @@
     const reach = lerp(LIGHT.minRange, 1, smooth(0, 1, level)) * (0.92 + 0.08 * bright);
     lantern.distance = LANTERN_RANGE * reach;
 
+    // Fed by an entropy light: your halo swells and brightens, and the light gets one of its own.
+    const fed = feeder();
+    fedAmt += ((fed ? 1 : 0) - fedAmt) * Math.min(1, dt * FEED_GLOW.ease);
+    if (fed) {
+      fed.flame.getWorldPosition(feedGlow.position);
+      feedGlowMat.color.set(fed.color);
+    }
+    feedGlow.visible = fedAmt > 0.01;
+    feedGlowMat.opacity = FEED_GLOW.opacity * fedAmt * (0.9 + 0.1 * Math.sin(t * 5.1));
+    feedGlow.scale.setScalar(FEED_GLOW.size * (0.7 + 0.3 * fedAmt));
+
     lanternMesh.getWorldPosition(lampWorld);
     haloMat.color.copy(lampColor);
     halo.position.copy(lampWorld);
     const wob = 1 + HALO.wobble * (u.flick * jitter2 + u.fade * 0.6 * slow) + swell * 0.6;
-    halo.scale.setScalar(HALO.full * (HALO.minScale + (1 - HALO.minScale) * level) * Math.max(0.3, wob));
-    haloMat.opacity = lerp(HALO.lowOpacity, HALO.opacity, smooth(0, 0.66, level)) * Math.min(1.2, bright) * on;
+    halo.scale.setScalar(HALO.full * (HALO.minScale + (1 - HALO.minScale) * level) * Math.max(0.3, wob) * lerp(1, HALO.fedScale, fedAmt));
+    haloMat.opacity = (lerp(HALO.lowOpacity, HALO.opacity, smooth(0, 0.66, level)) + HALO.fedOpacity * fedAmt) * Math.min(1.2, bright) * on;
 
     // The pool on the floor, breathing with the flame only as much as LIGHT.breathe says.
     const pool = lampLight();
@@ -484,15 +520,19 @@
     sparkGeo.attributes.position.needsUpdate = true;
     sparkGeo.attributes.color.needsUpdate = true;
 
-    updateStreams(dt);
+    updateStreams(dt, fed);
     updateLampHud();
   }
 
   // ---------------------------------------------------------------------------
   // The lamp on the HUD: an icon in the lamp's colour, whose flame stands
   // lower at each stage, and a fluid meter cut into one section per charge
-  // (the one that's burning shows dimmer). By a sconce the icon shimmers
-  // gold; drinking from a well, violet. Under the meter, psychic stamina: a
+  // (the one that's burning shows dimmer). Fed by an entropy light the icon
+  // and its lantern shimmer gold; drinking from a well, violet. Looking at
+  // something that costs entropy (lighting a sconce, a reroll), the share it
+  // would take pulses on the meter, harder while you hold E (red if you
+  // can't afford it); snuffing a sconce, the share it gives back shows
+  // past your fuel. Under the meter, psychic stamina: a
   // thin bar, and the screen's edges closing in as it falls. Words only
   // when the lamp is off, to say how to relight it.
 
@@ -501,6 +541,11 @@
   const flameEl = $('lamp-flame'), staminaEl = $('stamina'), vignetteEl = $('vignette');
   if (iconEl) iconEl.addEventListener('click', toggleLamp);
   let built = -1, lastSig = '';
+  let preview = null; // { cost (charges: over 0 spends, under 0 gives back), held (0..1) }
+  /** What the focused action would cost (hud.js, every frame): charges (negative: a gain), and how far its hold has filled. */
+  function previewCost(cost, held) {
+    preview = cost ? { cost, held: held || 0 } : null;
+  }
   function updateLampHud(force) {
     if (!meterEl) return;
     const run = state.run, max = maxCharges();
@@ -516,7 +561,7 @@
       meterEl.innerHTML = '';
       for (let i = 0; i < n; i++) {
         const sec = el('span', 'sec' + (i >= RULES.chargesMax ? ' buff' : ''));
-        sec.append(el('i', 'liquid'));
+        sec.append(el('i', 'liquid'), el('i', 'cost'));
         meterEl.append(sec);
       }
       built = n;
@@ -524,13 +569,25 @@
     }
     const off = !state.gutter && !lampOn();
     const mode = state.gutter ? 'out' : lampMode;
-    const sig = run.fuel.toFixed(3) + mode + W.drinking() + off + run.lampOn;
+    const pv = preview;
+    const sig = run.fuel.toFixed(3) + mode + W.drinking() + off + run.lampOn + (pv ? pv.cost.toFixed(3) + (pv.held > 0) : '');
     if (sig === lastSig) return;
     lastSig = sig;
+    // The span the preview marks: what it would take off the top of your fuel, or add past it.
+    const short = !!pv && pv.cost > run.fuel + 1e-6;
+    const lo = !pv ? 0 : pv.cost > 0 ? Math.max(0, run.fuel - pv.cost) : run.fuel;
+    const hi = !pv ? 0 : pv.cost > 0 ? run.fuel : Math.min(max, run.fuel - pv.cost);
+    meterEl.classList.toggle('previewing', !!pv);
+    meterEl.classList.toggle('holding', !!pv && pv.held > 0);
     Array.from(meterEl.children).forEach((sec, i) => {
       const f = THREE.MathUtils.clamp(run.fuel - i, 0, 1);
       sec.firstChild.style.width = (f * 100).toFixed(1) + '%';
-      sec.className = 'sec' + (i >= RULES.chargesMax ? ' buff' : '') + (f >= 1 ? ' full' : f > 0 ? ' part' : '');
+      const a = THREE.MathUtils.clamp(lo - i, 0, 1), b = THREE.MathUtils.clamp(hi - i, 0, 1);
+      const cost = sec.children[1];
+      cost.style.left = (a * 100).toFixed(1) + '%';
+      cost.style.width = (Math.max(0, b - a) * 100).toFixed(1) + '%';
+      sec.className = 'sec' + (i >= RULES.chargesMax ? ' buff' : '') + (f >= 1 ? ' full' : f > 0 ? ' part' : '') +
+        (pv && b > a ? (pv.cost < 0 ? ' gain' : short ? ' short' : ' spend') : '');
     });
     iconEl.style.color = '#' + lampColor.getHexString();
     iconEl.classList.toggle('burning', mode === 'burning' || mode === 'held');
@@ -566,9 +623,11 @@
   }
 
   Object.assign(W, { gainFuel, spendFuel, takeFuel, litAt, lampOn, toggleLamp, feedFrom, updateLamp,
-    updateLampLook, updateLampHud, lampLevel, lightRadius, lampLight, popEntropy, passOut });
+    updateLampLook, updateLampHud, previewCost, lampLevel, lightRadius, lampLight, popEntropy, passOut });
   /** The lamp's colour at this much fuel (charges), as it would show: for a pack's little lantern (packs.js). */
   const lampColorAt = (fuel, out) => colorAt(THREE.MathUtils.clamp(fuel / RULES.lampFullCharges, 0, 1), out);
+  /** The lamp's colour at this level (0 empty .. 1 full), into `out`: for a save lantern's flare (lanterns.js). */
+  const lampColorAtLevel = (level, out) => colorAt(THREE.MathUtils.clamp(level, 0, 1), out);
   /**
    * Your lamp's light at this much fuel (charges), steady (no flicker):
    * { intensity, distance, pool (cells) }, and its colour into `color`. For
@@ -584,5 +643,5 @@
       pool: lerp(LIGHT.poolEmpty, LIGHT.poolFull, Math.pow(level, LIGHT.poolCurve)),
     };
   }
-  Object.assign(W, { LIGHT, HALO, UNREST, EMBER, STREAM, lampColorAt, lampLightAt }); // tuning tables (the dev panel, dev.js)
+  Object.assign(W, { LIGHT, HALO, UNREST, EMBER, STREAM, DRIP, FEED_GLOW, lampColorAt, lampColorAtLevel, lampLightAt }); // tuning tables (the dev panel, dev.js)
 })(window);

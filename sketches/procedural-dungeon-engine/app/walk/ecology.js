@@ -61,9 +61,8 @@
     // Lights carry their light (light.js), which is what fleeing them tests.
     out.push(W.lampOn() ? { tags: ['player', 'light', 'lamp'], x: p.x, y: p.y, ref: p, light: W.lampLight() }
       : { tags: ['player'], x: p.x, y: p.y, ref: p });
-    for (const sc of state.sconces) if (sc.lit) out.push({ tags: ['light', 'steady'], x: sc.x, y: sc.y, ref: sc, light: W.sconceLight(sc) });
-    // Save lanterns are always lit: a sconce in all but name (lanterns.js).
-    for (const ln of state.lanterns) out.push({ tags: ['light', 'steady'], x: ln.x, y: ln.y, ref: ln, light: W.lanternLight(ln) });
+    // Entropy lights (lit sconces, save lanterns: light.js) are steady light.
+    for (const o of W.light.entropyLights()) out.push({ tags: ['light', 'steady'], x: o.pool.x, y: o.pool.y, ref: o.ref, light: o.pool });
     for (const st of state.waystones) {
       if (st.awake) out.push({ tags: ['waystone'], x: (st.ws.x0 + st.ws.x1) / 2, y: (st.ws.y0 + st.ws.y1) / 2, ref: st });
     }
