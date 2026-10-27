@@ -178,6 +178,8 @@
    */
   function slots() {
     const run = state.run, out = [{ key: 'lantern', kind: 'lantern' }]; // empty hands
+    const kindSlot = (k) => ITEMS[k].slot && ITEMS[k].slot(run);
+    for (const k in ITEMS) if (ITEMS[k].first && kindSlot(k)) out.push(kindSlot(k)); // a kind that keeps its place by the lantern (the duster)
     if (run.jars.length) {
       // One slot for every jar, grouped by what it holds: empty, a pixie, a
       // charge of entropy. The group you pick is the jar in your hands.
@@ -199,7 +201,7 @@
     if (run.doorstones > 0) out.push({ key: 'doorstone', kind: 'doorstone', count: run.doorstones });
     if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
     for (const k in ITEMS) {
-      const slot = ITEMS[k].slot && ITEMS[k].slot(run);
+      const slot = !ITEMS[k].first && kindSlot(k);
       if (slot) out.push(slot);
     }
     return out;

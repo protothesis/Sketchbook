@@ -429,6 +429,14 @@ kbd {
 .lamp-meter.previewing .sec.short { border-color: rgba(255, 90, 74, 0.9); }
 @keyframes cost-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.85; } }
 /* Psychic stamina: a thin bar under the lamp's meter. */
+/* The dust pre-pool (dust.js): a pip per chit toward the next shard. */
+.dust-pool { display: flex; gap: 3px; height: 5px; }
+.dust-pool[hidden] { display: none; }
+.dust-pool i { flex: 1 1 0; max-width: 12px; border-radius: 1px; background: rgba(181, 156, 255, 0.1); border: 1px solid rgba(181, 156, 255, 0.35); }
+.dust-pool i.on { background: var(--entropy); border-color: var(--entropy); }
+.dust-pool.full i.on { background: #e2d6ff; }
+.dust-pool.pour i { animation: dust-pour 0.6s ease-out; }
+@keyframes dust-pour { 0% { background: #fff; box-shadow: 0 0 6px #d6c4ff; } 100% { box-shadow: none; } }
 .stamina {
   position: relative;
   height: 10px;

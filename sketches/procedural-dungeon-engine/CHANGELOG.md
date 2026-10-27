@@ -94,6 +94,28 @@ All notable changes to this sketch are logged here, per
   direction's lead arrives as you go. Leads are 0.7 cells walking and 1.3
   running. `CAMERA.rise` (0 to 1) sets how much it follows block heights.
 
+- 2026-10-27: **Dusting, first pass** (`notes/dusting-2026-10-27.md`,
+  `app/walk/dust.js`). Rooms gather dust by their mood (`DP.dust`, its own
+  `'dust'` stream): a thin light-grey plane just above the floor and low
+  block tops, drawn as a scaled-up pixel dither whose density is the
+  layers left (one to three). Dusty rooms are mostly covered, damp, cold
+  and breathing rooms not at all (`RULES.dustMood`). The **feather duster**
+  is in your bag from the start, the slot after your lantern: F swings it,
+  one press one swing, taking a layer off every dusted half-cell in an arc
+  in front of you (reaching a one-unit block's top from the floor, higher
+  in a jump). Each swing kicks up chunky dithered clouds that break down
+  into motes, which drift for a while and catch the light. Now and then a
+  layer throws out a violet **entropy chit**; chits drift to you within
+  0.9 cells and fill a **pre-pool** of six pips under the lamp meter. A full
+  pre-pool pours a shard into your lamp (and that's the gain that holds the
+  burn, not each chit). It waits when the lamp has no room, and a faint
+  leaves it in your pack. **Crusted crystals:** most shards in a room with
+  dust (`dustCrust`, 80%) lie dull and crusted over, half sunk in dust, with
+  a glint when your lamp's light reaches them; three swipes
+  (`crustLayers`) wake one and it rises as an ordinary shard. Cleared dust,
+  crust, loose chits and the pre-pool are saved in the run. Tuning is in
+  `DUST` (dev panel).
+
 ### Changed
 
 - 2026-10-26: **Controls for the jump.** Keyboard: Space jumps and crouch
