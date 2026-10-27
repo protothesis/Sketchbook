@@ -826,11 +826,14 @@ All notable changes to this sketch are logged here, per
     ease back just enough as it lands. Only with no room behind you does
     it go one half-cell further. That ends the spot where nothing would go
     and the long reach just past an edge. The same applies one level up.
-  - The set-down preview is a tinted tile on the surface where it will
-    rest, plus a ghost of the object itself. The ghost uses the object's
-    own colours and texture, drawn with every other pixel left out. Its
-    faces are shaded by direction (top brightest) so it reads as a solid
-    even in the dark (`SETDOWN` in the dev panel).
+  - The set-down preview is now a debug aid, off by default. Turn it on
+    with `SETDOWN.show` in the dev panel. It's a tinted tile on the surface
+    where the object will rest, plus an orange ghost of it with every
+    other pixel left out, its faces shaded by direction.
+  - Turning on the spot with something in your hands moves the target. It
+    used to stay where you'd lifted the object from until you walked about
+    0.2 cells away. Now it goes back there only while you still face that
+    way.
   - A carried object's shadow dithers out over the start of the lift and
     back in over the end of the set-down, instead of switching off and
     on.

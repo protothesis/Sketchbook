@@ -686,16 +686,20 @@ void main() {
       const to = nudgeClear(p, sub(sx, sy), b);
       return to ? { sx, sy, base, nudge: to } : null;
     };
-    // Haven't moved since lifting it: back where it came from.
-    const f = b.liftedFrom;
-    if (f && Math.hypot(p.x - f.px, p.y - f.py) < 0.2 && Math.abs(p.z - f.pz) < 0.05) {
-      const back = ok(f.sx, f.sy);
-      if (back) return back;
-    }
-    // Otherwise: the half-cell in front of yours (nudging you back if you're in its way), else the one past it.
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     const d = Math.abs(fx) > Math.abs(fy) ? { x: Math.sign(fx), y: 0 } : { x: 0, y: Math.sign(fy) };
     const psx = Math.floor(p.x * 2), psy = Math.floor(p.y * 2);
+    // Haven't moved since lifting it, still facing where it came from: back there.
+    // (Turn away, and it's the half-cell in front of you like any other time.)
+    const f = b.liftedFrom;
+    if (f && Math.hypot(p.x - f.px, p.y - f.py) < 0.2 && Math.abs(p.z - f.pz) < 0.05) {
+      const rx = f.sx - psx, ry = f.sy - psy;
+      if (rx * d.x + ry * d.y > 0 && rx * d.y - ry * d.x === 0) {
+        const back = ok(f.sx, f.sy);
+        if (back) return back;
+      }
+    }
+    // Otherwise: the half-cell in front of yours (nudging you back if you're in its way), else the one past it.
     for (const k of [1, 2]) {
       const sx = psx + d.x * k, sy = psy + d.y * k;
       if (k === 2 && !W.quarterReachable(sx, sy, p)) break;

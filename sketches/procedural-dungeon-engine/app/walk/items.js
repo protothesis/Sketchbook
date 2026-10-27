@@ -791,12 +791,14 @@
     heldRig.add(m);
   }
 
-  // The set-down preview: a faint tile on the surface where E would put
-  // what you carry, and over it a ghost of the thing itself: its own
-  // colours, every other pixel left out (a screen-door dither), its faces
-  // shaded by which way they point (top brightest) so it reads as a solid
-  // even in the dark.
+  // The set-down preview, a debug aid (off unless SETDOWN.show is on in
+  // the dev panel): a faint tile on the surface where E would put what you
+  // carry, and over it an orange ghost of the thing itself, every other
+  // pixel left out (a screen-door dither), its faces shaded by which way
+  // they point (top brightest) so it reads as a solid.
   const SETDOWN = {
+    show: false,                     // debug: draw the preview at all
+    color: 0xe8935f,                 // the ghost's colour
     tile: 0.3,                       // the tile's opacity
     shade: { top: 1, x: 0.72, z: 0.55, bottom: 0.35 }, // brightness by face direction
     lift: 0.12,                      // of the colour: lightened toward white, to read on dark floors
@@ -807,39 +809,33 @@
   tile.renderOrder = 4;
   tile.visible = false;
   scene.add(tile);
-  const ghostUniforms = { uShade: { value: new THREE.Vector4() }, uLift: { value: 0 } };
-  /** A ghost's material, from the real one's colour and texture: opaque pixels in a checkerboard, shaded by face direction. */
-  function ghostMat(m) {
-    return new THREE.ShaderMaterial({
-      uniforms: Object.assign({ uColor: { value: new THREE.Color(m.color || 0xffffff) }, uMap: { value: m.map || null } }, ghostUniforms),
-      defines: m.map ? { USE_GHOST_MAP: '' } : {},
-      vertexShader: `varying vec3 vN; varying vec2 vUv;
-void main() { vN = normalize(mat3(modelMatrix) * normal); vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `uniform vec3 uColor; uniform sampler2D uMap; uniform vec4 uShade; uniform float uLift; varying vec3 vN; varying vec2 vUv;
+  const ghostUniforms = { uColor: { value: new THREE.Color(SETDOWN.color) }, uShade: { value: new THREE.Vector4() }, uLift: { value: 0 } };
+  /** The ghost's material (one, shared): opaque pixels in a checkerboard, in SETDOWN.color, shaded by face direction. */
+  const ghostMaterial = new THREE.ShaderMaterial({
+    uniforms: ghostUniforms,
+    vertexShader: `varying vec3 vN;
+void main() { vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform vec3 uColor; uniform vec4 uShade; uniform float uLift; varying vec3 vN;
 void main() {
   if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5) discard;
   vec3 base = uColor;
-#ifdef USE_GHOST_MAP
-  base *= texture2D(uMap, vUv).rgb;
-#endif
   vec3 n = normalize(vN);
   vec3 a = abs(n);
   float s = (uShade.x * max(n.y, 0.0) + uShade.w * max(-n.y, 0.0) + uShade.y * a.x + uShade.z * a.z) / max(a.x + a.y + a.z, 1e-3);
   gl_FragColor = vec4(mix(base, vec3(1.0), uLift) * s, 1.0);
 }`,
-    });
-  }
+  });
   let ghost = null, ghostOf = null;
-  /** The ghost of block `b`: a copy of its mesh with ghost materials (its see-through parts left out). */
+  /** The ghost of block `b`: a copy of its mesh in the ghost material (its see-through parts left out). */
   function ghostFor(b) {
     if (ghostOf === b) return ghost;
-    if (ghost) { scene.remove(ghost); ghost.traverse((o) => { if (o.isMesh && o.material.isShaderMaterial) o.material.dispose(); }); }
+    if (ghost) scene.remove(ghost);
     ghost = b.mesh.clone(true);
     ghost.traverse((o) => {
       if (!o.isMesh && !o.isPoints && !o.isSprite) return;
       const m = Array.isArray(o.material) ? o.material[0] : o.material;
       if (!o.isMesh || !m || m.transparent || m.blending === THREE.AdditiveBlending) { o.visible = false; return; }
-      o.material = ghostMat(m);
+      o.material = ghostMaterial;
       o.castShadow = o.receiveShadow = false;
     });
     ghost.visible = false;
@@ -848,17 +844,19 @@ void main() {
     return ghost;
   }
   function updatePreview(near) {
-    const b = near && near.spot && near.box;
+    const b = SETDOWN.show && near && near.spot && near.box;
     tile.visible = !!b;
     if (ghost) ghost.visible = false;
     if (!b) return;
     tile.scale.set((b.x1 - b.x0) * S * 0.96, (b.y1 - b.y0) * S * 0.96, 1);
     tile.position.set((b.x0 + b.x1) / 2 * S, b.z0 * S + 0.01, (b.y0 + b.y1) / 2 * S);
     tileMat.opacity = SETDOWN.tile;
+    tileMat.color.set(SETDOWN.color);
     const g = near.block && ghostFor(near.block);
     if (!g) return;
     ghostUniforms.uShade.value.set(SETDOWN.shade.top, SETDOWN.shade.x, SETDOWN.shade.z, SETDOWN.shade.bottom);
     ghostUniforms.uLift.value = SETDOWN.lift;
+    ghostUniforms.uColor.value.set(SETDOWN.color);
     g.visible = true;
     g.position.set((near.spot.sx / 2 + 0.25) * S, (near.spot.base || 0) * S, (near.spot.sy / 2 + 0.25) * S);
     g.rotation.set(0, 0, 0);
