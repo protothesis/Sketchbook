@@ -788,8 +788,45 @@ All notable changes to this sketch are logged here, per
   you carry and power from a jar. The action list
   (`notes/action-list-2026-10-25.md`) has the new build order.
 
+- 2026-10-26: **Entropy lights.** Lit sconces and save lanterns are now one
+  kind of light (`W.light.addEntropyLights` in `app/walk/light.js`). A kind
+  of light registers its lights that are on, each with its pool, flame and
+  colour. Your lamp's shelter, the feed effects and the creatures' "steady
+  light" all read from that one list, so a new kind of light gets all of
+  it by registering.
+  - Being fed is a slow, intermittent **drip** now: a drop every 1.3 to 2.8
+    s, taking 1.4 s to reach your lamp (`DRIP`). It hints at the link
+    instead of pulling a stream. A well you're drinking from still pours.
+  - While an entropy light feeds you, your lamp's halo swells and
+    brightens (`HALO.fedScale`, `fedOpacity`), and the light gets a halo of
+    its own in its colour (`FEED_GLOW`). The HUD's lantern icon glows as
+    well as its border, gold when fed and violet at a well.
+  - **What it costs shows on the meter.** Facing something that spends
+    entropy (lighting a sconce, a reroll, retracing a lost path, waking a
+    waystone from your lamp), the share it would take pulses at the top of
+    your fuel. It pulses faster while you hold E, and turns red if you
+    can't afford it. Facing a lit sconce, the shard that snuffing gives
+    back is outlined past your fuel.
+  - A save lantern's flare follows your lamp's colours. It starts bright
+    yellow, then fades through orange back to its resting red over the
+    same 1.4 s.
+- 2026-10-26: **Retracing a lost path leaves its door shut.** The
+  hourglass brings the rooms back, and the path's door comes back as a
+  plain closed door (no lost-path shimmer). You open it with E when you're
+  ready, as with any closed door you've been through.
+  - A retraced path of more than one room can't be rerolled from its
+    door. You paid to bring it back, so holding E there does nothing and
+    the green reroll arrow doesn't show (`run.retraced`,
+    `W.rerollThrough`). A one-room path stays rerollable like any
+    provisional room.
+
 ### Fixed
 
+- 2026-10-26: **Save lanterns shelter your lamp.** They were meant to
+  already, but the light was traced from a flame that sits inside the
+  lantern's own plinth block, so it was always shaded. Your lamp kept
+  burning beside one, and ghosts, creepers and pixies never treated it as
+  light. A light's own block no longer shades it (`from.own`).
 - 2026-10-26: **A new door no longer reshuffles a room.** Opening a door
   with a doorstone, or a loop opening one into the room, used to move the
   room's push-block marks and change their colours. The blocks you'd set

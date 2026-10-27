@@ -2,8 +2,10 @@
 // a lantern on a dark stone plinth, always lit with a low red flame. E held
 // at it saves: the flame flares, then settles back. It's the only thing that
 // sets where you wake, and the first save at a hall's lantern reveals new
-// waypoints. Like a lit sconce, its light has a pool (light.js): your lamp
-// rests inside it, ghosts and creepers keep out of it, pixies flee it.
+// waypoints. Like a lit sconce it's an entropy light (light.js): your lamp
+// rests inside its pool, ghosts and creepers keep out of it, pixies flee it.
+// A save's flare runs down your lamp's colours: bright yellow, then orange,
+// then back to its red.
 (function (global) {
   'use strict';
 
@@ -21,6 +23,7 @@
     flare: 9,            // brightness at the height of a save's flare
     flarePool: 2.6,      // cells: the pool, flaring
     flareTime: 1.4,      // seconds back down to its dim flame
+    flareLow: 0.33,      // of a full lamp: where the flare's colours end (your lamp's red)
   };
   const LANTERN_LIGHTS = 2; // real lights, given to the lanterns nearest you
 
@@ -95,8 +98,8 @@
     const k = DE.key(ls.cell.x, ls.cell.y);
     state.blockAt.set(k, (state.blockAt.get(k) || []).concat(blk));
     const ln = {
-      key, spaceId: space.id, ws: ls, x: cx, y: cy, tile, flame, glassMat, flameMat,
-      phase: ls.cell.x * 1.3 + ls.cell.y * 0.7, flare: 0,
+      key, spaceId: space.id, ws: ls, x: cx, y: cy, tile, flame, glassMat, flameMat, blk,
+      color: flameColor.clone(), phase: ls.cell.x * 1.3 + ls.cell.y * 0.7, flare: 0,
     };
     state.lanterns = state.lanterns.filter((o) => o.key !== key).concat(ln);
   }
@@ -140,6 +143,22 @@
       state.lanterns.find((o) => o.spaceId === 's0') || null;
   }
 
+  /**
+   * The flame's colour now, into ln.color: its red at rest; flaring, where
+   * your lamp's colour would be at that much of a full lamp (lamp.js), so a
+   * save starts bright yellow and fades through orange back down to red.
+   */
+  const flareTint = new THREE.Color();
+  function flameTint(ln) {
+    const f = W.easeOut(ln.flare);
+    ln.color.copy(flameColor);
+    if (f > 0 && W.lampColorAtLevel) {
+      W.lampColorAtLevel(SAVE_LANTERN.flareLow + (1 - SAVE_LANTERN.flareLow) * f, flareTint);
+      ln.color.lerp(flareTint, Math.min(1, f / 0.15));
+    }
+    return ln.color;
+  }
+
   /** The flame flickers, slow and uneven; a flare eases back down; the nearest lanterns get the lights. */
   function updateLanterns(dt) {
     const t = state.time, p = state.player;
@@ -148,6 +167,9 @@
       const k = brightness(ln) / SAVE_LANTERN.intensity;
       ln.flame.scale.set(1, 0.85 + 0.25 * k + 0.12 * Math.sin(t * 9 + ln.phase), 1);
       ln.glassMat.opacity = Math.min(0.9, 0.25 + 0.06 * k);
+      flameTint(ln);
+      ln.flameMat.color.copy(ln.color);
+      ln.glassMat.color.copy(ln.color);
     }
     const near = state.lanterns.filter((ln) => ln.tile.scale.x > 0.5)
       .map((ln) => ({ ln, d: Math.hypot(ln.x - p.x, ln.y - p.y) }))
@@ -156,7 +178,7 @@
     lights.forEach((l, i) => {
       const o = near[i];
       if (!o) { l.intensity = 0; return; }
-      l.color.setHex(SAVE_LANTERN.color);
+      l.color.copy(o.ln.color);
       l.distance = SAVE_LANTERN.reach * S;
       l.position.set(o.ln.x * S, FLAME_Y * S, o.ln.y * S);
       l.intensity = brightness(o.ln);
@@ -173,11 +195,15 @@
   /** A lantern's pool (light.js): always lit, wider while it flares. */
   function lanternLight(ln) {
     const f = W.easeOut(ln.flare);
-    return { x: ln.x, y: ln.y, r: SAVE_LANTERN.pool + (SAVE_LANTERN.flarePool - SAVE_LANTERN.pool) * f, from: { x: ln.x, y: ln.y, h: FLAME_Y } };
+    return { x: ln.x, y: ln.y, r: SAVE_LANTERN.pool + (SAVE_LANTERN.flarePool - SAVE_LANTERN.pool) * f,
+      from: { x: ln.x, y: ln.y, h: FLAME_Y, own: ln.blk } }; // the flame sits inside its plinth's block: that doesn't shade it
   }
   /** The pools of the lanterns that have real lights this frame (the ones drawn). */
   let shown = [];
   const lanternPools = () => shown.map(lanternLight);
+  // Always lit, a save lantern is an entropy light (light.js) wherever its hall stands.
+  W.light.addEntropyLights(() => state.lanterns.filter((ln) => ln.tile.scale.x > 0.5)
+    .map((ln) => ({ ref: ln, pool: lanternLight(ln), flame: ln.flame, color: ln.color })));
 
   /** On the maps: a small lantern, glowing red; brighter where you'd wake. */
   function drawLanternMarks(ctx, ox, oy, px) {

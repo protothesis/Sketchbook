@@ -85,7 +85,7 @@
     const seen = new Set();
     for (const [x, y] of cells) {
       for (const b of blocksAt(x, y)) {
-        if (seen.has(b)) continue;
+        if (seen.has(b) || b === f.own) continue; // a light's own block (a lantern's plinth) doesn't shade it
         seen.add(b);
         if (rayHitsBlock(f, t, b)) return false;
       }

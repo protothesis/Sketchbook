@@ -44,7 +44,7 @@
       if (p.z > 0.05) continue; // no doors from on top of a block
       if (!ex.connectionId) action = ex.kind === 'surface' ? 'surface' : isLockedNow(sp, ex) ? 'locked' : 'open';
       else if (!W.isClosed(ex.connectionId)) action = 'close';
-      else if ((child = DP.rerollThrough(exp, sp.id, ex))) action = 'reroll';
+      else if ((child = W.rerollThrough(exp, sp.id, ex))) action = 'reroll';
       else action = 'reopen';
       if (!action) continue;
       bestD = d;
@@ -373,7 +373,7 @@
       box: near.box,
       sel: off ? 1 : 0,
       options: [
-        { label: 'retrace', icon: '↺', detail: `as you left it · ${chargeText(near.price)}`, off, act: () => retraceThrough(near, !own) },
+        { label: 'retrace', icon: '↺', detail: `as you left it · ${chargeText(near.price)}`, cost: near.price, off, act: () => retraceThrough(near, !own) },
         { label: own ? 'reroll' : 'open anyway', icon: '↻', detail: own ? 'something new · the path is gone' : 'the path is gone', lose: true,
           act: () => openDoor(near.space.id, near.exit.id) },
       ],
@@ -390,7 +390,7 @@
     const r = W.retrace(near.path);
     W.showCaption(`the hourglass runs back · its pixie is spent · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
       (r.gone ? ` · ${r.gone} couldn't come back` : '') + ` · −${chargeText(near.price)}` +
-      (side && r.back ? ' · this door opens onto it now' : ''));
+      (r.back ? (side ? ' · this door opens onto it now' : ' · its door is yours to open') : ''));
     savePlayer();
     W.refreshHud();
   }

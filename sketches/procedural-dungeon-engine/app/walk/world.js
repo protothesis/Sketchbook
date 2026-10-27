@@ -417,7 +417,7 @@ void main() {
     const arrow = new THREE.Mesh(geo.arrow, arrowMat);
     arrow.position.y = 0.03;
     arrow.scale.z = beyond; // local +z, flipped to point out of this space
-    arrow.visible = !!DP.rerollThrough(state.exp, space.id, ex);
+    arrow.visible = !!W.rerollThrough(state.exp, space.id, ex);
     edgeGroup.add(pivot, seam, arrow);
     const door = {
       key: space.id + '/' + ex.id, spaceId: space.id, exitId: ex.id, pivot, panel, seam, point, arrow, locked, shimmer,
@@ -435,7 +435,7 @@ void main() {
     const exp = state.exp;
     for (const d of state.doors.values()) {
       const sp = exp.spaces[d.spaceId], ex = sp && sp.exits.find((e) => e.id === d.exitId);
-      d.arrow.visible = !!(ex && DP.rerollThrough(exp, d.spaceId, ex));
+      d.arrow.visible = !!(ex && W.rerollThrough(exp, d.spaceId, ex));
       const lost = !!(ex && !ex.connectionId && ex.kind !== 'surface' && !d.locked && W.lostPathAt(d.spaceId, d.exitId));
       if (ex && !ex.connectionId && ex.kind !== 'surface' && !d.locked) d.seam.material = d.point.material = lost ? lostSeamMat : seamMat;
       d.shimmer.visible = lost;
