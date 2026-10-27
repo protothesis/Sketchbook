@@ -20,15 +20,17 @@
     new THREE.SphereGeometry(0.04 * S, 10, 8),
     new THREE.MeshBasicMaterial({ color: 0xffc27a }));
   lanternMesh.position.set(0.14 * S, 0.3 * S, 0.12 * S);
-  // The figure's shadow: a soft dark disc cast straight down onto every
-  // upward-facing lit surface below its feet (the floor, a block top, a
-  // crate), so it lands right across an edge. Patched into three's Lambert
-  // and Phong shaders once, before anything compiles; the uniforms are
-  // plain objects, which three shares by reference between materials, so
-  // one update a frame (fall()) moves it everywhere.
-  const SHADOW = { radius: 0.2, opacity: 0.45, fade: 0.6 }; // cells; fade: the height where it's faintest
+  // The figure's shadow: a hard-edged disc cut out of the light, straight
+  // down onto every upward-facing lit surface below its feet (the floor, a
+  // block top, a crate), so it lands right across an edge. Inside it the
+  // direct light (your lamp, sconces) is taken away and the surface shows
+  // its own unlit colour; `opacity` is how much is taken. Patched into
+  // three's Lambert and Phong shaders once, before anything compiles; the
+  // uniforms are plain objects, which three shares by reference between
+  // materials, so one update a frame (fall()) moves it everywhere.
+  const SHADOW = { radius: 0.2, opacity: 0.85, fade: 0.6 }; // cells; fade: the height where it's faintest
   const blobAt = { x: 0, y: -1e4, z: 0, w: 0.2 * S }; // world x, feet y, world z, radius
-  const blobLook = { x: 0.45, y: 0.6 * S, z: 0, w: 0 }; // opacity, fade height
+  const blobLook = { x: 0.85, y: 0.6 * S, z: 0, w: 0 }; // opacity, fade height
   for (const name of ['lambert', 'phong']) {
     const lib = THREE.ShaderLib[name];
     lib.uniforms.uBlob = { value: blobAt };
@@ -41,15 +43,18 @@
     lib.fragmentShader = lib.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vBlobWorld;\nvarying float vBlobUp;\n' +
         'uniform vec4 uBlob;\nuniform vec4 uBlobLook;')
-      .replace('#include <tonemapping_fragment>', `{
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+{
   float h = uBlob.y - vBlobWorld.y; // how far below the feet
   if (h > -0.02 && vBlobUp > 0.5) {
     float fade = clamp(h / uBlobLook.y, 0.0, 1.0);
-    float d = distance(vBlobWorld.xz, uBlob.xz) / (uBlob.w * (1.0 - 0.45 * fade));
-    gl_FragColor.rgb *= 1.0 - uBlobLook.x * (1.0 - 0.5 * fade) * (1.0 - smoothstep(0.7, 1.0, d));
+    if (distance(vBlobWorld.xz, uBlob.xz) < uBlob.w * (1.0 - 0.45 * fade)) {
+      float cut = 1.0 - uBlobLook.x * (1.0 - 0.5 * fade);
+      reflectedLight.directDiffuse *= cut;
+      reflectedLight.directSpecular *= cut;
+    }
   }
-}
-#include <tonemapping_fragment>`);
+}`);
   }
   const bodyRig = new THREE.Group();
   bodyRig.add(body, head, lanternMesh);

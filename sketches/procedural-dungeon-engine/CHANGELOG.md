@@ -75,6 +75,17 @@ All notable changes to this sketch are logged here, per
   a block's edge it's on the block top and, fainter, on the floor past it.
   It used to be one disc at one height, hanging off ledges. `SHADOW` is in
   the dev panel.
+- 2026-10-27: **The shadow is cut out of the light**, hard-edged: inside it
+  the lamp's (and any sconce's) direct light is taken away, so you see the
+  surface's own unlit colour, instead of a dark disc laid over it.
+  `SHADOW.opacity` is how much light it takes.
+- 2026-10-27: **Camera, second pass.** The follow is a critically damped
+  spring, so it has a little drag starting off and never overshoots or
+  swings back when you stop. The look-ahead is built by travelling (up to
+  `CAMERA.build` cells of lead per cell walked), so a slow walk pushes the
+  view on slowly and turning round on the spot doesn't swing it; a new
+  direction's lead arrives as you go. Leads are 0.7 cells walking and 1.3
+  running. `CAMERA.rise` (0 to 1) sets how much it follows block heights.
 
 ### Changed
 
