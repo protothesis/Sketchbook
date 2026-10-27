@@ -596,20 +596,22 @@
 
   // Shadows: what you carry casts none (your lantern is right beside it,
   // and its shadow would sweep the room), so a block's shadow fades out
-  // over the start of the lift and back in over the end of the set-down,
-  // dithered: its shadow is drawn with a screen-door pattern of more or
-  // fewer holes (a 4x4 ordered dither in the shadow map), not switched.
-  const SHADOW_FADE = { out: [0, 0.45], in: [0.45, 1] }; // of the arc: where the shadow fades out (lifting) or in (setting down)
+  // as it leaves the ground and back in as it touches down: full on the
+  // surface, gone SHADOW_FADE.height cells above it. Dithered: its shadow
+  // is drawn with a screen-door pattern of more or fewer holes (a 4x4
+  // ordered dither in the shadow map), not switched.
+  const SHADOW_FADE = { height: 0.18 }; // cells above where it rests
   function shadowMatOf(b) {
     if (b.shadowMat) return b.shadowMat;
     const fade = { value: 1 };
     const m = new THREE.MeshDistanceMaterial();
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uShadowFade = fade;
-      sh.fragmentShader = sh.fragmentShader.replace('void main() {', `uniform float uShadowFade;
+      // Declarations before main (three.js writes it `void main () {`), the test first thing in it.
+      sh.fragmentShader = `uniform float uShadowFade;
 float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
 float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
-void main() {
+` + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
   if (bayer4(gl_FragCoord.xy) >= uShadowFade) discard;`);
     };
     m.userData.fade = fade;
@@ -859,9 +861,9 @@ void main() {
     const to = a.up ? overhead : new THREE.Vector3((b.x0 + 0.25) * S, b.base * S, (b.y0 + 0.25) * S);
     b.mesh.position.lerpVectors(a.from, to, k);
     b.mesh.position.y += Math.sin(Math.PI * a.t) * 0.12 * S;
-    const r = a.up ? SHADOW_FADE.out : SHADOW_FADE.in;
-    const s = THREE.MathUtils.smoothstep(a.t, r[0], r[1]);
-    setShadow(b, a.up ? 1 - s : s);
+    // The shadow, by how high it is over where it rests (where it came from, lifting; where it lands, setting down).
+    const rest = a.up ? a.from.y : to.y;
+    setShadow(b, 1 - THREE.MathUtils.smoothstep((b.mesh.position.y - rest) / S, 0, SHADOW_FADE.height));
     if (a.t < 1) return;
     b.anim = null;
     if (a.up) W.refreshHotbar(); // now it's in your hands (updateHeld)
@@ -1003,6 +1005,6 @@ void main() {
   const carryPace = (b) => CARRY_PACE[kindOf(b)];
 
   Object.assign(W, { SCONCE_Y, carryPace, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
-    setDownBlock, updatePushBlocks, addSconces, KINDS, covered,
+    setDownBlock, updatePushBlocks, addSconces, KINDS, covered, SHADOW_FADE,
     sconceNear, lightSconce, snuffSconce, updateSconces, SCONCE_LIGHT, sconceLight, sconcePools });
 })(window);

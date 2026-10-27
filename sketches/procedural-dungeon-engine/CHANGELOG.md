@@ -834,9 +834,9 @@ All notable changes to this sketch are logged here, per
     used to stay where you'd lifted the object from until you walked about
     0.2 cells away. Now it goes back there only while you still face that
     way.
-  - A carried object's shadow dithers out over the start of the lift and
-    back in over the end of the set-down, instead of switching off and
-    on.
+  - A carried object's shadow dithers out as it leaves the ground and back
+    in as it touches down, within 0.18 cells of the surface
+    (`SHADOW_FADE`), instead of switching off and on.
   - What can bear a stack is a property of each kind (`KINDS` in
     `restore.js`), not the `jar` flag. Crates, blocks, waystones and
     vessels all can now. Something set on a vessel rests a whole unit up.
