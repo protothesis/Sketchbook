@@ -5,7 +5,7 @@
 // LT held runs. The right stick peeks: it slides the view that
 // way, and it springs back when you let go (camera.js).
 //
-//   A  jump (Space; held for full height)       B  back out of anything (free in the world)
+//   A  jump (Space; held for full height)       B  back out of anything; in the world, put away / take out the item in hand
 //   X  E (tap to act, hold to fill the ring)     Y  on the map, recenter (free in the world)
 //   L3  crouch (C)    R3  the lamp (R)           D-pad ◀ ▶  the variant in a group
 //   LB / RB  the hotbar slot left / right        LT  run    RT  F (use the item in hand)
@@ -54,7 +54,7 @@
   function padHelp() {
     const g = GLYPH[style], k = (s) => `<kbd>${s}</kbd>`;
     return `${k('◖')} move · ${k('◗')} look · ${k(g.run)} run · ${k(g.Space)} jump · ${k(g.C)} crouch · ${k(g.E)} interact · ` +
-      `${k(g.F)} use item · ${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
+      `${k(g.F)} use item · ${k(g.Esc)} put away · ${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
   }
 
   function setPad(on, kind) {
@@ -128,7 +128,7 @@
         }
         return;
       }
-      case B.b: if (busy || state.expanded) key('keydown', 'escape'); return;
+      case B.b: if (busy || state.expanded) key('keydown', 'escape'); else W.toggleHands(); return;
       case B.x: key('keydown', 'e'); return;
       case B.y:
         if (state.bigmap) { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; }

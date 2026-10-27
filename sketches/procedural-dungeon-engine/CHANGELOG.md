@@ -132,11 +132,12 @@ All notable changes to this sketch are logged here, per
 - 2026-10-27: **Controls: the lamp leaves the hotbar, use moves to RT.**
   The lantern is no longer a hotbar slot: R (R3) is the lamp, and with
   nothing in hand that wants it, F at a dormant waystone wakes it from
-  your lamp. Instead, the selected slot's number (or a tap on it) puts it
-  away again, for empty hands. The duster keeps slot 1, so it's what you
-  start holding, and its slot lights up while a swipe would find dust. On
-  a gamepad, **RT uses the item in hand** (was Y) and LT alone runs; Y and
-  B are free in the world. (A worn-equipment slot with its own button, Q,
+  your lamp. Instead, you start with **empty hands**, and the selected
+  slot's number (or a tap on it) puts it away again; on a gamepad, **B**
+  puts it away or takes the last thing you held back out. Lifting or
+  grabbing a block puts it away too. The duster keeps slot 1, and its slot
+  lights up while a swipe would find dust. On a gamepad, **RT uses the
+  item in hand** (was Y) and LT alone runs; Y is free in the world. (A worn-equipment slot with its own button, Q,
   was tried for the duster and is kept in `items.js` for later, unused.)
 - 2026-10-27: **The slash.** Using what's in your hand (the duster, a jar,
   any item) whips it side to side in a fast arc across in front of you

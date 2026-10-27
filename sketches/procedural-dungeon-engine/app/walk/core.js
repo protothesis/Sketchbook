@@ -126,7 +126,8 @@
     sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
     buff: 0,             // powered sigils: +1 entropy max each
     buffReady: false,    // false until the first sigil pass (no caption on load)
-    sel: null,           // the selected hotbar slot's key
+    sel: 'hands',        // the selected hotbar slot's key; 'hands' for empty hands (how you start)
+    lastSel: null,       // the last slot you had in hand (B takes it out again)
     variant: {},         // per group slot: the variant in use (e.g. chalk colour)
     expanded: null,      // the group slot whose picker is open
     marks: [],           // chalk marks drawn in the world

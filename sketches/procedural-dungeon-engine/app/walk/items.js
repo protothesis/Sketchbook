@@ -17,7 +17,9 @@
   // doorstone to a wall. With nothing in hand that wants it, F at a dormant
   // waystone wakes it from your lamp (the lamp itself is R, never a hotbar
   // slot). 1-9 or the wheel select; the selected slot's number (or a tap on
-  // it) again puts it away, for empty hands. A slot can hold a group of variants (chalk colours):
+  // it) again puts it away, for empty hands. B on a pad puts it away or takes
+  // it out again. You start with empty hands, and lifting or grabbing a
+  // block puts what you're holding away (restore.js). A slot can hold a group of variants (chalk colours):
   // click it again, or press and hold, to open its picker; its number key
   // again cycles. F with an empty jar near a pixie catches it (pixies.js);
   // a pixie jar set down draws ghosts to it, and on a sigil tile it powers
@@ -233,6 +235,22 @@
     const s = slots();
     return s.find((x) => x.key === state.sel) || s[0] || null;
   }
+  /** Empty your hands (lifting or grabbing a block, restore.js). */
+  function putAway() {
+    if (state.sel === 'hands') return;
+    state.sel = 'hands';
+    state.expanded = null;
+    refreshHotbar();
+  }
+  /** B: put away what's in your hand, or take out the last thing you held (else slot 1). */
+  function toggleHands() {
+    if (state.carry) { shakeHotbar(); return; } // set the block down first
+    if (selectedSlot()) { putAway(); return; }
+    const s = slots();
+    if (!s.length) { shakeHotbar(); return; }
+    state.sel = (s.find((x) => x.key === state.lastSel) || s[0]).key;
+    refreshHotbar();
+  }
   /** Select slot i. `again`: picking the slot already in hand (a number key) cycles a
    *  group's variants, or puts anything else away. */
   function select(i, again) {
@@ -307,7 +325,7 @@
     if (!bar) return;
     const s = slots();
     const cur = selectedSlot();
-    if (cur) state.sel = cur.key;
+    if (cur) state.sel = state.lastSel = cur.key;
     bar.innerHTML = '';
     const eq = equipSlot();
     bar.hidden = !s.length && !eq;
@@ -1223,7 +1241,7 @@ void main() {
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, equipSlot, useEquip, SLASH, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, toggleHands, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });

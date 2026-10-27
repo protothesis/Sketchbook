@@ -363,7 +363,7 @@ Determinism).
     charged. Charged, it's the key to a lost path: F with it in hand at
     the path's door retraces it, and spends the pixie. **The feather
     duster** (`app/walk/dust.js`) is in your bag from the start, for now,
-    and keeps hotbar slot 1: F (RT on a gamepad) swipes it at the dust
+    and keeps hotbar slot 1: take it out (1, or B on a pad) and F (RT on a gamepad) swipes it at the dust
     (see Dusting, below).
   - **Creatures** (ghosts, pixies) aren't items: they move on their own,
     by the ecology's rules.
@@ -376,8 +376,10 @@ Determinism).
 - **One thing in your hand.** The selected slot is what you're holding,
   and the figure shows it: a tool in its left hand (the lantern is in the
   right), a jar held over its head. The lamp isn't a slot (since
-  2026-10-27): R (R3) covers or relights it. The selected slot's number,
-  or a tap on it, puts it away again: **empty hands**. With nothing in
+  2026-10-27): R (R3) covers or relights it. You start with **empty
+  hands**. The selected slot's number, or a tap on it, puts it away again;
+  on a gamepad, B puts it away or takes the last thing you held back out.
+  Lifting or grabbing a block puts it away too: both hands for the block. With nothing in
   hand that wants it, F at a dormant waystone wakes it from your lamp.
   Some slots are **groups**: one slot, several variants
   (chalk colours; jars by contents). Click a selected group again (or press and
@@ -989,8 +991,8 @@ more yours. Jump is the first step. Not built yet:
   over" without smaller blocks.
 - **A movement design conversation**, started 2026-10-26. Decided so far:
   - **Dash: likely.** It was going to be RT, but since 2026-10-27 RT
-    uses the item in hand and LT alone runs; Y and B are free in the
-    world, so one of those. A plain dash first; then upgrades, some costing entropy
+    uses the item in hand, LT alone runs and B puts the item away; Y is
+    free in the world. A plain dash first; then upgrades, some costing entropy
     or psychic stamina. One idea: a **phase dash** that passes through a
     wall without carving a door.
   - **Movement makes noise** (decided, parked until something listens; see

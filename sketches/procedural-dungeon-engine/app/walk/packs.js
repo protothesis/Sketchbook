@@ -37,7 +37,7 @@
     run.jars = [];
     run.chalks = {};
     run.dustPool = 0;
-    state.sel = null;
+    state.sel = 'hands';
     run.packs.push(pk);
     return pk;
   }
