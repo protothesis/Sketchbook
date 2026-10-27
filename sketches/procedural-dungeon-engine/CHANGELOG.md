@@ -1003,6 +1003,12 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-27: **The banded light pools are back**, for the lamp, sconces,
+  save lanterns and packs. They had vanished in #39. The figure's new
+  shadow (`figure.js`) pastes its own copy of three.js's light-loop chunk
+  into the Lambert and Phong shaders, and it loads before `light.js`. The
+  pools only patched the shared chunk, which those shaders no longer read.
+  `light.js` now patches the pasted copies too.
 - 2026-10-27: **A powered waystone keeps glowing in your hands.** Its light
   used to go out while you carried it. It's still off your ley lines
   until you set it down. Its light now also sits at the stone's centre
