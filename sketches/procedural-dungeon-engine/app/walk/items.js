@@ -672,9 +672,9 @@
   // RULES.vesselCapacity of one kind. A jar pours into one, or takes one out.
 
   /** A vessel right in front of you, in reach (your level or one up). */
-  function vesselAhead(p) { return objectAhead(p, (b) => b.vessel); }
+  function vesselAhead(p) { return objectAhead(p, (b) => b.vessel && !W.covered(b)); } // not one with something stacked on it
   /** An unpowered waystone right in front of you, in reach. */
-  function stoneAhead(p) { return objectAhead(p, (b) => b.waystone && !b.holds); }
+  function stoneAhead(p) { return objectAhead(p, (b) => b.waystone && !b.holds && !W.covered(b)); }
   function objectAhead(p, want) {
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle), mine = Math.round(p.z / W.UNIT);
     let best = null, bestD = RADIUS + 0.35;
@@ -791,17 +791,78 @@
     heldRig.add(m);
   }
 
-  // The set-down preview: a faint box where E would put what you carry.
-  const previewMat = new THREE.MeshBasicMaterial({ color: 0xe8935f, transparent: true, opacity: 0.22, depthWrite: false });
-  const preview = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), previewMat);
-  preview.visible = false;
-  scene.add(preview);
+  // The set-down preview: a faint tile on the surface where E would put
+  // what you carry, and over it a ghost of the thing itself: its own
+  // colours, every other pixel left out (a screen-door dither), its faces
+  // shaded by which way they point (top brightest) so it reads as a solid
+  // even in the dark.
+  const SETDOWN = {
+    tile: 0.3,                       // the tile's opacity
+    shade: { top: 1, x: 0.72, z: 0.55, bottom: 0.35 }, // brightness by face direction
+    lift: 0.12,                      // of the colour: lightened toward white, to read on dark floors
+  };
+  const tileMat = new THREE.MeshBasicMaterial({ color: 0xe8935f, transparent: true, opacity: SETDOWN.tile, depthWrite: false });
+  const tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), tileMat);
+  tile.rotation.x = -Math.PI / 2;
+  tile.renderOrder = 4;
+  tile.visible = false;
+  scene.add(tile);
+  const ghostUniforms = { uShade: { value: new THREE.Vector4() }, uLift: { value: 0 } };
+  /** A ghost's material, from the real one's colour and texture: opaque pixels in a checkerboard, shaded by face direction. */
+  function ghostMat(m) {
+    return new THREE.ShaderMaterial({
+      uniforms: Object.assign({ uColor: { value: new THREE.Color(m.color || 0xffffff) }, uMap: { value: m.map || null } }, ghostUniforms),
+      defines: m.map ? { USE_GHOST_MAP: '' } : {},
+      vertexShader: `varying vec3 vN; varying vec2 vUv;
+void main() { vN = normalize(mat3(modelMatrix) * normal); vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform vec3 uColor; uniform sampler2D uMap; uniform vec4 uShade; uniform float uLift; varying vec3 vN; varying vec2 vUv;
+void main() {
+  if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 0.5) discard;
+  vec3 base = uColor;
+#ifdef USE_GHOST_MAP
+  base *= texture2D(uMap, vUv).rgb;
+#endif
+  vec3 n = normalize(vN);
+  vec3 a = abs(n);
+  float s = (uShade.x * max(n.y, 0.0) + uShade.w * max(-n.y, 0.0) + uShade.y * a.x + uShade.z * a.z) / max(a.x + a.y + a.z, 1e-3);
+  gl_FragColor = vec4(mix(base, vec3(1.0), uLift) * s, 1.0);
+}`,
+    });
+  }
+  let ghost = null, ghostOf = null;
+  /** The ghost of block `b`: a copy of its mesh with ghost materials (its see-through parts left out). */
+  function ghostFor(b) {
+    if (ghostOf === b) return ghost;
+    if (ghost) { scene.remove(ghost); ghost.traverse((o) => { if (o.isMesh && o.material.isShaderMaterial) o.material.dispose(); }); }
+    ghost = b.mesh.clone(true);
+    ghost.traverse((o) => {
+      if (!o.isMesh && !o.isPoints && !o.isSprite) return;
+      const m = Array.isArray(o.material) ? o.material[0] : o.material;
+      if (!o.isMesh || !m || m.transparent || m.blending === THREE.AdditiveBlending) { o.visible = false; return; }
+      o.material = ghostMat(m);
+      o.castShadow = o.receiveShadow = false;
+    });
+    ghost.visible = false;
+    scene.add(ghost);
+    ghostOf = b;
+    return ghost;
+  }
   function updatePreview(near) {
     const b = near && near.spot && near.box;
-    preview.visible = !!b;
+    tile.visible = !!b;
+    if (ghost) ghost.visible = false;
     if (!b) return;
-    preview.scale.set((b.x1 - b.x0) * S * 0.96, (b.z1 - b.z0) * S, (b.y1 - b.y0) * S * 0.96);
-    preview.position.set((b.x0 + b.x1) / 2 * S, (b.z0 + b.z1) / 2 * S, (b.y0 + b.y1) / 2 * S);
+    tile.scale.set((b.x1 - b.x0) * S * 0.96, (b.y1 - b.y0) * S * 0.96, 1);
+    tile.position.set((b.x0 + b.x1) / 2 * S, b.z0 * S + 0.01, (b.y0 + b.y1) / 2 * S);
+    tileMat.opacity = SETDOWN.tile;
+    const g = near.block && ghostFor(near.block);
+    if (!g) return;
+    ghostUniforms.uShade.value.set(SETDOWN.shade.top, SETDOWN.shade.x, SETDOWN.shade.z, SETDOWN.shade.bottom);
+    ghostUniforms.uLift.value = SETDOWN.lift;
+    g.visible = true;
+    g.position.set((near.spot.sx / 2 + 0.25) * S, (near.spot.base || 0) * S, (near.spot.sy / 2 + 0.25) * S);
+    g.rotation.set(0, 0, 0);
+    g.scale.setScalar(1);
   }
 
   /** A ghost undone by a collapse. Kept as a tally and a short log; no use yet. */
@@ -828,12 +889,13 @@
     for (const v of state.pushBlocks) {
       if (!v.vessel) continue;
       const ud = v.mesh.userData, n = v.n || 0;
-      ud.glow.material.opacity = v.holds === 'entropy' ? (0.35 + 0.2 * n) * (0.85 + 0.15 * Math.sin(state.time * 3 + v.sx)) : 0;
+      const hid = W.covered(v); // something set on it: what's inside doesn't show (restore.js KINDS)
+      ud.glow.material.opacity = v.holds === 'entropy' && !hid ? (0.35 + 0.2 * n) * (0.85 + 0.15 * Math.sin(state.time * 3 + v.sx)) : 0;
       const vx = (v.x0 + v.x1) / 2, vy = (v.y0 + v.y1) / 2;
       const near = v.holds === 'pixie' && !v.carried ? state.ghosts.reduce((m, g) => Math.min(m, Math.hypot(g.x - vx, g.y - vy)), Infinity) : Infinity;
       const flare = Math.max(0, 1 - near / JAR_FLARE);
       ud.wisps.forEach((w, i) => {
-        w.visible = v.holds === 'pixie' && i < n;
+        w.visible = v.holds === 'pixie' && i < n && !hid;
         const a = state.time * (2.6 + 5 * flare) + i * 2.1, r = 0.07 + 0.05 * flare;
         w.position.set(Math.cos(a) * r * S, (0.45 + Math.sin(a * 1.7) * 0.05) * S, Math.sin(a * 1.3) * r * S);
         w.scale.setScalar(1 + flare * (0.7 + 0.3 * Math.sin(state.time * 14)));
@@ -1071,7 +1133,7 @@
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });

@@ -820,8 +820,36 @@ All notable changes to this sketch are logged here, per
     `W.rerollThrough`). A one-room path stays rerollable like any
     provisional room.
 
+- 2026-10-27: **Setting things down, and stacking.**
+  - The block goes to the half-cell right in front of the one you stand in,
+    along the way you most face. If you're too close for it to fit, you
+    ease back just enough as it lands. Only with no room behind you does
+    it go one half-cell further. That ends the spot where nothing would go
+    and the long reach just past an edge. The same applies one level up.
+  - The set-down preview is a tinted tile on the surface where it will
+    rest, plus a ghost of the object itself. The ghost uses the object's
+    own colours and texture, drawn with every other pixel left out. Its
+    faces are shaded by direction (top brightest) so it reads as a solid
+    even in the dark (`SETDOWN` in the dev panel).
+  - A carried object's shadow dithers out over the start of the lift and
+    back in over the end of the set-down, instead of switching off and
+    on.
+  - What can bear a stack is a property of each kind (`KINDS` in
+    `restore.js`), not the `jar` flag. Crates, blocks, waystones and
+    vessels all can now. Something set on a vessel rests a whole unit up.
+  - A vessel or waystone with something on it is **covered**. Its pixies
+    don't show and F can't reach in. Its pixie's presence carries a
+    `covered` tag, and the ecology has a new `blind` list: ghosts don't
+    sense 'covered', so they lose a covered jar's pixie. A sigil still
+    counts a covered vessel on its tile.
+
 ### Fixed
 
+- 2026-10-27: **A powered waystone keeps glowing in your hands.** Its light
+  used to go out while you carried it. It's still off your ley lines
+  until you set it down. Its light now also sits at the stone's centre
+  instead of just above its top face, so the stone no longer shows a hot
+  spot of its own light.
 - 2026-10-26: **Save lanterns shelter your lamp.** They were meant to
   already, but the light was traced from a flame that sits inside the
   lantern's own plinth block, so it was always shaded. Your lamp kept

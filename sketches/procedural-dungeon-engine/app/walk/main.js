@@ -61,7 +61,7 @@
       moving = true;
     }
     if (!state.paused) run.walked += dt;
-    const touched = state.climb ? [] : resolveCollisions(p);
+    const touched = state.climb ? [] : resolveCollisions(p, state.nudge && state.nudge.block); // a block you're stepping back from (restore.js)
     if (exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))] === undefined) { p.x = prev.x; p.y = prev.y; }
 
     // Safety net: if the figure's center ever ends up inside a block that

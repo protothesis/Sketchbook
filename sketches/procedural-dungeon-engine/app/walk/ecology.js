@@ -43,7 +43,15 @@
       { who: 'pixie', what: 'well', does: 'seek', chance: 0.5, orbit: [0.15, 0.6], range: 10, rooms: 0 },
       { who: 'creeper', what: 'steady', does: 'flee' }, // shadows keep off lit sconces
     ],
+    // What a kind of creature can't sense: a presence wearing any of these
+    // tags doesn't exist to it. A pixie in a vessel with something stacked
+    // on it is 'covered': ghosts, who find pixies by sight, lose it.
+    blind: {
+      ghost: ['covered'],
+    },
   };
+  /** Does a creature of `kind` sense presence `o` as `what`? */
+  const senses = (kind, o, what) => o.tags.includes(what) && !(ECOLOGY.blind[kind] || []).some((t) => o.tags.includes(t));
 
   const spaceAt = (x, y) => state.exp.registry[DE.key(Math.floor(x), Math.floor(y))];
 
@@ -53,9 +61,11 @@
     for (const g of state.ghosts) out.push({ tags: ['ghost'], x: g.x, y: g.y, ref: g });
     for (const o of state.pixies) out.push({ tags: ['pixie'], x: o.x, y: o.y, ref: o });
     for (const c of state.creepers) out.push({ tags: ['creeper'], x: c.x, y: c.y, ref: c });
-    for (const v of state.pushBlocks) if (v.vessel && !v.carried && v.holds === 'pixie' && v.n) out.push({ tags: ['pixie', 'jarred'], x: v.sx / 2 + 0.25, y: v.sy / 2 + 0.25, ref: v });
+    // A jarred pixie: 'covered' too while something rests on its vessel (restore.js KINDS).
+    const jarred = (v) => (W.covered(v) ? ['pixie', 'jarred', 'covered'] : ['pixie', 'jarred']);
+    for (const v of state.pushBlocks) if (v.vessel && !v.carried && v.holds === 'pixie' && v.n) out.push({ tags: jarred(v), x: v.sx / 2 + 0.25, y: v.sy / 2 + 0.25, ref: v });
     // A waystone woken by a pixie still holds one: it draws ghosts like a jar does.
-    for (const v of state.pushBlocks) if (v.waystone && !v.carried && v.holds === 'pixie') out.push({ tags: ['pixie', 'jarred'], x: (v.x0 + v.x1) / 2, y: (v.y0 + v.y1) / 2, ref: v });
+    for (const v of state.pushBlocks) if (v.waystone && !v.carried && v.holds === 'pixie') out.push({ tags: jarred(v), x: (v.x0 + v.x1) / 2, y: (v.y0 + v.y1) / 2, ref: v });
     for (const w of state.wells) out.push({ tags: ['well'], x: w.cell.x + 0.5, y: w.cell.y + 0.5, ref: w });
     const p = state.player;
     // Lights carry their light (light.js), which is what fleeing them tests.
@@ -103,7 +113,7 @@
       if (rule.who !== kind || rule.does !== 'seek' || Math.random() >= rule.chance) continue;
       let best = null, bd = rule.range;
       for (const o of presences()) {
-        if (o.ref === self || !o.tags.includes(rule.what) || o.spaceId === undefined) continue;
+        if (o.ref === self || !senses(kind, o, rule.what) || o.spaceId === undefined) continue;
         const d = Math.hypot(o.x - self.x, o.y - self.y);
         if (d >= bd || roomGap(here, o.spaceId, rule.rooms) > rule.rooms) continue;
         bd = d; best = o;
@@ -128,7 +138,7 @@
     for (const rule of ECOLOGY.rules) {
       if (rule.who !== kind || rule.does !== 'seek' || !rule.hold) continue;
       for (const o of presences()) {
-        if (o.ref === self || !o.tags.includes(rule.what) || o.spaceId !== here) continue;
+        if (o.ref === self || !senses(kind, o, rule.what) || o.spaceId !== here) continue;
         const d = Math.hypot(o.x - self.x, o.y - self.y);
         if (d < rule.hold && d < bd) { bd = d; best = { target: o, rule }; }
       }
@@ -159,7 +169,7 @@
     for (const rule of ECOLOGY.rules) {
       if (rule.who !== kind || rule.does !== 'flee') continue;
       for (const o of presences()) {
-        if (o.ref !== self && o.tags.includes(rule.what) && fleeFrom(rule, o, x, y, here) > 0) return true;
+        if (o.ref !== self && senses(kind, o, rule.what) && fleeFrom(rule, o, x, y, here) > 0) return true;
       }
     }
     return false;
@@ -172,7 +182,7 @@
     for (const rule of ECOLOGY.rules) {
       if (rule.who !== kind || rule.does !== 'flee') continue;
       for (const o of presences()) {
-        if (o.ref === self || !o.tags.includes(rule.what)) continue;
+        if (o.ref === self || !senses(kind, o, rule.what)) continue;
         const dx = self.x - o.x, dy = self.y - o.y, d = Math.hypot(dx, dy);
         const k = d < 1e-6 ? 0 : fleeFrom(rule, o, self.x, self.y, here);
         if (!k) continue;
