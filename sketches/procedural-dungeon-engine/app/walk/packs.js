@@ -15,7 +15,7 @@
 
   /**
    * Pack up what you carry, where you stand: { id, spaceId, seed, x, y, fuel,
-   * keys, doorstones, jars, chalks }. It all leaves the run. Null if you
+   * keys, doorstones, jars, chalks, dust (chits in the pre-pool, dust.js) }. It all leaves the run. Null if you
    * carried nothing.
    */
   function packUp() {
@@ -28,15 +28,16 @@
     const pk = {
       id: 'pack' + (++run.packSeq), spaceId: sp.id, seed: sp.seed, x: +p.x.toFixed(3), y: +p.y.toFixed(3),
       fuel: Math.max(0, run.fuel), keys: run.keys, doorstones: run.doorstones, jars: run.jars.slice(), chalks,
-      at: Math.round(run.walked),
+      dust: run.dustPool || 0, at: Math.round(run.walked),
     };
-    if (pk.fuel < 0.01 && !pk.keys && !pk.doorstones && !pk.jars.length && !Object.keys(chalks).length) return null;
+    if (pk.fuel < 0.01 && !pk.keys && !pk.doorstones && !pk.jars.length && !Object.keys(chalks).length && !pk.dust) return null;
     run.fuel = 0;
     run.keys = 0;
     run.doorstones = 0;
     run.jars = [];
     run.chalks = {};
-    state.sel = 'lantern';
+    run.dustPool = 0;
+    state.sel = 'hands';
     run.packs.push(pk);
     return pk;
   }
@@ -187,9 +188,10 @@
     run.doorstones += pk.doorstones;
     run.jars = run.jars.concat(pk.jars);
     for (const c in pk.chalks) run.chalks[c] = (run.chalks[c] || 0) + pk.chalks[c];
+    W.addToPool(pk.dust || 0);
     const got = W.gainFuel(pk.fuel);
     const left = pk.fuel - got;
-    Object.assign(pk, { keys: 0, doorstones: 0, jars: [], chalks: {}, fuel: left });
+    Object.assign(pk, { keys: 0, doorstones: 0, jars: [], chalks: {}, dust: 0, fuel: left });
     if (left < 0.01) run.packs = run.packs.filter((o) => o !== pk);
     prunePacks();
     W.showCaption('you take your pack back' + (got > 0.01 ? ` · +${chargeText(got)}` : '') +

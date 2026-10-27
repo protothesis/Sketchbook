@@ -336,6 +336,7 @@
     b.spaceId = null; // in your hands, not in any room: a reroll can't take it
     state.carry = b;
     state.run.carry = b.key;
+    W.putAway(); // both hands for the block: what you held goes in the bag
     W.refreshHotbar(); // the figure shows it (updateHeld), once any lift arc is done
   }
 
@@ -350,6 +351,7 @@
     // v: speed along dir (cells/s; + pushes); way: the way it last moved;
     // letGo: E is up, it's coming to a stop; settle: easing into a notch.
     state.grab = { block: b, dir, moved: false, v: 0, way: 0, letGo: false, settle: null };
+    W.putAway(); // both hands on the block
     p.angle = Math.atan2(dir.x, dir.y);
   }
 

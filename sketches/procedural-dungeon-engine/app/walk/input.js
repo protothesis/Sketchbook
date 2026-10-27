@@ -42,10 +42,12 @@
       e.preventDefault();
     } else if (k === 'f') {
       if (!e.repeat) useSelected();
+    } else if (k === 'q') { // worn equipment (none right now: items.js equipSlot)
+      if (!e.repeat) W.useEquip();
     } else if (k === 'r') { // the lamp: cover it, or relight it
       if (!e.repeat) W.toggleLamp();
     } else if (k >= '1' && k <= '9' && k.length === 1) {
-      select(+k - 1);
+      select(+k - 1, true);
     } else if (k === ' ') {
       if (!e.repeat) W.pressJump();
       e.preventDefault(); // don't also "click" a focused button or scroll

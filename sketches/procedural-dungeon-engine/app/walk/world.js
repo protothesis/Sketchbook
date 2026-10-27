@@ -245,6 +245,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     W.addPushBlocks(space, rec, tileAt);
     W.addSconces(space, edgeAt);
     W.addLantern(space, rec, tileAt);
+    W.addDust(space, rec, tileAt); // before the loot: a crusted shard isn't a pickup yet
 
     // Props ride on their cell's tile, so they assemble and dissolve with it.
     const pr = DP.props(space);
@@ -295,6 +296,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       if (state.run.collected.includes(key)) continue;
       if (item.kind === 'key' && !state.run.keyRooms.includes(spaceKey)) continue;
       if (W.ITEMS[item.kind].cls === 'equipment' && state.run.equipment[item.kind]) continue; // one of each, kept for good
+      if (W.isCrusted(key)) continue; // a crystal in the dust until you wake it (dust.js)
       const tile = tileAt[DE.key(item.cell.x, item.cell.y)];
       const mesh = W.itemMesh(item, key);
       mesh.position.set((item.cell.x + 0.5) * S, W.ITEMS[item.kind].cls === 'pickup' ? 0.45 * S : 0, (item.cell.y + 0.5) * S);
@@ -448,6 +450,7 @@ void main() {
     state.lanterns = state.lanterns.filter((ln) => ln.spaceId !== id);
     state.pushBlocks = state.pushBlocks.filter((b) => b.spaceId !== id);
     state.wells = state.wells.filter((w) => w.spaceId !== id);
+    W.forgetDust(id);
     const sg = state.sigils.get(id);
     if (sg && sg.fx) scene.remove(sg.fx.group);
     state.sigils.delete(id);

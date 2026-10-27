@@ -97,6 +97,26 @@
     sconceMinDepth: 1,
     sconceSecond: 0.4,        // chambers: chance of a second sconce (halls: hallSconceSecond)
     sconceCost: 1,            // shards
+    // Dust (notes/dusting-2026-10-27.md): on a room's surfaces, by its
+    // mood, on the half-cell grid. `cover`: the share of free floor and
+    // low block tops dusted; `layers`: the thickest it gets (a swipe takes
+    // one off).
+    dustMood: {
+      dusty: { cover: 0.7, layers: 3 },
+      still: { cover: 0.35, layers: 2 },
+      hollow: { cover: 0.35, layers: 2 },
+      warm: { cover: 0.3, layers: 2 },
+      echoing: { cover: 0.15, layers: 1 },
+      tilted: { cover: 0.15, layers: 1 },
+      humming: { cover: 0.12, layers: 1 },
+      damp: { cover: 0, layers: 0 },
+      cold: { cover: 0, layers: 0 },
+      breathing: { cover: 0, layers: 0 },
+    },
+    dustScale: 3,             // half-cells: how big the patches are
+    dustTops: 0.15,           // block tops gather a little more
+    dustCrust: 0.8,           // share of shards in a room with dust that lie crusted over (crystals)
+    crustLayers: 3,           // swipes to wake a crystal
     // The lamp burns entropy (GAME-DESIGN.md, section 10), steadily: a
     // shard's worth every lampSeconds, except within a tile of a lit sconce.
     // Any gain holds the burn for lampGrace seconds. The lamp looks full at
@@ -420,6 +440,91 @@
       }
     }
     return { blocks, details };
+  }
+
+  /**
+   * Dust in a space: { cells: [{ sx, sy, h, layers }], crust: [shard item
+   * ids] }. A cell is a half-cell (sx, sy) on the floor (h 0) or on top of
+   * an h-unit block (1 or 2). How much, and how thick, comes from the
+   * room's mood (RULES.dustMood); where, from smooth noise, so it lies in
+   * patches and drifts, thickest in their middles. Never on a cell with a
+   * door-side feature (sigil, well, waystone, save lantern) or a tool lying
+   * on it, nor under a loose object's start or mark. Most shards in a
+   * dusty room lie crusted over (`crust`): crystals you dust awake, with
+   * dust around them. Seeded on its own stream, so it shifts nothing else.
+   */
+  function dust(space) {
+    const out = { cells: [], crust: [] };
+    const m = RULES.dustMood[space.meta && space.meta.mood];
+    if (!m || !(m.cover > 0) || !(m.layers > 0)) return out;
+    const r = DE.deriveRng(space.seed, 'dust');
+    const items = loot(space);
+    // The crusted shards first, one draw each, so the patches never shift them.
+    for (const it of items) if (it.kind === 'shard' && r.chance(RULES.dustCrust)) out.crust.push(it.id);
+    const ox = r.next() * 1000, oy = r.next() * 1000, salt = r.int(1, 1e9);
+    const avoid = new Set();
+    for (const it of items) if (it.kind !== 'shard') avoid.add(DE.key(it.cell.x, it.cell.y));
+    for (const f of [sigil(space), well(space), waystone(space), saveLantern(space)]) if (f) avoid.add(DE.key(f.cell.x, f.cell.y));
+    const sk = (x, y) => x + ',' + y;
+    const solid = new Set(), tops = [];
+    for (const b of props(space).blocks) {
+      for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) {
+        solid.add(sk(x, y));
+        if (!b.crate && b.units <= 2) tops.push({ sx: x, sy: y, h: b.units });
+      }
+    }
+    for (const pb of pushBlocks(space)) { solid.add(sk(pb.from.sx, pb.from.sy)); solid.add(sk(pb.to.sx, pb.to.sy)); }
+    const vs = vessel(space);
+    if (vs) solid.add(sk(vs.sx, vs.sy));
+    const cand = [];
+    for (const k of space.cells.slice().sort()) {
+      if (avoid.has(k)) continue;
+      const c = DE.parseKey(k);
+      for (let q = 0; q < 4; q++) {
+        const sx = c.x * 2 + (q & 1), sy = c.y * 2 + (q >> 1);
+        if (!solid.has(sk(sx, sy))) cand.push({ sx, sy, h: 0 });
+      }
+    }
+    for (const t of tops) if (!avoid.has(DE.key(Math.floor(t.sx / 2), Math.floor(t.sy / 2)))) cand.push(t);
+    // Value noise on the half-cell grid, two octaves.
+    const lat = (ix, iy) => {
+      let h = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263) + salt) | 0;
+      h = Math.imul(h ^ (h >>> 13), 1274126177);
+      return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    };
+    const vnoise = (x, y) => {
+      const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+      const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+      const a = lat(ix, iy) + (lat(ix + 1, iy) - lat(ix, iy)) * u;
+      const b = lat(ix, iy + 1) + (lat(ix + 1, iy + 1) - lat(ix, iy + 1)) * u;
+      return a + (b - a) * v;
+    };
+    const sc = Math.max(0.5, RULES.dustScale);
+    for (const c of cand) {
+      const x = c.sx / sc + ox, y = c.sy / sc + oy;
+      c.n = 0.65 * vnoise(x, y) + 0.35 * vnoise(x * 2.3 + 17, y * 2.3 + 5) + (c.h ? RULES.dustTops : 0);
+    }
+    cand.sort((a, b) => b.n - a.n || a.sx - b.sx || a.sy - b.sy || a.h - b.h);
+    const n = Math.round(cand.length * Math.min(1, m.cover));
+    const byKey = new Map();
+    for (let i = 0; i < n; i++) {
+      const c = cand[i];
+      const cell = { sx: c.sx, sy: c.sy, h: c.h, layers: Math.max(1, Math.ceil(m.layers * (1 - i / n))) };
+      out.cells.push(cell);
+      byKey.set(c.sx + ',' + c.sy + ',' + c.h, cell);
+    }
+    // A crusted crystal lies in dust: its cell's floor is dusted, at least two layers deep.
+    for (const id of out.crust) {
+      const it = items.find((o) => o.id === id);
+      for (let q = 0; q < 4; q++) {
+        const sx = it.cell.x * 2 + (q & 1), sy = it.cell.y * 2 + (q >> 1);
+        if (solid.has(sk(sx, sy))) continue;
+        const cell = byKey.get(sx + ',' + sy + ',0');
+        if (cell) cell.layers = Math.max(cell.layers, 2);
+        else out.cells.push({ sx, sy, h: 0, layers: 2 });
+      }
+    }
+    return out;
   }
 
   /**
@@ -833,5 +938,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, vessel, sigil, well, props, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, saveLantern, hallKeepsStone, hallStone, stoneSpot, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, vessel, sigil, well, props, dust, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, saveLantern, hallKeepsStone, hallStone, stoneSpot, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

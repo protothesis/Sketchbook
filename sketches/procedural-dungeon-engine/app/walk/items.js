@@ -12,14 +12,23 @@
   //
   // E interacts with the world (doors, lifting a jar, wiping a
   // chalk mark you face): one focused thing (actionNear in actions.js).
-  // F uses what's in your hand, the item selected on the hotbar. Slot 1 is
-  // always the lantern (empty hands): F covers or relights it. Otherwise:
-  // draw a chalk mark, set a jar down, press a doorstone to a wall. 1-9 or
-  // the wheel select. A slot can hold a group of variants (chalk colours):
+  // F (RT on a pad) uses what's in your hand, the item selected on the
+  // hotbar: swipe the duster, draw a chalk mark, set a jar down, press a
+  // doorstone to a wall. With nothing in hand that wants it, F at a dormant
+  // waystone wakes it from your lamp (the lamp itself is R, never a hotbar
+  // slot). 1-9 or the wheel select; the selected slot's number (or a tap on
+  // it) again puts it away, for empty hands. B on a pad puts it away or takes
+  // it out again. You start with empty hands, and lifting or grabbing a
+  // block puts what you're holding away (restore.js). A slot can hold a group of variants (chalk colours):
   // click it again, or press and hold, to open its picker; its number key
   // again cycles. F with an empty jar near a pixie catches it (pixies.js);
   // a pixie jar set down draws ghosts to it, and on a sigil tile it powers
   // the sigil: +1 entropy max per pixie jar on it.
+  //
+  // Equipment worn rather than held (`equip: true`) gets its own slot at the
+  // hotbar's left end, out of the 1-9 cycle, and its own button, Q, whatever's
+  // in hand. Nothing is worn right now (the duster tried it, 2026-10-27, and
+  // went back to the hotbar); the slot is kept for later.
 
   const JAR_H = 0.38; // cells
   const STROKES = 3;  // chalk marks per stick
@@ -177,7 +186,9 @@
    * state.variant.
    */
   function slots() {
-    const run = state.run, out = [{ key: 'lantern', kind: 'lantern' }]; // empty hands
+    const run = state.run, out = [];
+    const kindSlot = (k) => !ITEMS[k].equip && ITEMS[k].slot && ITEMS[k].slot(run);
+    for (const k in ITEMS) if (ITEMS[k].first && kindSlot(k)) out.push(kindSlot(k)); // a kind that keeps slot 1 (the duster)
     if (run.jars.length) {
       // One slot for every jar, grouped by what it holds: empty, a pixie, a
       // charge of entropy. The group you pick is the jar in your hands.
@@ -199,21 +210,56 @@
     if (run.doorstones > 0) out.push({ key: 'doorstone', kind: 'doorstone', count: run.doorstones });
     if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
     for (const k in ITEMS) {
-      const slot = ITEMS[k].slot && ITEMS[k].slot(run);
+      const slot = !ITEMS[k].first && kindSlot(k);
       if (slot) out.push(slot);
     }
     return out;
   }
+  /** The worn equipment's slot (the duster), or null: { key, kind, ... } from its `slot(run)`. */
+  function equipSlot() {
+    for (const k in ITEMS) if (ITEMS[k].equip && ITEMS[k].slot) { const s = ITEMS[k].slot(state.run); if (s) return s; }
+    return null;
+  }
+  /** Q, RT, or a tap on its slot: use the worn equipment. */
+  function useEquip() {
+    const slot = equipSlot();
+    if (!slot || state.paused) return;
+    if (state.carry) { W.showCaption('your hands are full · E to set it down'); shakeHotbar(); return; }
+    ITEMS[slot.kind].act({ slot });
+    savePlayer();
+    W.refreshHud();
+  }
+  /** The slot in your hand: state.sel's, or the first; null with empty hands (state.sel 'hands'). */
   function selectedSlot() {
+    if (state.sel === 'hands') return null;
     const s = slots();
     return s.find((x) => x.key === state.sel) || s[0] || null;
   }
-  function select(i) {
+  /** Empty your hands (lifting or grabbing a block, restore.js). */
+  function putAway() {
+    if (state.sel === 'hands') return;
+    state.sel = 'hands';
+    state.expanded = null;
+    refreshHotbar();
+  }
+  /** B: put away what's in your hand, or take out the last thing you held (else slot 1). */
+  function toggleHands() {
+    if (state.carry) { shakeHotbar(); return; } // set the block down first
+    if (selectedSlot()) { putAway(); return; }
+    const s = slots();
+    if (!s.length) { shakeHotbar(); return; }
+    state.sel = (s.find((x) => x.key === state.lastSel) || s[0]).key;
+    refreshHotbar();
+  }
+  /** Select slot i. `again`: picking the slot already in hand (a number key) cycles a
+   *  group's variants, or puts anything else away. */
+  function select(i, again) {
     const s = slots();
     if (!s.length) return;
     if (state.carry) { shakeHotbar(); return; } // set the block down first
     const slot = s[((i % s.length) + s.length) % s.length];
     if (slot.key === state.sel && slot.variants && slot.variants.length > 1) { cycleVariant(slot, 1); return; }
+    if (again && slot.key === state.sel) { state.sel = 'hands'; state.expanded = null; refreshHotbar(); return; }
     state.sel = slot.key;
     state.expanded = null;
     refreshHotbar();
@@ -228,14 +274,9 @@
 
   const ICON = { jar: '⚱', doorstone: '⌂', key: '⚷' };
   const NAME = {
-    lantern: 'your lantern (empty hands): F covers or relights it',
     doorstone: 'doorstone: F at a bare wall opens a door',
     key: 'key: F at a locked door unlocks it',
   };
-  // The lantern slot's icon: a small copy of the lamp HUD's lantern.
-  const LANTERN_SVG = '<svg viewBox="0 0 24 32" width="15" height="20"><path d="M8 6 a4 4 0 0 1 8 0" fill="none" stroke="currentColor" stroke-width="1.8"/>' +
-    '<rect x="6" y="6" width="12" height="3" rx="1" fill="currentColor"/><rect x="7" y="9" width="10" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-    '<path d="M12 12 C15 16 15 19 12 22 C9 19 9 16 12 12 Z" fill="#ffc27a"/><rect x="6" y="25" width="12" height="3" rx="1" fill="currentColor"/></svg>';
   const JAR_HOLDS = [null, 'pixie', 'entropy'];
   /** "empty jar", "pixie jar", "jar of entropy". */
   const jarName = (j) => (j.holds === 'pixie' ? 'pixie jar' : j.holds === 'entropy' ? 'jar of entropy' : 'empty jar');
@@ -284,10 +325,21 @@
     if (!bar) return;
     const s = slots();
     const cur = selectedSlot();
-    if (cur) state.sel = cur.key;
+    if (cur) state.sel = state.lastSel = cur.key;
     bar.innerHTML = '';
-    bar.hidden = !s.length;
+    const eq = equipSlot();
+    bar.hidden = !s.length && !eq;
     updateHeld(cur);
+    if (eq) { // the worn equipment: its own slot, its own key
+      const b = el('button', 'slot equip ' + eq.kind);
+      b.type = 'button';
+      b.append(el('span', 'n', W.glyph ? W.glyph('Q') : 'Q'));
+      b.title = ITEMS[eq.kind].title(eq);
+      b.append(ITEMS[eq.kind].icon(eq));
+      b.addEventListener('click', (e) => { e.preventDefault(); useEquip(); b.blur(); });
+      bar.append(b);
+      if (s.length) bar.append(el('span', 'equip-gap'));
+    }
     s.forEach((slot, i) => {
       const b = el('button', 'slot' + (cur && slot.key === cur.key ? ' on' : '') + ' ' + slot.kind);
       b.type = 'button';
@@ -297,11 +349,6 @@
       } else if (slot.kind === 'jar') {
         b.title = `jars (${slot.count}): E sets the one in your hands down, F swipes it (a pixie, a full well) or pours it; ${jarVariantName(slot.cur)}` +
           (slot.variants.length > 1 ? '; click again or hold to choose' : '');
-      } else if (slot.kind === 'lantern') {
-        b.title = NAME.lantern;
-        const ic = el('span', 'ic');
-        ic.innerHTML = LANTERN_SVG;
-        b.append(ic);
       } else if (ITEMS[slot.kind] && ITEMS[slot.kind].icon) {
         b.title = ITEMS[slot.kind].title(slot);
         b.append(ITEMS[slot.kind].icon(slot));
@@ -327,6 +374,7 @@
         if (heldOpen) { heldOpen = false; return; }
         if (state.carry) { shakeHotbar(); return; } // set the block down first
         if (slot.variants && state.sel === slot.key) state.expanded = state.expanded === slot.key ? null : slot.key;
+        else if (state.sel === slot.key) { state.sel = 'hands'; state.expanded = null; } // put it away
         else { state.sel = slot.key; state.expanded = null; }
         refreshHotbar();
       });
@@ -572,16 +620,15 @@
   /** What F would do right now with the selected item, or null. */
   function useNear(p) {
     const slot = selectedSlot();
-    if (!slot || state.paused || state.carry) return null; // a block fills your hands
-    // An unpowered waystone right in front of you comes first: your lamp's
-    // flame (a charge) or a full jar (its entropy or its pixie) wakes it.
+    if (state.paused || state.carry) return null; // a block fills your hands
+    // An unpowered waystone right in front of you comes first: a full jar in
+    // hand (its entropy or its pixie) wakes it, or else your lamp's flame (a charge).
     const st = stoneAhead(p);
-    if (st && slot.kind === 'lantern') return { action: 'powerlamp', slot, stone: st };
-    if (st && slot.kind === 'jar') {
-      const jar = heldJar();
-      if (jar && jar.holds) return { action: 'power', slot, jar, stone: st };
+    if (st) {
+      const jar = slot && slot.kind === 'jar' && heldJar();
+      return jar && jar.holds ? { action: 'power', slot, jar, stone: st } : { action: 'powerlamp', slot, stone: st };
     }
-    if (slot.kind === 'lantern') return { action: 'lamp', slot };
+    if (!slot) return null;
     if (slot.kind === 'key') {
       const door = W.doorNear(p);
       return door && door.action === 'locked' ? { action: 'unlock', slot, door } : null;
@@ -625,7 +672,6 @@
     const u = useNear(state.player);
     if (!u && state.carry) W.showCaption('your hands are full · E to set it down');
     if (!u) { shakeHotbar(); return; } // "that didn't work"
-    if (u.action === 'lamp') { W.toggleLamp(); return; }
     if (u.action === 'powerlamp') { W.powerStone(u.stone, null); return; }
     if (u.action === 'power') {
       swipeAt = state.time;
@@ -763,7 +809,7 @@
   function resetHeld() { heldRig.clear(); heldSig = null; }
   function updateHeld(slot) {
     const sig = state.carry ? (state.carry.anim ? '' : 'carry:' + state.carry.key) // mid-arc: not in your hands yet
-      : !slot || slot.kind === 'lantern' ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : slot.sig || '');
+      : !slot ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : slot.sig || '');
     if (sig === heldSig) return;
     heldSig = sig;
     heldRig.clear();
@@ -871,19 +917,83 @@ void main() {
     if (u.log.length > 50) u.log.shift();
   }
 
+  // --- the slash: using what's in your hand (a jar, the duster, any item's
+  // act) whips it side to side in a fast arc across in front of you, leaving
+  // a pale swoosh behind it. The hand turns about the figure's middle; the
+  // swoosh is a flat ring at hand height, dithered in just behind the tip.
+
+  const SLASH = {
+    time: 0.16,      // s: the sweep across
+    back: 0.14,      // s: and back to rest
+    from: -0.55,     // radians the hand turns from rest: where the sweep starts (out to the side)
+    to: 2.5,         // and ends (across the front, to the other side)
+    reach: 0.1,      // cells the hand reaches out mid-sweep
+    trail: 1.3,      // radians of swoosh behind the tip
+    trailLife: 0.22, // s for the swoosh to fade, from the sweep's start
+    color: 0xf2eadb,
+  };
+  const HAND = Math.atan2(-0.16, 0.1); // the held thing's angle round the figure at rest (0 is ahead, +z)
+  const slashUniforms = { uHead: { value: 0 }, uStart: { value: 0 }, uTrail: { value: SLASH.trail }, uFade: { value: 0 },
+    uColor: { value: new THREE.Color(SLASH.color) } };
+  const slashMat = new THREE.ShaderMaterial({
+    uniforms: slashUniforms,
+    vertexShader: `varying vec3 vP;
+void main() { vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform float uHead; uniform float uStart; uniform float uTrail; uniform float uFade; uniform vec3 uColor;
+varying vec3 vP;
+void main() {
+  float a = atan(vP.x, vP.z); // the same way round as rotation.y
+  if (a > uHead || a < uStart) discard;
+  float t = 1.0 - (uHead - a) / uTrail;
+  if (t <= 0.0) discard;
+  float edge = smoothstep(${(0.16 * S).toFixed(3)}, ${(0.5 * S).toFixed(3)}, length(vP.xz)); // densest at the outside
+  // Thinned out in a chunky screen-space Bayer dither (2-px blocks), like the dust clouds.
+  vec2 g = floor(gl_FragCoord.xy / 2.0);
+  int i = int(mod(g.x, 4.0)) + int(mod(g.y, 4.0)) * 4;
+  float m[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
+  if ((m[i] + 0.5) / 16.0 >= t * edge * uFade * 1.4) discard;
+  gl_FragColor = vec4(uColor, 1.0);
+}`,
+    depthWrite: false, side: THREE.DoubleSide,
+  });
+  const slashMesh = new THREE.Mesh(new THREE.RingGeometry(0.2 * S, 0.52 * S, 40, 1).rotateX(Math.PI / 2), slashMat);
+  slashMesh.position.y = 0.36 * S; // about the height of a held tool's tip
+  slashMesh.renderOrder = 6;
+  slashMesh.visible = false;
+  W.bodyRig.add(slashMesh);
+  const easeOut3 = (t) => 1 - Math.pow(1 - t, 3);
+  function updateSlash() {
+    const t = state.time - swipeAt;
+    let turn = 0, out = 0;
+    if (t >= 0 && t < SLASH.time) {
+      turn = SLASH.from + (SLASH.to - SLASH.from) * easeOut3(t / SLASH.time);
+      out = Math.sin(t / SLASH.time * Math.PI);
+    } else if (t >= SLASH.time && t < SLASH.time + SLASH.back) {
+      const k = (t - SLASH.time) / SLASH.back;
+      turn = SLASH.to * (1 - k * k * (3 - 2 * k));
+    }
+    heldRig.rotation.set(0, turn, 0);
+    heldRig.position.z = out * SLASH.reach * S;
+    const live = t >= 0 && t < SLASH.trailLife;
+    slashMesh.visible = live && !state.carry;
+    if (live) {
+      slashUniforms.uStart.value = HAND + SLASH.from;
+      slashUniforms.uHead.value = HAND + turn;
+      slashUniforms.uTrail.value = SLASH.trail;
+      slashUniforms.uFade.value = 1 - t / SLASH.trailLife;
+      slashUniforms.uColor.value.setHex(SLASH.color);
+    }
+  }
+
   /**
    * Pixies in a vessel flit above its mouth. With a ghost drawn close
    * (within JAR_FLARE cells), they flare: bigger, and faster. Entropy in
    * one glows at the mouth, brighter the more there is.
    */
   const JAR_FLARE = 2.5;
-  const SWIPE = 0.32; // s: the held jar sweeps forward and down, and back
   let swipeAt = -9;
   function updateJars() {
-    const k = (state.time - swipeAt) / SWIPE;
-    const sw = k >= 0 && k < 1 ? Math.sin(k * Math.PI) : 0;
-    heldRig.rotation.x = sw * 1.1;
-    heldRig.position.z = sw * 0.12 * S;
+    updateSlash();
     for (const v of state.pushBlocks) {
       if (!v.vessel) continue;
       const ud = v.mesh.userData, n = v.n || 0;
@@ -1131,7 +1241,7 @@ void main() {
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, toggleHands, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });

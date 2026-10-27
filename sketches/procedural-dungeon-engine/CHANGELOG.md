@@ -94,7 +94,55 @@ All notable changes to this sketch are logged here, per
   direction's lead arrives as you go. Leads are 0.7 cells walking and 1.3
   running. `CAMERA.rise` (0 to 1) sets how much it follows block heights.
 
+- 2026-10-27: **Dusting, first pass** (`notes/dusting-2026-10-27.md`,
+  `app/walk/dust.js`). Rooms gather dust by their mood (`DP.dust`, its own
+  `'dust'` stream): a thin light-grey plane just above the floor and low
+  block tops, drawn as a scaled-up pixel dither whose density is the
+  layers left (one to three). Dusty rooms are mostly covered, damp, cold
+  and breathing rooms not at all (`RULES.dustMood`). The **feather duster**
+  is in your bag from the start, the slot after your lantern: F swings it,
+  one press one swing, taking a layer off every dusted half-cell in an arc
+  in front of you (reaching a one-unit block's top from the floor, higher
+  in a jump). Each swing kicks up chunky dithered clouds that break down
+  into motes, which drift for a while and catch the light. Now and then a
+  layer throws out a violet **entropy chit**; chits drift to you within
+  0.9 cells and fill a **pre-pool** of six pips under the lamp meter. A full
+  pre-pool pours a shard into your lamp (and that's the gain that holds the
+  burn, not each chit). It waits when the lamp has no room, and a faint
+  leaves it in your pack. **Crusted crystals:** most shards in a room with
+  dust (`dustCrust`, 80%) lie dull and crusted over, half sunk in dust, with
+  a glint when your lamp's light reaches them; three swipes
+  (`crustLayers`) wake one and it rises as an ordinary shard. Cleared dust,
+  crust, loose chits and the pre-pool are saved in the run. Tuning is in
+  `DUST` (dev panel).
+- 2026-10-27: **Dusting, after the first playtest.** Each layer of dust is
+  its own plane, a little above the one under it (`DUST.layerGap`), so the
+  layers shift against each other as you move, and each lays a faint film
+  between its pixels (`film`). Dither pixels are half the size, set as a
+  plain size now (`pixel`, cells; it replaces `pixels`, which counted
+  pixels across a half-cell, so lowering it made them bigger). Pixel size,
+  film, cover and layer gap change live from the dev panel. Dust builds
+  out with its room's tiles instead of popping in after. Chits are twice
+  the size (`chitSize`), and gathering one flashes the figure violet.
+  New defaults from the playtest's tweaks: `launch` 1.78, `bounce` 0.42,
+  `moteSize` 0.047.
+
 ### Changed
+
+- 2026-10-27: **Controls: the lamp leaves the hotbar, use moves to RT.**
+  The lantern is no longer a hotbar slot: R (R3) is the lamp, and with
+  nothing in hand that wants it, F at a dormant waystone wakes it from
+  your lamp. Instead, you start with **empty hands**, and the selected
+  slot's number (or a tap on it) puts it away again; on a gamepad, **B**
+  puts it away or takes the last thing you held back out. Lifting or
+  grabbing a block puts it away too. The duster keeps slot 1, and its slot
+  lights up while a swipe would find dust. On a gamepad, **RT uses the
+  item in hand** (was Y) and LT alone runs; Y is free in the world. (A worn-equipment slot with its own button, Q,
+  was tried for the duster and is kept in `items.js` for later, unused.)
+- 2026-10-27: **The slash.** Using what's in your hand (the duster, a jar,
+  any item) whips it side to side in a fast arc across in front of you
+  instead of a forward dip, with a dithered swoosh trailing the tip
+  (`SLASH`, dev panel).
 
 - 2026-10-26: **Controls for the jump.** Keyboard: Space jumps and crouch
   moves to C. Gamepad: A jumps, X interacts (was A), Y uses the item in hand

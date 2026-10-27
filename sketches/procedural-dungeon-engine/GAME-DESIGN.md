@@ -103,7 +103,9 @@ Where it comes from, in rough order of importance:
 1. **Restoration** (next section): one-time payouts for setting things
    right. This becomes the main source.
 2. **Pickups:** shards as today, but **rarer**. Free entropy lying around
-   stays, as a supplement rather than the economy.
+   stays, as a supplement rather than the economy. Since 2026-10-27
+   dusting is the steady trickle, and most shards in dusty rooms are
+   finds under dust, never under objects (`notes/dusting-2026-10-27.md`).
 3. **Slow sources:** things that pay out while they last, such as a lit
    candle. Anything that pays over time must **run out** (candles burn
    down), or it becomes a farm.
@@ -142,7 +144,11 @@ for some kinds, the **thing** that goes in it.
   - a statue's head back on its body
   - furniture back in place, fallen lamps set upright
   - the water turned back on
-  - dusting and sweeping, once you've found the broom
+  - dusting and sweeping, once you've found the broom. Dusting is
+    designed in `notes/dusting-2026-10-27.md`, first pass built
+    2026-10-27: dithered dust on surfaces, a feather duster, chits that
+    fill a pre-pool, and dormant crystals crusted in dust (PLAY.md has the
+    numbers)
 
 **Cross-room tasks don't have to be solvable.** An empty specimen table is a
 want you carry, like a journal entry. Specimens deeper down are seeded with a

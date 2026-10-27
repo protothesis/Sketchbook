@@ -354,26 +354,34 @@ Determinism).
   - **Objects** (crates, push blocks, vessels) are things in the world as
     themselves, never in the bag. Hold E to grab one and lift it, E to set
     it down again, with whatever's inside.
-  - **Equipment** (the hourglass; a draft class) is always with you, kept
+  - **Equipment** (the hourglass, the duster; a draft class) is always with you, kept
     through faints along with what's in it. One of each, collected like a
     tool, on the hotbar if it has a use. **The hourglass**
     (`app/walk/hourglass.js`) holds one pixie: F near a pixie catches it,
     F at a vessel pours it in or takes one out of a vessel of pixies. A
     pixie glows in its lower bulb (and its hotbar glyph) when it's
     charged. Charged, it's the key to a lost path: F with it in hand at
-    the path's door retraces it, and spends the pixie.
+    the path's door retraces it, and spends the pixie. **The feather
+    duster** (`app/walk/dust.js`) is in your bag from the start, for now,
+    and keeps hotbar slot 1: take it out (1, or B on a pad) and F (RT on a gamepad) swipes it at the dust
+    (see Dusting, below).
   - **Creatures** (ghosts, pixies) aren't items: they move on their own,
     by the ecology's rules.
 - **The hotbar.** Tools and objects sit in slots at the bottom of the
   screen. Pick a slot with 1–9, the mouse wheel, or a tap. **E** interacts
   with the world (doors, lifting a jar, wiping a chalk mark
-  you're facing). **F** (or "use" on touch) uses the selected item: the
-  one in your hand.
+  you're facing). **F** (RT on a gamepad, or "use" on touch) uses the
+  selected item: the one in your hand, with a fast side-to-side slash
+  and a dithered swoosh behind it (`SLASH`).
 - **One thing in your hand.** The selected slot is what you're holding,
   and the figure shows it: a tool in its left hand (the lantern is in the
-  right), a jar held over its head. **Slot 1 is always the lantern**:
-  empty hands. F with it covers or relights the lamp (R still does too,
-  from any slot). Some slots are **groups**: one slot, several variants
+  right), a jar held over its head. The lamp isn't a slot (since
+  2026-10-27): R (R3) covers or relights it. You start with **empty
+  hands**. The selected slot's number, or a tap on it, puts it away again;
+  on a gamepad, B puts it away or takes the last thing you held back out.
+  Lifting or grabbing a block puts it away too: both hands for the block. With nothing in
+  hand that wants it, F at a dormant waystone wakes it from your lamp.
+  Some slots are **groups**: one slot, several variants
   (chalk colours; jars by contents). Click a selected group again (or press and
   hold it) to open its picker, or press its number again to cycle.
 - **Focus and prompts.** E acts on one thing at a time: of everything in
@@ -526,7 +534,7 @@ you pass out and wake by your save lantern.
 | Closed door | dark panel with a warm orange seam of light under it | the same orange as the chart view's open doorways |
 | Locked door | iron-grey panel with two bands and a cold blue seam | blue on the minimap; once unlocked it keeps its bands and gets an orange seam |
 | Minimap | unopened doors orange, locked doors blue, opened doors green, doors to a lost path (its own, or onto ground it holds) violet; traces grey; lost paths violet and hatched, by stage: since your last faint, a fill that breathes, close hatching and a solid glowing edge; dimmed (it fades at the next faint), fainter, sparse hatching and a dashed edge (faded ones not drawn); imprinted cells get a violet tick | so overlapping rooms stay readable |
-| Big map | Tab or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close (on a gamepad: View opens it, the stick pans, the triggers zoom, Y centers, B closes) | walking pauses while it's open |
+| Big map | Tab or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close (on a gamepad: View opens it, the stick pans, LT / RT zoom, Y centers, B closes) | walking pauses while it's open |
 | Cracks | canvas-drawn fissures with a violet core on imprinted tiles; more trace layers, more cracks | seeded per cell; glows faintly even in the dark |
 | Blocks | flat-shaded boxes a shade darker than the walls, filling half-cell subgrid squares flush (no gaps between neighbours), 1–3 units of 0.43 cells tall, one seamless box each | cast shadows; never dither. The figure shows through them instead |
 | Silhouette | the parts of the figure hidden behind anything (a block, a door, the solid part of a wall) draw as a dithered lantern-orange silhouette, 85% opacity | GreaterDepth pass, so it only appears where something is in front; the figure's own parts mark the stencil, so the figure never dithers itself (head over body, lamp over either). The figure draws after every other solid thing (renderOrder 5), or it would mark pixels that a block then covers |
@@ -536,8 +544,9 @@ you pass out and wake by your save lantern.
 | Doorstone | a small white slab with a dark doorway in it; a ⌂ slot on the hotbar; a "open a door here" prompt at a bare wall | the door looks like any other |
 | Chalk | sticks in five colours; on the hotbar, one group slot: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
-| Hotbar | bottom-centre slots: the lantern (always slot 1: empty hands), ⚱ jars (one group slot: empty, a violet pip for a pixie or a violet bar for entropy, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
-| Held item | the selected tool in the figure's left hand, tilted up; a jar or block over its head; all at their true size, and casting no shadow; nothing for the lantern slot | |
+| Hotbar | bottom-centre slots: the duster (always slot 1, lit violet while a swipe would find dust), ⚱ jars (one group slot: empty, a violet pip for a pixie or a violet bar for entropy, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
+| Held item | the selected tool in the figure's left hand, tilted up; a jar or block over its head; all at their true size, and casting no shadow; nothing with empty hands | |
+| Slash | using what's in your hand whips it side to side across in front of you: 0.16 s across (`SLASH.time`, turning from −0.55 to +2.5 radians off its rest, `from`, `to`, reaching out 0.1 cells), 0.14 s back (`back`); a flat ring at tool-tip height (0.2–0.52 cells round the figure) lights the 1.3 radians behind the tip (`trail`) in a 2-px Bayer dither, densest at the outside, gone in 0.22 s (`trailLife`) | |
 | Jar | a small glass jar with a dark lid; a pixie flits inside when it holds one | a solid half-cell |
 | Pixie | a small pale-violet sphere with two fluttering translucent wings and a soft additive glow, bobbing about 0.6 cells up | no light of its own (cost) |
 | Jars | glass, a dark lid; a pixie flits inside, a jar of entropy holds a glowing violet liquid; on the floor and in the left hand at 0.55×; the swipe tips it forward and down over 0.32 s | |
@@ -548,6 +557,8 @@ you pass out and wake by your save lantern.
 | Sigil | a seeded star polygon (pentagram, hexagram, {7/3}, {8/3}) in a double ring with glyph marks, drawn additively | stage 0 a faint violet trace; 1 a dim glow; 2 brighter and flickering; 3 pulsing gold. A +1 max shows as a gold-edged ninth charge slot |
 | Ghost effects | full-screen pass (only while active; 8-bit sRGB target, no MSAA, CSS-pixel resolution that adapts down to half if the effect slows frames): wobble = layered sine warp plus slight colour split; glitch = torn slices, purple static, scanlines, wide colour split | wobble rises with nearness (within ~4 cells). Contact: a full-strength glitch flash that fades in 0.35 s, settling to a quarter-strength glitch while in contact. Each holds 1.2–1.5 s after, then decays |
 | Lamp HUD | bottom left: a lantern icon (92 px; 64 on phones) in the lamp's colour, its flame scaled to 100 / 80 / 62 / 45% by stage; a fluid meter of 6 sections (32 × 20 px; more with sigils), the burning one dimmer; the stamina bar (and relight words when the lamp is off). The icon shimmers gold by a sconce, violet at a well; tap it to cover or relight | violet liquid, gold for a sigil's extra sections |
+| Dust | a light-grey (`DUST.color`) instanced quad per layer of each dusted half-cell, the first 0.014 world units above its surface and each next one 0.018 cells higher (`layerGap`), so the layers shift against each other as you move; Lambert (lamp, pool bands and shadows fall on it). Each pixel of a world-space 4×4 Bayer pattern plus a little hash, 0.036 cells across (`pixel`), belongs to one layer's band of thresholds (1 layer about 38% covered, 3 about 82%, `cover`), so the layers never double up; a layer coming off thins over 0.2 s; brightness varies a little per pixel. A second pass lays a 10% film (`film`) over the rest of each layer. Built out with its room: each quad is drawn in toward its floor tile's centre as the tile scales up. Dev-panel changes show at once | |
+| Dust clouds | per half-cell cleared, 5 puffs (`puffs`, fewer as it thins): 0.42 cells across growing ×1.9 over about 2.2 s (`cloudSize`, `cloudGrow`, `cloudLife`), drifting out and up, their pixels dithered (2-px screen blocks) by alpha; each breaks into 2 motes (`motes`), single bright pixels 0.047 cells across (`moteSize`) drifting about 9 s (`moteLife`). Both lit on the CPU from your lamp's pool and any entropy light's pool, so they catch the light; motes twinkle in it | |
 | Lamp streams | motes flowing in an arc into the lamp from what feeds it: a lit sconce's flame (warm) while it shelters you, a well's pool (its colour) while you drink (`STREAM` in `lamp.js`, 16/s, 0.6 s each) | |
 | Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges). Unrest by fuel (`UNREST` in `lamp.js`, blended): flicker depth 0.03 at full, 0.08 at 2, 0.38 at 1, then settling to 0.02 at empty while a slow irregular fade grows to 0.5; dying, a brightness swell of up to 35% while you move. Halo (`HALO`): flat, hard-edged, see-through, about 4x the lamp across at full, shrinking to 40%, wobbling with the flicker and fade (it can exceed its average), opacity 0.3 down to 0.12, until the lamp is out. Light (`LIGHT`): intensity 25%–100%, falloff reach 18%–100%, colour following the lamp toward red. Its pool (light.js): 3.2 cells from you at full (3 charges or more), down to 0.9 at empty (`poolFull`, `poolEmpty`, `poolCurve` 1), steady (`breathe` 0: the flicker doesn't move it). Creepers read its edge (`lightRadius()`). Embers (`EMBER`): walking, up to 22/s spraying (0.35–0.75 s); standing, 9/s in a swaying column (0.9–1.6 s); dying, 0.7/s, red. Covered or out: the light eases to nothing, no halo or embers | |
 | Entropy popup | "+◆" (one diamond per shard's worth, up to three) floats up over the head in violet; "−◆" greyer when a block takes its charge back | |
@@ -637,6 +648,11 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Checkpoint | written when you save at a lantern: where you wake, and which rooms were standing. A faint makes every room opened since a lost path; it rolls nothing back (doors carved since stay, and a retraced path comes back as you left it, its ghosts, pixies and creepers rolled again) |
 | Pack | `run.packs`: [{ id, spaceId, seed, x, y, fuel, keys, doorstones, jars, chalks }]; follows its room (`packStatus`: here, lost, dim, or gone) |
 | Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), F with a charged hourglass in hand, which spends its pixie; reroll: E held at the door (the path turns to corruption); `lostDoorChoice`: a choice between the two instead; unchosen: dim at the next faint, fade at the one after |
+| Dust | by room mood (`dustMood`): dusty 70% of free half-cells up to 3 layers; still, hollow 35% / 2; warm 30% / 2; echoing, tilted 15% / 1; humming 12% / 1; damp, cold, breathing none. On the floor and the tops of 1- and 2-unit blocks (not crates), in noise patches `dustScale` (3) half-cells across, block tops +0.15 (`dustTops`), thickest in a patch's middle; never on a sigil, well, waystone or save lantern cell, a tool's cell, or under a loose object's start, mark or a vessel. Seeded on the `'dust'` stream (`DP.dust`); saved as `run.dust` (layers taken off, per room and half-cell) |
+| Duster | equipment, in your bag from the start for now, hotbar slot 1; F (RT on a pad): one press, one swing (no sooner than 0.18 s, `DUST.swingEvery`). Hits every dusted half-cell whose centre is within 0.75 cells in front (a ±70° arc, `reach`, `arc`; within 0.32 any way you face), 0.5 below to 0.55 above your feet (`reachDown`, `reachUp`: a one-unit block's top from the floor, a two-unit one in a jump), and a crusted crystal the same way; one layer off each |
+| Chits | per layer taken off: 45% one chit, 10% a second (`chit`, `chitTwo`); after 3 swings in a row that hit dust and threw none, the next throws one (`pity`). Violet diamonds (points) 0.15 cells across (`chitSize`), thrown out at 1.78 cells/s (`launch`) and bouncing (`bounce` 0.42); within 0.9 cells (`magnet`) they drift to you, gathered within 0.28, each with a 0.32 s dithered violet flash over the figure (seen through anything). Saved where they lie (`run.chits`) |
+| Pre-pool | 6 chits (`perShard`) pour a shard into the lamp (the gain that starts `lampGrace`); full with no room in the lamp, it waits, and chits stay on the floor. Six pips under the lamp meter, shown once you've gathered one. A faint leaves it in your pack (`run.dustPool`) |
+| Crusted crystals | 80% of shards in a room with dust (`dustCrust`, drawn first on the `'dust'` stream) lie crusted over: today's shard, dull and tilted, half sunk among grey lumps, its cell dusted at least 2 layers deep; a glint every 1.7 s (`glintEvery`) where your lamp's pool reaches it. 3 swipes (`crustLayers`) wake it: the crust falls away, a violet flash, and it rises as an ordinary shard pickup. Saved as `run.crust` |
 | Hourglass | 1 room in 20 at depth 3+ (`hourglassChance`, `hourglassMinDepth`, last on the loot stream; loot id still `thread`), one per run; equipment: kept for the rest of the run, never in your pack, pixie and all; holds one pixie (F: catch one, pour into / take from a vessel of pixies, or retrace a lost path at its door); a hotbar slot, an hourglass glyph with the lower bulb lit when charged; in the world, two glass bulbs in a wooden frame, a pixie glowing in the lower one when charged |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded on the loot stream, drawn after chalk); a tool, collected by walking over it; holds one pixie or one charge |
@@ -974,8 +990,9 @@ more yours. Jump is the first step. Not built yet:
   hazard, before the draining ones, and the way to get "something to trip
   over" without smaller blocks.
 - **A movement design conversation**, started 2026-10-26. Decided so far:
-  - **Dash: likely, on RT.** Running would move to LT alone (today either
-    trigger runs). A plain dash first; then upgrades, some costing entropy
+  - **Dash: likely.** It was going to be RT, but since 2026-10-27 RT
+    uses the item in hand, LT alone runs and B puts the item away; Y is
+    free in the world. A plain dash first; then upgrades, some costing entropy
     or psychic stamina. One idea: a **phase dash** that passes through a
     wall without carving a door.
   - **Movement makes noise** (decided, parked until something listens; see

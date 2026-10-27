@@ -13,7 +13,7 @@
 // Walk mode is split into classic scripts (no modules: the page has to open
 // from file://), which play.html loads in this order:
 //
-//   saves, core, world, figure, light, items, restore, waystones, lanterns, packs, lamp, actions,
+//   saves, core, world, figure, light, items, hourglass, dust, restore, waystones, lanterns, packs, lamp, actions,
 //   input, ecology, creatures, markers, wells, pixies, ghosts, creepers, fx, hud, choice, game, main, dev
 //
 // (saves.js is the odd one out: it knows nothing of W, and hangs its save
@@ -126,7 +126,8 @@
     sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
     buff: 0,             // powered sigils: +1 entropy max each
     buffReady: false,    // false until the first sigil pass (no caption on load)
-    sel: null,           // the selected hotbar slot's key
+    sel: 'hands',        // the selected hotbar slot's key; 'hands' for empty hands (how you start)
+    lastSel: null,       // the last slot you had in hand (B takes it out again)
     variant: {},         // per group slot: the variant in use (e.g. chalk colour)
     expanded: null,      // the group slot whose picker is open
     marks: [],           // chalk marks drawn in the world
@@ -196,6 +197,10 @@
       retraces: 0,           // lost paths retraced
       pathsLetGo: 0,         // lost paths let go
       equipment: {},         // always with you, kept through faints: { hourglass: { holds } } (hourglass.js)
+      dust: {},              // dust taken off: { "spaceId:seed": { "sx,sy,h": layers } } (dust.js)
+      crust: {},             // swipes taken off crusted shards: { item key: n } (RULES.crustLayers wakes one)
+      chits: [],             // entropy chits lying loose: [{ x, y, z, s: "spaceId:seed" }]
+      dustPool: 0,           // chits gathered toward the next shard (DUST.perShard pours one)
     };
   }
 
