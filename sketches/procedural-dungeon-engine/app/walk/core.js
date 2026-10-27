@@ -178,6 +178,7 @@
       lanterns: {},          // save lanterns saved at, ever: { "spaceId:seed": true } (the first save reveals waypoints)
       hearth: null,          // "spaceId:seed" of the hall whose lantern you last saved at: where you wake
       packs: [],             // what you carried when you fainted, where you fell (packs.js)
+      retraced: {},          // first rooms of retraced paths of more than one room: { "spaceId:seed": true }; no rerolling them
       packSeq: 0,
       surfaced: false,       // went up the surface door (the record shows until you go back down)
       faints: 0,             // faints that cost rooms (see game.js)
@@ -205,6 +206,16 @@
   /** An opened door (a connection) you've shut again: solid until you open it. */
   function isClosed(connectionId) {
     return !!connectionId && !!state.run.closed && state.run.closed.includes(connectionId);
+  }
+
+  /**
+   * The provisional room through this door, if closing it would reroll one
+   * (DP.rerollThrough). Not the first room of a path you retraced that had
+   * more than one room: that's ground you paid to bring back.
+   */
+  function rerollThrough(exp, spaceId, ex) {
+    const child = DP.rerollThrough(exp, spaceId, ex);
+    return child && !(state.run.retraced || {})[child.id + ':' + child.seed] ? child : null;
   }
 
   function ownsDoorPanel(spaceId, ex) {
@@ -346,6 +357,6 @@
     CLIMB_TIME, GRAVITY, PUSH_TIME, USE_RANGE, PICKUP_RANGE, DOOR_SWING, SWING_ANGLE,
     REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_RADIUS, DITHER_APPROACH, CAM_OFFSET, SEAM,
     LOCK_SEAM, OPEN_SEAM, LANTERN, LANTERN_RANGE, OPP, ekey, canvas, renderer, scene, camera, state, world,
-    freshRun, rebuildExitIndex, isLockedNow, isClosed, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,
+    freshRun, rebuildExitIndex, isLockedNow, isClosed, rerollThrough, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,
     savePlayer, saveCheckpoint, snapshot, SAVES, RUN_VERSION });
 })(window);

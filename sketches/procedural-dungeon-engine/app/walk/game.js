@@ -96,6 +96,9 @@
       const run = state.run;
       if (!run.closed) run.closed = [];
       if (!run.closed.includes(ex.connectionId)) run.closed.push(ex.connectionId);
+      // A path of more than one room is held once retraced: its first room can't be rerolled.
+      const first = path.traces.length > 1 && exp.spaces[path.root.id];
+      if (first) (run.retraced = run.retraced || {})[first.id + ':' + first.seed] = true;
     }
     if (door && back.length) {
       door.dir = 0; door.t = 0;

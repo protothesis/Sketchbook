@@ -314,7 +314,7 @@
         const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);
         if (!visible(ex.cell)) continue;
         const conn = ex.connectionId && exp.connections[ex.connectionId];
-        if (conn && DP.rerollThrough(exp, id, ex)) {
+        if (conn && W.rerollThrough(exp, id, ex)) {
           const d = DE.DIRS[ex.facing], mx = (ax + bx) / 2, my = (ay + by) / 2;
           const hx = (bx - ax) * 0.4, hy = (by - ay) * 0.4; // half the base
           ctx.fillStyle = '#5fbf7a';

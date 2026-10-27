@@ -44,7 +44,7 @@
       if (p.z > 0.05) continue; // no doors from on top of a block
       if (!ex.connectionId) action = ex.kind === 'surface' ? 'surface' : isLockedNow(sp, ex) ? 'locked' : 'open';
       else if (!W.isClosed(ex.connectionId)) action = 'close';
-      else if ((child = DP.rerollThrough(exp, sp.id, ex))) action = 'reroll';
+      else if ((child = W.rerollThrough(exp, sp.id, ex))) action = 'reroll';
       else action = 'reopen';
       if (!action) continue;
       bestD = d;

@@ -800,6 +800,11 @@ All notable changes to this sketch are logged here, per
   hourglass brings the rooms back, and the path's door comes back as a
   plain closed door (no lost-path shimmer). You open it with E when you're
   ready, as with any closed door you've been through.
+  - A retraced path of more than one room can't be rerolled from its
+    door. You paid to bring it back, so holding E there does nothing and
+    the green reroll arrow doesn't show (`run.retraced`,
+    `W.rerollThrough`). A one-room path stays rerollable like any
+    provisional room.
 
 ### Fixed
 
