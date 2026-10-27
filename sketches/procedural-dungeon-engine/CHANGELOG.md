@@ -61,6 +61,12 @@ All notable changes to this sketch are logged here, per
   hop. You still never stand higher than one unit; taller stacks and vessels
   are walls. Notes for a movement design conversation (hazards, dodge,
   noise, traversal) are in `PLAY.md`'s future directions.
+- 2026-10-26: **Camera pass** (`app/walk/camera.js`). The camera no longer
+  rises with a jump: its height follows the ground you stand on and eases
+  over landings. It follows with easing, and leads where you're moving (a
+  little walking, more running, none standing), the lead easing round as
+  you turn. The right stick peeks up to 2 cells and springs back when you
+  let go. `CAMERA` and `JUMP` are in the dev panel, to tune live.
 
 ### Changed
 
@@ -72,6 +78,13 @@ All notable changes to this sketch are logged here, per
   features won't be designed or tested for it.
 - 2026-10-26: Gravity is 30 cells/s² (was 9), the same for a jump and for
   stepping off an edge.
+- 2026-10-26: **Jump feel.** A held jump goes higher (about 1.4 units; was
+  about 1.0). You stand on a block while your footprint is over it, not
+  just your center, so stepping off an edge or landing on a lip no longer
+  shoves you sideways or drops you back down a frame later. A lip that
+  catches you eases the figure up instead of popping it. The round shadow
+  stays on what you'd land on (it used to ride at your feet), shrinking and
+  fading as you rise.
 - 2026-10-19: Walk mode no longer sinks walls near the figure. Walls in
   front of it get a screen-door dither inside a soft circle around it
   instead. The door prompt is now a button, so on touch you tap it to

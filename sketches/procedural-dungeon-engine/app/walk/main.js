@@ -6,7 +6,7 @@
   const W = global.DungeonPlay.walk;
   const { DE, DP, THREE, $, S, WALL_H, RADIUS, SPEED, RUN,
     CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, DOOR_SWING,
-    DITHER_RADIUS, CAM_OFFSET, LANTERN, renderer, scene, camera, state, world, freshRun,
+    DITHER_RADIUS, LANTERN, renderer, scene, camera, state, world, freshRun,
     isLockedNow, save, savePlayer, dither, doorMat, buildWorld, easeOut, easeInOut,
     applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions, placeLamp,
     addMarkToWorld, useNear, collectPickups, updateItems,
@@ -18,7 +18,6 @@
   // ---------------------------------------------------------------------------
   // Per-frame update
 
-  const camTarget = new THREE.Vector3();
   const tmpV = new THREE.Vector3();
 
   function update(dt) {
@@ -105,7 +104,7 @@
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;
-    figure.position.set(p.x * S, p.z * S, p.y * S);
+    figure.position.set(p.x * S, (p.z - state.jump.lift) * S, p.y * S);
     figure.rotation.y = p.angle;
     fill.position.set(p.x * S, 1.0 * S, (p.y + 0.6) * S);
     state.crouchAmt += ((state.crouch ? 1 : 0) - state.crouchAmt) * Math.min(1, dt * 10);
@@ -135,12 +134,7 @@
       stanceEl.className = 'stance' + (hidden ? ' hidden' : '');
     }
 
-    // Camera: fixed angle, smoothed follow.
-    tmpV.set(p.x * S, 0.6 + p.z * S * 0.6, p.y * S);
-    camTarget.lerp(tmpV, 1 - Math.exp(-dt * 7));
-    camera.position.copy(camTarget).add(CAM_OFFSET);
-    camera.lookAt(camTarget);
-    camera.updateMatrixWorld();
+    W.updateCamera(dt);
 
     // Dither: centered on the figure on screen, for pixels nearer the camera.
     renderer.getDrawingBufferSize(tmpV2);
@@ -190,7 +184,7 @@
   /** Jump the camera to the figure (after travelling, or waking). */
   function snapCamera() {
     const p = state.player;
-    camTarget.set(p.x * S, 0.6 + p.z * S * 0.6, p.y * S);
+    W.snapCameraTo(p);
     // Already "in" the room, so its log line doesn't cover the caller's caption.
     p.spaceId = state.exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))];
   }
@@ -259,7 +253,7 @@
       sp = savedPlayer;
     }
     Object.assign(state.player, { x: sp.x, y: sp.y, z: 0, vz: 0, angle: sp.angle || 0, spaceId: null });
-    camTarget.set(sp.x * S, 0.6, sp.y * S);
+    W.snapCameraTo(state.player);
     save();
     savePlayer();
     refreshHud();

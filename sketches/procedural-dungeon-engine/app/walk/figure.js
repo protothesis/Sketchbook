@@ -60,7 +60,8 @@
     g.renderOrder = 10;
     bodyRig.add(g);
   }
-  figure.add(bodyRig, blob);
+  figure.add(bodyRig);
+  scene.add(blob); // on whatever you'd land on, not at your feet (fall())
   // The light rides with the held lamp (ahead and to the right, which gives
   // the light its direction). Each frame the lamp is kept out of walls; see
   // placeLamp(). It lives in the scene, positioned in world space.
@@ -238,16 +239,26 @@
     state.jump.held = false;
   }
 
+  /** Is the figure's footprint (JUMP.foot around its center) over block b? */
+  function under(p, b) {
+    const dx = Math.max(b.x0 - p.x, 0, p.x - b.x1), dy = Math.max(b.y0 - p.y, 0, p.y - b.y1);
+    return dx * dx + dy * dy < JUMP.foot * JUMP.foot;
+  }
+
   /**
-   * Each frame: stand on the tallest block top under the figure's center
-   * (jars aren't floor), take off if a jump is waiting, and rise or fall.
-   * Step off an edge and you drop to whatever is below.
+   * Each frame: stand on the tallest block top under the figure's
+   * footprint (jars aren't floor), take off if a jump is waiting, and rise
+   * or fall. Step off an edge and you drop to whatever is below. The shadow
+   * sits on what you'd land on, smaller and fainter the higher you are.
    */
   function fall(p, dt) {
     const j = state.jump, reach = footReach(p);
     let support = 0;
-    for (const b of state.blockAt.get(DE.key(Math.floor(p.x), Math.floor(p.y))) || []) {
-      if (!b.jar && b.top <= reach && p.x > b.x0 && p.x < b.x1 && p.y > b.y0 && p.y < b.y1) support = Math.max(support, b.top);
+    const cx = Math.floor(p.x), cy = Math.floor(p.y);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
+        if (!b.jar && b.top <= reach && under(p, b)) support = Math.max(support, b.top);
+      }
     }
     j.buffer = Math.max(0, j.buffer - dt);
     j.coyote = p.z <= support && p.vz <= 0 ? JUMP.coyote : Math.max(0, j.coyote - dt);
@@ -257,12 +268,23 @@
       p.vz = j.hop || !j.held ? JUMP.hop : JUMP.v;
       if (state.crouch) toggleCrouch(); // jumping stands you up
     }
+    const before = p.z;
     if (p.z > support || p.vz > 0) {
       p.vz -= (p.vz > 0 && j.held && !j.hop ? JUMP.riseG : GRAVITY) * dt;
-      p.z = Math.max(support, p.z + p.vz * dt);
-      if (p.z === support) p.vz = 0;
-    } else { p.z = support; p.vz = 0; }
+      p.z += p.vz * dt;
+    }
+    if (p.z <= support) {
+      // Lifted onto a lip from below: the figure eases up rather than pops.
+      j.lift += Math.max(0, support - Math.max(before, p.z));
+      p.z = support; p.vz = 0;
+    }
+    j.lift *= Math.exp(-dt * JUMP.ease);
     j.air = p.z > support;
+    if (!j.air) j.ground = support;
+    const h = Math.min(1, (p.z - support) / 0.6);
+    blob.position.set(p.x * S, support * S + 0.01, p.y * S);
+    blob.scale.setScalar(1 - 0.45 * h);
+    blob.material.opacity = 0.45 * (1 - 0.5 * h);
   }
 
   function toggleCrouch() {

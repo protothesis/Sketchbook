@@ -2,7 +2,8 @@
 // frame. Most buttons stand in for a key and go through input.js's keydown
 // handler, so a pad does what the keyboard does in every state (a choice,
 // the map, a dialog). The left stick walks, analog like the touch stick;
-// either trigger held runs. The camera is fixed, so the right stick is free.
+// either trigger held runs. The right stick peeks: it slides the view that
+// way, and it springs back when you let go (camera.js).
 //
 //   A  jump (Space; held for full height)       B  back out of anything (free in the world)
 //   X  E (tap to act, hold to fill the ring)     Y  F (use the item in hand); on the map, recenter
@@ -51,7 +52,7 @@
   const keyHelp = help ? help.innerHTML : '';
   function padHelp() {
     const g = GLYPH[style], k = (s) => `<kbd>${s}</kbd>`;
-    return `${k('◖')} move · ${k(g.run)} run · ${k(g.Space)} jump · ${k(g.C)} crouch · ${k(g.E)} interact · ` +
+    return `${k('◖')} move · ${k('◗')} look · ${k(g.run)} run · ${k(g.Space)} jump · ${k(g.C)} crouch · ${k(g.E)} interact · ` +
       `${k(g.F)} use item · ${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
   }
 
@@ -165,6 +166,7 @@
     if (!gp) {
       if (prev[B.x] || aKey) { W.keys.delete('e'); W.releaseE(true); W.releaseJump(); aKey = null; } // unplugged mid-hold: let go, like losing focus
       prev = []; tilted = false; move = { x: 0, y: 0, mag: 0, run: false };
+      W.padLook = null;
       return;
     }
     const kind = /054c|playstation|dualsense|dualshock|sony/i.test(gp.id) ? 'ps' : 'xbox';
@@ -209,6 +211,8 @@
       }
     }
     move = { x: s.x, y: s.y, mag: s.mag, run: down[B.lt] || down[B.rt] };
+    const r = stick(gp, 2);
+    W.padLook = { x: r.x * r.mag, y: r.y * r.mag };
   }
   global.requestAnimationFrame(poll);
 

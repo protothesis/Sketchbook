@@ -62,8 +62,12 @@
   // you landed), and the forgiveness: seconds after walking off an edge you can still jump,
   // seconds a press waits for you to land, and cells a block's top can be
   // above your feet and still catch you. A quick, low arc: the peak comes
-  // just after you clear a block's lip, so you come down on it.
-  const JUMP = { v: 4.6, riseG: 20, cut: 0.5, hop: 2.2, coyote: 0.1, buffer: 0.12, ledge: 0.1 };
+  // just after you clear a block's lip, so you come down on it. `foot`: you
+  // stand on a block while this much of you (cells from your center) is
+  // over it, so you step off once your body has cleared the edge. `ease`
+  // (1/s): how fast the figure catches up when a lip lifts you, instead of
+  // popping up.
+  const JUMP = { v: 5.0, riseG: 20, cut: 0.5, hop: 2.2, coyote: 0.1, buffer: 0.12, ledge: 0.1, foot: 0.17, ease: 18 };
   const PUSH_TIME = 0.35;   // seconds of walking into a door to open it
   const USE_RANGE = 0.6;    // E / tap reach to a door's midpoint
   const PICKUP_RANGE = 0.42;
@@ -112,7 +116,7 @@
     items: new Map(),    // "spaceId:seed:itemId" -> { mesh, item, spaceId, tile }
     blockAt: new Map(),  // "x,y" -> [{ x0, y0, x1, y1, h, spaceId }] for collision
     player: { x: 0.5, y: 0.5, z: 0, vz: 0, angle: 0, spaceId: null, phase: 0 },
-    jump: { held: false, buffer: 0, coyote: 0, hop: false, air: false }, // see figure.js
+    jump: { held: false, buffer: 0, coyote: 0, hop: false, air: false, ground: 0, lift: 0 }, // see figure.js
     ghosts: [],          // live hash ghosts (see ghosts.js)
     ghostTouch: false,   // in a ghost's reach this frame (drains psychic stamina)
     pixies: [],          // free pixies (see pixies.js)
