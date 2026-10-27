@@ -907,18 +907,22 @@ All notable changes to this sketch are logged here, per
     and bursts from different sources add up. A creeper's pull flashes
     each time you enter it again (after 0.6 s clear), softer than a
     ghost's. The meter starting to go down at all, from any source,
-    gives a jolt on top.
+    gives a soft deep-purple jolt on top.
   - While anything drains you, a shared **distress** level climbs as the
-    meter empties, worst just before you faint (`psyche`).
+    meter empties, worst just before you faint (`psyche`). Near empty,
+    chunky glitches break in now and then, at irregular moments, more
+    often the emptier you are. All the tearing jumps at an uneven pace in
+    slices of varying height, so it doesn't repeat. The dark's and the
+    distress's static is half as bright as before.
   - **The dark** has its own look. Static and tearing keep to the outer
     edge, and a ragged near-black violet rim of shadow drifts and curls
     inward. The shadow follows the meter directly: a thin rim at first,
     covering at most about 70% of the screen and never fully opaque when
     empty (`PSYCHE.shadow`). It replaces the CSS vignette.
-  - When your lamp goes out (or you cover it) there's a flash. Then comes
-    a 1.5 s beat (`RULES.staminaDarkDelay`) where the dark costs no psych
-    while its look fades in, mirroring the pause before the meter
-    refills. The meter never refills in the dark.
+  - When your lamp goes out (or you cover it), nothing flashes. For a
+    1.5 s beat (`RULES.staminaDarkDelay`) the dark costs no psych while
+    its look eases in from nothing to subtle, mirroring the pause before
+    the meter refills. The meter never refills in the dark.
   - **Bumping into a creeper hurts** whatever its mood, even when it's
     afraid of your lamp: 0.1 psych (`RULES.staminaCreeperHit`) and a
     flash, once per touch.

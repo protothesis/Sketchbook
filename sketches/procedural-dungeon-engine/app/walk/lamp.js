@@ -135,9 +135,8 @@
     cooldown: { creeper: 0.6, ghost: 0.3 }, // s clear of a source before it bursts again
     creeperBurst: 0.8,   // creeperFlash, entering a creeper's pull
     creeperHit: 1.2,     // creeperFlash, bumping into one
-    jolt: 0.7,           // the meter starting to go down at all
-    outFlash: 0.8,       // darkFlash, the moment your lamp goes out (or you cover it)
-    darkGrace: [0.3, 0.55], // the dark's level across its first beat...
+    jolt: 0.45,          // the meter starting to go down at all (a deep purple shiver)
+    darkGrace: [0, 0.3], // the dark's level across its first beat, easing in from nothing...
     darkMax: 1,          // ...and just before you faint in it
     distress: 1.1,       // psyche, just before you faint (any drain)
     // The grasping shadows: they follow the meter, from a rim (the dark's
@@ -169,7 +168,6 @@
     else if (!lampOn()) mode = 'dark';
     else if (state.lampGrace > 0) mode = 'held';
     state.lampGrace = Math.max(0, (state.lampGrace || 0) - (mode === 'paused' ? 0 : dt));
-    if (mode === 'dark' && lampMode !== 'dark' && lampMode !== 'paused') W.fxBurst('darkFlash', PSYCHE.outFlash); // the lamp goes out
     lampMode = mode;
     if (mode === 'paused') return;
     darkT = mode === 'dark' ? darkT + dt : 0;
@@ -237,7 +235,7 @@
     const empty = smooth(0, 1, 1 - run.stamina);
     W.fxToward('psyche', draining ? PSYCHE.distress * empty : 0, dt);
     const g = PSYCHE.darkGrace, delay = RULES.staminaDarkDelay;
-    W.fxToward('dark', mode !== 'dark' ? 0 : darkT < delay ? lerp(g[0], g[1], darkT / delay)
+    W.fxToward('dark', mode !== 'dark' ? 0 : darkT < delay ? lerp(g[0], g[1], smooth(0, 1, darkT / delay))
       : lerp(g[1], PSYCHE.darkMax, empty), dt);
     // The shadows, straight off the meter: in the dark, a rim growing in over
     // its first beat, then as far in as the meter is empty; drained by
