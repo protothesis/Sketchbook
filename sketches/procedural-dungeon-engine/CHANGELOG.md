@@ -67,6 +67,14 @@ All notable changes to this sketch are logged here, per
   little walking, more running, none standing), the lead easing round as
   you turn. The right stick peeks up to 2 cells and springs back when you
   let go. `CAMERA` and `JUMP` are in the dev panel, to tune live.
+- 2026-10-26: **The look-ahead holds.** Slowing down or stopping no longer
+  pulls the view back to you: it stays at the most lead it reached until
+  you turn more than 50° (`CAMERA.turn`), which starts a new lead that way.
+- 2026-10-26: **The shadow falls on whatever is below.** It's cast straight
+  down onto every lit upward-facing surface under your feet, so standing at
+  a block's edge it's on the block top and, fainter, on the floor past it.
+  It used to be one disc at one height, hanging off ledges. `SHADOW` is in
+  the dev panel.
 
 ### Changed
 

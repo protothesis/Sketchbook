@@ -20,11 +20,37 @@
     new THREE.SphereGeometry(0.04 * S, 10, 8),
     new THREE.MeshBasicMaterial({ color: 0xffc27a }));
   lanternMesh.position.set(0.14 * S, 0.3 * S, 0.12 * S);
-  const blob = new THREE.Mesh(
-    new THREE.CircleGeometry(0.2 * S, 20),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
-  blob.rotation.x = -Math.PI / 2;
-  blob.position.y = 0.01;
+  // The figure's shadow: a soft dark disc cast straight down onto every
+  // upward-facing lit surface below its feet (the floor, a block top, a
+  // crate), so it lands right across an edge. Patched into three's Lambert
+  // and Phong shaders once, before anything compiles; the uniforms are
+  // plain objects, which three shares by reference between materials, so
+  // one update a frame (fall()) moves it everywhere.
+  const SHADOW = { radius: 0.2, opacity: 0.45, fade: 0.6 }; // cells; fade: the height where it's faintest
+  const blobAt = { x: 0, y: -1e4, z: 0, w: 0.2 * S }; // world x, feet y, world z, radius
+  const blobLook = { x: 0.45, y: 0.6 * S, z: 0, w: 0 }; // opacity, fade height
+  for (const name of ['lambert', 'phong']) {
+    const lib = THREE.ShaderLib[name];
+    lib.uniforms.uBlob = { value: blobAt };
+    lib.uniforms.uBlobLook = { value: blobLook };
+    lib.vertexShader = lib.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBlobWorld;\nvarying float vBlobUp;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\n' +
+        'vBlobWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;\n' +
+        'vBlobUp = normalize(mat3(modelMatrix) * objectNormal).y;');
+    lib.fragmentShader = lib.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBlobWorld;\nvarying float vBlobUp;\n' +
+        'uniform vec4 uBlob;\nuniform vec4 uBlobLook;')
+      .replace('#include <tonemapping_fragment>', `{
+  float h = uBlob.y - vBlobWorld.y; // how far below the feet
+  if (h > -0.02 && vBlobUp > 0.5) {
+    float fade = clamp(h / uBlobLook.y, 0.0, 1.0);
+    float d = distance(vBlobWorld.xz, uBlob.xz) / (uBlob.w * (1.0 - 0.45 * fade));
+    gl_FragColor.rgb *= 1.0 - uBlobLook.x * (1.0 - 0.5 * fade) * (1.0 - smoothstep(0.7, 1.0, d));
+  }
+}
+#include <tonemapping_fragment>`);
+  }
   const bodyRig = new THREE.Group();
   bodyRig.add(body, head, lanternMesh);
   // When something stands between the camera and the figure (a block, or
@@ -61,7 +87,6 @@
     bodyRig.add(g);
   }
   figure.add(bodyRig);
-  scene.add(blob); // on whatever you'd land on, not at your feet (fall())
   // The light rides with the held lamp (ahead and to the right, which gives
   // the light its direction). Each frame the lamp is kept out of walls; see
   // placeLamp(). It lives in the scene, positioned in world space.
@@ -249,7 +274,7 @@
    * Each frame: stand on the tallest block top under the figure's
    * footprint (jars aren't floor), take off if a jump is waiting, and rise
    * or fall. Step off an edge and you drop to whatever is below. The shadow
-   * sits on what you'd land on, smaller and fainter the higher you are.
+   * falls on what's below, smaller and fainter the farther down it is.
    */
   function fall(p, dt) {
     const j = state.jump, reach = footReach(p);
@@ -281,10 +306,9 @@
     j.lift *= Math.exp(-dt * JUMP.ease);
     j.air = p.z > support;
     if (!j.air) j.ground = support;
-    const h = Math.min(1, (p.z - support) / 0.6);
-    blob.position.set(p.x * S, support * S + 0.01, p.y * S);
-    blob.scale.setScalar(1 - 0.45 * h);
-    blob.material.opacity = 0.45 * (1 - 0.5 * h);
+    blobAt.x = p.x * S; blobAt.y = (p.z - j.lift) * S + 0.02; blobAt.z = p.y * S;
+    blobAt.w = SHADOW.radius * S;
+    blobLook.x = SHADOW.opacity; blobLook.y = SHADOW.fade * S;
   }
 
   function toggleCrouch() {
@@ -293,5 +317,5 @@
   }
 
   Object.assign(W, { figure, bodyRig, lantern, lanternMesh, fill, edgeEnds, resolveCollisions, placeLamp,
-    footReach, pressJump, releaseJump, fall, toggleCrouch });
+    footReach, pressJump, releaseJump, fall, toggleCrouch, SHADOW });
 })(window);

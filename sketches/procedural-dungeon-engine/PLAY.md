@@ -552,7 +552,7 @@ you pass out and wake by your save lantern.
 | Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges). Unrest by fuel (`UNREST` in `lamp.js`, blended): flicker depth 0.03 at full, 0.08 at 2, 0.38 at 1, then settling to 0.02 at empty while a slow irregular fade grows to 0.5; dying, a brightness swell of up to 35% while you move. Halo (`HALO`): flat, hard-edged, see-through, about 4x the lamp across at full, shrinking to 40%, wobbling with the flicker and fade (it can exceed its average), opacity 0.3 down to 0.12, until the lamp is out. Light (`LIGHT`): intensity 25%–100%, falloff reach 18%–100%, colour following the lamp toward red. Its pool (light.js): 3.2 cells from you at full (3 charges or more), down to 0.9 at empty (`poolFull`, `poolEmpty`, `poolCurve` 1), steady (`breathe` 0: the flicker doesn't move it). Creepers read its edge (`lightRadius()`). Embers (`EMBER`): walking, up to 22/s spraying (0.35–0.75 s); standing, 9/s in a swaying column (0.9–1.6 s); dying, 0.7/s, red. Covered or out: the light eases to nothing, no halo or embers | |
 | Entropy popup | "+◆" (one diamond per shard's worth, up to three) floats up over the head in violet; "−◆" greyer when a block takes its charge back | |
 | Ghost markers | on a ring around the figure, radius 42% of the shorter screen side | idle ghosts: a faint ghost icon, violet border |
-| Camera | fixed 3/4 top-down view from the south (`camera.js`). Eased follow (`CAMERA.follow` 7/s). Its height follows the ground you stand on, not your jump (held in the air, eased over landings, 4/s). It leads where you're moving: 0.6 cells at walking speed, 1.2 running, none standing, easing in and round at 2.5/s (the follow's lag is aimed past, so the lead is what's set). The right stick peeks up to 2 cells, springing back on release (6/s). All in `CAMERA`, tunable in the dev panel | W is always north on screen and on the chart |
+| Camera | fixed 3/4 top-down view from the south (`camera.js`). Eased follow (`CAMERA.follow` 7/s). Its height follows the ground you stand on, not your jump (held in the air, eased over landings, 4/s). It leads where you're moving: 0.6 cells at walking speed, 1.2 running. The lead holds at the most it reached when you slow or stop, until you turn more than 50° from it, which starts a new lead that way; it eases round at 2.5/s (the follow's lag is aimed past, so the lead is what's set). The right stick peeks up to 2 cells, springing back on release (6/s). All in `CAMERA`, tunable in the dev panel | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. The wall around a doorway dithers like the rest; door panels never dither (the figure's silhouette shows through them) | side (north–south) walls never dither |
 | Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction); on the floor it shows only inside its pool (light.js, the Lamp row); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
 | Pickups | violet octahedron (shard) | bob and turn; lit by the lantern, so they hide in the dark too |
@@ -629,7 +629,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
 | Crouch | C (L3 on a pad) or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
-| Jump | Space (A on a pad; a button on touch). Take-off 5 cells/s; gravity 20 cells/s² while held and rising, 30 otherwise; letting go cuts the rise to 0.5 cells/s. Held: about 1.4 units up, peaking just after you clear a one-unit block's lip, so you come down on it; a tap: a hop. Forgiveness: 0.1 s after walking off an edge, a press 0.12 s before landing, and a block top up to 0.1 cells above your feet catches you (the figure eases up the difference, 18/s, instead of popping). You stand on a block while your footprint (0.17 cells around your center) is over it, so you step off once your body has cleared the edge, without being shoved. The round shadow sits on whatever you'd land on, smaller and fainter the higher you are. Never stand above one unit (taller blocks and vessels are walls). Carrying or dragging a block, or a press let go before landing: a hop (2.2 cells/s). `JUMP` in `core.js`, `fall()` in `figure.js` |
+| Jump | Space (A on a pad; a button on touch). Take-off 5 cells/s; gravity 20 cells/s² while held and rising, 30 otherwise; letting go cuts the rise to 0.5 cells/s. Held: about 1.4 units up, peaking just after you clear a one-unit block's lip, so you come down on it; a tap: a hop. Forgiveness: 0.1 s after walking off an edge, a press 0.12 s before landing, and a block top up to 0.1 cells above your feet catches you (the figure eases up the difference, 18/s, instead of popping). You stand on a block while your footprint (0.17 cells around your center) is over it, so you step off once your body has cleared the edge, without being shoved. The round shadow is cast straight down onto every upward-facing surface below your feet (floor, block tops, crates), so it lands right across an edge: smaller and fainter the farther down (`SHADOW` in `figure.js`, patched into three's Lambert and Phong shaders). Never stand above one unit (taller blocks and vessels are walls). Carrying or dragging a block, or a press let go before landing: a hop (2.2 cells/s). `JUMP` in `core.js`, `fall()` in `figure.js` |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells, swelling to 0.8 while it touches you and shrinking back over 1 s (`swell`, `swellShrink`). No catching; a room with a ghost in it can't be rerolled |
@@ -965,6 +965,14 @@ more yours. Jump is the first step. Not built yet:
 - **Hazards you clear or route around.** Tiles, spills, and entities that
   drain entropy or psychic stamina while you're on or near them. Jumping
   over them, crossing on block tops, or finding another way is the play.
+- **Trip hazards** (idea, 2026-10-26; not built). Not new geometry: a kind
+  of floor feature with no collision. Run across one and you stumble: a
+  moment without control, slowed, maybe dropping what you carry, maybe a
+  burst of noise. Walking carefully or crouching steps over it, and
+  jumping clears it. It rewards moving with intent, fits "running is
+  loud", and would be the noise system's first event. A natural first
+  hazard, before the draining ones, and the way to get "something to trip
+  over" without smaller blocks.
 - **A movement design conversation**, started 2026-10-26. Decided so far:
   - **Dash: likely, on RT.** Running would move to LT alone (today either
     trigger runs). A plain dash first; then upgrades, some costing entropy
@@ -979,12 +987,20 @@ more yours. Jump is the first step. Not built yet:
   - **Routes:** rooms generated with traversal in mind. Noted as a possible
     procgen feature in `DESIGN.md`.
 
+  - **Blocks stay on today's grain** (decided 2026-10-26; may revisit): a
+    half cell across, one-unit steps, and you stand at most one unit up.
+    There's plenty to tune with what's here before adding complexity. More
+    heights would want taller rooms (the ceiling is close), muddy the
+    "taller than you crouched" hiding rule, and make one jump height serve
+    many steps. Smaller blocks would bring back edge catching at the
+    figure's size, be hard to read from the camera, and touch the
+    generator, saves and push blocks, which all assume the half-cell grid.
+    Trip hazards (above) give the "something underfoot" without it.
+
   Still open:
   - What makes moving feel good here? Acceleration and stopping, and turn
     speed. (The camera got a first pass: `camera.js`.)
   - What do hazards do to the lamp, and what does the lamp do to them?
-  - Block grain: more heights, or blocks smaller than a half cell (things
-    you could trip over)?
 
 ## Out of scope for now
 
