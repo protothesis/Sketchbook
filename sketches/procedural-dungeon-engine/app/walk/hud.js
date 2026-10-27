@@ -112,6 +112,22 @@
     W.updatePreview(nearE);
     updateRing(state.hold.ring);
     W.updateChoice(focusRect);
+    // What it costs, on the lamp's meter: E's action, else F's.
+    const ce = nearE && costOf(nearE), cf = !ce && nearF && costOf(nearF);
+    W.previewCost(ce || cf || 0, ce && state.hold.ring ? state.hold.ring.v : 0);
+  }
+
+  /** Entropy (charges) an action would spend, negative for what it gives back; 0 if none. */
+  function costOf(near) {
+    const shard = 1 / RULES.shardsPerCharge;
+    switch (near.action) {
+      case 'light': return RULES.sconceCost * shard;
+      case 'snuff': return -RULES.sconceCost * shard;
+      case 'reroll': return near.price ? near.price.charges : 0;
+      case 'choose': return near.opt.cost || 0;
+      case 'powerlamp': return RULES.waystoneCharges;
+      default: return 0;
+    }
   }
 
   // The hold ring: like a ghost's, a circle that fills clockwise with the
@@ -300,7 +316,7 @@
         const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);
         if (!visible(ex.cell)) continue;
         const conn = ex.connectionId && exp.connections[ex.connectionId];
-        if (conn && DP.rerollThrough(exp, id, ex)) {
+        if (conn && W.rerollThrough(exp, id, ex)) {
           const d = DE.DIRS[ex.facing], mx = (ax + bx) / 2, my = (ay + by) / 2;
           const hx = (bx - ax) * 0.4, hy = (by - ay) * 0.4; // half the base
           ctx.fillStyle = '#5fbf7a';

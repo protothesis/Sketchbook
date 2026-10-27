@@ -900,6 +900,9 @@
   /** The pools of the sconces that have real lights this frame, nearest first (the ones drawn). */
   let shown = [];
   const sconcePools = () => shown.map(sconceLight);
+  // A lit sconce is an entropy light (light.js): your lamp rests in it.
+  W.light.addEntropyLights(() => state.sconces.filter((sc) => sc.lit)
+    .map((sc) => ({ ref: sc, pool: sconceLight(sc), flame: sc.flame, color: SCONCE_LIGHT.color })));
 
   /** Your walking speed carrying `b`, as a share of the usual. */
   const carryPace = (b) => CARRY_PACE[kindOf(b)];

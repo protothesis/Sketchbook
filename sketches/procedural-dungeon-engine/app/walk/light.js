@@ -117,5 +117,29 @@ vec3 poolLight(vec3 color, vec3 viewPos, vec3 normal, float index) {
     lightPools.pooled.x = bits;
   }
 
-  Object.assign(W, { POOL, light: { edge, litBy, setLampPool, addPooledLight, lampPool: () => lampPool } });
+  // ---------------------------------------------------------------------------
+  // Entropy lights: steady lights in the world (a lit sconce, a save
+  // lantern) that share their flame with your lamp. Inside one's pool your
+  // lamp doesn't burn and a drip of light runs to it (lamp.js), and
+  // creatures treat it as steady light (ecology.js). A kind of light joins by
+  // registering a source: a function returning its lights that are on now,
+  // each { ref, pool (a pool, as above), flame (an Object3D: where the drip
+  // starts and the glow sits), color }. A pool's `from.own` is the light's
+  // own block (a lantern's plinth), which never shades it.
+
+  const entropySources = [];
+  /** Register a kind of entropy light: `fn()` returns its lights that are on now. */
+  function addEntropyLights(fn) { entropySources.push(fn); }
+  /** Every entropy light that's on now. */
+  function entropyLights() { return [].concat(...entropySources.map((fn) => fn())); }
+  /** The entropy light sheltering (x, y), if any: inside its pool, nothing in the way. */
+  function shelterAt(x, y) {
+    for (const fn of entropySources) {
+      for (const o of fn()) if (litBy(o.pool, x, y, 0.5)) return o;
+    }
+    return null;
+  }
+
+  Object.assign(W, { POOL, light: { edge, litBy, setLampPool, addPooledLight, lampPool: () => lampPool,
+    addEntropyLights, entropyLights, shelterAt } });
 })(window);
