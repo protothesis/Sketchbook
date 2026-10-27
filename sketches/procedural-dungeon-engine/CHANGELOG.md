@@ -796,6 +796,10 @@ All notable changes to this sketch are logged here, per
   - A save lantern's flare follows your lamp's colours. It starts bright
     yellow, then fades through orange back to its resting red over the
     same 1.4 s.
+- 2026-10-26: **Retracing a lost path leaves its door shut.** The
+  hourglass brings the rooms back, and the path's door comes back as a
+  plain closed door (no lost-path shimmer). You open it with E when you're
+  ready, as with any closed door you've been through.
 
 ### Fixed
 
