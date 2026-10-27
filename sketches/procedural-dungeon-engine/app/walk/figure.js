@@ -20,41 +20,49 @@
     new THREE.SphereGeometry(0.04 * S, 10, 8),
     new THREE.MeshBasicMaterial({ color: 0xffc27a }));
   lanternMesh.position.set(0.14 * S, 0.3 * S, 0.12 * S);
-  // The figure's shadow: a hard-edged disc cut out of the light, straight
-  // down onto every upward-facing lit surface below its feet (the floor, a
-  // block top, a crate), so it lands right across an edge. Inside it the
-  // direct light (your lamp, sconces) is taken away and the surface shows
-  // its own unlit colour; `opacity` is how much is taken. Patched into
+  // The figure's shadow: a hard-edged disc cut out of your lamp's light,
+  // straight down onto every upward-facing lit surface below its feet (the
+  // floor, a block top, a crate), so it lands right across an edge. Only
+  // the lamp's light is taken (`opacity`: how much), so where the lamp's
+  // light is already blocked, or the lamp is out, there's no shadow; other
+  // lights (the fill, sconces) still reach in. Patched into
   // three's Lambert and Phong shaders once, before anything compiles; the
   // uniforms are plain objects, which three shares by reference between
   // materials, so one update a frame (fall()) moves it everywhere.
   const SHADOW = { radius: 0.2, opacity: 0.85, fade: 0.6 }; // cells; fade: the height where it's faintest
   const blobAt = { x: 0, y: -1e4, z: 0, w: 0.2 * S }; // world x, feet y, world z, radius
   const blobLook = { x: 0.85, y: 0.6 * S, z: 0, w: 0 }; // opacity, fade height
+  const blobLamp = { x: 0, y: -1e4, z: 0 }; // the lamp's light, world position (placeLamp())
   for (const name of ['lambert', 'phong']) {
     const lib = THREE.ShaderLib[name];
     lib.uniforms.uBlob = { value: blobAt };
     lib.uniforms.uBlobLook = { value: blobLook };
+    lib.uniforms.uBlobLamp = { value: blobLamp };
     lib.vertexShader = lib.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vBlobWorld;\nvarying float vBlobUp;')
       .replace('#include <project_vertex>', '#include <project_vertex>\n' +
         'vBlobWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;\n' +
         'vBlobUp = normalize(mat3(modelMatrix) * objectNormal).y;');
     lib.fragmentShader = lib.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBlobWorld;\nvarying float vBlobUp;\n' +
-        'uniform vec4 uBlob;\nuniform vec4 uBlobLook;')
-      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-{
+      .replace('#include <common>', `#include <common>
+varying vec3 vBlobWorld;
+varying float vBlobUp;
+uniform vec4 uBlob;
+uniform vec4 uBlobLook;
+uniform vec3 uBlobLamp;
+// How much of a point light (its view-space position) reaches here: all of
+// it, except your lamp's under the figure's shadow.
+float blobCut(vec3 lightView) {
+  if (distance(lightView, (viewMatrix * vec4(uBlobLamp, 1.0)).xyz) > 0.05) return 1.0;
   float h = uBlob.y - vBlobWorld.y; // how far below the feet
-  if (h > -0.02 && vBlobUp > 0.5) {
-    float fade = clamp(h / uBlobLook.y, 0.0, 1.0);
-    if (distance(vBlobWorld.xz, uBlob.xz) < uBlob.w * (1.0 - 0.45 * fade)) {
-      float cut = 1.0 - uBlobLook.x * (1.0 - 0.5 * fade);
-      reflectedLight.directDiffuse *= cut;
-      reflectedLight.directSpecular *= cut;
-    }
-  }
-}`);
+  if (h < -0.02 || vBlobUp < 0.5) return 1.0;
+  float fade = clamp(h / uBlobLook.y, 0.0, 1.0);
+  if (distance(vBlobWorld.xz, uBlob.xz) >= uBlob.w * (1.0 - 0.45 * fade)) return 1.0;
+  return 1.0 - uBlobLook.x * (1.0 - 0.5 * fade);
+}`)
+      .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
+        'getPointLightInfo( pointLight, geometryPosition, directLight );',
+        'getPointLightInfo( pointLight, geometryPosition, directLight );\ndirectLight.color *= blobCut( pointLight.position );'));
   }
   const bodyRig = new THREE.Group();
   bodyRig.add(body, head, lanternMesh);
@@ -240,6 +248,7 @@
       }
     }
     lantern.position.set(q.x * S, (p.z + height) * S, q.y * S);
+    blobLamp.x = lantern.position.x; blobLamp.y = lantern.position.y; blobLamp.z = lantern.position.z;
     // The lamp mesh, back in the body's local frame.
     const wx = q.x - p.x, wy = q.y - p.y;
     lanternMesh.position.x = (wx * c - wy * sn) * S;

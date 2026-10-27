@@ -79,6 +79,13 @@ All notable changes to this sketch are logged here, per
   the lamp's (and any sconce's) direct light is taken away, so you see the
   surface's own unlit colour, instead of a dark disc laid over it.
   `SHADOW.opacity` is how much light it takes.
+- 2026-10-27: The shadow takes only your lamp's light (it was taking every
+  light's, including the shadowless fill that follows you), so it no longer
+  shows inside a block's cast shadow or when your lamp is covered or out.
+- 2026-10-27: **Camera debug overlay**: `CAMERA.debug` in the dev panel
+  draws you, your velocity, the spring-followed spot, the lead and its
+  goal, the turn cone, the peek and the screen's centre over the game, with
+  a readout (speed, lag, lead, peek, height).
 - 2026-10-27: **Camera, second pass.** The follow is a critically damped
   spring, so it has a little drag starting off and never overshoots or
   swings back when you stop. The look-ahead is built by travelling (up to

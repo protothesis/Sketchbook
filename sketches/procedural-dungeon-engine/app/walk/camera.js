@@ -16,7 +16,8 @@
 // - The right stick peeks (gamepad.js sets W.padLook): it slides the view
 //   up to `peek` cells that way, and springs back when you let go.
 //
-// The numbers are in CAMERA, which the dev panel tunes live.
+// The numbers are in CAMERA, which the dev panel tunes live. Its `debug`
+// switch draws what the camera is doing over the game (drawDebug below).
 (function (global) {
   'use strict';
 
@@ -34,6 +35,7 @@
     riseSmooth: 0.3,  // s: how gently it follows the ground up or down
     peek: 2,          // cells the right stick slides the view at full tilt
     peekEase: 6,      // 1/s: how fast the peek goes out and springs back
+    debug: false,     // draw the camera's workings over the game
   };
   const MOVING = 0.5; // cells/s: slower than this (or bumping a wall) doesn't steer the lead
 
@@ -96,6 +98,82 @@
     camera.position.copy(target).add(CAM_OFFSET);
     camera.lookAt(target);
     camera.updateMatrixWorld();
+    drawDebug(p, speed, mx, my, step);
+  }
+
+  // ---------------------------------------------------------------------------
+  // The debug overlay (CAMERA.debug). On the floor at your feet' height:
+  //   white dot      you
+  //   orange arrow   your velocity (a third of a second of it)
+  //   grey rings     the walking and running leads, around you
+  //   cyan dot       the spring-followed spot (it trails you while you move)
+  //   green ring     the lead's goal; the dashed lines either side are the
+  //                  `turn` cone: heading outside it starts a new lead
+  //   green arrow    the lead shown, from the followed spot
+  //   magenta arrow  the right stick's peek
+  //   yellow cross   where the camera looks: the middle of the screen
+
+  let dbg = null;
+  const pv = new THREE.Vector3();
+  function drawDebug(p, speed, mx, my, step) {
+    if (!CAMERA.debug) { if (dbg) dbg.cv.hidden = true; return; }
+    if (!dbg) {
+      const cv = document.createElement('canvas');
+      cv.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:50';
+      document.body.append(cv);
+      dbg = { cv, g: cv.getContext('2d') };
+    }
+    const { cv, g } = dbg, dpr = global.devicePixelRatio || 1;
+    const w = global.innerWidth, h = global.innerHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    cv.hidden = false;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const y = p.z * S;
+    const at = (x, z) => { pv.set(x * S, y, z * S).project(camera); return [(pv.x + 1) / 2 * w, (1 - pv.y) / 2 * h]; };
+    const line = (pts, color, width, dash) => {
+      g.strokeStyle = color; g.lineWidth = width || 2; g.setLineDash(dash || []);
+      g.beginPath(); pts.forEach(([sx, sy], i) => (i ? g.lineTo(sx, sy) : g.moveTo(sx, sy))); g.stroke();
+    };
+    const ring = (cx, cy, r, color, width, dash) => {
+      const pts = []; for (let i = 0; i <= 32; i++) { const a = i / 32 * Math.PI * 2; pts.push(at(cx + Math.cos(a) * r, cy + Math.sin(a) * r)); }
+      line(pts, color, width, dash);
+    };
+    const arrow = (x0, y0, x1, y1, color) => {
+      const a = at(x0, y0), b = at(x1, y1);
+      line([a, b], color, 2.5);
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 6) {
+        line([[b[0] - 9 * Math.cos(ang - 0.45), b[1] - 9 * Math.sin(ang - 0.45)], b,
+          [b[0] - 9 * Math.cos(ang + 0.45), b[1] - 9 * Math.sin(ang + 0.45)]], color, 2.5);
+      }
+    };
+    const dot = (x, z, color, r) => { const [sx, sy] = at(x, z); g.fillStyle = color; g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.fill(); };
+
+    ring(p.x, p.y, CAMERA.lookWalk, 'rgba(255,255,255,0.18)', 1);
+    ring(p.x, p.y, CAMERA.lookRun, 'rgba(255,255,255,0.18)', 1);
+    const gl = Math.hypot(goal.x, goal.y);
+    if (gl > 1e-3) {
+      const ga = Math.atan2(goal.y, goal.x), t = CAMERA.turn * Math.PI / 180, r = CAMERA.lookRun * 1.4;
+      for (const s of [-1, 1]) line([at(p.x, p.y), at(p.x + Math.cos(ga + s * t) * r, p.y + Math.sin(ga + s * t) * r)], 'rgba(120,230,140,0.55)', 1.5, [5, 5]);
+      ring(pos.x + goal.x, pos.y + goal.y, 0.12, 'rgb(120,230,140)', 2);
+    }
+    if (step > 0) arrow(p.x, p.y, p.x + mx / step * speed / 3, p.y + my / step * speed / 3, 'rgb(255,160,70)');
+    arrow(pos.x, pos.y, pos.x + shown.x, pos.y + shown.y, 'rgb(120,230,140)');
+    if (Math.hypot(peek.x, peek.y) > 0.02) arrow(pos.x + shown.x, pos.y + shown.y, pos.x + shown.x + peek.x, pos.y + shown.y + peek.y, 'rgb(240,110,230)');
+    dot(pos.x, pos.y, 'rgb(90,220,255)', 4);
+    dot(p.x, p.y, '#fff', 4);
+    const [cx, cy] = [w / 2, h / 2];
+    line([[cx - 10, cy], [cx + 10, cy]], 'rgb(255,230,90)', 2); line([[cx, cy - 10], [cx, cy + 10]], 'rgb(255,230,90)', 2);
+
+    g.setLineDash([]);
+    g.font = '12px ui-monospace, monospace'; g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(w - 230, h - 132, 218, 118);
+    g.fillStyle = '#e8e2d6';
+    [`speed  ${speed.toFixed(2)} cells/s`, `lag    ${Math.hypot(p.x - pos.x, p.y - pos.y).toFixed(2)} cells`,
+      `lead   ${Math.hypot(shown.x, shown.y).toFixed(2)} / goal ${gl.toFixed(2)}`,
+      `peek   ${Math.hypot(peek.x, peek.y).toFixed(2)}`, `height ${hgt.v.toFixed(2)} (ground ${state.jump.ground.toFixed(2)})`,
+      `air    ${state.jump.air ? 'yes' : 'no'}  z ${p.z.toFixed(2)}`,
+    ].forEach((t, i) => g.fillText(t, w - 222, h - 112 + i * 17));
   }
 
   /** Jump the camera to the figure (after travelling, waking, or a new run). */
