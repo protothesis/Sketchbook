@@ -390,7 +390,7 @@
     const r = W.retrace(near.path);
     W.showCaption(`the hourglass runs back · its pixie is spent · ${r.back} room${r.back === 1 ? '' : 's'} as you left ${r.back === 1 ? 'it' : 'them'}` +
       (r.gone ? ` · ${r.gone} couldn't come back` : '') + ` · −${chargeText(near.price)}` +
-      (side && r.back ? ' · this door opens onto it now' : ''));
+      (r.back ? (side ? ' · this door opens onto it now' : ' · its door is yours to open') : ''));
     savePlayer();
     W.refreshHud();
   }

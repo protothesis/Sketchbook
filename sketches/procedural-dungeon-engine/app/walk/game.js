@@ -88,11 +88,22 @@
     DE.tagTraces(exp, gone, 'corrupt', false);
     rebuildExitIndex();
     for (const id of back) W.buildSpace(exp.spaces[id], true);
+    // The path is back, but its door stays shut: a closed door like any
+    // other (no lost-path shimmer), for you to open when you choose.
     const door = path.door && state.doors.get(path.door.spaceId + '/' + path.door.exitId);
+    const ex = path.door && exp.spaces[path.door.spaceId] && exp.spaces[path.door.spaceId].exits.find((e) => e.id === path.door.exitId);
+    if (ex && ex.connectionId && back.length) {
+      const run = state.run;
+      if (!run.closed) run.closed = [];
+      if (!run.closed.includes(ex.connectionId)) run.closed.push(ex.connectionId);
+    }
     if (door && back.length) {
-      door.dir = 1;
-      door.seam.visible = false;
-      door.panel.material = W.doorOpenMat;
+      door.dir = 0; door.t = 0;
+      door.pivot.rotation.y = 0;
+      door.seam.visible = true;
+      door.seam.material = door.point.material = W.seamMat;
+      door.shimmer.visible = false;
+      door.panel.material = W.doorMat;
     }
     W.refreshArrows();
     save();
