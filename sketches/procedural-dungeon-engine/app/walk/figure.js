@@ -1,10 +1,10 @@
 // Walk mode: the figure. Its meshes and lantern, collision against walls
-// and blocks, the lamp kept out of walls, climbing and crouching.
+// and blocks, the lamp kept out of walls, jumping and crouching.
 (function (global) {
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, RULES, THREE, $, S, JAMB, RADIUS, UNIT, LANTERN, LANTERN_RANGE, OPP, ekey, scene,
+  const { DE, RULES, THREE, $, S, JAMB, RADIUS, UNIT, GRAVITY, JUMP, LANTERN, LANTERN_RANGE, OPP, ekey, scene,
     state } = W;
 
   // ---------------------------------------------------------------------------
@@ -122,17 +122,18 @@
    * Wall, door and block edges around a point. Blocks only count if their
    * top rises above `above` (cells): for the figure that's its feet, for the
    * lamp its own height. `ignore`: a block left out (the one you're dragging).
+   * `figure`: jars are always walls (you can't stand on one).
    */
-  function nearbySegments(p, above, ignore) {
+  function nearbySegments(p, above, ignore, figure) {
     const segs = [];
     const cx = Math.floor(p.x), cy = Math.floor(p.y);
     const seen = new Set();
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       edgeSegments(cx + dx, cy + dy, segs);
       for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
-        if (seen.has(b) || b === ignore || b.top <= above) continue;
+        if (seen.has(b) || b === ignore || (b.top <= above && !(figure && b.jar))) continue;
         seen.add(b);
-        // facing = the side's outward direction, for push-to-climb.
+        // facing = the side's outward direction.
         segs.push({ ax: b.x0, ay: b.y0, bx: b.x1, by: b.y0, block: b, facing: 'N' },
           { ax: b.x1, ay: b.y0, bx: b.x1, by: b.y1, block: b, facing: 'E' },
           { ax: b.x1, ay: b.y1, bx: b.x0, by: b.y1, block: b, facing: 'S' },
@@ -144,7 +145,7 @@
 
   /** Push the player out of every nearby wall; returns the doors and blocks touched. */
   function resolveCollisions(p, ignore) {
-    const segs = nearbySegments(p, p.z + 0.05, ignore); // at or below your feet: walkable
+    const segs = nearbySegments(p, footReach(p), ignore, true); // at or below your feet: walkable
     const touched = [];
     for (let iter = 0; iter < 3; iter++) {
       for (const s of segs) {
@@ -214,50 +215,54 @@
     lanternMesh.position.z = (wx * sn + wy * c) * S;
   }
 
-  const canClimb = (b) => !b.jar && !b.carried && b.top - state.player.z > 0.05 &&
-    b.top - state.player.z <= RULES.climbMaxUnits * UNIT + 0.01 && b.top <= RULES.climbMaxTop * UNIT + 0.01;
+  // ---------------------------------------------------------------------------
+  // Jumping. Press to take off; while it's held and you're rising, gravity
+  // is lighter, and letting go cuts what rise is left: a tap is a hop, a
+  // held press clears a one-unit block. A press just before you land,
+  // or just after you walk off an edge, still counts, and coming down with
+  // your feet a hair below a block's top puts you on it (JUMP in core.js).
 
-  /** A climbable block right in front of the figure, if no door is closer. */
-  function blockNear(p) {
-    const cx = Math.floor(p.x), cy = Math.floor(p.y);
-    const fx = Math.sin(p.angle), fy = Math.cos(p.angle); // facing
-    let best = null, bestD = RADIUS + 0.14;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
-        if (!canClimb(b)) continue;
-        const qx = THREE.MathUtils.clamp(p.x, b.x0, b.x1), qy = THREE.MathUtils.clamp(p.y, b.y0, b.y1);
-        const d = Math.hypot(qx - p.x, qy - p.y);
-        if (d >= bestD || d < 1e-6) continue;
-        if (((qx - p.x) * fx + (qy - p.y) * fy) / d < 0.3) continue; // must be roughly ahead
-        bestD = d;
-        best = { action: 'climb', block: b, dir: { x: (qx - p.x) / d, y: (qy - p.y) / d } };
-      }
-    }
-    return best;
+  const MAX_TOP = RULES.climbMaxTop * UNIT + 0.01; // never stand higher than this (head room)
+
+  /** How high a block's top can be and still be floor to you: a little more in the air. */
+  function footReach(p) { return Math.min(p.z + (state.jump.air ? JUMP.ledge : 0.05), MAX_TOP); }
+
+  function pressJump() {
+    if (state.paused || state.bigmap || state.choice) return;
+    state.jump.held = true;
+    state.jump.buffer = JUMP.buffer;
+  }
+  function releaseJump() {
+    const p = state.player;
+    if (state.jump.held && p.vz > JUMP.cut) p.vz = JUMP.cut;
+    state.jump.held = false;
   }
 
   /**
-   * Step up onto a block, moving as little as possible: cross the face
-   * you're at just far enough to stand on the near edge, and keep your
-   * position along that face (nudged in only if you were past a corner).
+   * Each frame: stand on the tallest block top under the figure's center
+   * (jars aren't floor), take off if a jump is waiting, and rise or fall.
+   * Step off an edge and you drop to whatever is below.
    */
-  function climb(b, dir) {
-    const p = state.player;
-    const IN = 0.12, SIDE = 0.06; // how far onto the block; corner margin
-    const inX = Math.min(IN, (b.x1 - b.x0) / 2), inY = Math.min(IN, (b.y1 - b.y0) / 2);
-    const gx = Math.max(b.x0 - p.x, 0, p.x - b.x1), gy = Math.max(b.y0 - p.y, 0, p.y - b.y1);
-    const acrossX = gx > gy || (gx === gy && Math.abs(dir.x) >= Math.abs(dir.y));
-    let tx, ty;
-    if (acrossX) {
-      tx = p.x < b.x0 ? b.x0 + inX : b.x1 - inX;
-      ty = THREE.MathUtils.clamp(p.y, b.y0 + Math.min(SIDE, inY), b.y1 - Math.min(SIDE, inY));
-    } else {
-      ty = p.y < b.y0 ? b.y0 + inY : b.y1 - inY;
-      tx = THREE.MathUtils.clamp(p.x, b.x0 + Math.min(SIDE, inX), b.x1 - Math.min(SIDE, inX));
+  function fall(p, dt) {
+    const j = state.jump, reach = footReach(p);
+    let support = 0;
+    for (const b of state.blockAt.get(DE.key(Math.floor(p.x), Math.floor(p.y))) || []) {
+      if (!b.jar && b.top <= reach && p.x > b.x0 && p.x < b.x1 && p.y > b.y0 && p.y < b.y1) support = Math.max(support, b.top);
     }
-    state.climb = { fx: p.x, fy: p.y, fz: p.z, tx, ty, tz: b.top, t: 0 };
-    state.push.key = null;
-    if (state.crouch) toggleCrouch(); // vaulting stands you up
+    j.buffer = Math.max(0, j.buffer - dt);
+    j.coyote = p.z <= support && p.vz <= 0 ? JUMP.coyote : Math.max(0, j.coyote - dt);
+    if (j.buffer > 0 && j.coyote > 0) {
+      j.buffer = 0; j.coyote = 0;
+      j.hop = !!(state.carry || state.grab); // a block in your hands: a hop at most
+      p.vz = j.hop || !j.held ? JUMP.hop : JUMP.v;
+      if (state.crouch) toggleCrouch(); // jumping stands you up
+    }
+    if (p.z > support || p.vz > 0) {
+      p.vz -= (p.vz > 0 && j.held && !j.hop ? JUMP.riseG : GRAVITY) * dt;
+      p.z = Math.max(support, p.z + p.vz * dt);
+      if (p.z === support) p.vz = 0;
+    } else { p.z = support; p.vz = 0; }
+    j.air = p.z > support;
   }
 
   function toggleCrouch() {
@@ -266,5 +271,5 @@
   }
 
   Object.assign(W, { figure, bodyRig, lantern, lanternMesh, fill, edgeEnds, resolveCollisions, placeLamp,
-    canClimb, blockNear, climb, toggleCrouch });
+    footReach, pressJump, releaseJump, fall, toggleCrouch });
 })(window);

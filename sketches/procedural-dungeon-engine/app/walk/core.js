@@ -55,8 +55,15 @@
   const CROUCH_SCALE = 0.55; // figure height when crouched (standing is ~0.64 cells tall)
   const HIDE_RANGE = 0.2;
   const UNIT = RULES.blockUnit; // one stacked block unit, in cells
-  const CLIMB_TIME = 0.42;      // seconds to step up onto a block
-  const GRAVITY = 9;            // cells/s^2 when stepping off an edge   // cells between the figure and a block to count as hidden
+  const GRAVITY = 30;           // cells/s^2: falling, and rising once jump is let go
+  // Jumping (figure.js): take-off speed (cells/s), gravity while jump is held
+  // and you're still rising, the most rising speed left once it's let go, a
+  // hop's take-off speed (a block in your hands, or a press let go before
+  // you landed), and the forgiveness: seconds after walking off an edge you can still jump,
+  // seconds a press waits for you to land, and cells a block's top can be
+  // above your feet and still catch you. A quick, low arc: the peak comes
+  // just after you clear a block's lip, so you come down on it.
+  const JUMP = { v: 4.6, riseG: 20, cut: 0.5, hop: 2.2, coyote: 0.1, buffer: 0.12, ledge: 0.1 };
   const PUSH_TIME = 0.35;   // seconds of walking into a door to open it
   const USE_RANGE = 0.6;    // E / tap reach to a door's midpoint
   const PICKUP_RANGE = 0.42;
@@ -105,7 +112,7 @@
     items: new Map(),    // "spaceId:seed:itemId" -> { mesh, item, spaceId, tile }
     blockAt: new Map(),  // "x,y" -> [{ x0, y0, x1, y1, h, spaceId }] for collision
     player: { x: 0.5, y: 0.5, z: 0, vz: 0, angle: 0, spaceId: null, phase: 0 },
-    climb: null,         // { fx, fy, fz, tx, ty, tz, t } while stepping up
+    jump: { held: false, buffer: 0, coyote: 0, hop: false, air: false }, // see figure.js
     ghosts: [],          // live hash ghosts (see ghosts.js)
     ghostTouch: false,   // in a ghost's reach this frame (drains psychic stamina)
     pixies: [],          // free pixies (see pixies.js)
@@ -122,7 +129,6 @@
     fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9, // screen effects, 0..1
       levels: {} },      // per effect profile (FX_PROFILES in fx.js): how strong it is right now
     run: null,           // inventory + run stats, see freshRun()
-    push: { key: null, t: 0 },
     hold: { sig: null, t: 0, spent: false }, // holding E on a hold action (actions.js)
     pushBlocks: [],      // push blocks in built rooms (see restore.js)
     carry: null,         // the push block in your hands (restore.js)
@@ -343,7 +349,7 @@
 
   Object.assign(W, { DE, DP, RULES, THREE, $, STORAGE_KEY, PLAYER_KEY, S, WALL_H, WALL_T,
     DOOR_W, DOOR_H, JAMB, RADIUS, SPEED, RUN, CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, UNIT,
-    CLIMB_TIME, GRAVITY, PUSH_TIME, USE_RANGE, PICKUP_RANGE, DOOR_SWING, SWING_ANGLE,
+    GRAVITY, JUMP, PUSH_TIME, USE_RANGE, PICKUP_RANGE, DOOR_SWING, SWING_ANGLE,
     REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_RADIUS, DITHER_APPROACH, CAM_OFFSET, SEAM,
     LOCK_SEAM, OPEN_SEAM, LANTERN, LANTERN_RANGE, OPP, ekey, canvas, renderer, scene, camera, state, world,
     freshRun, rebuildExitIndex, isLockedNow, isClosed, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,

@@ -4,13 +4,15 @@
 // the map, a dialog). The left stick walks, analog like the touch stick;
 // either trigger held runs. The camera is fixed, so the right stick is free.
 //
-//   A  E (tap to act, hold to fill the ring)    B  crouch; back out of anything
-//   X  F (use the item in hand)                  Y  the lamp; on the map, recenter
-//   LB / RB  the hotbar slot left / right        D-pad ◀ ▶  the variant in a group
-//   View  the map    Menu  pause                 LT / RT  run; on the map, zoom
+//   A  jump (Space; held for full height)       B  back out of anything (free in the world)
+//   X  E (tap to act, hold to fill the ring)     Y  F (use the item in hand); on the map, recenter
+//   L3  crouch (C)    R3  the lamp (R)           D-pad ◀ ▶  the variant in a group
+//   LB / RB  the hotbar slot left / right        LT / RT  run; on the map, zoom
+//   View  the map    Menu  pause
 //
 // In a choice, a dialog or the waystone travel map, the d-pad (and in a
-// choice or dialog, the stick) moves between options and A confirms.
+// choice or dialog, the stick) moves between options and A (or, in a
+// choice, X) confirms.
 // Using a pad switches the prompts and hints to its glyphs (PlayStation
 // shapes for a Sony pad); a key or a touch switches them back.
 (function (global) {
@@ -26,10 +28,10 @@
   const PAN = 700;        // px/s the stick pans the map at full tilt
   const ZOOM = 2.2;       // ×/s the triggers zoom the map at full pull
 
-  const B = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, menu: 9, up: 12, down: 13, left: 14, right: 15 };
+  const B = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, menu: 9, l3: 10, r3: 11, up: 12, down: 13, left: 14, right: 15 };
   const GLYPH = {
-    xbox: { E: 'A', F: 'X', R: 'Y', Space: 'B', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT/RT', bumpers: 'LB/RB' },
-    ps: { E: '✕', F: '□', R: '△', Space: '○', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2/R2', bumpers: 'L1/R1' },
+    xbox: { E: 'X', F: 'Y', R: 'R3', Space: 'A', C: 'L3', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT/RT', bumpers: 'LB/RB' },
+    ps: { E: '□', F: '△', R: 'R3', Space: '✕', C: 'L3', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2/R2', bumpers: 'L1/R1' },
   };
 
   let pad = false;       // the last input was the pad: prompts show its glyphs
@@ -38,6 +40,7 @@
   let nav = { x: 0, y: 0, t: 0 };
   let move = { x: 0, y: 0, mag: 0, run: false };
   let tilted = false;    // the left stick was off rest last frame
+  let aKey = null;       // the key A stood in for when it went down (let go of the same one)
   let last = 0;
 
   const padMode = () => pad;
@@ -48,8 +51,8 @@
   const keyHelp = help ? help.innerHTML : '';
   function padHelp() {
     const g = GLYPH[style], k = (s) => `<kbd>${s}</kbd>`;
-    return `${k('◖')} move · ${k(g.run)} run · ${k(g.Space)} crouch · ${k(g.E)} interact · ${k(g.F)} use item · ` +
-      `${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
+    return `${k('◖')} move · ${k(g.run)} run · ${k(g.Space)} jump · ${k(g.C)} crouch · ${k(g.E)} interact · ` +
+      `${k(g.F)} use item · ${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
   }
 
   function setPad(on, kind) {
@@ -116,14 +119,19 @@
         } else if (state.bigmap) {
           const v = state.bigmap;
           if (v.travel && v.hover) { const from = v.travel, to = v.hover; W.closeBigMap(); W.travelTo(to, from); }
-        } else key('keydown', 'e');
+        } else {
+          aKey = state.choice ? 'e' : ' '; // in a choice, A confirms like X
+          key('keydown', aKey);
+        }
         return;
       }
-      case B.b: key('keydown', busy || state.expanded ? 'escape' : ' '); return;
-      case B.x: key('keydown', 'f'); return;
+      case B.b: if (busy || state.expanded) key('keydown', 'escape'); return;
+      case B.x: key('keydown', 'e'); return;
       case B.y:
-        if (state.bigmap) { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; } else key('keydown', 'r');
+        if (state.bigmap) { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; } else key('keydown', 'f');
         return;
+      case B.l3: key('keydown', 'c'); return;
+      case B.r3: key('keydown', 'r'); return;
       case B.lb: case B.rb: {
         if (busy) return;
         const s = W.slots(), at = s.findIndex((x) => x.key === state.sel);
@@ -135,7 +143,8 @@
     }
   }
   function release(i) {
-    if (i === B.a) key('keyup', 'e');
+    if (i === B.x) key('keyup', 'e');
+    if (i === B.a && aKey) { key('keyup', aKey); aKey = null; }
   }
 
   /** The stick, past the dead zone and rescaled to start from 0. */
@@ -154,7 +163,7 @@
     const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
     const gp = pads.find((p) => p.mapping === 'standard') || pads[0];
     if (!gp) {
-      if (prev[B.a]) { W.keys.delete('e'); W.releaseE(true); } // unplugged mid-hold: let go, like losing focus
+      if (prev[B.x] || aKey) { W.keys.delete('e'); W.releaseE(true); W.releaseJump(); aKey = null; } // unplugged mid-hold: let go, like losing focus
       prev = []; tilted = false; move = { x: 0, y: 0, mag: 0, run: false };
       return;
     }

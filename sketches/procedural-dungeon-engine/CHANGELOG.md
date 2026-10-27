@@ -53,9 +53,25 @@ All notable changes to this sketch are logged here, per
   captions and controls line to its glyphs (PlayStation shapes for a Sony
   pad), and its controls line shows even on touch screens. A key or a touch
   switches them back.
+- 2026-10-26: **Jump.** Space (A on a pad; a jump button on touch). A tap is a
+  hop, a held press clears a one-unit block, with a quick, low arc that peaks
+  just after you clear the lip. It forgives: you can still jump just after
+  walking off an edge, a press just before landing counts, and a block's top a
+  hair above your feet catches you. Carrying or dragging a block allows only a
+  hop. You still never stand higher than one unit; taller stacks and vessels
+  are walls. Notes for a movement design conversation (hazards, dodge,
+  noise, traversal) are in `PLAY.md`'s future directions.
 
 ### Changed
 
+- 2026-10-26: **Controls for the jump.** Keyboard: Space jumps and crouch
+  moves to C. Gamepad: A jumps, X interacts (was A), Y uses the item in hand
+  (was X), L3 crouches, R3 is the lamp, and B is free in the world (still
+  "back" in menus, choices and the map); in a choice, A or X confirms. Touch
+  support is frozen: it keeps working (with a new jump button), but new
+  features won't be designed or tested for it.
+- 2026-10-26: Gravity is 30 cells/s² (was 9), the same for a jump and for
+  stepping off an edge.
 - 2026-10-19: Walk mode no longer sinks walls near the figure. Walls in
   front of it get a screen-door dither inside a soft circle around it
   instead. The door prompt is now a button, so on touch you tap it to
@@ -787,6 +803,11 @@ All notable changes to this sketch are logged here, per
   waystones in halls and are the only respawn. Waystones become 1x1 blocks
   you carry and power from a jar. The action list
   (`notes/action-list-2026-10-25.md`) has the new build order.
+
+### Removed
+
+- 2026-10-26: Vaulting. Pushing into a block, or pressing E facing it, no
+  longer climbs it; you jump.
 
 ### Fixed
 

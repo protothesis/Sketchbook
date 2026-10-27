@@ -139,7 +139,6 @@
   function teleport(x, y) {
     const q = p();
     Object.assign(q, { x, y, z: 0, vz: 0 });
-    state.climb = null;
     W.snapCamera();
     after('teleported to ' + (q.spaceId || '?'));
   }

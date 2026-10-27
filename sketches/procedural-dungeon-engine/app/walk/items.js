@@ -10,7 +10,7 @@
   // ---------------------------------------------------------------------------
   // Inventory: the hotbar, chalk marks, jars and sigils
   //
-  // E interacts with the world (doors, climbing, lifting a jar, wiping a
+  // E interacts with the world (doors, lifting a jar, wiping a
   // chalk mark you face): one focused thing (actionNear in actions.js).
   // F uses what's in your hand, the item selected on the hotbar. Slot 1 is
   // always the lantern (empty hands): F covers or relights it. Otherwise:
@@ -572,7 +572,7 @@
   /** What F would do right now with the selected item, or null. */
   function useNear(p) {
     const slot = selectedSlot();
-    if (!slot || state.paused || state.climb || state.carry) return null; // a block fills your hands
+    if (!slot || state.paused || state.carry) return null; // a block fills your hands
     // An unpowered waystone right in front of you comes first: your lamp's
     // flame (a charge) or a full jar (its entropy or its pixie) wakes it.
     const st = stoneAhead(p);
