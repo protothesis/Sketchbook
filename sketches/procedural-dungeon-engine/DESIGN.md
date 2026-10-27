@@ -233,6 +233,7 @@ These are deliberately out of the prototype but should not be designed out of it
 - Pre-resolution hints: a door's look suggests what lies beyond without fixing it
 - Seed-driven extras per space: palette, lighting mood, ambient or musical parameters
 - Loop-seeking corridors and depth "pressure" that makes the dungeon push back
+- Routes: rooms generated with traversal in mind (walk mode's jump, 2026-10-26). Gaps, stepping-stone blocks, raised paths past hazards, a way across that you have to read. The room generator would place props as a route, not just scattered blocks, and check that it can be crossed
 - Application modes: creative (free reroll/revert) vs survival (reroll and revert cost something)
 - Branch and merge semantics borrowed from version control
 - Art output: styled print and digital maps as finished artifacts

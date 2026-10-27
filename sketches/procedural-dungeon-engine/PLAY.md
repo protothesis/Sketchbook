@@ -35,14 +35,14 @@ Determinism).
   About 1 room in 4 is *able* to hold a key, but the key only appears in
   it if, when you open that room, there are more unopened locked doors
   around than keys (held or lying somewhere).
-- **Hide and climb.** Rooms have blocks on a half-cell subgrid: singles,
+- **Hide and jump.** Rooms have blocks on a half-cell subgrid: singles,
   doubles, full 2×2s, and partition rows. They stack 1–3 units high, and 3
-  units reach the ceiling as a column. Crouch (Space, or the button) to crawl;
-  crouched against a block that rises above you, you're **hidden**. Push into
-  a block, or press E facing it, to **climb** on top. You can only step up
-  one unit at a time, and never higher than one unit off the floor (any
-  higher and you'd bump the ceiling). Climbing stands you up if you were
-  crouched. You can walk across tops of equal height, and you drop down when
+  units reach the ceiling as a column. Crouch (C, or the button) to crawl;
+  crouched against a block that rises above you, you're **hidden**. **Jump**
+  (Space; A on a pad) to get on top of one: a tap is a hop, a held press
+  clears a one-unit block. You never stand higher than one unit off the
+  floor (any higher and you'd bump the ceiling), so taller stacks are walls.
+  Jumping stands you up if you were crouched. You can walk across tops of equal height, and you drop down when
   you step off an edge. Nothing hunts you yet, so for now hiding is only the
   shadow play and the hook.
 - **Rerolling (collapse).** A new room is **provisional** until you open a
@@ -279,8 +279,8 @@ Determinism).
   still have, and never enough to put your lamp out), and home again pays
   back only what was taken, so a block can't be farmed. Jars and chalk
   can't go on them. See [`GAME-DESIGN.md`](GAME-DESIGN.md).
-- **Moving blocks (crates and push blocks).** Walk into one and you
-  **climb** it, like any one-unit block. **Hold E** facing it and a ring
+- **Moving blocks (crates and push blocks).** Jump onto one, like any
+  one-unit block. **Hold E** facing it and a ring
   fills (0.4 s): you've **grabbed** it. Then:
   - let go of E without moving and you **lift** it: it swings up in an
     arc over your head (0.38 s for a crate, 0.32 s for a vessel, 0.6 s for
@@ -314,7 +314,7 @@ Determinism).
   whole half-cell (a fixed block, another crate). From the floor that's
   the floor or a one-unit top; standing on a block, a one- or two-unit
   top. A stack reaches 3 units, the ceiling. You still only stand one unit
-  up (you climb a one-unit stack, not a taller one). You can lift a block
+  up (you jump onto a one-unit stack, not a taller one). You can lift a block
   at your level or one up, but not one with something resting on it, and
   you push or pull only on the floor (a block up a stack, or you on one:
   let go of E to lift it instead).
@@ -329,7 +329,7 @@ Determinism).
   and comes back if you retrace the path.
 - **Hands full.** With a block in your hands, E only sets it down; F does
   nothing ("your hands are full"), the hotbar won't switch (it shakes),
-  and you can't climb or run. The block you carry is saved with the run
+  and you can't run, and a jump is only a hop. The block you carry is saved with the run
   (`run.carry`).
 - **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
   sconce on a wall, chambers sometimes two. Never on a south wall: the
@@ -366,7 +366,7 @@ Determinism).
     by the ecology's rules.
 - **The hotbar.** Tools and objects sit in slots at the bottom of the
   screen. Pick a slot with 1–9, the mouse wheel, or a tap. **E** interacts
-  with the world (doors, climbing, lifting a jar, wiping a chalk mark
+  with the world (doors, lifting a jar, wiping a chalk mark
   you're facing). **F** (or "use" on touch) uses the selected item: the
   one in your hand.
 - **One thing in your hand.** The selected slot is what you're holding,
@@ -398,8 +398,8 @@ Determinism).
   undone, 1 s, or 2 s if something of yours is in it. Grabbing a block takes 0.4 s.
   Where one thing takes both (a closed door you could reroll, an awake
   waystone), letting go before the ring fills is the tap (open it, travel),
-  and the ring only shows after 0.15 s. Climbing, setting something down
-  and the surface door are a tap.
+  and the ring only shows after 0.15 s. Setting something down and the
+  surface door are a tap.
   Something you can't do right now (a lock with no key, a reroll you can't
   afford) is a tap that says why. Over the ring, icons show anything of
   yours at stake (a pack, a hall's lantern), red and crossed out when the
@@ -444,7 +444,7 @@ Determinism).
 - **Vessels.** A squat clay urn standing in about 1 room in 10 (depth
   1+; seeded on its own `'vessel'` stream, on a free half-cell). An object,
   like a crate: hold E to grab and lift it, carry it anywhere, set it down
-  (stacked too, but nothing stacks on a vessel, and you can't climb it;
+  (stacked too, but nothing stacks on a vessel, and you can't stand on it;
   ghosts float over it). It holds **up to 3 of one kind** (pixies, or
   charges of entropy): F with a full jar pours it in, F with an empty jar
   takes one back out (a jar of the other kind, or a full vessel, says
@@ -552,7 +552,7 @@ you pass out and wake by your save lantern.
 | Lamp | the held sphere goes yellow → orange → red → grey with the fuel (full at 3 charges). Unrest by fuel (`UNREST` in `lamp.js`, blended): flicker depth 0.03 at full, 0.08 at 2, 0.38 at 1, then settling to 0.02 at empty while a slow irregular fade grows to 0.5; dying, a brightness swell of up to 35% while you move. Halo (`HALO`): flat, hard-edged, see-through, about 4x the lamp across at full, shrinking to 40%, wobbling with the flicker and fade (it can exceed its average), opacity 0.3 down to 0.12, until the lamp is out. Light (`LIGHT`): intensity 25%–100%, falloff reach 18%–100%, colour following the lamp toward red. Its pool (light.js): 3.2 cells from you at full (3 charges or more), down to 0.9 at empty (`poolFull`, `poolEmpty`, `poolCurve` 1), steady (`breathe` 0: the flicker doesn't move it). Creepers read its edge (`lightRadius()`). Embers (`EMBER`): walking, up to 22/s spraying (0.35–0.75 s); standing, 9/s in a swaying column (0.9–1.6 s); dying, 0.7/s, red. Covered or out: the light eases to nothing, no halo or embers | |
 | Entropy popup | "+◆" (one diamond per shard's worth, up to three) floats up over the head in violet; "−◆" greyer when a block takes its charge back | |
 | Ghost markers | on a ring around the figure, radius 42% of the shorter screen side | idle ghosts: a faint ghost icon, violet border |
-| Camera | fixed 3/4 top-down view from the south, smooth follow | W is always north on screen and on the chart |
+| Camera | fixed 3/4 top-down view from the south (`camera.js`). Follows on a critically damped spring (0.15 s): it gathers speed as you start and settles without overshooting or swinging back. It leads where you're moving, up to 0.7 cells at walking speed and 1.3 running, but the lead is built by travelling: each cell you walk adds or swings at most 0.5 cells of it, so a slow walk pushes the view on slowly and turning on the spot doesn't swing it. The lead holds at the most it reached when you slow or stop; heading more than 50° away from it starts a new one. Its height follows the ground you stand on, not your jump (`rise`: 0 keeps it level). The right stick peeks up to 2 cells, springing back on release (6/s). All in `CAMERA`, tunable in the dev panel; its `debug` switch draws the camera's workings over the game (you, your velocity, the followed spot, the lead and its goal, the turn cone, the peek, the screen's centre, and a readout) | W is always north on screen and on the chart |
 | Occlusion | screen-door dither on east–west walls south of the figure (a world-position test): up to 92% inside a soft circle around it (27% of the screen), and a light 30% across the whole wall within 2.5 cells. The wall around a doorway dithers like the rest; door panels never dither (the figure's silhouette shows through them) | side (north–south) walls never dither |
 | Light | the lantern is a shadow-casting point light at the held lamp (ahead and to the right of the body, which gives it direction); on the floor it shows only inside its pool (light.js, the Lamp row); ambient is almost zero | the lamp has its own collision: a ray from the body stops it 0.14 cells short of any wall, closed door or taller block, so it never lights through a wall. Plus a faint, short-range cool fill so nearby wall faces read. Shadow bias is small (−0.0008, normal bias 0.02) |
 | Pickups | violet octahedron (shard) | bob and turn; lit by the lantern, so they hide in the dark too |
@@ -628,8 +628,8 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Waystones | loose objects (`kind: 'waystone'` in `run.objects`, `holds`: null, `'entropy'` or `'pixie'`); wake with F: a charge from your lamp (`waystoneCharges`) or a full jar, once; travel (a tap of E): awake to awake only, picked on the big map, along ley lines worked out from where the awake stones stand (each joins its 2 nearest, `leyNeighbours`, plus a spanning tree), the fewest lines first, then the shortest; 1 shard per line (`travelShardsPerHop`) |
 | Key | 25% of rooms (depth 1+) can hold one; it shows only while unopened locks outnumber keys held + lying |
 | Locked door | 4.5% of unresolved exits on rooms at depth 3, +0.75% per level deeper, up to 9% |
-| Crouch | Space or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
-| Climb | push into a block (crates and push blocks too) for 0.35 s or tap E facing a fixed one; one unit up at a time and never above one unit; a 0.42 s hop that rises first and then carries forward (both eased in and out), landing 0.12 cells past the edge you crossed while keeping your position along it; gravity 9 cells/s² when stepping off |
+| Crouch | C (L3 on a pad) or the button toggles; crawl at 1.1 cells/s; hidden within 0.2 cells of a block rising 0.38+ above your feet |
+| Jump | Space (A on a pad; a button on touch). Take-off 5 cells/s; gravity 20 cells/s² while held and rising, 30 otherwise; letting go cuts the rise to 0.5 cells/s. Held: about 1.4 units up, peaking just after you clear a one-unit block's lip, so you come down on it; a tap: a hop. Forgiveness: 0.1 s after walking off an edge, a press 0.12 s before landing, and a block top up to 0.1 cells above your feet catches you (the figure eases up the difference, 18/s, instead of popping). You stand on a block while your footprint (0.17 cells around your center) is over it, so you step off once your body has cleared the edge, without being shoved. The round shadow is a hard-edged disc cut out of the light, straight down onto every upward-facing surface below your feet (floor, block tops, crates), so it lands right across an edge: inside it your lamp's light is taken away (`opacity`, 0.85) and other lights (the fill, sconces) still reach, so it vanishes where the lamp's light is already blocked or when the lamp is out; smaller and fainter the farther down (`SHADOW` in `figure.js`, patched into three's Lambert and Phong shaders). Never stand above one unit (taller blocks and vessels are walls). Carrying or dragging a block, or a press let go before landing: a hop (2.2 cells/s). `JUMP` in `core.js`, `fall()` in `figure.js` |
 | Blocks | 0.32 placement attempts per chamber cell, 0.12 per corridor cell (corridors: singles only). Chamber shapes: single 30%, double 18%, 2×2 30%, row of 3–6 singles 22% (40% of rows have a gap). Height: 1 unit 55%, 2 units 30%, column 15% (rows: 1–2). Never on a cell with a door or an item; kept only if every free half-cell stays reachable |
 | Collision radius | 0.2 cells, so a half-cell gap is a real (tight) passage |
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells, swelling to 0.8 while it touches you and shrinking back over 1 s (`swell`, `swellShrink`). No catching; a room with a ghost in it can't be rerolled |
@@ -957,6 +957,50 @@ undoing gets harder and more consequential the deeper you go.
   ghost) and pay to reroll before ever stepping through.
 - **Locked doors that lead somewhere:** a next level, a vault, or the relic
   from the design doc's roguelike idea, instead of ending the walk.
+
+From the 2026-10-26 jump chat (after playing Voidigo): **movement and
+positioning should be a much bigger part of the game**, more expressive and
+more yours. Jump is the first step. Not built yet:
+
+- **Hazards you clear or route around.** Tiles, spills, and entities that
+  drain entropy or psychic stamina while you're on or near them. Jumping
+  over them, crossing on block tops, or finding another way is the play.
+- **Trip hazards** (idea, 2026-10-26; not built). Not new geometry: a kind
+  of floor feature with no collision. Run across one and you stumble: a
+  moment without control, slowed, maybe dropping what you carry, maybe a
+  burst of noise. Walking carefully or crouching steps over it, and
+  jumping clears it. It rewards moving with intent, fits "running is
+  loud", and would be the noise system's first event. A natural first
+  hazard, before the draining ones, and the way to get "something to trip
+  over" without smaller blocks.
+- **A movement design conversation**, started 2026-10-26. Decided so far:
+  - **Dash: likely, on RT.** Running would move to LT alone (today either
+    trigger runs). A plain dash first; then upgrades, some costing entropy
+    or psychic stamina. One idea: a **phase dash** that passes through a
+    wall without carving a door.
+  - **Movement makes noise** (decided, parked until something listens; see
+    `EMERGENCE.md`, step 3). Crawling or moving very slowly is silent,
+    walking is quiet (most things won't notice), running and jumping are
+    loud.
+  - **Falling costs nothing**, for now. There's little height in the game,
+    and there may never be much more.
+  - **Routes:** rooms generated with traversal in mind. Noted as a possible
+    procgen feature in `DESIGN.md`.
+
+  - **Blocks stay on today's grain** (decided 2026-10-26; may revisit): a
+    half cell across, one-unit steps, and you stand at most one unit up.
+    There's plenty to tune with what's here before adding complexity. More
+    heights would want taller rooms (the ceiling is close), muddy the
+    "taller than you crouched" hiding rule, and make one jump height serve
+    many steps. Smaller blocks would bring back edge catching at the
+    figure's size, be hard to read from the camera, and touch the
+    generator, saves and push blocks, which all assume the half-cell grid.
+    Trip hazards (above) give the "something underfoot" without it.
+
+  Still open:
+  - What makes moving feel good here? Acceleration and stopping, and turn
+    speed. (The camera got a first pass: `camera.js`.)
+  - What do hazards do to the lamp, and what does the lamp do to them?
 
 ## Out of scope for now
 

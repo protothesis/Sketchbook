@@ -46,7 +46,6 @@
         : `holding the ${objName(near.block)} · let go of E to lift it · move to push or pull` };
       case 'setblock': return near.spot ? { cls: 'jar', text: `set the ${objName(near.block)} down` }
         : { cls: 'blocked', text: `no room to set it down here${near.block.spaceId !== state.exp.registry[DE.key(Math.floor(state.player.x), Math.floor(state.player.y))] ? ' · it belongs in its own room' : ''}` };
-      case 'climb': return { text: state.push.key ? 'climbing…' : 'climb (or push into it)' };
       case 'open': return { text: 'open the door' };
       case 'letgo': {
         // Retracing is the hourglass's (F with it in hand), shown on its own line.

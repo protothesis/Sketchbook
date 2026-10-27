@@ -9,8 +9,8 @@
 
   const W = global.DungeonPlay.walk;
   const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, PUSH_TIME, state, rebuildExitIndex, isLockedNow, chargeText, save,
-    savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds, blockNear,
-    climb, removeMarkFromWorld, markNear, wipeMarksIn,
+    savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds,
+    removeMarkFromWorld, markNear, wipeMarksIn,
     liftNear, sconceNear, lightSconce } = W;
 
   // ---------------------------------------------------------------------------
@@ -151,7 +151,6 @@
         return { x0: near.spot.sx / 2, y0: near.spot.sy / 2, x1: near.spot.sx / 2 + 0.5, y1: near.spot.sy / 2 + 0.5, z0: z, z1: z + h };
       }
       case 'light': case 'snuff': return pad(near.sconce.x, near.sconce.y, 0.08, W.SCONCE_Y - 0.1, W.SCONCE_Y + 0.12);
-      case 'climb': return blk(near.block, near.block.base || 0, near.block.top);
       default: { // a door
         const [ax, ay, bx, by] = edgeEnds(near.exit.cell.x, near.exit.cell.y, near.exit.facing);
         const mx = (ax + bx) / 2, my = (ay + by) / 2, h = ax === bx ? 0 : DOOR_W / 2, v = ax === bx ? DOOR_W / 2 : 0;
@@ -184,7 +183,7 @@
     }
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     let best = null, bestScore = Infinity;
-    for (const find of [doorNear, W.lanternNear, markNear, liftNear, sconceNear, blockNear]) {
+    for (const find of [doorNear, W.lanternNear, markNear, liftNear, sconceNear]) {
       const near = find(p);
       if (!near) continue;
       const b = near.box = focusBox(near);
@@ -307,11 +306,10 @@
   }
 
   function act(near) {
-    if (!near || state.paused || state.climb) return;
+    if (!near || state.paused) return;
     if (near.action === 'close') { closeDoor(near.exit.connectionId); return; }
     if (near.action === 'reopen') { reopenDoor(near.exit.connectionId); return; }
     if (near.action === 'snuff') { W.snuffSconce(near.sconce); return; }
-    if (near.action === 'climb') { climb(near.block, near.dir); return; }
     if (near.action === 'surface') { askSurface(); return; }
     if (near.action === 'save') { W.saveAt(near.lantern); return; }
     if (near.action === 'choose') {
