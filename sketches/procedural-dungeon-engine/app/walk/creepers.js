@@ -42,6 +42,7 @@
     postTol: 0.15,       // cells inside its edge it tolerates before moving back out
     postSlack: 1.2,      // cells past its edge before it follows you in
     reach: 0.4,          // cells, centre to centre: as close as it gets
+    touch: 0.3,          // cells, centre to centre: walk into it this close and it hurts (RULES.staminaCreeperHit), whatever its mood
     // Its pull on your psychic stamina, by mood: bands out from it, innermost
     // first; inside one (and in its sight) you lose k × RULES.staminaCreeperDrain
     // per second. Afraid, it doesn't drain you.
@@ -367,6 +368,10 @@
         think(c, dt, lamp);
         if (c.mood === 'hunt' && was !== 'hunt' && was !== 'lurk') W.showCaption('the red eye stops minding your light');
         hopTo(c, dt);
+        // Bumping into it hurts, afraid or not: once each time you touch it (lamp.js).
+        const touching = d < CREEPER.touch && Math.abs(p.z) < 0.3;
+        if (touching && !c.touching) state.creeperHits = (state.creeperHits || 0) + 1;
+        c.touching = touching;
         // Its pull on you: the band you're in, while it can see you. Several add up.
         c.dashT = c.hop.phase === 'dash' ? CREEPER.dashLinger : Math.max(0, c.dashT - dt);
         const bands = CREEPER.bands[c.mood];

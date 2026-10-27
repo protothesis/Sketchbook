@@ -126,6 +126,8 @@
     staminaCreeperDrain: 0.2, // per second in a bold or hunting shadow creeper's strongest band, times the band's share (creepers.js); adds to the dark's
     staminaRegen: 0.12,       // per second
     staminaRegenDelay: 1.5,
+    staminaDarkDelay: 1.5,    // s in the dark before it starts to drain you (its look fades in meanwhile)
+    staminaCreeperHit: 0.1,   // bumping into a creeper, whatever its mood (a ghost's touch is staminaHit)
     // Halls (setpieces at waypoints): sizes, and what they always hold.
     hallMin: 7,
     hallMax: 9,

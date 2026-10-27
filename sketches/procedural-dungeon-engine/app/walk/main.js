@@ -239,6 +239,9 @@
     }
     state.fx.wobble = state.fx.glitch = state.fx.flash = 0;
     state.fx.levels = {};
+    state.fx.bursts = {};
+    state.fx.faint = null;
+    state.creeperHits = 0;
     state.ghostTouch = state.wasTouched = false;
     state.creeperDrain = 0;
     state.gutter = null;

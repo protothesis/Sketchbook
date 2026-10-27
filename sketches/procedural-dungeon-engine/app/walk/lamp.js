@@ -10,9 +10,19 @@
 // ghosts can't notice you, but the dark wears on your psychic stamina.
 //
 // Psychic stamina is your other meter (GAME-DESIGN.md, section 12). A
-// ghost's touch drains it, and so does the dark, more slowly. Empty, you
-// pass out and wake at your last waystone, and lose everything opened since
-// you last used one (game.js). It refills in light once nothing drains it.
+// ghost's touch drains it, a creeper's pull and its touch, and the dark,
+// more slowly (after a beat: RULES.staminaDarkDelay). Empty, you pass out
+// and wake at your last save, and lose everything opened since (game.js).
+// It refills in light once nothing drains it.
+//
+// The psyche: what the meter does shows on screen (fx.js). Each kind of
+// drain bursts when it starts on you (and again each time it comes back,
+// after its cooldown); the meter starting to go down at all gives a jolt;
+// while it drains, a distress level climbs as it empties; and the dark has
+// its own look, static and shadows closing in from the edges, fading in
+// across that first beat. They all add up. Passing out runs a sequence:
+// the picture shatters, settles into static that holds until you press
+// something, then collapses to black, and you wake.
 //
 // You should feel the lamp without looking at the meter. It has three
 // stages, blended (RULES.lampUneasy, lampDanger, lampDying): uneasy, a
@@ -115,25 +125,48 @@
   // ---------------------------------------------------------------------------
   // Burning, the dark, stamina, passing out and waking
 
-  const GUTTER_FADE = 1.2, GUTTER_DARK = 1.4; // seconds: you sink, then darkness
+  const GUTTER_FADE = 1.2; // seconds: your lamp's light sinks as you pass out
   let lampMode = '';
   let staminaIdle = 0; // seconds since anything last drained your stamina
+  let darkT = 0;       // seconds in the dark (the first RULES.staminaDarkDelay cost nothing)
+
+  // The psyche's look (fx.js profiles), and the faint's timing.
+  const PSYCHE = {
+    cooldown: { creeper: 0.6, ghost: 0.3 }, // s clear of a source before it bursts again
+    creeperBurst: 0.8,   // creeperFlash, entering a creeper's pull
+    creeperHit: 1.2,     // creeperFlash, bumping into one
+    jolt: 0.7,           // the meter starting to go down at all
+    outFlash: 0.8,       // darkFlash, the moment your lamp goes out (or you cover it)
+    darkGrace: [0.3, 0.55], // the dark's level across its first beat...
+    darkMax: 1,          // ...and just before you faint in it
+    distress: 1.1,       // psyche, just before you faint (any drain)
+    faint: {
+      shatter: 0.45,     // s: the picture breaks into chunks
+      static: 1.4,       // s: settling into static, its colour streaks fading
+      hold: 0.55,        // the static's level while it waits for you
+      hint: 2,           // s into the wait before it says so
+      collapse: 0.7,     // s: noise collapses to black
+      beat: 0.6,         // s of black
+      wake: 1.6,         // s: fading back in, the last static dying away
+      wakeStatic: 0.3,
+    },
+  };
+  const psy = { on: {}, off: {}, draining: false };
 
   function updateLamp(dt) {
     const run = state.run, p = state.player;
-    if (state.gutter) {
-      state.gutter.t += dt;
-      if (state.gutter.t >= GUTTER_FADE + GUTTER_DARK) wake();
-      return;
-    }
+    if (state.gutter) { updateFaint(dt); return; }
+    updateWaking(dt);
     let mode = 'burning';
     if (state.paused || state.bigmap) mode = 'paused';
     else if (litAt(p)) mode = 'sheltered';
     else if (!lampOn()) mode = 'dark';
     else if (state.lampGrace > 0) mode = 'held';
     state.lampGrace = Math.max(0, (state.lampGrace || 0) - (mode === 'paused' ? 0 : dt));
+    if (mode === 'dark' && lampMode !== 'dark' && lampMode !== 'paused') W.fxBurst('darkFlash', PSYCHE.outFlash); // the lamp goes out
     lampMode = mode;
     if (mode === 'paused') return;
+    darkT = mode === 'dark' ? darkT + dt : 0;
     if (mode === 'burning') {
       const before = run.fuel;
       run.fuel = Math.max(0, run.fuel - DRAIN * dt);
@@ -146,46 +179,131 @@
 
   /**
    * Psychic stamina: a ghost's touch (state.ghostTouch, from ghosts.js)
-   * knocks a chunk off once and drains it while you stay in its reach; the
-   * dark drains it too, more slowly. In light, with nothing draining it for
-   * a moment, it refills.
+   * knocks a chunk off once and drains it while you stay in its reach; a
+   * creeper's pull drains it and its touch knocks a smaller chunk off
+   * (creepers.js); the dark drains it too, more slowly, after a beat. In
+   * light, with nothing draining it for a moment, it refills.
    */
   function updateStamina(dt, mode) {
     const run = state.run;
-    const touch = !!state.ghostTouch, dark = mode === 'dark';
+    const touch = !!state.ghostTouch, dark = mode === 'dark' && darkT >= RULES.staminaDarkDelay;
     const creep = state.creeperDrain || 0; // 0..1, a creeper's nearness (creepers.js)
+    const hits = state.creeperHits || 0;   // bumps into a creeper this frame
+    state.creeperHits = 0;
     if (touch && !state.wasTouched) run.stamina -= RULES.staminaHit;
     state.wasTouched = touch;
+    if (hits) { run.stamina -= RULES.staminaCreeperHit * hits; W.fxBurst('creeperFlash', PSYCHE.creeperHit); staminaIdle = 0; }
+    updatePsyche(dt, mode, { ghost: touch, creeper: creep > 0, dark }, touch || dark || creep > 0 || hits > 0);
     if (touch || dark || creep > 0) {
       run.stamina -= ((touch ? RULES.staminaDrain : 0) + (dark ? RULES.staminaDarkDrain : 0) +
         RULES.staminaCreeperDrain * creep) * dt;
       staminaIdle = 0;
     } else {
       staminaIdle += dt;
-      if (staminaIdle >= RULES.staminaRegenDelay) run.stamina += RULES.staminaRegen * dt;
+      if (staminaIdle >= RULES.staminaRegenDelay && mode !== 'dark') run.stamina += RULES.staminaRegen * dt; // only in light, not the dark's first beat
     }
     run.stamina = THREE.MathUtils.clamp(run.stamina, 0, 1);
     if (run.stamina <= 0) {
       passOut(touch ? 'the ghost is too much · you pass out'
-        : creep > 0 && !dark ? 'the creeper is too close · you pass out' : 'the dark is too much · you pass out');
+        : (creep > 0 || hits) && !dark ? 'the creeper is too close · you pass out' : 'the dark is too much · you pass out');
     }
   }
 
+  /**
+   * The psyche on screen (fx.js): a burst as each source starts on you
+   * (again after its cooldown), a jolt as the meter starts going down at
+   * all, distress climbing as it empties while anything drains it, and the
+   * dark's own look: fading in across its first beat, then closing in as
+   * the meter empties.
+   */
+  function updatePsyche(dt, mode, sources, draining) {
+    const run = state.run, t = state.time;
+    for (const src in sources) {
+      const on = sources[src];
+      if (on && !psy.on[src] && t - (psy.off[src] ?? -9) >= (PSYCHE.cooldown[src] || 0)) {
+        if (src === 'creeper') W.fxBurst('creeperFlash', PSYCHE.creeperBurst); // a ghost flashes on its own (ghosts.js)
+      }
+      if (!on && psy.on[src]) psy.off[src] = t;
+      psy.on[src] = on;
+    }
+    if (draining && !psy.draining) W.fxBurst('jolt', PSYCHE.jolt);
+    psy.draining = draining;
+    const empty = smooth(0, 1, 1 - run.stamina);
+    W.fxToward('psyche', draining ? PSYCHE.distress * empty : 0, dt);
+    const g = PSYCHE.darkGrace, delay = RULES.staminaDarkDelay;
+    W.fxToward('dark', mode !== 'dark' ? 0 : darkT < delay ? lerp(g[0], g[1], darkT / delay)
+      : lerp(g[1], PSYCHE.darkMax, empty), dt);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Passing out: shatter, static, wait for you, collapse, black, wake.
+
   function passOut(text) {
     if (W.closeChoice) W.closeChoice();
-    state.gutter = { t: 0 };
+    state.gutter = { phase: 'shatter', t: 0, total: 0 };
+    state.fx.faint = { shatter: 1, static: 0, streakT: 0, black: 0 };
     state.paused = true;
     state.wasTouched = false;
     W.keys.clear();
     W.showCaption(text);
-    const f = $('fade');
-    if (f) f.classList.add('on');
+  }
+
+  function updateFaint(dt) {
+    const g = state.gutter, f = state.fx.faint || (state.fx.faint = {}), F = PSYCHE.faint;
+    g.t += dt; g.total += dt;
+    const next = (phase) => { g.phase = phase; g.t = 0; };
+    if (g.phase === 'shatter') {
+      f.shatter = 1 - 0.3 * (g.t / F.shatter); f.static = 0.8 * (g.t / F.shatter);
+      if (g.t >= F.shatter) next('static');
+    } else if (g.phase === 'static') {
+      f.shatter = Math.max(0, 0.7 - g.t * 2);
+      f.static = lerp(1, F.hold, smooth(0, 1, g.t / F.static));
+      f.streakT = g.t;
+      if (g.t >= F.static) next('hold');
+    } else if (g.phase === 'hold') {
+      f.shatter = 0; f.static = F.hold; f.streakT += dt;
+      if (!g.hinted && g.t >= F.hint) {
+        g.hinted = true;
+        W.showCaption(W.padMode && W.padMode() ? 'press any button to come to' : touchScreen ? 'tap to come to' : 'press any key to come to');
+      }
+      if (g.woken) next('collapse');
+    } else if (g.phase === 'collapse') {
+      const k = 7, b = (1 - Math.exp(-k * g.t)) / (1 - Math.exp(-k * F.collapse)); // exponential, landing on 1
+      f.black = Math.min(1, b); f.static = F.hold * (1 - f.black);
+      if (g.t >= F.collapse) next('beat');
+    } else if (g.phase === 'beat') {
+      f.black = 1; f.static = 0;
+      if (g.t >= F.beat) wake();
+    }
+  }
+
+  // The wait: any key, click, tap or (through gamepad.js's keys) button brings you to.
+  const touchScreen = global.matchMedia && global.matchMedia('(hover: none)').matches;
+  function comeTo(e) {
+    const g = state.gutter;
+    if (!g || g.phase !== 'hold' || g.t < 0.25 || g.woken) return;
+    g.woken = true;
+    e.stopImmediatePropagation();
+  }
+  global.addEventListener('keydown', comeTo, true);
+  global.addEventListener('pointerdown', comeTo, true);
+
+  /** After waking: black fading back to the picture, the last static dying away. */
+  function updateWaking(dt) {
+    const f = state.fx.faint, F = PSYCHE.faint;
+    if (!f || f.waking === undefined) return;
+    f.waking += dt;
+    f.black = 1 - smooth(0, F.wake, f.waking);
+    f.static = F.wakeStatic * (1 - smooth(0, F.wake * 1.2, f.waking));
+    if (f.waking >= F.wake * 1.2) state.fx.faint = null;
   }
 
   function wake() {
     state.gutter = null;
     state.paused = false;
+    psy.on = {}; psy.draining = false; darkT = 0;
     const out = W.faint(); // the rooms since your last save are suspended; your pack stays where you fell
+    state.fx.faint = { black: 1, static: PSYCHE.faint.wakeStatic, streakT: 3, shatter: 0, waking: 0 }; // after faint(): its reload clears the effects
     const lost = out.lost;
     const run = state.run;
     run.fuel = RULES.wakeCharges; // what you had is in your pack
@@ -196,8 +314,6 @@
     const st = W.hearth();
     if (st) W.placeAt(st);
     else { Object.assign(state.player, W.spawnPoint(state.exp), { z: 0, vz: 0 }); W.snapCamera(); }
-    const f = $('fade');
-    if (f) f.classList.remove('on');
     W.showCaption(`you wake by the lantern in ${st ? st.spaceId : 's0'}` +
       (lost ? ` · ${lost} room${lost === 1 ? '' : 's'} lost to the dark` : '') +
       (out.pack ? ' · your pack lies where you fell' : '') + ` · ${chargeText(run.fuel)} of entropy`);
@@ -427,7 +543,7 @@
   let onAmt = 1; // the light easing on and off (covering, relighting, going out)
   function updateLampLook(dt) {
     const t = state.time, run = state.run, p = state.player;
-    const g = state.gutter ? Math.max(0, 1 - state.gutter.t / GUTTER_FADE) : 1;
+    const g = state.gutter ? Math.max(0, 1 - state.gutter.total / GUTTER_FADE) : 1;
     onAmt += ((lampOn() ? 1 : 0) - onAmt) * Math.min(1, dt * 6);
     const on = onAmt * g;
     const fuel = run.fuel, level = lampLevel();
@@ -538,7 +654,7 @@
 
   const FLAME_H = [[RULES.lampUneasy, 1], [RULES.lampDanger, 0.8], [RULES.lampDying, 0.62], [0, 0.45]];
   const meterEl = $('lamp-meter'), iconEl = $('lamp-icon'), stateEl = $('lamp-state');
-  const flameEl = $('lamp-flame'), staminaEl = $('stamina'), vignetteEl = $('vignette');
+  const flameEl = $('lamp-flame'), staminaEl = $('stamina'); // the edges closing in are the psyche's now (fx.js)
   if (iconEl) iconEl.addEventListener('click', toggleLamp);
   let built = -1, lastSig = '';
   let preview = null; // { cost (charges: over 0 spends, under 0 gives back), held (0..1) }
@@ -555,7 +671,6 @@
       staminaEl.classList.toggle('draining', !!state.ghostTouch || lampMode === 'dark' || state.creeperDrain > 0);
       staminaEl.title = `psychic stamina ${Math.round(run.stamina * 100)}% · a ghost's touch, a creeper close by and the dark drain it; it comes back in light`;
     }
-    if (vignetteEl) vignetteEl.style.opacity = ((1 - run.stamina) * 0.85).toFixed(3);
     const n = Math.max(max, Math.ceil(run.fuel - 1e-6));
     if (n !== built || force) {
       meterEl.innerHTML = '';
@@ -623,7 +738,7 @@
   }
 
   Object.assign(W, { gainFuel, spendFuel, takeFuel, litAt, lampOn, toggleLamp, feedFrom, updateLamp,
-    updateLampLook, updateLampHud, previewCost, lampLevel, lightRadius, lampLight, popEntropy, passOut });
+    updateLampLook, updateLampHud, previewCost, lampLevel, PSYCHE, lightRadius, lampLight, popEntropy, passOut });
   /** The lamp's colour at this much fuel (charges), as it would show: for a pack's little lantern (packs.js). */
   const lampColorAt = (fuel, out) => colorAt(THREE.MathUtils.clamp(fuel / RULES.lampFullCharges, 0, 1), out);
   /** The lamp's colour at this level (0 empty .. 1 full), into `out`: for a save lantern's flare (lanterns.js). */
