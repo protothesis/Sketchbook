@@ -39,6 +39,20 @@ All notable changes to this sketch are logged here, per
 - 2026-10-19: Walk mode visuals. The lantern casts point-light shadows and
   ambient light is near zero, so you can't see around corners until your
   light reaches. Rooms dissolve in reverse when collapsed.
+- 2026-10-26: **Gamepad support** in walk mode (`app/walk/gamepad.js`, the
+  standard Gamepad API layout, polled each frame). The left stick walks,
+  analog like the touch stick (a radial dead zone of 0.2, rescaled), and
+  either trigger held runs. A is E (tap to act, hold to fill the ring), X is
+  F, Y is the lamp, B crouches and backs out of a choice, dialog or the map,
+  LB / RB step through the hotbar, the d-pad's ◀ ▶ changes a group's variant
+  (jars, chalk), View is the map and Menu pauses. In a choice or a dialog, the
+  d-pad or stick moves between options (held, it repeats) and A confirms. On
+  the map, the stick pans, the triggers zoom and Y recenters. On the waystone
+  travel map, ◀ ▶ steps through the awake stones and A travels. The camera
+  is fixed, so the right stick is unused. Using the pad switches the prompts,
+  captions and controls line to its glyphs (PlayStation shapes for a Sony
+  pad), and its controls line shows even on touch screens. A key or a touch
+  switches them back.
 
 ### Changed
 
