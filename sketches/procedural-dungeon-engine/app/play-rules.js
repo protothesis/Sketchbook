@@ -179,6 +179,16 @@
     creeperMinDepth: 2,
   };
 
+  /**
+   * The doors a room was made with: every exit but those added later (drawn
+   * with a doorstone, or made by a loop). Anything placed around the doors
+   * (push blocks, vessels, sigils, wells, a hall's centre) works from these,
+   * so a new door can't reshuffle a room you've already seen.
+   */
+  function exitsMadeWith(space) {
+    return space.exits.filter((e) => !e.loopMade && !(e.tags && e.tags.includes('carved')));
+  }
+
   /** Items lying in a space: [{ id, kind: 'shard'|'key'|'chalk'|'jar', cell }]. */
   function loot(space) {
     if (!space.parentId) return [];
@@ -226,11 +236,11 @@
     if (!space.parentId || space.deadEnd || space.depth < RULES.vesselMinDepth) return null;
     const r = DE.deriveRng(space.seed, 'vessel');
     if (!r.chance(RULES.vesselChance)) return null;
-    const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
     for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     for (const f of [sigil(space), well(space), waystone(space)]) if (f) avoid.add(DE.key(f.cell.x, f.cell.y));
     const solid = new Set();
-    for (const b of props(space).blocks) {
+    for (const b of props(space, true).blocks) {
       for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) solid.add(x + ',' + y);
     }
     for (const pb of pushBlocks(space)) { solid.add(pb.from.sx + ',' + pb.from.sy); solid.add(pb.to.sx + ',' + pb.to.sy); }
@@ -254,7 +264,7 @@
     if (!space.parentId || space.depth < RULES.sigilMinDepth || space.cells.length < 4) return null;
     const r = DE.deriveRng(space.seed, 'sigil');
     if (!r.chance(RULES.sigilChance)) return null;
-    const doors = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const doors = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
     const items = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
     const ws = waystone(space);
     if (ws) items.add(DE.key(ws.cell.x, ws.cell.y));
@@ -273,7 +283,7 @@
     const r = DE.deriveRng(space.seed, 'well');
     if (!r.chance(RULES.wellChance)) return null;
     const kind = r.chance(RULES.wellSurge) ? 'surge' : 'trickle';
-    const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
     for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     const sg = sigil(space), ws = waystone(space);
     if (sg) avoid.add(DE.key(sg.cell.x, sg.cell.y));
@@ -304,12 +314,13 @@
    * (drawn with chalk, or made by a loop) can't reshuffle it: they just
    * clear any block on their own cell. Removing a block can never trap
    * anyone, while a reshuffle could drop a block onto the figure.
+   * `asMade` keeps those blocks, for placing other things around the room.
    */
-  function props(space) {
+  function props(space, asMade) {
     const r = DE.deriveRng(space.seed, 'props');
-    const later = (e) => e.loopMade || (e.tags && e.tags.includes('carved'));
-    const doorCells = new Set(space.exits.filter((e) => !later(e)).map((e) => DE.key(e.cell.x, e.cell.y)));
-    const laterCells = space.exits.filter(later).map((e) => e.cell);
+    const made = exitsMadeWith(space);
+    const doorCells = new Set(made.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const laterCells = space.exits.filter((e) => !made.includes(e)).map((e) => e.cell);
     const lootCells = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
     const sg = sigil(space); // keep a sigil tile clear of blocks
     if (sg) lootCells.add(DE.key(sg.cell.x, sg.cell.y));
@@ -378,18 +389,20 @@
       else blocks.push(Object.assign(rect(cells), kind === 'single' && units === 1 ? { single: true } : {}));
     }
 
-    // Clear blocks off cells that gained a door after the room was made.
-    for (let i = blocks.length - 1; i >= 0; i--) {
-      const b = blocks[i];
-      if (laterCells.some((c) => b.x0 < c.x + 1 && b.x1 > c.x && b.y0 < c.y + 1 && b.y1 > c.y)) blocks.splice(i, 1);
-    }
-
     // Some single one-unit blocks are crates (loose; walk mode makes them
-    // push blocks). One draw per single block, on its own stream.
+    // push blocks). One draw per single block, on its own stream,
+    // before any are cleared off a later door so none of the draws shift.
     const cr = DE.deriveRng(space.seed, 'crate');
     for (const b of blocks) {
       if (b.single && cr.chance(RULES.crateChance)) b.crate = { id: 'crate' + b.x0 * 2 + ',' + b.y0 * 2, sx: b.x0 * 2, sy: b.y0 * 2 };
       delete b.single;
+    }
+
+    // Clear blocks off cells that gained a door after the room was made
+    // (unless asked for the layout as made, which placement works from).
+    for (let i = blocks.length - 1; i >= 0 && !asMade; i--) {
+      const b = blocks[i];
+      if (laterCells.some((c) => b.x0 < c.x + 1 && b.x1 > c.x && b.y0 < c.y + 1 && b.y1 > c.y)) blocks.splice(i, 1);
     }
 
     // Floor detail on its own stream, skipping blocked sub-cells.
@@ -501,7 +514,7 @@
     const want = hall ? RULES.hallPushBlocks : r.chance(RULES.pushChance) ? 1 : 0;
     if (!want) return [];
     const sk = (x, y) => x + ',' + y;
-    const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
     for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     const sg = sigil(space);
     if (sg) avoid.add(DE.key(sg.cell.x, sg.cell.y));
@@ -510,7 +523,7 @@
     const ws = waystone(space);
     if (ws) avoid.add(DE.key(ws.cell.x, ws.cell.y));
     const blocked = new Set();
-    for (const b of props(space).blocks) {
+    for (const b of props(space, true).blocks) {
       for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) blocked.add(sk(x, y));
     }
     const floor = new Set(), free = [];
@@ -579,8 +592,7 @@
     else if (space.depth < RULES.sconceMinDepth || !r.chance(RULES.sconceChance)) return [];
     else n = space.archetype === 'chamber' && r.chance(RULES.sconceSecond) ? 2 : 1;
     const own = new Set(space.cells);
-    const later = (e) => e.loopMade || (e.tags && e.tags.includes('carved'));
-    const doorEdges = new Set(space.exits.filter((e) => !later(e)).map((e) => e.cell.x + ',' + e.cell.y + ',' + e.facing));
+    const doorEdges = new Set(exitsMadeWith(space).map((e) => e.cell.x + ',' + e.cell.y + ',' + e.facing));
     const walls = [];
     for (const k of space.cells.slice().sort()) {
       const c = DE.parseKey(k);
@@ -658,7 +670,7 @@
    */
   function hallCentre(space) {
     if (space.archetype !== 'hall') return null;
-    const doors = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const doors = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
     const c0 = centerOf(space);
     let best = null, bd = Infinity;
     for (const k of space.cells) {
@@ -704,11 +716,11 @@
    */
   function stoneSpot(space) {
     const r = DE.deriveRng(space.seed, 'waystone-spot');
-    const avoid = new Set(space.exits.map((e) => DE.key(e.cell.x, e.cell.y)));
+    const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
     for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     for (const f of [sigil(space), well(space), waystone(space)]) if (f) avoid.add(DE.key(f.cell.x, f.cell.y));
     const solid = new Set();
-    for (const b of props(space).blocks) {
+    for (const b of props(space, true).blocks) {
       for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) solid.add(x + ',' + y);
     }
     for (const pb of pushBlocks(space)) { solid.add(pb.from.sx + ',' + pb.from.sy); solid.add(pb.to.sx + ',' + pb.to.sy); }
