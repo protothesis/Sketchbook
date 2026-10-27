@@ -47,8 +47,10 @@
     } else if (k >= '1' && k <= '9' && k.length === 1) {
       select(+k - 1);
     } else if (k === ' ') {
-      if (!e.repeat) toggleCrouch();
+      if (!e.repeat) W.pressJump();
       e.preventDefault(); // don't also "click" a focused button or scroll
+    } else if (k === 'c') {
+      if (!e.repeat) toggleCrouch();
     } else if (k === 'tab') { // the map, under the left hand with WASD
       if (!e.repeat) W.openBigMap();
       e.preventDefault(); // not a focus change
@@ -59,8 +61,9 @@
     const k = e.key.toLowerCase();
     keys.delete(k);
     if (k === 'e') W.releaseE();
+    if (k === ' ') W.releaseJump();
   });
-  global.addEventListener('blur', () => { keys.clear(); W.releaseE(true); });
+  global.addEventListener('blur', () => { keys.clear(); W.releaseE(true); W.releaseJump(); });
 
   const promptEl = $('prompt');
   // Pressing the E prompt is E: held down, it fills a hold action's ring.
@@ -109,6 +112,12 @@
   canvas.addEventListener('pointercancel', endStick);
 
   $('crouch-btn').addEventListener('click', (e) => { toggleCrouch(); e.currentTarget.blur(); });
+  // Touch: the jump button, held for a full jump.
+  const jumpBtn = $('jump-btn');
+  if (jumpBtn) {
+    jumpBtn.addEventListener('pointerdown', (e) => { W.pressJump(); e.preventDefault(); });
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) jumpBtn.addEventListener(ev, () => W.releaseJump());
+  }
   const useBtn = $('use-btn');
   if (useBtn) useBtn.addEventListener('click', (e) => { useSelected(); e.currentTarget.blur(); });
 

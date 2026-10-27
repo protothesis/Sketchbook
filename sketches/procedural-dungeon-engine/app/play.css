@@ -133,6 +133,25 @@ html, body {
 @media (hover: hover) {
   .crouch-btn { width: auto; height: auto; padding: 5px 10px; border-radius: 6px; }
 }
+/* Touch only: jump, left of crouch. */
+.jump-btn {
+  position: fixed;
+  z-index: 3;
+  right: calc(max(16px, env(safe-area-inset-right)) + 74px);
+  bottom: max(16px, env(safe-area-inset-bottom));
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  touch-action: none;
+}
+@media (hover: hover) {
+  .jump-btn { display: none; }
+}
 
 .bottom-left {
   bottom: max(12px, env(safe-area-inset-bottom));

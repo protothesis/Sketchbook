@@ -53,9 +53,64 @@ All notable changes to this sketch are logged here, per
   captions and controls line to its glyphs (PlayStation shapes for a Sony
   pad), and its controls line shows even on touch screens. A key or a touch
   switches them back.
+- 2026-10-26: **Jump.** Space (A on a pad; a jump button on touch). A tap is a
+  hop, a held press clears a one-unit block, with a quick, low arc that peaks
+  just after you clear the lip. It forgives: you can still jump just after
+  walking off an edge, a press just before landing counts, and a block's top a
+  hair above your feet catches you. Carrying or dragging a block allows only a
+  hop. You still never stand higher than one unit; taller stacks and vessels
+  are walls. Notes for a movement design conversation (hazards, dodge,
+  noise, traversal) are in `PLAY.md`'s future directions.
+- 2026-10-26: **Camera pass** (`app/walk/camera.js`). The camera no longer
+  rises with a jump: its height follows the ground you stand on and eases
+  over landings. It follows with easing, and leads where you're moving (a
+  little walking, more running, none standing), the lead easing round as
+  you turn. The right stick peeks up to 2 cells and springs back when you
+  let go. `CAMERA` and `JUMP` are in the dev panel, to tune live.
+- 2026-10-26: **The look-ahead holds.** Slowing down or stopping no longer
+  pulls the view back to you: it stays at the most lead it reached until
+  you turn more than 50° (`CAMERA.turn`), which starts a new lead that way.
+- 2026-10-26: **The shadow falls on whatever is below.** It's cast straight
+  down onto every lit upward-facing surface under your feet, so standing at
+  a block's edge it's on the block top and, fainter, on the floor past it.
+  It used to be one disc at one height, hanging off ledges. `SHADOW` is in
+  the dev panel.
+- 2026-10-27: **The shadow is cut out of the light**, hard-edged: inside it
+  the lamp's (and any sconce's) direct light is taken away, so you see the
+  surface's own unlit colour, instead of a dark disc laid over it.
+  `SHADOW.opacity` is how much light it takes.
+- 2026-10-27: The shadow takes only your lamp's light (it was taking every
+  light's, including the shadowless fill that follows you), so it no longer
+  shows inside a block's cast shadow or when your lamp is covered or out.
+- 2026-10-27: **Camera debug overlay**: `CAMERA.debug` in the dev panel
+  draws you, your velocity, the spring-followed spot, the lead and its
+  goal, the turn cone, the peek and the screen's centre over the game, with
+  a readout (speed, lag, lead, peek, height).
+- 2026-10-27: **Camera, second pass.** The follow is a critically damped
+  spring, so it has a little drag starting off and never overshoots or
+  swings back when you stop. The look-ahead is built by travelling (up to
+  `CAMERA.build` cells of lead per cell walked), so a slow walk pushes the
+  view on slowly and turning round on the spot doesn't swing it; a new
+  direction's lead arrives as you go. Leads are 0.7 cells walking and 1.3
+  running. `CAMERA.rise` (0 to 1) sets how much it follows block heights.
 
 ### Changed
 
+- 2026-10-26: **Controls for the jump.** Keyboard: Space jumps and crouch
+  moves to C. Gamepad: A jumps, X interacts (was A), Y uses the item in hand
+  (was X), L3 crouches, R3 is the lamp, and B is free in the world (still
+  "back" in menus, choices and the map); in a choice, A or X confirms. Touch
+  support is frozen: it keeps working (with a new jump button), but new
+  features won't be designed or tested for it.
+- 2026-10-26: Gravity is 30 cells/s² (was 9), the same for a jump and for
+  stepping off an edge.
+- 2026-10-26: **Jump feel.** A held jump goes higher (about 1.4 units; was
+  about 1.0). You stand on a block while your footprint is over it, not
+  just your center, so stepping off an edge or landing on a lip no longer
+  shoves you sideways or drops you back down a frame later. A lip that
+  catches you eases the figure up instead of popping it. The round shadow
+  stays on what you'd land on (it used to ride at your feet), shrinking and
+  fading as you rise.
 - 2026-10-19: Walk mode no longer sinks walls near the figure. Walls in
   front of it get a screen-door dither inside a soft circle around it
   instead. The door prompt is now a button, so on touch you tap it to
@@ -845,6 +900,11 @@ All notable changes to this sketch are logged here, per
     `covered` tag, and the ecology has a new `blind` list: ghosts don't
     sense 'covered', so they lose a covered jar's pixie. A sigil still
     counts a covered vessel on its tile.
+
+### Removed
+
+- 2026-10-26: Vaulting. Pushing into a block, or pressing E facing it, no
+  longer climbs it; you jump.
 
 ### Fixed
 

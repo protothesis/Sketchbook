@@ -2,7 +2,7 @@
 // entropy, once. For now: push blocks, each with a matching floor mark where
 // it belongs, and unlit sconces on the walls. Crates (loose props) move the
 // same way as push blocks but have no home and pay nothing. Either one:
-// walk into it and you climb it, like any one-unit block. Hold E and you
+// jump onto it, like any one-unit block. Hold E and you
 // grab it: let go without moving and you lift it over your head (set it
 // down again with E); move while holding and you push or pull it along
 // that axis. A block you can lift is never stuck.

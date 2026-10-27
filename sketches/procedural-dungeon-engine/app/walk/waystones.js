@@ -307,7 +307,6 @@
   function placeAt(st) {
     const p = state.player, w = st.ws.wake;
     Object.assign(p, { x: w.x, y: w.y, z: 0, vz: 0, angle: w.angle });
-    state.climb = null;
     W.snapCamera();
   }
 

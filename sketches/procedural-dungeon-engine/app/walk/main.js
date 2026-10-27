@@ -5,11 +5,11 @@
 
   const W = global.DungeonPlay.walk;
   const { DE, DP, THREE, $, S, WALL_H, RADIUS, SPEED, RUN,
-    CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, CLIMB_TIME, GRAVITY, PUSH_TIME, DOOR_SWING,
-    DITHER_RADIUS, CAM_OFFSET, LANTERN, renderer, scene, camera, state, world, freshRun,
+    CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, DOOR_SWING,
+    DITHER_RADIUS, LANTERN, renderer, scene, camera, state, world, freshRun,
     isLockedNow, save, savePlayer, dither, doorMat, buildWorld, easeOut, easeInOut,
     applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions, placeLamp,
-    canClimb, climb, addMarkToWorld, useNear, collectPickups, updateItems,
+    addMarkToWorld, useNear, collectPickups, updateItems,
     updatePushBlocks, updateSconces, noteUnmade, updateJars, updateSigils, doorNear, actionNear, act, openDoor, readInput,
     addGhost, lightReaches, updateGhosts, tmpV2, post, fxPerf, renderFrame, updatePrompt,
     showCaption, stanceEl, refreshHud, notice, REFRESH_HINT, drawMinimap, drawBigMap,
@@ -18,7 +18,6 @@
   // ---------------------------------------------------------------------------
   // Per-frame update
 
-  const camTarget = new THREE.Vector3();
   const tmpV = new THREE.Vector3();
 
   function update(dt) {
@@ -29,23 +28,8 @@
     const prev = { x: p.x, y: p.y };
     let moving = false;
 
-    // Stepping up onto a block: a short eased hop; input waits.
-    if (state.climb) {
-      const c = state.climb;
-      c.t = Math.min(1, c.t + dt / CLIMB_TIME);
-      // Rise first, then carry forward, both eased in and out, so the hop
-      // has no sudden starts or stops; a small arc over the lip.
-      const rise = easeInOut(THREE.MathUtils.clamp(c.t / 0.65, 0, 1));
-      const carry = easeInOut(THREE.MathUtils.clamp((c.t - 0.2) / 0.8, 0, 1));
-      p.x = c.fx + (c.tx - c.fx) * carry;
-      p.y = c.fy + (c.ty - c.fy) * carry;
-      p.z = c.fz + (c.tz - c.fz) * rise + Math.sin(Math.PI * c.t) * 0.04;
-      if (c.t >= 1) { p.z = c.tz; p.vz = 0; state.climb = null; }
-      inp = { x: 0, y: 0, mag: 0 };
-    }
-
     // Holding on to a block (E held): movement pushes or pulls it instead.
-    if (state.grab && !state.climb) {
+    if (state.grab) {
       W.grabInput(inp, dt);
       inp = { x: 0, y: 0, mag: 0 };
     }
@@ -61,15 +45,16 @@
       moving = true;
     }
     if (!state.paused) run.walked += dt;
-    const touched = state.climb ? [] : resolveCollisions(p, state.nudge && state.nudge.block); // a block you're stepping back from (restore.js)
+    const touched = resolveCollisions(p, state.nudge && state.nudge.block); // a block you're stepping back from (restore.js)
     if (exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))] === undefined) { p.x = prev.x; p.y = prev.y; }
 
     // Safety net: if the figure's center ever ends up inside a block that
     // rises above its feet (say a room rebuilt around it), step out of the
     // nearest side.
-    if (!state.climb) {
+    {
+      const reach = W.footReach(p);
       for (const b of state.blockAt.get(DE.key(Math.floor(p.x), Math.floor(p.y))) || []) {
-        if (b.top <= p.z + 0.05 || p.x <= b.x0 || p.x >= b.x1 || p.y <= b.y0 || p.y >= b.y1) continue;
+        if ((b.top <= reach && !b.jar) || p.x <= b.x0 || p.x >= b.x1 || p.y <= b.y0 || p.y >= b.y1) continue;
         const outs = [[p.x - b.x0, -1, 0], [b.x1 - p.x, 1, 0], [p.y - b.y0, 0, -1], [b.y1 - p.y, 0, 1]].sort((a, c) => a[0] - c[0]);
         const [d, ox, oy] = outs[0];
         p.x += ox * (d + RADIUS + 0.01);
@@ -77,43 +62,17 @@
       }
     }
 
-    // Standing height: the tallest block top under the figure's center.
-    // Step off an edge and you drop to whatever is below.
-    if (!state.climb) {
-      let support = 0;
-      for (const b of state.blockAt.get(DE.key(Math.floor(p.x), Math.floor(p.y))) || []) {
-        if (!b.jar && b.top <= p.z + 0.05 && p.x > b.x0 && p.x < b.x1 && p.y > b.y0 && p.y < b.y1) support = Math.max(support, b.top);
-      }
-      if (p.z > support) {
-        p.vz = (p.vz || 0) - GRAVITY * dt;
-        p.z = Math.max(support, p.z + p.vz * dt);
-        if (p.z === support) p.vz = 0;
-      } else { p.z = support; p.vz = 0; }
-    }
+    W.fall(p, dt);
 
-    // Pushing into a climbable block for a beat steps up onto it. A wall is
-    // a block's way of saying no. (Doors only open with E held.)
-    let pushingBlock = null, pk = null;
+    // Walking into a closed door says how it opens, once per door.
     if (inp.mag > 0) {
       for (const s of touched) {
         const dk = s.door && !s.door.exit.connectionId && s.door.spaceId + '/' + s.door.exit.id;
         if (dk && state.hintedDoor !== dk) {
-          state.hintedDoor = dk; // walking into a closed door says how it opens, once per door
-          showCaption('E opens the door');
-        }
-        if (!s.block) continue;
-        const d = DE.DIRS[s.facing];
-        if (-(d.x * inp.x + d.y * inp.y) <= 0.5) continue; // block sides face out of the block
-        if (canClimb(s.block) && !state.carry) { // not with a block in your hands
-          pushingBlock = s.block; pk = 'block:' + s.block.x0 + ',' + s.block.y0; break;
+          state.hintedDoor = dk;
+          showCaption(`${W.glyph('E')} opens the door`);
         }
       }
-    }
-    if (pk && pk === state.push.key) state.push.t += dt;
-    else { state.push.key = pk; state.push.t = 0; }
-    if (pk && state.push.t >= PUSH_TIME) {
-      state.push.key = null;
-      climb(pushingBlock, { x: inp.x, y: inp.y });
     }
 
     collectPickups(p);
@@ -138,14 +97,14 @@
       }
     }
 
-    const idle = state.paused || state.climb;
+    const idle = state.paused;
     const nearE = idle ? null : actionNear(p);
     W.tickHold(nearE, dt);
     updatePrompt(nearE, idle ? null : useNear(p));
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;
-    figure.position.set(p.x * S, p.z * S, p.y * S);
+    figure.position.set(p.x * S, (p.z - state.jump.lift) * S, p.y * S);
     figure.rotation.y = p.angle;
     fill.position.set(p.x * S, 1.0 * S, (p.y + 0.6) * S);
     state.crouchAmt += ((state.crouch ? 1 : 0) - state.crouchAmt) * Math.min(1, dt * 10);
@@ -175,12 +134,7 @@
       stanceEl.className = 'stance' + (hidden ? ' hidden' : '');
     }
 
-    // Camera: fixed angle, smoothed follow.
-    tmpV.set(p.x * S, 0.6 + p.z * S * 0.6, p.y * S);
-    camTarget.lerp(tmpV, 1 - Math.exp(-dt * 7));
-    camera.position.copy(camTarget).add(CAM_OFFSET);
-    camera.lookAt(camTarget);
-    camera.updateMatrixWorld();
+    W.updateCamera(dt);
 
     // Dither: centered on the figure on screen, for pixels nearer the camera.
     renderer.getDrawingBufferSize(tmpV2);
@@ -230,7 +184,7 @@
   /** Jump the camera to the figure (after travelling, or waking). */
   function snapCamera() {
     const p = state.player;
-    camTarget.set(p.x * S, 0.6 + p.z * S * 0.6, p.y * S);
+    W.snapCameraTo(p);
     // Already "in" the room, so its log line doesn't cover the caller's caption.
     p.spaceId = state.exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))];
   }
@@ -299,8 +253,7 @@
       sp = savedPlayer;
     }
     Object.assign(state.player, { x: sp.x, y: sp.y, z: 0, vz: 0, angle: sp.angle || 0, spaceId: null });
-    state.climb = null;
-    camTarget.set(sp.x * S, 0.6, sp.y * S);
+    W.snapCameraTo(state.player);
     save();
     savePlayer();
     refreshHud();
