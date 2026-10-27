@@ -171,6 +171,7 @@
       return false;
     });
     updateItems();
+    W.updateDust(dt);
     updatePushBlocks(dt);
     updateSconces();
     W.updateWaystones();
@@ -321,7 +322,7 @@
   const expectIds = ['view', 'stats', 'lamp', 'lamp-meter', 'lamp-icon', 'popups', 'hotbar', 'use-btn',
     'prompt', 'caption', 'minimap', 'bigmap', 'bigmap-canvas', 'bigmap-hint', 'ghost-edges', 'crouch-btn', 'done',
     'dialog', 'fade', 'title', 'menu-btn'];
-  const expectFns = [DE.carve, DE.imprintAt, DE.reserve, DE.restore, DE.tagTraces, DP.saves && DP.saves.write, W.faint, W.lostPathAt, DP.props, DP.ghostSpawn, DP.loot, DP.waypointCount, W.updateLampLook];
+  const expectFns = [DE.carve, DE.imprintAt, DE.reserve, DE.restore, DE.tagTraces, DP.saves && DP.saves.write, W.faint, W.lostPathAt, DP.props, DP.ghostSpawn, DP.loot, DP.waypointCount, W.updateLampLook, DP.dust, W.updateDust];
   const missing = expectIds.filter((id) => !$(id));
   if (missing.length || expectFns.some((f) => typeof f !== 'function')) {
     notice(`This page's files are out of date (cached copies of different versions). ${REFRESH_HINT}`, 'stale');
