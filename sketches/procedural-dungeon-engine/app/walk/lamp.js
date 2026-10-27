@@ -88,7 +88,7 @@
   // Lit, covered, out: R relights or covers
 
   const lampOn = () => !!state.run.lampOn && state.run.fuel > 0;
-  const relightKey = () => (W.verbF === 'tap' ? 'tap the lamp' : 'R');
+  const relightKey = () => (W.verbF === 'tap' ? 'tap the lamp' : W.glyph('R'));
 
   function putOut() {
     state.run.lampOn = false;

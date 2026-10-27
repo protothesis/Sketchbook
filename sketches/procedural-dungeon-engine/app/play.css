@@ -501,6 +501,9 @@ kbd {
 @media (hover: none) {
   .help { display: none; }
 }
+/* A gamepad in use (gamepad.js): its controls line shows, even on touch, and the d-pad's focus is visible. */
+body.pad .help { display: block; }
+body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Off-screen hash ghosts: status icon + arrow on the screen edge. */
 .ghost-edges { position: fixed; inset: 0; z-index: 4; pointer-events: none; }

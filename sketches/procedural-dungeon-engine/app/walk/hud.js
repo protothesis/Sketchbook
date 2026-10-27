@@ -11,7 +11,9 @@
   // HUD
 
   const touchUi = global.matchMedia && global.matchMedia('(hover: none)').matches;
-  const verbF = touchUi ? 'tap' : 'F';
+  // A pad in use (gamepad.js) prompts like a keyboard, with its glyphs.
+  const touch = () => touchUi && !W.padMode();
+  Object.defineProperty(W, 'verbF', { get: () => (touch() ? 'tap' : W.glyph('F')), configurable: true });
 
   // Two prompt lines: what E would do (the focused thing) and what F would
   // do with the item in hand. Each starts with its key (on touch, tap the
@@ -87,13 +89,14 @@
 
   const lastLine = new Map();
   function showLine(btn, key, line) {
-    const sig = line ? line.text + '|' + (line.cls || '') : '';
+    const cap = touch() ? '' : W.glyph(key);
+    const sig = line ? line.text + '|' + (line.cls || '') + '|' + cap : '';
     if (lastLine.get(btn) === sig) return;
     lastLine.set(btn, sig);
     btn.hidden = !line;
     btn.textContent = '';
     if (!line) return;
-    if (!touchUi && line.cls !== 'blocked') btn.append(el('kbd', 'key', key));
+    if (cap && line.cls !== 'blocked') btn.append(el('kbd', 'key', cap));
     btn.append(line.text);
     btn.className = 'prompt ' + (key === 'F' ? 'f ' : '') + (line.cls || '');
   }
@@ -101,7 +104,7 @@
   function updatePrompt(nearE, nearF) {
     // E has no prompt on a keyboard (fewer callouts; the hold ring is its
     // feedback). On touch the E line stays: it's the only E button.
-    const e = touchUi && nearE && eLine(nearE), f = nearF && fLine(nearF);
+    const e = touch() && nearE && eLine(nearE), f = nearF && fLine(nearF);
     if (e && W.holdTime(nearE)) e.text += ' · hold';
     showLine(promptEl, 'E', e);
     showLine(promptF, 'F', f);
@@ -804,7 +807,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 
-  Object.assign(W, { verbF, updatePrompt, showCaption, stanceEl, refreshHud, notice,
-    REFRESH_HINT, drawMinimap, openBigMap, closeBigMap, drawBigMap, showRecord,
+  Object.assign(W, { updatePrompt, showCaption, stanceEl, refreshHud, notice,
+    REFRESH_HINT, drawMinimap, openBigMap, closeBigMap, drawBigMap, zoomBigMap, showRecord,
     hideRecord, openDialog, closeDialog });
 })(window);

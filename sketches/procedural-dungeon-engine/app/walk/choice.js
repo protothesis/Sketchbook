@@ -109,7 +109,8 @@
       return b;
     }));
     iconRow(thingsEl, c.things, !!c.options[c.sel].lose);
-    hintEl.textContent = touchUi ? 'press and hold one' : 'A / D to choose · hold E · Esc to back out';
+    hintEl.textContent = W.padMode() ? `◀ ▶ to choose · hold ${W.glyph('E')} · ${W.glyph('Esc')} to back out`
+      : touchUi ? 'press and hold one' : 'A / D to choose · hold E · Esc to back out';
     panel.hidden = false;
   }
 
