@@ -875,6 +875,32 @@ All notable changes to this sketch are logged here, per
     `W.rerollThrough`). A one-room path stays rerollable like any
     provisional room.
 
+- 2026-10-27: **Setting things down, and stacking.**
+  - The block goes to the half-cell right in front of the one you stand in,
+    along the way you most face. If you're too close for it to fit, you
+    ease back just enough as it lands. Only with no room behind you does
+    it go one half-cell further. That ends the spot where nothing would go
+    and the long reach just past an edge. The same applies one level up.
+  - The set-down preview is now a debug aid, off by default. Turn it on
+    with `SETDOWN.show` in the dev panel. It's a tinted tile on the surface
+    where the object will rest, plus an orange ghost of it with every
+    other pixel left out, its faces shaded by direction.
+  - Turning on the spot with something in your hands moves the target. It
+    used to stay where you'd lifted the object from until you walked about
+    0.2 cells away. Now it goes back there only while you still face that
+    way.
+  - A carried object's shadow dithers out as it leaves the ground and back
+    in as it touches down, within 0.18 cells of the surface
+    (`SHADOW_FADE`), instead of switching off and on.
+  - What can bear a stack is a property of each kind (`KINDS` in
+    `restore.js`), not the `jar` flag. Crates, blocks, waystones and
+    vessels all can now. Something set on a vessel rests a whole unit up.
+  - A vessel or waystone with something on it is **covered**. Its pixies
+    don't show and F can't reach in. Its pixie's presence carries a
+    `covered` tag, and the ecology has a new `blind` list: ghosts don't
+    sense 'covered', so they lose a covered jar's pixie. A sigil still
+    counts a covered vessel on its tile.
+
 ### Removed
 
 - 2026-10-26: Vaulting. Pushing into a block, or pressing E facing it, no
@@ -882,6 +908,11 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-27: **A powered waystone keeps glowing in your hands.** Its light
+  used to go out while you carried it. It's still off your ley lines
+  until you set it down. Its light now also sits at the stone's centre
+  instead of just above its top face, so the stone no longer shows a hot
+  spot of its own light.
 - 2026-10-26: **Save lanterns shelter your lamp.** They were meant to
   already, but the light was traced from a flame that sits inside the
   lantern's own plinth block, so it was always shaded. Your lamp kept

@@ -17,6 +17,18 @@
   const LIFT_TIME = { crate: 0.38, vessel: 0.32, block: 0.6, waystone: 0.6 };
   // How fast you walk with it over your head (no running with anything).
   const CARRY_PACE = { crate: 0.85, vessel: 1, block: 0.7, waystone: 0.7 };
+  // What each kind of loose object allows. bearsStack: something can be set
+  // on top of it (it then rests a whole unit up, however tall the thing
+  // is). covers: what's inside is hidden while something rests on top of
+  // it: its pixies don't show, and creatures blind to 'covered' (ecology.js)
+  // don't notice them. Anything else in blockAt (a jar on the floor) bears
+  // nothing.
+  const KINDS = {
+    crate: { bearsStack: true },
+    block: { bearsStack: true },
+    waystone: { bearsStack: true, covers: true },
+    vessel: { bearsStack: true, covers: true },
+  };
 
   const pushGeo = {
     block: new THREE.BoxGeometry(0.5 * S * 0.98, UNIT * S, 0.5 * S * 0.98),
@@ -296,6 +308,7 @@
     b.spaceId = null;
     state.pushBlocks.push(b);
     hold(b);
+    setShadow(b, 0); // in your hands: no shadow
   }
 
   /** A room about to be rerolled: the objects sitting in it are despawned (kept in a list, for later). */
@@ -581,13 +594,47 @@
     notch.position.set((tsx / 2 + 0.25) * S, 0.068, (tsy / 2 + 0.25) * S);
   }
 
+  // Shadows: what you carry casts none (your lantern is right beside it,
+  // and its shadow would sweep the room), so a block's shadow fades out
+  // as it leaves the ground and back in as it touches down: full on the
+  // surface, gone SHADOW_FADE.height cells above it. Dithered: its shadow
+  // is drawn with a screen-door pattern of more or fewer holes (a 4x4
+  // ordered dither in the shadow map), not switched.
+  const SHADOW_FADE = { height: 0.18 }; // cells above where it rests
+  function shadowMatOf(b) {
+    if (b.shadowMat) return b.shadowMat;
+    const fade = { value: 1 };
+    const m = new THREE.MeshDistanceMaterial();
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uShadowFade = fade;
+      // Declarations before main (three.js writes it `void main () {`), the test first thing in it.
+      sh.fragmentShader = `uniform float uShadowFade;
+float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
+float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+` + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+  if (bayer4(gl_FragCoord.xy) >= uShadowFade) discard;`);
+    };
+    m.userData.fade = fade;
+    b.shadowMat = m;
+    return m;
+  }
+  /** How much shadow a block casts now (0..1), dithered in between. */
+  function setShadow(b, k) {
+    const m = shadowMatOf(b);
+    m.userData.fade.value = k;
+    b.mesh.traverse((o) => {
+      if (!o.isMesh || o.userData.noShadow) return;
+      o.customDistanceMaterial = m;
+      o.castShadow = k > 0.001;
+    });
+  }
+
   /** E held at a block, and let go without moving: lift it, in an arc up over your head. Off its mark, it takes its entropy back. */
   function liftBlock(b) {
     if (b.done) unsettle(b);
     indexBlock(b, false);
     saveObject(b);
-    b.mesh.traverse((o) => { o.castShadow = false; });
-    b.anim = { t: 0, up: true, from: b.mesh.position.clone() };
+    b.anim = { t: 0, up: true, from: b.mesh.position.clone() }; // its shadow fades out as it rises (animateLift)
     const p = state.player;
     b.liftedFrom = { sx: b.sx, sy: b.sy, base: b.base || 0, px: p.x, py: p.y, pz: p.z };
     hold(b);
@@ -610,47 +657,76 @@
       if (o.top > top + 1e-6) { top = o.top; cover = o; }
     }
     if (!cover) return 0;
-    if (cover.jar || !(cover.x0 <= r.x0 && cover.x1 >= r.x1 && cover.y0 <= r.y0 && cover.y1 >= r.y1)) return null;
+    if (!bearsStack(cover) || !(cover.x0 <= r.x0 && cover.x1 >= r.x1 && cover.y0 <= r.y0 && cover.y1 >= r.y1)) return null;
     // Anything else reaching that high there must be under the cover, not beside it.
-    return top;
+    return stackTop(cover);
   }
 
   const STACK_MAX = 3; // units: a stack reaches the ceiling at most
   const levelOf = (z) => Math.round(z / UNIT);
 
   /**
-   * Where E would set the carried block down: the free half-cell ahead,
-   * in any room, resting at your level or one up (on the floor, a block's
-   * top, another crate), and never higher than STACK_MAX units.
+   * Where E would set the carried block down: the half-cell right in front
+   * of the one you stand in, along the way you most face (no diagonals), in
+   * any room, resting at your level or one up (on the floor, a block's top,
+   * another crate), and never higher than STACK_MAX units. If you're too
+   * close to it, you're nudged back as it lands (`nudge`: where you end
+   * up); only if there's no room behind you does it go one further ahead.
    */
+  const NUDGE_TIME = 0.14; // seconds to ease back out of the way
   function blockSpot(p) {
     const b = state.carry;
     if (!b) return null;
     const mine = levelOf(p.z);
-    const ok = (sx, sy) => {
+    const ok = (sx, sy, nudge) => {
       const base = restHeight(sx, sy, b);
       if (base === null) return null;
       const lv = levelOf(base);
       if (Math.abs(base - lv * UNIT) > 0.02 || (lv !== mine && lv !== mine + 1) || lv + 1 > STACK_MAX) return null;
-      return canMoveTo(b, sx, sy, true, base) ? { sx, sy, base } : null;
+      if (canMoveTo(b, sx, sy, true, base)) return { sx, sy, base };
+      if (!nudge || !canMoveTo(b, sx, sy, true, base, true)) return null;
+      const to = nudgeClear(p, sub(sx, sy), b);
+      return to ? { sx, sy, base, nudge: to } : null;
     };
-    // Haven't moved since lifting it: back where it came from.
-    const f = b.liftedFrom;
-    if (f && Math.hypot(p.x - f.px, p.y - f.py) < 0.2 && Math.abs(p.z - f.pz) < 0.05) {
-      const back = ok(f.sx, f.sy);
-      if (back) return back;
-    }
-    // Otherwise: the half-cell straight ahead, along the way you most face (no diagonals).
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     const d = Math.abs(fx) > Math.abs(fy) ? { x: Math.sign(fx), y: 0 } : { x: 0, y: Math.sign(fy) };
-    for (const reach of [RADIUS + 0.2, RADIUS + 0.45]) {
-      const sx = Math.floor((p.x + d.x * reach) * 2), sy = Math.floor((p.y + d.y * reach) * 2);
-      if (Math.floor(sx / 2) === Math.floor(p.x) && Math.floor(sy / 2) === Math.floor(p.y) || W.quarterReachable(sx, sy, p)) {
-        const spot = ok(sx, sy);
-        if (spot) return spot;
+    const psx = Math.floor(p.x * 2), psy = Math.floor(p.y * 2);
+    // Haven't moved since lifting it, still facing where it came from: back there.
+    // (Turn away, and it's the half-cell in front of you like any other time.)
+    const f = b.liftedFrom;
+    if (f && Math.hypot(p.x - f.px, p.y - f.py) < 0.2 && Math.abs(p.z - f.pz) < 0.05) {
+      const rx = f.sx - psx, ry = f.sy - psy;
+      if (rx * d.x + ry * d.y > 0 && rx * d.y - ry * d.x === 0) {
+        const back = ok(f.sx, f.sy);
+        if (back) return back;
       }
     }
+    // Otherwise: the half-cell in front of yours (nudging you back if you're in its way), else the one past it.
+    for (const k of [1, 2]) {
+      const sx = psx + d.x * k, sy = psy + d.y * k;
+      if (k === 2 && !W.quarterReachable(sx, sy, p)) break;
+      if (k === 1 && !W.quarterReachable(sx, sy, p)) return null; // a wall right in front
+      const spot = ok(sx, sy, k === 1);
+      if (spot) return spot;
+    }
     return null;
+  }
+
+  /**
+   * Where you'd step back to so a block landing on `r` clears you: straight
+   * out from it, just past your radius. Null if something behind you is in
+   * the way (or it's off the map).
+   */
+  function nudgeClear(p, r, b) {
+    const ex = Math.max(r.x0 - p.x, 0, p.x - r.x1), ey = Math.max(r.y0 - p.y, 0, p.y - r.y1);
+    const gap = RADIUS + 0.02;
+    const to = { x: p.x, y: p.y, z: p.z };
+    if (ex >= ey) to.x = p.x < r.x0 ? r.x0 - gap : r.x1 + gap;
+    else to.y = p.y < r.y0 ? r.y0 - gap : r.y1 + gap;
+    if (state.exp.registry[DE.key(Math.floor(to.x), Math.floor(to.y))] === undefined) return null;
+    const q = Object.assign({}, to);
+    W.resolveCollisions(q, b);
+    return Math.hypot(q.x - to.x, q.y - to.y) < 0.01 ? { x: to.x, y: to.y } : null;
   }
 
   /** E with a block in your hands: set it down at `spot`. On its mark, it settles and pays. */
@@ -672,6 +748,8 @@
     b.mesh.rotation.set(0, 0, 0);
     b.anim = { t: 0, up: false, from };
     indexBlock(b, true);
+    // Too close: ease back out of its way (collisions leave it alone meanwhile, main.js).
+    if (spot.nudge) state.nudge = { block: b, fx: state.player.x, fy: state.player.y, tx: spot.nudge.x, ty: spot.nudge.y, t: 0 };
     if (b.to && spot.sx === b.to.sx && spot.sy === b.to.sy) settle(b, true);
     saveObject(b);
     W.refreshHotbar();
@@ -697,11 +775,19 @@
 
   /** Is anything resting on top of this block (another block, a jar)? Then it stays put. */
   function loaded(b) {
+    if (b.carried) return false;
+    const top = stackTop(b);
     for (const o of state.blockAt.get(cellOf(b.sx, b.sy)) || []) {
-      if (o !== b && Math.abs((o.base || 0) - b.top) < 0.02 && o.x0 < b.x1 && o.x1 > b.x0 && o.y0 < b.y1 && o.y1 > b.y0) return true;
+      if (o !== b && Math.abs((o.base || 0) - top) < 0.02 && o.x0 < b.x1 && o.x1 > b.x0 && o.y0 < b.y1 && o.y1 > b.y0) return true;
     }
     return false;
   }
+  /** Can something be set on top of `o` (KINDS)? A loose object by its kind; anything else, unless it's a jar. */
+  const bearsStack = (o) => (o.push ? !!(KINDS[kindOf(o)] || {}).bearsStack : !o.jar);
+  /** Where something set on `o` rests: a whole number of units up (a vessel is a little short of one). */
+  const stackTop = (o) => (o.push ? (o.base || 0) + (o.units || 1) * UNIT : o.top);
+  /** Is what's in `b` hidden right now: a kind that covers, with something resting on it (KINDS)? */
+  const covered = (b) => !!(KINDS[kindOf(b)] || {}).covers && loaded(b);
 
   /** Home: its mark lights up, and the room pays entropy (whatever it hasn't paid already). */
   function settle(b, now) {
@@ -750,6 +836,14 @@
   /** Lift arcs, and growing and shrinking with the floor as the room assembles. */
   const overhead = new THREE.Vector3();
   function updatePushBlocks(dt) {
+    const n = state.nudge;
+    if (n) {
+      n.t = Math.min(1, n.t + dt / NUDGE_TIME);
+      const k = easeOut(n.t), p = state.player;
+      p.x = n.fx + (n.tx - n.fx) * k;
+      p.y = n.fy + (n.ty - n.fy) * k;
+      if (n.t >= 1) state.nudge = null;
+    }
     for (const b of state.pushBlocks) {
       if (b.anim) { animateLift(b, dt); continue; }
       if (b.carried) continue; // over your head (items.js updateHeld)
@@ -767,12 +861,15 @@
     const to = a.up ? overhead : new THREE.Vector3((b.x0 + 0.25) * S, b.base * S, (b.y0 + 0.25) * S);
     b.mesh.position.lerpVectors(a.from, to, k);
     b.mesh.position.y += Math.sin(Math.PI * a.t) * 0.12 * S;
+    // The shadow, by how high it is over where it rests (where it came from, lifting; where it lands, setting down).
+    const rest = a.up ? a.from.y : to.y;
+    setShadow(b, 1 - THREE.MathUtils.smoothstep((b.mesh.position.y - rest) / S, 0, SHADOW_FADE.height));
     if (a.t < 1) return;
     b.anim = null;
     if (a.up) W.refreshHotbar(); // now it's in your hands (updateHeld)
     else {
       b.mesh.position.copy(to);
-      b.mesh.traverse((o) => { o.castShadow = true; });
+      setShadow(b, 1);
     }
   }
 
@@ -908,6 +1005,6 @@
   const carryPace = (b) => CARRY_PACE[kindOf(b)];
 
   Object.assign(W, { SCONCE_Y, carryPace, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
-    setDownBlock, updatePushBlocks, addSconces,
+    setDownBlock, updatePushBlocks, addSconces, KINDS, covered, SHADOW_FADE,
     sconceNear, lightSconce, snuffSconce, updateSconces, SCONCE_LIGHT, sconceLight, sconcePools });
 })(window);

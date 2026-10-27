@@ -151,12 +151,16 @@
 
   // The two powered stones nearest you get a real violet light (a fixed
   // pool, like the sconces', so powering more never recompiles materials).
+  // A powered stone glows wherever it is, in your hands too (it's only off
+  // your ley lines while you carry it). The light sits at the stone's
+  // centre: from inside, it can't light the stone's own faces (they all
+  // face away from it), so the stone shows no hot spot of its own light.
   const GLOW = {
     color: 0x8f86ff,
     lights: 2,           // pooled
     intensity: 3.5,
     range: 3,            // cells
-    height: 0.7,         // cells above the floor
+    height: 0.5,         // of the stone's height: where in it the light sits
   };
   const glowLights = Array.from({ length: GLOW.lights }, () => {
     const l = new THREE.PointLight(GLOW.color, 0, GLOW.range * S, 1.6);
@@ -172,19 +176,19 @@
       const mat = st.b.mesh.userData.sigil;
       if (!mat) continue;
       const pulse = 0.75 + 0.25 * Math.sin(t * 1.6 + st.phase);
-      if (st.b.holds) mat.color.copy(SIGIL[st.b.holds] || SIGIL.entropy).multiplyScalar(st.awake ? pulse : 0.55);
+      if (st.b.holds) mat.color.copy(SIGIL[st.b.holds] || SIGIL.entropy).multiplyScalar(pulse);
       else mat.color.copy(DORMANT_SIGIL);
     }
-    const lit = state.waystones.filter((o) => o.awake)
-      .map((o) => ({ o, d: Math.hypot(centre(o).x - p.x, centre(o).y - p.y) }))
+    const lit = state.waystones.filter((o) => o.b.holds && o.b.mesh && (o.b.carried || o.b.anim || o.b.spaceId))
+      .map((o) => ({ o, d: o.b.carried ? 0 : Math.hypot(centre(o).x - p.x, centre(o).y - p.y) }))
       .sort((a, b) => a.d - b.d);
     glowLights.forEach((l, i) => {
       const it = lit[i];
       if (!it) { l.intensity = 0; return; }
-      const c = centre(it.o);
       l.color.setHex(GLOW.color);
       l.distance = GLOW.range * S;
-      l.position.set(c.x * S, ((it.o.b.base || 0) + GLOW.height) * S, c.y * S);
+      // At the stone's centre, wherever its mesh is now (set down, rising, over your head).
+      it.o.b.mesh.localToWorld(l.position.set(0, GLOW.height * UNIT * S, 0));
       l.intensity = GLOW.intensity * (0.85 + 0.15 * Math.sin(t * 1.6 + it.o.phase));
     });
   }
