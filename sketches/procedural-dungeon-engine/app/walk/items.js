@@ -12,19 +12,21 @@
   //
   // E interacts with the world (doors, lifting a jar, wiping a
   // chalk mark you face): one focused thing (actionNear in actions.js).
-  // F uses what's in your hand, the item selected on the hotbar: draw a
-  // chalk mark, set a jar down, press a doorstone to a wall. With nothing in
-  // hand that wants it, F at a dormant waystone wakes it from your lamp
-  // (the lamp itself is R, never a hotbar slot). 1-9 or
-  // the wheel select. A slot can hold a group of variants (chalk colours):
+  // F (RT on a pad) uses what's in your hand, the item selected on the
+  // hotbar: swipe the duster, draw a chalk mark, set a jar down, press a
+  // doorstone to a wall. With nothing in hand that wants it, F at a dormant
+  // waystone wakes it from your lamp (the lamp itself is R, never a hotbar
+  // slot). 1-9 or the wheel select; the selected slot's number (or a tap on
+  // it) again puts it away, for empty hands. A slot can hold a group of variants (chalk colours):
   // click it again, or press and hold, to open its picker; its number key
   // again cycles. F with an empty jar near a pixie catches it (pixies.js);
   // a pixie jar set down draws ghosts to it, and on a sigil tile it powers
   // the sigil: +1 entropy max per pixie jar on it.
   //
-  // Equipment worn rather than held (`equip: true`, the feather duster) has
-  // its own slot at the hotbar's left end, out of the 1-9 cycle, and its own
-  // button: Q (RT on a pad, or a tap on the slot) uses it whatever's in hand.
+  // Equipment worn rather than held (`equip: true`) gets its own slot at the
+  // hotbar's left end, out of the 1-9 cycle, and its own button, Q, whatever's
+  // in hand. Nothing is worn right now (the duster tried it, 2026-10-27, and
+  // went back to the hotbar); the slot is kept for later.
 
   const JAR_H = 0.38; // cells
   const STROKES = 3;  // chalk marks per stick
@@ -184,6 +186,7 @@
   function slots() {
     const run = state.run, out = [];
     const kindSlot = (k) => !ITEMS[k].equip && ITEMS[k].slot && ITEMS[k].slot(run);
+    for (const k in ITEMS) if (ITEMS[k].first && kindSlot(k)) out.push(kindSlot(k)); // a kind that keeps slot 1 (the duster)
     if (run.jars.length) {
       // One slot for every jar, grouped by what it holds: empty, a pixie, a
       // charge of entropy. The group you pick is the jar in your hands.
@@ -205,7 +208,7 @@
     if (run.doorstones > 0) out.push({ key: 'doorstone', kind: 'doorstone', count: run.doorstones });
     if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
     for (const k in ITEMS) {
-      const slot = kindSlot(k);
+      const slot = !ITEMS[k].first && kindSlot(k);
       if (slot) out.push(slot);
     }
     return out;
@@ -224,16 +227,21 @@
     savePlayer();
     W.refreshHud();
   }
+  /** The slot in your hand: state.sel's, or the first; null with empty hands (state.sel 'hands'). */
   function selectedSlot() {
+    if (state.sel === 'hands') return null;
     const s = slots();
     return s.find((x) => x.key === state.sel) || s[0] || null;
   }
-  function select(i) {
+  /** Select slot i. `again`: picking the slot already in hand (a number key) cycles a
+   *  group's variants, or puts anything else away. */
+  function select(i, again) {
     const s = slots();
     if (!s.length) return;
     if (state.carry) { shakeHotbar(); return; } // set the block down first
     const slot = s[((i % s.length) + s.length) % s.length];
     if (slot.key === state.sel && slot.variants && slot.variants.length > 1) { cycleVariant(slot, 1); return; }
+    if (again && slot.key === state.sel) { state.sel = 'hands'; state.expanded = null; refreshHotbar(); return; }
     state.sel = slot.key;
     state.expanded = null;
     refreshHotbar();
@@ -348,6 +356,7 @@
         if (heldOpen) { heldOpen = false; return; }
         if (state.carry) { shakeHotbar(); return; } // set the block down first
         if (slot.variants && state.sel === slot.key) state.expanded = state.expanded === slot.key ? null : slot.key;
+        else if (state.sel === slot.key) { state.sel = 'hands'; state.expanded = null; } // put it away
         else { state.sel = slot.key; state.expanded = null; }
         refreshHotbar();
       });
@@ -890,19 +899,83 @@ void main() {
     if (u.log.length > 50) u.log.shift();
   }
 
+  // --- the slash: using what's in your hand (a jar, the duster, any item's
+  // act) whips it side to side in a fast arc across in front of you, leaving
+  // a pale swoosh behind it. The hand turns about the figure's middle; the
+  // swoosh is a flat ring at hand height, dithered in just behind the tip.
+
+  const SLASH = {
+    time: 0.16,      // s: the sweep across
+    back: 0.14,      // s: and back to rest
+    from: -0.55,     // radians the hand turns from rest: where the sweep starts (out to the side)
+    to: 2.5,         // and ends (across the front, to the other side)
+    reach: 0.1,      // cells the hand reaches out mid-sweep
+    trail: 1.3,      // radians of swoosh behind the tip
+    trailLife: 0.22, // s for the swoosh to fade, from the sweep's start
+    color: 0xf2eadb,
+  };
+  const HAND = Math.atan2(-0.16, 0.1); // the held thing's angle round the figure at rest (0 is ahead, +z)
+  const slashUniforms = { uHead: { value: 0 }, uStart: { value: 0 }, uTrail: { value: SLASH.trail }, uFade: { value: 0 },
+    uColor: { value: new THREE.Color(SLASH.color) } };
+  const slashMat = new THREE.ShaderMaterial({
+    uniforms: slashUniforms,
+    vertexShader: `varying vec3 vP;
+void main() { vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform float uHead; uniform float uStart; uniform float uTrail; uniform float uFade; uniform vec3 uColor;
+varying vec3 vP;
+void main() {
+  float a = atan(vP.x, vP.z); // the same way round as rotation.y
+  if (a > uHead || a < uStart) discard;
+  float t = 1.0 - (uHead - a) / uTrail;
+  if (t <= 0.0) discard;
+  float edge = smoothstep(${(0.16 * S).toFixed(3)}, ${(0.5 * S).toFixed(3)}, length(vP.xz)); // densest at the outside
+  // Thinned out in a chunky screen-space Bayer dither (2-px blocks), like the dust clouds.
+  vec2 g = floor(gl_FragCoord.xy / 2.0);
+  int i = int(mod(g.x, 4.0)) + int(mod(g.y, 4.0)) * 4;
+  float m[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
+  if ((m[i] + 0.5) / 16.0 >= t * edge * uFade * 1.4) discard;
+  gl_FragColor = vec4(uColor, 1.0);
+}`,
+    depthWrite: false, side: THREE.DoubleSide,
+  });
+  const slashMesh = new THREE.Mesh(new THREE.RingGeometry(0.2 * S, 0.52 * S, 40, 1).rotateX(Math.PI / 2), slashMat);
+  slashMesh.position.y = 0.36 * S; // about the height of a held tool's tip
+  slashMesh.renderOrder = 6;
+  slashMesh.visible = false;
+  W.bodyRig.add(slashMesh);
+  const easeOut3 = (t) => 1 - Math.pow(1 - t, 3);
+  function updateSlash() {
+    const t = state.time - swipeAt;
+    let turn = 0, out = 0;
+    if (t >= 0 && t < SLASH.time) {
+      turn = SLASH.from + (SLASH.to - SLASH.from) * easeOut3(t / SLASH.time);
+      out = Math.sin(t / SLASH.time * Math.PI);
+    } else if (t >= SLASH.time && t < SLASH.time + SLASH.back) {
+      const k = (t - SLASH.time) / SLASH.back;
+      turn = SLASH.to * (1 - k * k * (3 - 2 * k));
+    }
+    heldRig.rotation.set(0, turn, 0);
+    heldRig.position.z = out * SLASH.reach * S;
+    const live = t >= 0 && t < SLASH.trailLife;
+    slashMesh.visible = live && !state.carry;
+    if (live) {
+      slashUniforms.uStart.value = HAND + SLASH.from;
+      slashUniforms.uHead.value = HAND + turn;
+      slashUniforms.uTrail.value = SLASH.trail;
+      slashUniforms.uFade.value = 1 - t / SLASH.trailLife;
+      slashUniforms.uColor.value.setHex(SLASH.color);
+    }
+  }
+
   /**
    * Pixies in a vessel flit above its mouth. With a ghost drawn close
    * (within JAR_FLARE cells), they flare: bigger, and faster. Entropy in
    * one glows at the mouth, brighter the more there is.
    */
   const JAR_FLARE = 2.5;
-  const SWIPE = 0.32; // s: the held jar sweeps forward and down, and back
   let swipeAt = -9;
   function updateJars() {
-    const k = (state.time - swipeAt) / SWIPE;
-    const sw = k >= 0 && k < 1 ? Math.sin(k * Math.PI) : 0;
-    heldRig.rotation.x = sw * 1.1;
-    heldRig.position.z = sw * 0.12 * S;
+    updateSlash();
     for (const v of state.pushBlocks) {
       if (!v.vessel) continue;
       const ud = v.mesh.userData, n = v.n || 0;
@@ -1150,7 +1223,7 @@ void main() {
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, equipSlot, useEquip, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, equipSlot, useEquip, SLASH, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });

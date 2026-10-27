@@ -1,8 +1,8 @@
 // Walk mode: dusting (notes/dusting-2026-10-27.md). Rooms gather dust by
 // their mood (DP.dust, play-rules.js): a thin light-grey plane a little
 // above the floor or a low block's top, in a scaled-up pixel dither whose
-// density is how many layers are left. The feather duster, worn in its own
-// slot, swipes it (Q or RT; one press, one swing): each swing takes a layer off
+// density is how many layers are left. The feather duster, hotbar slot 1,
+// swipes it (F or RT; one press, one swing): each swing takes a layer off
 // every dusted half-cell in an arc in front of you, kicks up chunky dust
 // clouds that break down into motes catching the light, and now and then
 // throws out entropy chits. Walk through chits (they drift to you over a
@@ -789,9 +789,8 @@ void main() {
     drawChits();
     updateParts(dt);
     poolHud();
-    showSwing();
     // The duster's slot lights up while a swing would find dust (or a crust).
-    if (!readyEl || !readyEl.isConnected) readyEl = document.querySelector('.slot.equip.duster');
+    if (!readyEl || !readyEl.isConnected) readyEl = document.querySelector('.slot.duster');
     if (readyEl) {
       const t = state.carry || state.paused ? null : targets(state.player);
       readyEl.classList.toggle('ready', !!t && (t.cells.length > 0 || !!t.crystal));
@@ -799,10 +798,9 @@ void main() {
   }
 
   // ---------------------------------------------------------------------------
-  // The feather duster: worn (for now from the start), in the equipment slot
-  // at the hotbar's left end (items.js), used with Q or RT whatever's in your
-  // hand. A short wooden handle and a head of pale feathers, out in your
-  // left hand for the moment of a swing.
+  // The feather duster: in your bag from the start (for now), hotbar slot 1,
+  // a tool in your left hand, swiped with F or RT (the slash: items.js). A
+  // short wooden handle and a head of pale feathers.
 
   const dusterGeo = {
     handle: new THREE.CylinderGeometry(0.012 * S, 0.015 * S, 0.22 * S, 6),
@@ -832,32 +830,21 @@ void main() {
   const DUSTER_SVG = '<svg viewBox="0 0 16 22" width="13" height="18"><path d="M8 21 V11" stroke="#a07a52" stroke-width="1.8" stroke-linecap="round"/>' +
     '<path d="M8 11 C3 9 2 5 4 1 C6 4 7 3 8 1 C9 3 10 4 12 1 C14 5 13 9 8 11 Z" fill="#e3d8c2"/></svg>';
 
-  const swingRig = new THREE.Group();
-  swingRig.position.set(-0.17 * S, 0.3 * S, 0.08 * S); // at the figure's left side, like a held tool
-  swingRig.add(makeDuster());
-  swingRig.visible = false;
-  W.bodyRig.add(swingRig);
-  /** The duster out for a swing: a sweep across in front of you, then away. */
-  function showSwing() {
-    const k = (state.time - lastSwing) / 0.3;
-    swingRig.visible = k >= 0 && k < 1;
-    if (!swingRig.visible) return;
-    swingRig.rotation.set(1.1 + 0.3 * Math.sin(k * Math.PI), 0, 0);
-    swingRig.rotation.y = 0.9 - 1.8 * k;
-  }
-
   let readyEl = null;
   ITEMS.duster = {
     cls: 'equipment',
-    equip: true, // its own slot, not in the 1-9 cycle (items.js equipSlot)
+    first: true, // keeps hotbar slot 1 (items.js slots)
     mesh: makeDuster,
     slot: () => ({ key: 'duster', kind: 'duster', sig: 'duster', item: { kind: 'duster' } }),
-    title: () => 'feather duster (worn): Q or RT swipes it, or tap here · dust comes off a layer a swipe, and now and then a chit of entropy with it',
+    title: () => 'feather duster: F swipes it · dust comes off a layer a swipe, and now and then a chit of entropy with it',
     icon() {
       const ic = el('span', 'ic');
       ic.innerHTML = DUSTER_SVG;
       return ic;
     },
+    /** F always swipes it (a swipe at air too); the slot lights up while a swipe would find
+     *  dust, and a crusted crystal in reach gets a prompt. */
+    use: (p, slot) => ({ action: 'dust', slot, line: targets(p).crystal ? { cls: 'jar', text: 'dust the crystal off' } : null }),
     act: () => swing(),
   };
 

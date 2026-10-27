@@ -362,22 +362,24 @@ Determinism).
     pixie glows in its lower bulb (and its hotbar glyph) when it's
     charged. Charged, it's the key to a lost path: F with it in hand at
     the path's door retraces it, and spends the pixie. **The feather
-    duster** (`app/walk/dust.js`) is worn from the start, for now, in
-    its own equipment slot at the hotbar's left end, out of the 1–9
-    cycle: Q (RT on a gamepad, or a tap on the slot) swings it at the
-    dust whatever's in your hand (see Dusting, below).
+    duster** (`app/walk/dust.js`) is in your bag from the start, for now,
+    and keeps hotbar slot 1: F (RT on a gamepad) swipes it at the dust
+    (see Dusting, below).
   - **Creatures** (ghosts, pixies) aren't items: they move on their own,
     by the ecology's rules.
 - **The hotbar.** Tools and objects sit in slots at the bottom of the
   screen. Pick a slot with 1–9, the mouse wheel, or a tap. **E** interacts
   with the world (doors, lifting a jar, wiping a chalk mark
-  you're facing). **F** (or "use" on touch) uses the selected item: the
-  one in your hand.
+  you're facing). **F** (RT on a gamepad, or "use" on touch) uses the
+  selected item: the one in your hand, with a fast side-to-side slash
+  and a dithered swoosh behind it (`SLASH`).
 - **One thing in your hand.** The selected slot is what you're holding,
   and the figure shows it: a tool in its left hand (the lantern is in the
   right), a jar held over its head. The lamp isn't a slot (since
-  2026-10-27): R (R3) covers or relights it. With nothing in hand that
-  wants it, F at a dormant waystone wakes it from your lamp. Some slots are **groups**: one slot, several variants
+  2026-10-27): R (R3) covers or relights it. The selected slot's number,
+  or a tap on it, puts it away again: **empty hands**. With nothing in
+  hand that wants it, F at a dormant waystone wakes it from your lamp.
+  Some slots are **groups**: one slot, several variants
   (chalk colours; jars by contents). Click a selected group again (or press and
   hold it) to open its picker, or press its number again to cycle.
 - **Focus and prompts.** E acts on one thing at a time: of everything in
@@ -540,8 +542,9 @@ you pass out and wake by your save lantern.
 | Doorstone | a small white slab with a dark doorway in it; a ⌂ slot on the hotbar; a "open a door here" prompt at a bare wall | the door looks like any other |
 | Chalk | sticks in five colours; on the hotbar, one group slot: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
-| Hotbar | bottom-centre slots: at the left end, the worn equipment (the duster: a dashed slot marked Q, or RT/R2 on a pad, lit violet while a swing would find dust; a tap swings it), then ⚱ jars (one group slot: empty, a violet pip for a pixie or a violet bar for entropy, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
-| Held item | the selected tool in the figure's left hand, tilted up; a jar or block over its head; all at their true size, and casting no shadow. The duster shows in that hand only for the 0.3 s of a swing, sweeping across | |
+| Hotbar | bottom-centre slots: the duster (always slot 1, lit violet while a swipe would find dust), ⚱ jars (one group slot: empty, a violet pip for a pixie or a violet bar for entropy, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
+| Held item | the selected tool in the figure's left hand, tilted up; a jar or block over its head; all at their true size, and casting no shadow; nothing with empty hands | |
+| Slash | using what's in your hand whips it side to side across in front of you: 0.16 s across (`SLASH.time`, turning from −0.55 to +2.5 radians off its rest, `from`, `to`, reaching out 0.1 cells), 0.14 s back (`back`); a flat ring at tool-tip height (0.2–0.52 cells round the figure) lights the 1.3 radians behind the tip (`trail`) in a 2-px Bayer dither, densest at the outside, gone in 0.22 s (`trailLife`) | |
 | Jar | a small glass jar with a dark lid; a pixie flits inside when it holds one | a solid half-cell |
 | Pixie | a small pale-violet sphere with two fluttering translucent wings and a soft additive glow, bobbing about 0.6 cells up | no light of its own (cost) |
 | Jars | glass, a dark lid; a pixie flits inside, a jar of entropy holds a glowing violet liquid; on the floor and in the left hand at 0.55×; the swipe tips it forward and down over 0.32 s | |
@@ -644,7 +647,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Pack | `run.packs`: [{ id, spaceId, seed, x, y, fuel, keys, doorstones, jars, chalks }]; follows its room (`packStatus`: here, lost, dim, or gone) |
 | Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), F with a charged hourglass in hand, which spends its pixie; reroll: E held at the door (the path turns to corruption); `lostDoorChoice`: a choice between the two instead; unchosen: dim at the next faint, fade at the one after |
 | Dust | by room mood (`dustMood`): dusty 70% of free half-cells up to 3 layers; still, hollow 35% / 2; warm 30% / 2; echoing, tilted 15% / 1; humming 12% / 1; damp, cold, breathing none. On the floor and the tops of 1- and 2-unit blocks (not crates), in noise patches `dustScale` (3) half-cells across, block tops +0.15 (`dustTops`), thickest in a patch's middle; never on a sigil, well, waystone or save lantern cell, a tool's cell, or under a loose object's start, mark or a vessel. Seeded on the `'dust'` stream (`DP.dust`); saved as `run.dust` (layers taken off, per room and half-cell) |
-| Duster | worn equipment, from the start for now, in its own slot; Q (RT on a pad, or a tap on its slot): one press, one swing (no sooner than 0.18 s, `DUST.swingEvery`). Hits every dusted half-cell whose centre is within 0.75 cells in front (a ±70° arc, `reach`, `arc`; within 0.32 any way you face), 0.5 below to 0.55 above your feet (`reachDown`, `reachUp`: a one-unit block's top from the floor, a two-unit one in a jump), and a crusted crystal the same way; one layer off each |
+| Duster | equipment, in your bag from the start for now, hotbar slot 1; F (RT on a pad): one press, one swing (no sooner than 0.18 s, `DUST.swingEvery`). Hits every dusted half-cell whose centre is within 0.75 cells in front (a ±70° arc, `reach`, `arc`; within 0.32 any way you face), 0.5 below to 0.55 above your feet (`reachDown`, `reachUp`: a one-unit block's top from the floor, a two-unit one in a jump), and a crusted crystal the same way; one layer off each |
 | Chits | per layer taken off: 45% one chit, 10% a second (`chit`, `chitTwo`); after 3 swings in a row that hit dust and threw none, the next throws one (`pity`). Violet diamonds (points) 0.15 cells across (`chitSize`), thrown out at 1.78 cells/s (`launch`) and bouncing (`bounce` 0.42); within 0.9 cells (`magnet`) they drift to you, gathered within 0.28, each with a 0.32 s dithered violet flash over the figure (seen through anything). Saved where they lie (`run.chits`) |
 | Pre-pool | 6 chits (`perShard`) pour a shard into the lamp (the gain that starts `lampGrace`); full with no room in the lamp, it waits, and chits stay on the floor. Six pips under the lamp meter, shown once you've gathered one. A faint leaves it in your pack (`run.dustPool`) |
 | Crusted crystals | 80% of shards in a room with dust (`dustCrust`, drawn first on the `'dust'` stream) lie crusted over: today's shard, dull and tilted, half sunk among grey lumps, its cell dusted at least 2 layers deep; a glint every 1.7 s (`glintEvery`) where your lamp's pool reaches it. 3 swipes (`crustLayers`) wake it: the crust falls away, a violet flash, and it rises as an ordinary shard pickup. Saved as `run.crust` |
@@ -986,7 +989,8 @@ more yours. Jump is the first step. Not built yet:
   over" without smaller blocks.
 - **A movement design conversation**, started 2026-10-26. Decided so far:
   - **Dash: likely.** It was going to be RT, but since 2026-10-27 RT
-    swings the duster and LT alone runs, so the dash needs another input. A plain dash first; then upgrades, some costing entropy
+    uses the item in hand and LT alone runs; Y and B are free in the
+    world, so one of those. A plain dash first; then upgrades, some costing entropy
     or psychic stamina. One idea: a **phase dash** that passes through a
     wall without carving a door.
   - **Movement makes noise** (decided, parked until something listens; see

@@ -129,14 +129,19 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
-- 2026-10-27: **The lamp and the duster get their own buttons.** The
-  lantern is no longer a hotbar slot: R (R3) is the lamp, and with nothing
-  in hand that wants it, F at a dormant waystone wakes it from your lamp.
-  The feather duster is worn, not held: its own equipment slot at the
-  hotbar's left end (out of the 1–9 cycle, lit while a swing would find
-  dust), swung with **Q**, **RT** on a gamepad, or a tap on the slot, and
-  shown in the figure's hand for the swing. Running on a gamepad is LT
-  alone. Every other item works as before with F (Y).
+- 2026-10-27: **Controls: the lamp leaves the hotbar, use moves to RT.**
+  The lantern is no longer a hotbar slot: R (R3) is the lamp, and with
+  nothing in hand that wants it, F at a dormant waystone wakes it from
+  your lamp. Instead, the selected slot's number (or a tap on it) puts it
+  away again, for empty hands. The duster keeps slot 1, so it's what you
+  start holding, and its slot lights up while a swipe would find dust. On
+  a gamepad, **RT uses the item in hand** (was Y) and LT alone runs; Y and
+  B are free in the world. (A worn-equipment slot with its own button, Q,
+  was tried for the duster and is kept in `items.js` for later, unused.)
+- 2026-10-27: **The slash.** Using what's in your hand (the duster, a jar,
+  any item) whips it side to side in a fast arc across in front of you
+  instead of a forward dip, with a dithered swoosh trailing the tip
+  (`SLASH`, dev panel).
 
 - 2026-10-26: **Controls for the jump.** Keyboard: Space jumps and crouch
   moves to C. Gamepad: A jumps, X interacts (was A), Y uses the item in hand

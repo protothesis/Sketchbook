@@ -6,9 +6,9 @@
 // way, and it springs back when you let go (camera.js).
 //
 //   A  jump (Space; held for full height)       B  back out of anything (free in the world)
-//   X  E (tap to act, hold to fill the ring)     Y  F (use the item in hand); on the map, recenter
+//   X  E (tap to act, hold to fill the ring)     Y  on the map, recenter (free in the world)
 //   L3  crouch (C)    R3  the lamp (R)           D-pad ◀ ▶  the variant in a group
-//   LB / RB  the hotbar slot left / right        LT  run    RT  the duster (Q)
+//   LB / RB  the hotbar slot left / right        LT  run    RT  F (use the item in hand)
 //   (on the map, LT / RT zoom)
 //   View  the map    Menu  pause
 //
@@ -32,8 +32,8 @@
 
   const B = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, menu: 9, l3: 10, r3: 11, up: 12, down: 13, left: 14, right: 15 };
   const GLYPH = {
-    xbox: { E: 'X', F: 'Y', Q: 'RT', R: 'R3', Space: 'A', C: 'L3', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT', bumpers: 'LB/RB' },
-    ps: { E: '□', F: '△', Q: 'R2', R: 'R3', Space: '✕', C: 'L3', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2', bumpers: 'L1/R1' },
+    xbox: { E: 'X', F: 'RT', Q: 'RT', R: 'R3', Space: 'A', C: 'L3', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT', bumpers: 'LB/RB' },
+    ps: { E: '□', F: 'R2', Q: 'R2', R: 'R3', Space: '✕', C: 'L3', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2', bumpers: 'L1/R1' },
   };
 
   let pad = false;       // the last input was the pad: prompts show its glyphs
@@ -54,7 +54,7 @@
   function padHelp() {
     const g = GLYPH[style], k = (s) => `<kbd>${s}</kbd>`;
     return `${k('◖')} move · ${k('◗')} look · ${k(g.run)} run · ${k(g.Space)} jump · ${k(g.C)} crouch · ${k(g.E)} interact · ` +
-      `${k(g.F)} use item · ${k(g.Q)} dust · ${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
+      `${k(g.F)} use item · ${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
   }
 
   function setPad(on, kind) {
@@ -131,10 +131,10 @@
       case B.b: if (busy || state.expanded) key('keydown', 'escape'); return;
       case B.x: key('keydown', 'e'); return;
       case B.y:
-        if (state.bigmap) { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; } else key('keydown', 'f');
+        if (state.bigmap) { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; }
         return;
       case B.l3: key('keydown', 'c'); return;
-      case B.rt: if (!state.bigmap) key('keydown', 'q'); return; // on the map it zooms (poll)
+      case B.rt: if (!state.bigmap) key('keydown', 'f'); return; // on the map it zooms (poll)
       case B.r3: key('keydown', 'r'); return;
       case B.lb: case B.rb: {
         if (busy) return;
