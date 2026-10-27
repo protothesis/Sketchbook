@@ -1003,6 +1003,18 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-27: **A lost path's door warns you before you lose it.** On a
+  keyboard or gamepad the door used to show only the hold ring's ↻. Now:
+  - **A warning line.** Its E line shows ("hold: reroll your lost path ·
+    n rooms · the path is gone"). So does a reroll's E line when the
+    reroll would take something of yours. Every other E prompt stays off.
+  - **The path's own icon.** The lost rooms' cells are drawn as a little
+    violet map, like the minimap's lost paths. It shows, with the icons of
+    anything of yours beyond the door, as soon as you face the door.
+  - **Red while you hold.** While you hold E, the path icon blinks red,
+    since letting the path go always loses it.
+  - **Icons no longer squashed.** The hold ring's CSS rotated every SVG
+    inside it, the at-stake icons included. It now rotates only the ring.
 - 2026-10-27: **The banded light pools are back**, for the lamp, sconces,
   save lanterns and packs. They had vanished in #39. The figure's new
   shadow (`figure.js`) pastes its own copy of three.js's light-loop chunk

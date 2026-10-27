@@ -25,18 +25,57 @@
   };
   const LABEL = { pack: 'your pack', lantern: 'a save lantern', waystone: 'a waystone' };
 
-  /** A row of icons (kinds, e.g. ['pack', 'lantern']); `lose`: red and crossed out. */
+  /**
+   * A lost path's own icon: its rooms' cells as a little map, styled like
+   * the minimap's lost paths. { kind: 'path', key, svg }, for iconRow.
+   * Lost (`lose` on the row), it blinks red instead of being crossed out.
+   */
+  function pathIcon(cellKeys) {
+    const DE = W.DE;
+    const cells = cellKeys.map(DE.parseKey);
+    const own = new Set(cellKeys);
+    const xs = cells.map((c) => c.x), ys = cells.map((c) => c.y);
+    const x0 = Math.min(...xs), y0 = Math.min(...ys);
+    const cols = Math.max(...xs) - x0 + 1, rows = Math.max(...ys) - y0 + 1;
+    const u = 4, pad = 1.5; // viewBox units per cell; the icon keeps the path's own proportions
+    const at = (x, y) => [pad + (x - x0) * u, pad + (y - y0) * u];
+    let fill = '', grid = '', edge = '';
+    for (const c of cells) {
+      const [x, y] = at(c.x, c.y);
+      fill += `M${x} ${y}h${u}v${u}h-${u}z`;
+      for (const f of DE.FACINGS) {
+        const n = DE.step(c, f);
+        const [ax, ay] = at(c.x + (f === 'E' ? 1 : 0), c.y + (f === 'S' ? 1 : 0));
+        const side = `M${ax} ${ay}` + (f === 'N' || f === 'S' ? `h${u}` : `v${u}`);
+        if (!own.has(DE.key(n.x, n.y))) edge += side; // the outline: sides that aren't another of its cells
+        else if (f === 'E' || f === 'S') grid += side; // faint cell lines inside, like the minimap
+      }
+    }
+    const vw = cols * u + 2 * pad, vh = rows * u + 2 * pad;
+    const w = Math.min(66, Math.max(14, 22 * vw / vh)); // px wide at 22px tall (play.css), capped
+    const svg = `<svg viewBox="0 0 ${vw} ${vh}" style="width:${w.toFixed(1)}px"><path d="${fill}" fill="currentColor" fill-opacity=".45"/>` +
+      `<path d="${grid}" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width=".5"/>` +
+      `<path d="${edge}" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="square"/></svg>`;
+    return { kind: 'path', key: 'path:' + cellKeys.slice().sort().join(';'), svg };
+  }
+  LABEL.path = 'this lost path, every room of it';
+
+  /**
+   * A row of icons (kinds, e.g. ['pack', 'lantern'], or an icon object from
+   * pathIcon); `lose`: red and crossed out (a path's own icon blinks red).
+   */
   function iconRow(row, kinds, lose) {
-    const sig = kinds.join(',') + (lose ? '!' : '');
+    const sig = kinds.map((k) => (typeof k === 'string' ? k : k.key)).join(',') + (lose ? '!' : '');
     if (row.dataset.sig === sig) return;
     row.dataset.sig = sig;
     row.replaceChildren();
     row.classList.toggle('lose', !!lose);
     row.hidden = !kinds.length;
     for (const k of kinds) {
-      const i = el('span', 'thing');
-      i.innerHTML = ICONS[k] || '';
-      i.title = (lose ? 'lost: ' : '') + (LABEL[k] || k);
+      const kind = typeof k === 'string' ? k : k.kind;
+      const i = el('span', 'thing ' + kind);
+      i.innerHTML = (typeof k === 'string' ? null : k.svg) || ICONS[kind] || '';
+      i.title = (lose ? 'lost: ' : '') + (LABEL[kind] || kind);
       row.append(i);
     }
   }
@@ -122,5 +161,5 @@
     panel.style.top = (rect.y0 - 44) + 'px'; // above the hold ring
   }
 
-  Object.assign(W, { ICONS, iconRow, openChoice, closeChoice, moveChoice, choiceNear, updateChoice });
+  Object.assign(W, { ICONS, pathIcon, iconRow, openChoice, closeChoice, moveChoice, choiceNear, updateChoice });
 })(window);

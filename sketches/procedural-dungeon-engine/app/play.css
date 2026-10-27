@@ -223,11 +223,11 @@ kbd {
 /* The hold ring, over what you're acting on. */
 .holdring { position: fixed; z-index: 3; width: 34px; height: 34px; transform: translate(-50%, -100%); pointer-events: none; }
 .holdring[hidden] { display: none; }
-.holdring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.holdring > svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .holdring circle { fill: rgba(14, 10, 8, 0.6); stroke-width: 3.5; }
 .holdring .bg { stroke: rgba(20, 12, 30, 0.7); }
 .holdring .fg { fill: none; stroke: var(--accent); stroke-linecap: round; }
-.holdring span { position: absolute; inset: 0; display: grid; place-items: center; color: #ffe8d2; font-size: 15px; line-height: 1; }
+.holdring > span { position: absolute; inset: 0; display: grid; place-items: center; color: #ffe8d2; font-size: 15px; line-height: 1; }
 /* What's yours at stake, over the ring and in a choice: red and crossed out when it would be lost. */
 .things { display: flex; gap: 4px; justify-content: center; }
 .things[hidden] { display: none; }
@@ -235,7 +235,15 @@ kbd {
 .things .thing { position: relative; width: 24px; height: 24px; padding: 2px; border-radius: 5px;
   background: rgba(14, 10, 8, 0.7); color: #ffd9a8; box-sizing: border-box; }
 .things .thing svg { width: 100%; height: 100%; display: block; }
+.holdring.idle > svg, .holdring.idle > span { visibility: hidden; }
+.things .thing.path { width: auto; min-width: 24px; max-width: 72px; height: 28px; padding: 3px;
+  color: #c3adff; background: rgba(28, 18, 48, 0.8); box-shadow: 0 0 6px rgba(165, 140, 255, 0.55); }
+.things .thing.path svg { height: 22px; }
 .things.lose .thing { color: #ff6b5a; background: rgba(40, 8, 6, 0.8); }
+/* A lost path being let go: its own icon blinks red rather than being crossed out. */
+.things.lose .thing.path { animation: path-lose 0.5s steps(1, end) infinite; box-shadow: 0 0 6px rgba(255, 90, 70, 0.7); }
+.things.lose .thing.path::after { content: none; }
+@keyframes path-lose { 50% { color: #c3adff; background: rgba(28, 18, 48, 0.8); box-shadow: 0 0 6px rgba(165, 140, 255, 0.55); } }
 .things.lose .thing::after { content: ''; position: absolute; inset: 1px;
   background: linear-gradient(45deg, transparent 46.5%, rgba(255, 59, 47, 0.9) 46.5%, rgba(255, 59, 47, 0.9) 53.5%, transparent 53.5%),
     linear-gradient(-45deg, transparent 46.5%, rgba(255, 59, 47, 0.9) 46.5%, rgba(255, 59, 47, 0.9) 53.5%, transparent 53.5%); }

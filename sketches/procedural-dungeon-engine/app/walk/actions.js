@@ -57,8 +57,10 @@
       best.price = W.retracePrice(path);
       best.charged = W.canRetrace(); // a charged hourglass (hourglass.js)
       best.affordable = best.price <= state.run.fuel + 1e-6;
-      best.things = thingsIn(new Set(path.traces.map((t) => t.id)), path.traces);
-      if (best.action === 'letgo') best.lose = best.things.length > 0;
+      // The path itself comes first: letting it go always loses it.
+      best.things = [W.pathIcon(path.traces.flatMap((t) => t.cells))]
+        .concat(thingsIn(new Set(path.traces.map((t) => t.id)), path.traces));
+      if (best.action === 'letgo') best.lose = true;
       // A side door: it opens onto ground the path holds, not the path's own door.
       best.own = !!path.door && path.door.spaceId === sp.id && path.door.exitId === best.exit.id;
     }
@@ -276,6 +278,9 @@
       }
       if (h.t >= need) { h.spent = true; act(near); }
     }
+    // A lost path's door shows what's beyond it as soon as you face it (no
+    // ring yet, and not red: that's for when you hold E to let it go).
+    if (!h.ring && near && near.path && near.things) h.ring = { v: 0, idle: true, things: near.things, lose: false };
     return h.ring;
   }
 
