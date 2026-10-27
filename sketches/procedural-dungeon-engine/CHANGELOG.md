@@ -115,8 +115,28 @@ All notable changes to this sketch are logged here, per
   (`crustLayers`) wake one and it rises as an ordinary shard. Cleared dust,
   crust, loose chits and the pre-pool are saved in the run. Tuning is in
   `DUST` (dev panel).
+- 2026-10-27: **Dusting, after the first playtest.** Each layer of dust is
+  its own plane, a little above the one under it (`DUST.layerGap`), so the
+  layers shift against each other as you move, and each lays a faint film
+  between its pixels (`film`). Dither pixels are half the size, set as a
+  plain size now (`pixel`, cells; it replaces `pixels`, which counted
+  pixels across a half-cell, so lowering it made them bigger). Pixel size,
+  film, cover and layer gap change live from the dev panel. Dust builds
+  out with its room's tiles instead of popping in after. Chits are twice
+  the size (`chitSize`), and gathering one flashes the figure violet.
+  New defaults from the playtest's tweaks: `launch` 1.78, `bounce` 0.42,
+  `moteSize` 0.047.
 
 ### Changed
+
+- 2026-10-27: **The lamp and the duster get their own buttons.** The
+  lantern is no longer a hotbar slot: R (R3) is the lamp, and with nothing
+  in hand that wants it, F at a dormant waystone wakes it from your lamp.
+  The feather duster is worn, not held: its own equipment slot at the
+  hotbar's left end (out of the 1–9 cycle, lit while a swing would find
+  dust), swung with **Q**, **RT** on a gamepad, or a tap on the slot, and
+  shown in the figure's hand for the swing. Running on a gamepad is LT
+  alone. Every other item works as before with F (Y).
 
 - 2026-10-26: **Controls for the jump.** Keyboard: Space jumps and crouch
   moves to C. Gamepad: A jumps, X interacts (was A), Y uses the item in hand

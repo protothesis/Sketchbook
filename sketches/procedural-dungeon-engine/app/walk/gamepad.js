@@ -2,13 +2,14 @@
 // frame. Most buttons stand in for a key and go through input.js's keydown
 // handler, so a pad does what the keyboard does in every state (a choice,
 // the map, a dialog). The left stick walks, analog like the touch stick;
-// either trigger held runs. The right stick peeks: it slides the view that
+// LT held runs. The right stick peeks: it slides the view that
 // way, and it springs back when you let go (camera.js).
 //
 //   A  jump (Space; held for full height)       B  back out of anything (free in the world)
 //   X  E (tap to act, hold to fill the ring)     Y  F (use the item in hand); on the map, recenter
 //   L3  crouch (C)    R3  the lamp (R)           D-pad ◀ ▶  the variant in a group
-//   LB / RB  the hotbar slot left / right        LT / RT  run; on the map, zoom
+//   LB / RB  the hotbar slot left / right        LT  run    RT  the duster (Q)
+//   (on the map, LT / RT zoom)
 //   View  the map    Menu  pause
 //
 // In a choice, a dialog or the waystone travel map, the d-pad (and in a
@@ -31,8 +32,8 @@
 
   const B = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, menu: 9, l3: 10, r3: 11, up: 12, down: 13, left: 14, right: 15 };
   const GLYPH = {
-    xbox: { E: 'X', F: 'Y', R: 'R3', Space: 'A', C: 'L3', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT/RT', bumpers: 'LB/RB' },
-    ps: { E: '□', F: '△', R: 'R3', Space: '✕', C: 'L3', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2/R2', bumpers: 'L1/R1' },
+    xbox: { E: 'X', F: 'Y', Q: 'RT', R: 'R3', Space: 'A', C: 'L3', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT', bumpers: 'LB/RB' },
+    ps: { E: '□', F: '△', Q: 'R2', R: 'R3', Space: '✕', C: 'L3', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2', bumpers: 'L1/R1' },
   };
 
   let pad = false;       // the last input was the pad: prompts show its glyphs
@@ -53,7 +54,7 @@
   function padHelp() {
     const g = GLYPH[style], k = (s) => `<kbd>${s}</kbd>`;
     return `${k('◖')} move · ${k('◗')} look · ${k(g.run)} run · ${k(g.Space)} jump · ${k(g.C)} crouch · ${k(g.E)} interact · ` +
-      `${k(g.F)} use item · ${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
+      `${k(g.F)} use item · ${k(g.Q)} dust · ${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
   }
 
   function setPad(on, kind) {
@@ -63,6 +64,7 @@
     document.body.classList.toggle('pad', on);
     if (help) help.innerHTML = on ? padHelp() : keyHelp;
     if (state.choice) W.moveChoice(0); // redraw its hint
+    if (state.run) W.refreshHotbar(); // the equipment slot's key
   }
   // A real key or touch takes the hints back (the pad's own keys are synthetic).
   for (const ev of ['keydown', 'pointerdown', 'wheel']) {
@@ -132,6 +134,7 @@
         if (state.bigmap) { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; } else key('keydown', 'f');
         return;
       case B.l3: key('keydown', 'c'); return;
+      case B.rt: if (!state.bigmap) key('keydown', 'q'); return; // on the map it zooms (poll)
       case B.r3: key('keydown', 'r'); return;
       case B.lb: case B.rb: {
         if (busy) return;
@@ -210,7 +213,7 @@
         W.zoomBigMap(Math.pow(ZOOM, z * dt), r.left + r.width / 2, r.top + r.height / 2);
       }
     }
-    move = { x: s.x, y: s.y, mag: s.mag, run: down[B.lt] || down[B.rt] };
+    move = { x: s.x, y: s.y, mag: s.mag, run: down[B.lt] };
     const r = stick(gp, 2);
     W.padLook = { x: r.x * r.mag, y: r.y * r.mag };
   }

@@ -634,6 +634,11 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .slot.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: rgba(232, 147, 95, 0.12); }
 .slot .n { position: absolute; left: 4px; top: 2px; font-size: 9px; color: var(--muted); }
 .slot .ic { font-size: 20px; line-height: 46px; }
+/* Worn equipment (the duster): its own slot at the left end, its key in the corner. */
+.slot.equip { border-style: dashed; background: rgba(196, 193, 186, 0.06); }
+.slot.equip .n { color: #c4c1ba; }
+.slot.equip.ready { border-style: solid; border-color: rgba(201, 168, 255, 0.75); box-shadow: 0 0 8px rgba(185, 140, 255, 0.35); }
+.equip-gap { width: 1px; margin: 4px 2px; background: var(--border); }
 .slot .ct { position: absolute; right: 4px; bottom: 2px; font-size: 10px; color: var(--muted); }
 .slot .fill { position: absolute; left: 0; right: 0; bottom: 4px; display: flex; justify-content: center; gap: 3px; }
 .slot .fill i { width: 5px; height: 5px; border-radius: 50%; border: 1px solid rgba(210, 168, 255, 0.6); }

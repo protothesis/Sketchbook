@@ -12,14 +12,19 @@
   //
   // E interacts with the world (doors, lifting a jar, wiping a
   // chalk mark you face): one focused thing (actionNear in actions.js).
-  // F uses what's in your hand, the item selected on the hotbar. Slot 1 is
-  // always the lantern (empty hands): F covers or relights it. Otherwise:
-  // draw a chalk mark, set a jar down, press a doorstone to a wall. 1-9 or
+  // F uses what's in your hand, the item selected on the hotbar: draw a
+  // chalk mark, set a jar down, press a doorstone to a wall. With nothing in
+  // hand that wants it, F at a dormant waystone wakes it from your lamp
+  // (the lamp itself is R, never a hotbar slot). 1-9 or
   // the wheel select. A slot can hold a group of variants (chalk colours):
   // click it again, or press and hold, to open its picker; its number key
   // again cycles. F with an empty jar near a pixie catches it (pixies.js);
   // a pixie jar set down draws ghosts to it, and on a sigil tile it powers
   // the sigil: +1 entropy max per pixie jar on it.
+  //
+  // Equipment worn rather than held (`equip: true`, the feather duster) has
+  // its own slot at the hotbar's left end, out of the 1-9 cycle, and its own
+  // button: Q (RT on a pad, or a tap on the slot) uses it whatever's in hand.
 
   const JAR_H = 0.38; // cells
   const STROKES = 3;  // chalk marks per stick
@@ -177,9 +182,8 @@
    * state.variant.
    */
   function slots() {
-    const run = state.run, out = [{ key: 'lantern', kind: 'lantern' }]; // empty hands
-    const kindSlot = (k) => ITEMS[k].slot && ITEMS[k].slot(run);
-    for (const k in ITEMS) if (ITEMS[k].first && kindSlot(k)) out.push(kindSlot(k)); // a kind that keeps its place by the lantern (the duster)
+    const run = state.run, out = [];
+    const kindSlot = (k) => !ITEMS[k].equip && ITEMS[k].slot && ITEMS[k].slot(run);
     if (run.jars.length) {
       // One slot for every jar, grouped by what it holds: empty, a pixie, a
       // charge of entropy. The group you pick is the jar in your hands.
@@ -201,10 +205,24 @@
     if (run.doorstones > 0) out.push({ key: 'doorstone', kind: 'doorstone', count: run.doorstones });
     if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
     for (const k in ITEMS) {
-      const slot = !ITEMS[k].first && kindSlot(k);
+      const slot = kindSlot(k);
       if (slot) out.push(slot);
     }
     return out;
+  }
+  /** The worn equipment's slot (the duster), or null: { key, kind, ... } from its `slot(run)`. */
+  function equipSlot() {
+    for (const k in ITEMS) if (ITEMS[k].equip && ITEMS[k].slot) { const s = ITEMS[k].slot(state.run); if (s) return s; }
+    return null;
+  }
+  /** Q, RT, or a tap on its slot: use the worn equipment. */
+  function useEquip() {
+    const slot = equipSlot();
+    if (!slot || state.paused) return;
+    if (state.carry) { W.showCaption('your hands are full · E to set it down'); shakeHotbar(); return; }
+    ITEMS[slot.kind].act({ slot });
+    savePlayer();
+    W.refreshHud();
   }
   function selectedSlot() {
     const s = slots();
@@ -230,14 +248,9 @@
 
   const ICON = { jar: '⚱', doorstone: '⌂', key: '⚷' };
   const NAME = {
-    lantern: 'your lantern (empty hands): F covers or relights it',
     doorstone: 'doorstone: F at a bare wall opens a door',
     key: 'key: F at a locked door unlocks it',
   };
-  // The lantern slot's icon: a small copy of the lamp HUD's lantern.
-  const LANTERN_SVG = '<svg viewBox="0 0 24 32" width="15" height="20"><path d="M8 6 a4 4 0 0 1 8 0" fill="none" stroke="currentColor" stroke-width="1.8"/>' +
-    '<rect x="6" y="6" width="12" height="3" rx="1" fill="currentColor"/><rect x="7" y="9" width="10" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-    '<path d="M12 12 C15 16 15 19 12 22 C9 19 9 16 12 12 Z" fill="#ffc27a"/><rect x="6" y="25" width="12" height="3" rx="1" fill="currentColor"/></svg>';
   const JAR_HOLDS = [null, 'pixie', 'entropy'];
   /** "empty jar", "pixie jar", "jar of entropy". */
   const jarName = (j) => (j.holds === 'pixie' ? 'pixie jar' : j.holds === 'entropy' ? 'jar of entropy' : 'empty jar');
@@ -288,8 +301,19 @@
     const cur = selectedSlot();
     if (cur) state.sel = cur.key;
     bar.innerHTML = '';
-    bar.hidden = !s.length;
+    const eq = equipSlot();
+    bar.hidden = !s.length && !eq;
     updateHeld(cur);
+    if (eq) { // the worn equipment: its own slot, its own key
+      const b = el('button', 'slot equip ' + eq.kind);
+      b.type = 'button';
+      b.append(el('span', 'n', W.glyph ? W.glyph('Q') : 'Q'));
+      b.title = ITEMS[eq.kind].title(eq);
+      b.append(ITEMS[eq.kind].icon(eq));
+      b.addEventListener('click', (e) => { e.preventDefault(); useEquip(); b.blur(); });
+      bar.append(b);
+      if (s.length) bar.append(el('span', 'equip-gap'));
+    }
     s.forEach((slot, i) => {
       const b = el('button', 'slot' + (cur && slot.key === cur.key ? ' on' : '') + ' ' + slot.kind);
       b.type = 'button';
@@ -299,11 +323,6 @@
       } else if (slot.kind === 'jar') {
         b.title = `jars (${slot.count}): E sets the one in your hands down, F swipes it (a pixie, a full well) or pours it; ${jarVariantName(slot.cur)}` +
           (slot.variants.length > 1 ? '; click again or hold to choose' : '');
-      } else if (slot.kind === 'lantern') {
-        b.title = NAME.lantern;
-        const ic = el('span', 'ic');
-        ic.innerHTML = LANTERN_SVG;
-        b.append(ic);
       } else if (ITEMS[slot.kind] && ITEMS[slot.kind].icon) {
         b.title = ITEMS[slot.kind].title(slot);
         b.append(ITEMS[slot.kind].icon(slot));
@@ -574,16 +593,15 @@
   /** What F would do right now with the selected item, or null. */
   function useNear(p) {
     const slot = selectedSlot();
-    if (!slot || state.paused || state.carry) return null; // a block fills your hands
-    // An unpowered waystone right in front of you comes first: your lamp's
-    // flame (a charge) or a full jar (its entropy or its pixie) wakes it.
+    if (state.paused || state.carry) return null; // a block fills your hands
+    // An unpowered waystone right in front of you comes first: a full jar in
+    // hand (its entropy or its pixie) wakes it, or else your lamp's flame (a charge).
     const st = stoneAhead(p);
-    if (st && slot.kind === 'lantern') return { action: 'powerlamp', slot, stone: st };
-    if (st && slot.kind === 'jar') {
-      const jar = heldJar();
-      if (jar && jar.holds) return { action: 'power', slot, jar, stone: st };
+    if (st) {
+      const jar = slot && slot.kind === 'jar' && heldJar();
+      return jar && jar.holds ? { action: 'power', slot, jar, stone: st } : { action: 'powerlamp', slot, stone: st };
     }
-    if (slot.kind === 'lantern') return { action: 'lamp', slot };
+    if (!slot) return null;
     if (slot.kind === 'key') {
       const door = W.doorNear(p);
       return door && door.action === 'locked' ? { action: 'unlock', slot, door } : null;
@@ -627,7 +645,6 @@
     const u = useNear(state.player);
     if (!u && state.carry) W.showCaption('your hands are full · E to set it down');
     if (!u) { shakeHotbar(); return; } // "that didn't work"
-    if (u.action === 'lamp') { W.toggleLamp(); return; }
     if (u.action === 'powerlamp') { W.powerStone(u.stone, null); return; }
     if (u.action === 'power') {
       swipeAt = state.time;
@@ -765,7 +782,7 @@
   function resetHeld() { heldRig.clear(); heldSig = null; }
   function updateHeld(slot) {
     const sig = state.carry ? (state.carry.anim ? '' : 'carry:' + state.carry.key) // mid-arc: not in your hands yet
-      : !slot || slot.kind === 'lantern' ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : slot.sig || '');
+      : !slot ? '' : slot.kind + ':' + (slot.cur ? slot.cur.id : slot.sig || '');
     if (sig === heldSig) return;
     heldSig = sig;
     heldRig.clear();
@@ -1133,7 +1150,7 @@ void main() {
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, equipSlot, useEquip, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });

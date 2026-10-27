@@ -1,8 +1,8 @@
 // Walk mode: dusting (notes/dusting-2026-10-27.md). Rooms gather dust by
 // their mood (DP.dust, play-rules.js): a thin light-grey plane a little
 // above the floor or a low block's top, in a scaled-up pixel dither whose
-// density is how many layers are left. The feather duster, always in your
-// bag, swipes it (F; one press, one swing): each swing takes a layer off
+// density is how many layers are left. The feather duster, worn in its own
+// slot, swipes it (Q or RT; one press, one swing): each swing takes a layer off
 // every dusted half-cell in an arc in front of you, kicks up chunky dust
 // clouds that break down into motes catching the light, and now and then
 // throws out entropy chits. Walk through chits (they drift to you over a
@@ -39,18 +39,21 @@
     magnet: 0.9,       // cells: chits drift to you this close
     collect: 0.28,     // cells: and are gathered this close
     gravity: 14,       // cells/s²
-    launch: 1.3,       // cells/s: how hard a chit flies out
+    launch: 1.78,      // cells/s: how hard a chit flies out
     lift: 2.6,         // cells/s: and up
-    bounce: 0.35,
+    bounce: 0.42,
     puffs: 5,          // cloud puffs per half-cell a swing clears a layer from
     cloudLife: 2.2,    // s
     cloudSize: 0.42,   // cells across, at first
     cloudGrow: 1.9,    // times that, at the end
     motes: 2,          // motes each puff breaks down into
     moteLife: 9,       // s
-    moteSize: 0.035,   // cells
+    moteSize: 0.047,   // cells
     cover: 0.82,       // how much of a half-cell three layers cover (the dither's density)
-    pixels: 7,         // dither pixels across a half-cell
+    pixel: 0.036,      // cells: the size of one dither pixel
+    layerGap: 0.018,   // cells between one layer of dust and the next above it
+    film: 0.1,         // the faint film each layer lays between its pixels (opacity)
+    chitSize: 0.15,    // cells across
     color: 0xc4c1ba,   // the dust's grey
     glintEvery: 1.7,   // s between a crusted crystal's glints, in your light
   };
@@ -60,42 +63,56 @@
   const ckey = (c) => c.sx + ',' + c.sy + ',' + c.h;
 
   // ---------------------------------------------------------------------------
-  // The dust plane: one instanced quad per dusted half-cell, a Lambert
-  // material (so the lamp, its pool bands and the shadows fall on it), with
-  // fragments thrown out in a world-space 4x4 Bayer pattern (plus a little
-  // hash) against the half-cell's coverage. World-space pixels, so patches
-  // meet seamlessly and read as one chunky dither.
+  // The dust plane: one instanced quad per layer of each dusted half-cell,
+  // each layer a little above the one under it (so they shift against each
+  // other as you move), in a Lambert material (so the lamp, its pool bands
+  // and the shadows fall on it). Each pixel of the world-space 4x4 Bayer
+  // pattern (plus a little hash) belongs to one layer's band of thresholds,
+  // so the layers together cover what the half-cell's coverage says and
+  // never double up. World-space pixels, so patches meet seamlessly and read
+  // as one chunky dither. A second pass lays a faint film over the rest of
+  // each layer, so covered ground reads as filmed over between the pixels.
 
-  const dustUniforms = { uDustPix: { value: 0.5 * S / DUST.pixels } };
-  const dustMat = new THREE.MeshLambertMaterial({ color: DUST.color, emissive: 0x0d0d0f });
-  dustMat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, dustUniforms);
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aDust;\nvarying float vDust;\nvarying vec3 vDustW;')
-      .replace('#include <project_vertex>', `#include <project_vertex>
+  const dustUniforms = { uDustPix: { value: DUST.pixel * S }, uFilm: { value: DUST.film } };
+  function dustMaterial(film) {
+    const mat = new THREE.MeshLambertMaterial(film
+      ? { color: DUST.color, emissive: 0x0d0d0f, transparent: true, depthWrite: false }
+      : { color: DUST.color, emissive: 0x0d0d0f });
+    mat.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, dustUniforms);
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec3 aDust;\nvarying vec3 vDust;\nvarying vec3 vDustW;')
+        .replace('#include <project_vertex>', `#include <project_vertex>
 vDust = aDust;
 vec4 dustW = vec4(transformed, 1.0);
 #ifdef USE_INSTANCING
 dustW = instanceMatrix * dustW;
 #endif
 vDustW = (modelMatrix * dustW).xyz;`);
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
-varying float vDust;
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>
+varying vec3 vDust; // this layer's band of thresholds (from, to), and how much of the layer is left
 varying vec3 vDustW;
 uniform float uDustPix;
+uniform float uFilm;
 float dustBayer(vec2 p) {
   int i = int(mod(p.x, 4.0)) + int(mod(p.y, 4.0)) * 4;
   float m[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
   return (m[i] + 0.5) / 16.0;
 }
 float dustHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`)
-      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 vec2 dustG = floor(vDustW.xz / uDustPix);
-if (dustBayer(dustG) * 0.72 + dustHash(dustG) * 0.28 >= vDust) discard;`)
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 0.84 + 0.3 * dustHash(dustG + 7.0);');
-  };
-  dustMat.customProgramCacheKey = () => 'dust';
+float dustT = dustBayer(dustG) * 0.72 + dustHash(dustG) * 0.28;
+bool dustPixel = dustT >= vDust.x && dustT < vDust.y;
+${film ? 'if (dustPixel || vDust.z <= 0.0) discard;' : 'if (!dustPixel) discard;'}`)
+        .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 0.84 + 0.3 * dustHash(dustG + 7.0);' +
+          (film ? '\ndiffuseColor.a = uFilm * vDust.z;' : ''));
+    };
+    mat.customProgramCacheKey = () => (film ? 'dust-film' : 'dust');
+    return mat;
+  }
+  const dustMat = dustMaterial(false), filmMat = dustMaterial(true);
   const quadGeo = new THREE.PlaneGeometry(0.5 * S, 0.5 * S).rotateX(-Math.PI / 2);
 
   /** How much of a half-cell `n` layers cover (n eases between whole layers as one comes off). */
@@ -110,6 +127,34 @@ if (dustBayer(dustG) * 0.72 + dustHash(dustG) * 0.28 >= vDust) discard;`)
   const builtKeys = new Set();  // "spaceId:seed" of built rooms (their chits are live)
   const crusted = new Map();    // item key -> crystal, for crystals still crusted over
   const easing = new Set();     // cells whose shown layers are catching up
+
+  /** A cell's layers, as bands of the dither: layer j shows the pixels between j and j+1 layers' coverage. */
+  function paint(c) {
+    const a = c.room.attr.array;
+    for (let j = 0; j < c.layers; j++) {
+      const k = (c.i + j) * 3, left = THREE.MathUtils.clamp(c.shown - j, 0, 1);
+      a[k] = coverage(j);
+      a[k + 1] = coverage(j + left);
+      a[k + 2] = left;
+    }
+    c.room.attr.needsUpdate = true;
+  }
+
+  /** Where a room's layers sit: stacked DUST.layerGap apart, and drawn in toward the tile's
+   *  centre as it builds out (world.js applyReveal scales the tiles). */
+  const tmpM = new THREE.Matrix4();
+  function place(room) {
+    for (const c of room.cells) {
+      const tx = (Math.floor(c.sx / 2) + 0.5) * S, ty = (Math.floor(c.sy / 2) + 0.5) * S;
+      const r = c.tile ? c.tile.scale.x : 1;
+      for (let j = 0; j < c.layers; j++) {
+        tmpM.makeScale(r, 1, r).setPosition(tx + ((c.sx + 0.5) / 2 * S - tx) * r,
+          (c.top + j * DUST.layerGap) * S + 0.014, ty + ((c.sy + 0.5) / 2 * S - ty) * r);
+        room.mesh.setMatrixAt(c.i + j, tmpM);
+      }
+    }
+    room.mesh.instanceMatrix.needsUpdate = true;
+  }
 
   /** Add a space's dust and crusted crystals. Called from buildSpace, before its loot. */
   function addDust(space, rec, tileAt) {
@@ -127,27 +172,32 @@ if (dustBayer(dustG) * 0.72 + dustHash(dustG) * 0.28 >= vDust) discard;`)
       const left = Math.max(0, c.layers - (taken[ckey(c)] || 0));
       return Object.assign({}, c, { key, left, shown: left });
     });
-    const room = { key, spaceId: space.id, cells, crystals: [], mesh: null, attr: null };
+    const room = { key, spaceId: space.id, cells, crystals: [], mesh: null, film: null, attr: null, rec, sig: '' };
     if (cells.length) {
-      const geom = quadGeo.clone();
-      const attr = new THREE.InstancedBufferAttribute(new Float32Array(cells.length), 1);
-      geom.setAttribute('aDust', attr);
-      const mesh = new THREE.InstancedMesh(geom, dustMat, cells.length);
-      const m = new THREE.Matrix4();
-      cells.forEach((c, i) => {
-        Object.assign(c, { i, room, top: c.h * UNIT });
-        m.makeTranslation((c.sx + 0.5) / 2 * S, c.top * S + 0.014, (c.sy + 0.5) / 2 * S);
-        mesh.setMatrixAt(i, m);
-        attr.array[i] = coverage(c.left);
+      let n = 0;
+      for (const c of cells) {
+        // c.i: its first layer's instance; c.tile: the floor tile it builds out with.
+        Object.assign(c, { i: n, room, top: c.h * UNIT, tile: tileAt[DE.key(Math.floor(c.sx / 2), Math.floor(c.sy / 2))] });
+        n += c.layers;
         const at = c.sx + ',' + c.sy;
         dustAt.set(at, (dustAt.get(at) || []).concat(c));
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false; // its bounds are the one quad's
-      mesh.visible = false;       // until the room has assembled (updateDust)
-      rec.group.add(mesh);
-      Object.assign(room, { mesh, attr });
+      }
+      const geom = quadGeo.clone();
+      const attr = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+      geom.setAttribute('aDust', attr);
+      const mesh = new THREE.InstancedMesh(geom, dustMat, n);
+      const film = new THREE.InstancedMesh(geom, filmMat, n);
+      film.instanceMatrix = mesh.instanceMatrix; // the same quads
+      for (const o of [mesh, film]) {
+        o.receiveShadow = true;
+        o.frustumCulled = false; // its bounds are the one quad's
+        rec.group.add(o);
+      }
+      Object.assign(room, { mesh, film, attr });
+      for (const c of cells) paint(c);
+      place(room);
+      // A room being revealed shows its dust from the next update, drawn in with its tiles.
+      mesh.visible = film.visible = rec.revealStart === null;
     }
     // Crusted crystals: shards not yet woken (or collected).
     const items = d.crust.length ? DP.loot(space) : [];
@@ -160,7 +210,6 @@ if (dustBayer(dustG) * 0.72 + dustHash(dustG) * 0.28 >= vDust) discard;`)
       room.crystals.push(cr);
       crusted.set(ikey, cr);
     }
-    room.rec = rec;
     dustRooms.set(space.id, room);
   }
 
@@ -171,7 +220,7 @@ if (dustBayer(dustG) * 0.72 + dustHash(dustG) * 0.28 >= vDust) discard;`)
   function forgetDust(id) {
     const room = dustRooms.get(id);
     if (!room) return;
-    if (room.mesh) room.mesh.visible = false;
+    if (room.mesh) room.mesh.visible = room.film.visible = false;
     for (const c of room.cells) {
       const at = c.sx + ',' + c.sy;
       const keep = (dustAt.get(at) || []).filter((o) => o !== c);
@@ -372,8 +421,10 @@ if (dustBayer(dustG) * 0.72 + dustHash(dustG) * 0.28 >= vDust) discard;`)
   /** Can the pre-pool take a chit? Not when it's full and your lamp has no room for its shard. */
   const poolTakes = () => (run().dustPool || 0) < DUST.perShard || W.lampRoom() >= PER_SHARD() - 1e-6;
 
+  let gathered = -9;
   function gather(c) {
     const r = run();
+    gathered = state.time;
     r.chits.splice(r.chits.indexOf(c), 1);
     r.dustPool = (r.dustPool || 0) + 1;
     r.chitsFound = (r.chitsFound || 0) + 1;
@@ -453,15 +504,16 @@ if (dustBayer(dustG) * 0.72 + dustHash(dustG) * 0.28 >= vDust) discard;`)
   chitGeo.setAttribute('aGlow', new THREE.BufferAttribute(new Float32Array(MAX_CHITS), 1));
   const sizing = { uScale: { value: 400 }, uTime: { value: 0 } };
   const chitMat = new THREE.ShaderMaterial({
-    uniforms: Object.assign({ uColor: { value: new THREE.Color(0xc4a6ff) } }, sizing),
+    uniforms: Object.assign({ uColor: { value: new THREE.Color(0xc4a6ff) }, uSize: { value: DUST.chitSize * S } }, sizing),
     vertexShader: `
 uniform float uScale;
+uniform float uSize;
 attribute float aGlow;
 varying float vGlow;
 void main() {
   vGlow = aGlow;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_PointSize = max(3.0, ${(0.075 * S).toFixed(3)} * (0.8 + 0.35 * aGlow) * uScale / -mv.z);
+  gl_PointSize = max(5.0, uSize * (0.8 + 0.35 * aGlow) * uScale / -mv.z);
   gl_Position = projectionMatrix * mv;
 }`,
     fragmentShader: `
@@ -689,18 +741,30 @@ void main() {
     sizing.uScale.value = tmpSize.y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
     sizing.uTime.value = state.time;
     partMat.uniforms.uPx.value = Math.max(2, Math.round(2 * renderer.getPixelRatio()));
-    // Rooms show their dust once they've assembled.
+    // The dev panel's tweaks show at once, in every built room.
+    dustUniforms.uDustPix.value = Math.max(0.004, DUST.pixel) * S;
+    dustUniforms.uFilm.value = DUST.film;
+    chitMat.uniforms.uSize.value = DUST.chitSize * S;
+    // A chit gathered: a quick violet flash over you (figure.js flashMat).
+    const fk = (state.time - gathered) / 0.32;
+    W.flashMat.opacity = fk < 1 ? 0.75 * (1 - fk) : 0;
+    W.flashMat.visible = fk < 1;
+    const sig = DUST.cover + '|' + DUST.layerGap;
+    // Dust builds out with its room's tiles.
     for (const room of dustRooms.values()) {
-      const rec = room.rec;
-      const ready = !rec || rec.revealStart === null || state.time - rec.revealStart > 1;
-      if (room.mesh) room.mesh.visible = ready;
+      if (room.mesh) {
+        const fresh = room.sig !== sig;
+        if (fresh) for (const c of room.cells) paint(c);
+        if (fresh || room.rec.revealStart !== null) place(room);
+        room.sig = sig;
+        room.mesh.visible = room.film.visible = true;
+      }
       for (const cr of room.crystals) cr.group.scale.setScalar(Math.max(0.001, cr.tile ? cr.tile.scale.x : 1));
     }
     // A layer coming off thins the dither over a moment, not at once.
     for (const c of easing) {
       c.shown = Math.max(c.left, c.shown - dt * 5);
-      c.room.attr.array[c.i] = coverage(c.shown);
-      c.room.attr.needsUpdate = true;
+      paint(c);
       if (c.shown <= c.left) easing.delete(c);
     }
     // Crystals glint, now and then, where your light reaches them.
@@ -725,11 +789,20 @@ void main() {
     drawChits();
     updateParts(dt);
     poolHud();
+    showSwing();
+    // The duster's slot lights up while a swing would find dust (or a crust).
+    if (!readyEl || !readyEl.isConnected) readyEl = document.querySelector('.slot.equip.duster');
+    if (readyEl) {
+      const t = state.carry || state.paused ? null : targets(state.player);
+      readyEl.classList.toggle('ready', !!t && (t.cells.length > 0 || !!t.crystal));
+    }
   }
 
   // ---------------------------------------------------------------------------
-  // The feather duster: always in your bag (for now), the slot after your
-  // lantern. A short wooden handle and a head of pale feathers.
+  // The feather duster: worn (for now from the start), in the equipment slot
+  // at the hotbar's left end (items.js), used with Q or RT whatever's in your
+  // hand. A short wooden handle and a head of pale feathers, out in your
+  // left hand for the moment of a swing.
 
   const dusterGeo = {
     handle: new THREE.CylinderGeometry(0.012 * S, 0.015 * S, 0.22 * S, 6),
@@ -759,22 +832,31 @@ void main() {
   const DUSTER_SVG = '<svg viewBox="0 0 16 22" width="13" height="18"><path d="M8 21 V11" stroke="#a07a52" stroke-width="1.8" stroke-linecap="round"/>' +
     '<path d="M8 11 C3 9 2 5 4 1 C6 4 7 3 8 1 C9 3 10 4 12 1 C14 5 13 9 8 11 Z" fill="#e3d8c2"/></svg>';
 
+  const swingRig = new THREE.Group();
+  swingRig.position.set(-0.17 * S, 0.3 * S, 0.08 * S); // at the figure's left side, like a held tool
+  swingRig.add(makeDuster());
+  swingRig.visible = false;
+  W.bodyRig.add(swingRig);
+  /** The duster out for a swing: a sweep across in front of you, then away. */
+  function showSwing() {
+    const k = (state.time - lastSwing) / 0.3;
+    swingRig.visible = k >= 0 && k < 1;
+    if (!swingRig.visible) return;
+    swingRig.rotation.set(1.1 + 0.3 * Math.sin(k * Math.PI), 0, 0);
+    swingRig.rotation.y = 0.9 - 1.8 * k;
+  }
+
+  let readyEl = null;
   ITEMS.duster = {
     cls: 'equipment',
-    first: true, // its slot comes right after the lantern's (items.js slots)
+    equip: true, // its own slot, not in the 1-9 cycle (items.js equipSlot)
     mesh: makeDuster,
     slot: () => ({ key: 'duster', kind: 'duster', sig: 'duster', item: { kind: 'duster' } }),
-    title: () => 'feather duster: F swipes it · dust comes off a layer a swipe, and now and then a chit of entropy with it',
+    title: () => 'feather duster (worn): Q or RT swipes it, or tap here · dust comes off a layer a swipe, and now and then a chit of entropy with it',
     icon() {
       const ic = el('span', 'ic');
       ic.innerHTML = DUSTER_SVG;
       return ic;
-    },
-    /** F always swings it; the prompt shows only with something in reach. */
-    use(p, slot) {
-      const t = targets(p);
-      const line = t.crystal ? { cls: 'jar', text: 'dust the crystal off' } : t.cells.length ? { cls: 'jar', text: 'dust' } : null;
-      return { action: 'dust', slot, line };
     },
     act: () => swing(),
   };

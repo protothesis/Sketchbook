@@ -93,11 +93,26 @@ float blobCut(vec3 lightView) {
   for (const m of [body, head, lanternMesh]) m.renderOrder = 5;
   Object.assign(ghostMat, { stencilWrite: true, stencilRef: FIGURE_STENCIL, stencilFunc: THREE.NotEqualStencilFunc,
     stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp, stencilZPass: THREE.KeepStencilOp });
+  // A flash over the whole figure, seen through anything (a chit gathered:
+  // dust.js sets its opacity and shows it for a moment). Dithered like the
+  // silhouette, on the other half of the checkerboard.
+  const flashMat = new THREE.MeshBasicMaterial({
+    color: 0xb98cff, transparent: true, opacity: 0, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  flashMat.visible = false;
+  flashMat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
+      '#include <clipping_planes_fragment>\nif (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) > 0.5) discard;');
+  };
+  flashMat.customProgramCacheKey = () => 'figure-flash';
   for (const m of [body, head]) {
     const g = new THREE.Mesh(m.geometry, ghostMat);
     g.position.copy(m.position);
     g.renderOrder = 10;
-    bodyRig.add(g);
+    const f = new THREE.Mesh(m.geometry, flashMat);
+    f.position.copy(m.position);
+    f.renderOrder = 11;
+    bodyRig.add(g, f);
   }
   figure.add(bodyRig);
   // The light rides with the held lamp (ahead and to the right, which gives
@@ -330,6 +345,6 @@ float blobCut(vec3 lightView) {
     $('crouch-btn').classList.toggle('on', state.crouch);
   }
 
-  Object.assign(W, { figure, bodyRig, lantern, lanternMesh, fill, edgeEnds, resolveCollisions, placeLamp,
+  Object.assign(W, { figure, bodyRig, flashMat, lantern, lanternMesh, fill, edgeEnds, resolveCollisions, placeLamp,
     footReach, pressJump, releaseJump, fall, toggleCrouch, SHADOW });
 })(window);

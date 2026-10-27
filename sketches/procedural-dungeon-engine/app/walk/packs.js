@@ -37,7 +37,7 @@
     run.jars = [];
     run.chalks = {};
     run.dustPool = 0;
-    state.sel = 'lantern';
+    state.sel = null;
     run.packs.push(pk);
     return pk;
   }
