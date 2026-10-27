@@ -121,6 +121,12 @@ playable on its own:
    where something has been. Creatures get *senses* (what they can detect)
    and *drives* (what they want). That's the step from "a table of
    reactions" to "an ecosystem".
+   - **Noise from movement** (decided 2026-10-26, parked until a creature
+     listens). Moving emits noise as a stimulus anything can sense, scaled
+     by how you move: crawling or moving very slowly is silent, walking is
+     quiet (below most things' hearing), running and jumping (and landing)
+     are loud. It would be a stimulus with strength and reach like light,
+     not a direct "player is here" signal.
 4. **More verbs:** `follow` (keep a distance, like boids), `consume` (a
    ghost drains a well, so a haunted well runs dry), `carry`, `startle`.
 5. **One more creature, designed for the web,** not on its own: say,

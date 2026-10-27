@@ -965,16 +965,26 @@ more yours. Jump is the first step. Not built yet:
 - **Hazards you clear or route around.** Tiles, spills, and entities that
   drain entropy or psychic stamina while you're on or near them. Jumping
   over them, crossing on block tops, or finding another way is the play.
-- **A movement design conversation** to have before building more. Open
-  questions:
-  - What makes moving feel good here? Acceleration and stopping, turn
-    speed, how the camera follows.
-  - Does a dodge or dash belong, and what would it cost (stamina, entropy)?
-  - Should jumping or landing make noise that ghosts or creepers notice?
-  - Fall height: should dropping off a stack cost anything?
-  - Should rooms be generated with traversal in mind (gaps, stepping-stone
-    blocks, raised routes past hazards)?
+- **A movement design conversation**, started 2026-10-26. Decided so far:
+  - **Dash: likely, on RT.** Running would move to LT alone (today either
+    trigger runs). A plain dash first; then upgrades, some costing entropy
+    or psychic stamina. One idea: a **phase dash** that passes through a
+    wall without carving a door.
+  - **Movement makes noise** (decided, parked until something listens; see
+    `EMERGENCE.md`, step 3). Crawling or moving very slowly is silent,
+    walking is quiet (most things won't notice), running and jumping are
+    loud.
+  - **Falling costs nothing**, for now. There's little height in the game,
+    and there may never be much more.
+  - **Routes:** rooms generated with traversal in mind. Noted as a possible
+    procgen feature in `DESIGN.md`.
+
+  Still open:
+  - What makes moving feel good here? Acceleration and stopping, and turn
+    speed. (The camera got a first pass: `camera.js`.)
   - What do hazards do to the lamp, and what does the lamp do to them?
+  - Block grain: more heights, or blocks smaller than a half cell (things
+    you could trip over)?
 
 ## Out of scope for now
 
