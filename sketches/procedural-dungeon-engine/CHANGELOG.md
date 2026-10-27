@@ -790,6 +790,22 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-26: **A new door no longer reshuffles a room.** Opening a door
+  with a doorstone, or a loop opening one into the room, used to move the
+  room's push-block marks and change their colours. The blocks you'd set
+  home were then left off target, and sometimes a block was left with no
+  mark at all. The vessel, sigil, well and scattered waystone spots could
+  move too.
+
+  The cause was that all of these were placed around the room's current
+  doors. Now they're placed around the doors the room was made with
+  (`exitsMadeWith` in `play-rules.js`), the way props and sconces already
+  were. Two more fixes in the same area:
+  - Crates are rolled before props are cleared off a later door, so a
+    clearing can't shift which singles are crates.
+  - Placement reads the props layout as it was made.
+
+  Rooms that already moved go back to their original layout.
 - 2026-10-25: **Dragging blocks is smooth** (issue #26). It used to pop
   and jerk for two reasons:
   - The block's collision box stayed on its old half-cell while its mesh
