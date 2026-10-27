@@ -140,6 +140,12 @@
     darkGrace: [0.3, 0.55], // the dark's level across its first beat...
     darkMax: 1,          // ...and just before you faint in it
     distress: 1.1,       // psyche, just before you faint (any drain)
+    // The grasping shadows: they follow the meter, from a rim (the dark's
+    // first beat) to most of the way in (empty), never crowding out more
+    // than about 70% of the screen. none / most: their edge (0 centre ..
+    // 1 corner) with none and at most; fingers: how far the ragged bits
+    // reach past it; opacity: at most.
+    shadow: { none: 1.25, most: 0.45, fingers: 0.18, opacity: 0.8, rim: 0.12, drain: 0.25, ease: 3 },
     faint: {
       shatter: 0.45,     // s: the picture breaks into chunks
       static: 1.4,       // s: settling into static, its colour streaks fading
@@ -233,6 +239,14 @@
     const g = PSYCHE.darkGrace, delay = RULES.staminaDarkDelay;
     W.fxToward('dark', mode !== 'dark' ? 0 : darkT < delay ? lerp(g[0], g[1], darkT / delay)
       : lerp(g[1], PSYCHE.darkMax, empty), dt);
+    // The shadows, straight off the meter: in the dark, a rim growing in over
+    // its first beat, then as far in as the meter is empty; drained by
+    // anything else, a little of that.
+    const sh = PSYCHE.shadow, gone = 1 - run.stamina;
+    const want = mode === 'dark' ? Math.max(sh.rim * Math.min(1, darkT / delay), gone)
+      : draining ? sh.drain * gone : 0;
+    const fx = state.fx;
+    fx.shadow = (fx.shadow || 0) + (want - (fx.shadow || 0)) * Math.min(1, dt * sh.ease);
   }
 
   // ---------------------------------------------------------------------------

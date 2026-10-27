@@ -27,9 +27,10 @@
   // far), split (colour fringe, in screen widths), noise (how much static
   // replaces the picture), scan (scanline darkening), tint (the static's
   // colour) and glow (colour added over everything).
-  // Optional: edge (static and tearing kept to the screen's edges), shadow
-  // (how far the grasping shadows close in), and for a burst, decay (its
-  // level lost per second) and cap (how far bursts stack).
+  // Optional: edge (static and tearing kept to the screen's edges), and
+  // for a burst, decay (its level lost per second) and cap (how far bursts
+  // stack). The grasping shadows aren't a profile: they follow the meter
+  // itself (state.fx.shadow, lamp.js; shaped by PSYCHE.shadow).
   const FX_PROFILES = {
     ghost: { tear: 1, split: 0.014, noise: 0.5, scan: 0.3, tint: [0.55, 0.3, 0.9], glow: [0.12, 0.02, 0.22] },
     // A creeper's flash: entering its pull, or bumping into it. Well under a ghost's.
@@ -39,14 +40,15 @@
     jolt: { tear: 0.35, split: 0.007, noise: 0.12, scan: 0.12, tint: [0.7, 0.5, 0.95], glow: [0.07, 0.05, 0.1],
       decay: 2, cap: 1.5 },
     // The dark: static and tears at the edges, shadows reaching in, a cold cast.
-    dark: { tear: 0.04, split: 0.002, noise: 0.03, scan: 0.08, tint: [0.45, 0.2, 0.7], glow: [0, 0, 0.012],
-      edge: 0.55, shadow: 1, rise: 0.9, fall: 0.7 },
+    // (The pass works in linear colour: tiny glow and noise values still lift a dark scene a lot.)
+    dark: { tear: 0.04, split: 0.002, noise: 0.012, scan: 0.08, tint: [0.45, 0.2, 0.7], glow: [0, 0, 0],
+      edge: 0.3, rise: 0.9, fall: 0.7 },
     // The lamp going out: noticeable, not a ghost's bang.
     darkFlash: { tear: 0.3, edge: 0.9, split: 0.004, noise: 0.06, scan: 0.12, tint: [0.5, 0.2, 0.8], glow: [0.03, 0, 0.06],
-      shadow: 0.35, decay: 1.3, cap: 1 },
+      decay: 1.3, cap: 1 },
     // Distress: everything draining you, worse the emptier the meter.
-    psyche: { tear: 0.35, split: 0.008, noise: 0.12, scan: 0.15, tint: [0.6, 0.25, 0.85], glow: [0.02, 0, 0.03],
-      edge: 0.35, shadow: 0.3, rise: 0.8, fall: 0.5 },
+    psyche: { tear: 0.35, split: 0.008, noise: 0.05, scan: 0.15, tint: [0.6, 0.25, 0.85], glow: [0.003, 0, 0.005],
+      edge: 0.18, rise: 0.8, fall: 0.5 },
     // Much subtler: a faint red fringe and grain, barely tearing.
     // (Static brightens a dark scene a lot, so noise and glow stay tiny.)
     creeper: { tear: 0.06, split: 0.003, noise: 0.035, scan: 0.06, tint: [0.75, 0.12, 0.08], glow: [0.012, 0, 0],
@@ -80,7 +82,7 @@
         uWobble: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) },
         uTear: { value: 0 }, uSplit: { value: 0 }, uNoise: { value: 0 }, uScan: { value: 0 },
         uTint: { value: new THREE.Color() }, uGlow: { value: new THREE.Color() },
-        uEdge: { value: 0 }, uShadow: { value: 0 },
+        uEdge: { value: 0 }, uShadow: { value: 0 }, uShadowShape: { value: new THREE.Vector4() },
         uShatter: { value: 0 }, uStatic: { value: 0 }, uStreakT: { value: 0 }, uBlack: { value: 0 },
       },
       vertexShader: 'varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
@@ -88,6 +90,7 @@
 uniform sampler2D tDiffuse;
 uniform float uTime, uWobble, uTear, uSplit, uNoise, uScan;
 uniform float uEdge, uShadow, uShatter, uStatic, uStreakT, uBlack;
+uniform vec4 uShadowShape; // x: its edge with none, y: at most (both 0 centre .. 1 corner), z: finger length, w: most opacity
 uniform vec3 uTint, uGlow;
 uniform vec2 uRes;
 varying vec2 vUv;
@@ -130,7 +133,7 @@ void main() {
   col.a = 1.0;
   // Tinted static and scanlines.
   float n = rand(floor(vUv * uRes / 2.0) + tick * 3.1);
-  col.rgb = mix(col.rgb, vec3(n) * uTint, min(1.0, uNoise + uEdge * edgeW * 0.6));
+  col.rgb = mix(col.rgb, vec3(n) * uTint, min(1.0, uNoise + uEdge * edgeW * edgeW * 0.5)); // edge static: mostly the outer band
   col.rgb += uGlow;
   col.rgb *= 1.0 - min(0.6, uScan) * step(0.5, fract(vUv.y * uRes.y / 3.0));
   // Grasping shadows: a ragged black-violet rim, reaching in as uShadow grows, its fingers drifting and curling.
@@ -138,11 +141,10 @@ void main() {
     vec2 dir = q / max(length(q), 1e-4);
     float reach = vnoise(dir * 2.6 + vec2(uTime * 0.23, -uTime * 0.17)) * 0.7
       + vnoise(dir * 6.5 + vec2(-uTime * 0.41, uTime * 0.33)) * 0.3;
-    float closing = pow(uShadow, 1.6); // a rim at first; most of the screen only near the end
-    float inner = mix(1.25, 0.2, closing) - reach * 0.42 * min(1.0, uShadow * 1.5);
+    float inner = mix(uShadowShape.x, uShadowShape.y, uShadow) - reach * uShadowShape.z * min(1.0, uShadow * 2.0);
     float dark = smoothstep(inner, inner + 0.22, r);
-    vec3 shade = mix(vec3(0.05, 0.01, 0.07), vec3(0.008, 0.0, 0.016), smoothstep(inner + 0.1, 1.0, r));
-    col.rgb = mix(col.rgb, shade, dark * min(1.0, 0.35 + uShadow));
+    vec3 shade = mix(vec3(0.010, 0.002, 0.016), vec3(0.001, 0.0, 0.003), smoothstep(inner + 0.1, 1.0, r)); // linear: a near-black violet
+    col.rgb = mix(col.rgb, shade, dark * uShadowShape.w * (0.45 + 0.55 * uShadow));
   }
   // The faint: static, its colour streaks fading like an old TV's; over it, chunks of its colours (shatter).
   if (uStatic > 0.0) {
@@ -198,7 +200,7 @@ void main() {
   function mixProfiles(u) {
     const fx = state.fx;
     fx.levels.ghost = Math.max(fx.glitch * GLITCH_HOLD, fx.flash);
-    let tear = 0, split = 0, noise = 0, scan = 0, tw = 0, edge = 0, shadow = 0;
+    let tear = 0, split = 0, noise = 0, scan = 0, tw = 0, edge = 0;
     u.uTint.value.setRGB(0, 0, 0); u.uGlow.value.setRGB(0, 0, 0);
     const bursts = fx.bursts || {};
     const names = new Set(Object.keys(fx.levels).concat(Object.keys(bursts)));
@@ -206,7 +208,7 @@ void main() {
       const k = (fx.levels[name] || 0) + (bursts[name] || 0), pr = FX_PROFILES[name];
       if (!pr || k < 0.003) continue;
       tear += pr.tear * k; split += pr.split * k; noise += pr.noise * k; scan += pr.scan * k;
-      edge += (pr.edge || 0) * k; shadow += (pr.shadow || 0) * k;
+      edge += (pr.edge || 0) * k;
       // The static's colour: each profile's tint, weighted by how much static it adds.
       u.uTint.value.r += pr.tint[0] * pr.noise * k; u.uTint.value.g += pr.tint[1] * pr.noise * k; u.uTint.value.b += pr.tint[2] * pr.noise * k;
       tw += pr.noise * k;
@@ -215,7 +217,9 @@ void main() {
     if (tw > 0) u.uTint.value.multiplyScalar(1 / tw);
     else u.uTint.value.setRGB(0.6, 0.3, 0.85);
     u.uTear.value = Math.min(1, tear); u.uSplit.value = split; u.uNoise.value = noise; u.uScan.value = scan;
+    const shadow = fx.shadow || 0, sh = (W.PSYCHE && W.PSYCHE.shadow) || {};
     u.uEdge.value = Math.min(1, edge); u.uShadow.value = Math.min(1, shadow);
+    u.uShadowShape.value.set(sh.none ?? 1.25, sh.most ?? 0.62, sh.fingers ?? 0.2, sh.opacity ?? 0.75);
     const f = fx.faint || {};
     u.uShatter.value = f.shatter || 0; u.uStatic.value = f.static || 0; u.uStreakT.value = f.streakT || 0; u.uBlack.value = f.black || 0;
     return fx.wobble >= 0.003 || tear + split * 50 + noise + scan + edge + shadow >= 0.003 ||

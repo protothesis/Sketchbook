@@ -241,6 +241,7 @@
     state.fx.levels = {};
     state.fx.bursts = {};
     state.fx.faint = null;
+    state.fx.shadow = 0;
     state.creeperHits = 0;
     state.ghostTouch = state.wasTouched = false;
     state.creeperDrain = 0;
