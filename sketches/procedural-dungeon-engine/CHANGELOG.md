@@ -949,6 +949,53 @@ All notable changes to this sketch are logged here, per
     sense 'covered', so they lose a covered jar's pixie. A sigil still
     counts a covered vessel on its tile.
 
+- 2026-10-27: **Your psych meter shows on screen** (`app/walk/lamp.js`,
+  `fx.js`).
+  - Each kind of drain **bursts** when it starts on you, decaying fast,
+    and bursts from different sources add up. A creeper's pull flashes
+    each time you enter it again (after 0.6 s clear), softer than a
+    ghost's. The meter starting to go down at all, from any source,
+    gives a soft deep-purple jolt on top.
+  - While anything drains you, a shared **distress** level climbs as the
+    meter empties, worst just before you faint (`psyche`). Near empty,
+    chunky glitches break in now and then, at irregular moments, more
+    often the emptier you are. All the tearing jumps at an uneven pace in
+    slices of varying height, so it doesn't repeat. The dark's and the
+    distress's static is half as bright as before. The static itself is
+    coarser (3 px grain) and mostly a boiling noise, not fresh random dots
+    each frame. Glitch blocks across it vary its strength, coming and going
+    at uneven moments. The random function behind all of it no longer
+    uses `sin()`, whose patterns started to repeat as play time grew.
+  - **No more hitch as effects start.** The first frame any effect showed
+    took about half a second: the effect shader, a second version of every
+    scene material's shader (drawn into the effect's buffer) and the
+    buffer itself were all created on the spot. They're now prepared in
+    the background ahead of time, and kept up as new materials appear. The
+    effect's adaptive resolution moves between a few fixed steps, slowly,
+    because every resize was a small hitch too.
+  - **The dark** has its own look. Static and tearing keep to the outer
+    edge, and a ragged near-black violet rim of shadow drifts and curls
+    inward. The shadow follows the meter directly: a thin rim at first,
+    covering at most about 70% of the screen and never fully opaque when
+    empty (`PSYCHE.shadow`). It replaces the CSS vignette.
+  - When your lamp goes out (or you cover it), nothing flashes. For a
+    1.5 s beat (`RULES.staminaDarkDelay`) the dark costs no psych while
+    its look eases in from nothing to subtle, mirroring the pause before
+    the meter refills. The meter never refills in the dark.
+  - **Bumping into a creeper hurts** whatever its mood, even when it's
+    afraid of your lamp: 0.1 psych (`RULES.staminaCreeperHit`) and a
+    flash, once per touch.
+  - **Passing out** is a sequence.
+    - The picture shatters into stuttering chunks of purple, red and lamp
+      yellow, mixed with torn bits of the level and whatever glitch was
+      already on screen.
+    - It settles into static whose colour streaks fade like an old TV's,
+      and the static holds until you press any key, click, tap or
+      gamepad button. After 2 s it says so.
+    - The noise then collapses exponentially to black, and after a beat
+      you wake, fading in with the last static dying away. Timings are in
+      `PSYCHE` in the dev panel.
+
 ### Removed
 
 - 2026-10-26: Vaulting. Pushing into a block, or pressing E facing it, no

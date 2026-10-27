@@ -132,7 +132,9 @@
     expanded: null,      // the group slot whose picker is open
     marks: [],           // chalk marks drawn in the world
     fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9, // screen effects, 0..1
-      levels: {} },      // per effect profile (FX_PROFILES in fx.js): how strong it is right now
+      levels: {},        // per effect profile (FX_PROFILES in fx.js): how strong it is right now
+      bursts: {},        // per profile: a burst on top, decaying fast (fxBurst)
+      faint: null },     // passing out and waking: { shatter, static, streakT, black, waking } (lamp.js)
     run: null,           // inventory + run stats, see freshRun()
     hold: { sig: null, t: 0, spent: false }, // holding E on a hold action (actions.js)
     pushBlocks: [],      // push blocks in built rooms (see restore.js)
@@ -142,7 +144,7 @@
     waystones: [],       // waystones in built halls (see waystones.js)
     lanterns: [],        // save lanterns in built halls (see lanterns.js)
     choice: null,        // a choice up on screen, picked with A / D and confirmed with E held (choice.js)
-    gutter: null,        // { t } while the lamp is guttering out
+    gutter: null,        // { phase, t, total } while you pass out (lamp.js)
     lampGrace: 0,        // seconds the lamp holds its burn after a gain
     time: 0,
     minimap: true,
