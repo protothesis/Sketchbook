@@ -82,7 +82,29 @@
           : `not enough entropy to reroll it · ${chargeText(best.price.charges)}`;
       }
     }
+    // Every door has a hold. Where it can't reroll anything, a tap still
+    // opens or closes it, and the hold fills, then refuses and says why.
+    if (best && (best.action === 'open' || best.action === 'close' || best.action === 'reopen')) {
+      best.refuse = best.why || cantReroll(sp, best);
+      const tapped = { action: best.action, space: best.space, exit: best.exit };
+      best.onTap = () => act(tapped);
+    }
     return best;
+  }
+
+  /** Why holding E at this door rerolls nothing, in a few words. */
+  function cantReroll(sp, near) {
+    const exp = state.exp, ex = near.exit;
+    if (!ex.connectionId) return 'nothing beyond it to reroll yet · tap to open it';
+    const child = DP.childThrough(exp, sp.id, ex);
+    if (child) return near.action === 'close' && !DP.committed(exp, child)
+      ? `close the door first · then hold to reroll ${child.id}`
+      : `${child.id} holds now · a door out of it has opened · no rerolling it`;
+    const c = exp.connections[ex.connectionId];
+    const other = c.a.spaceId === sp.id ? c.b.spaceId : c.a.spaceId;
+    if (exp.spaces[sp.id].parentId !== other || c.loop) return `this door joins two rooms you've been in · nothing to reroll`;
+    return DP.committed(exp, exp.spaces[sp.id]) ? `${sp.id} holds now · a door out of it has opened · no rerolling it`
+      : `${sp.id} opened from ${other} · reroll it from that side`;
   }
   const DOOR_FACING = 0.5; // cos of how far off straight at a door you can be and still use it
 
@@ -214,6 +236,7 @@
     erase: 0.4, light: 0.5, snuff: 0.5, lift: 0.4, save: 0.5,
     reroll: 1.0, letgo: 1.0, // they can't be undone (a reroll costs entropy too)
   };
+  const REFUSE_HOLD = 0.6; // a door's hold that can't reroll anything: it fills, then says why
   const TAP_GRACE = 0.15; // seconds of a hold before its ring shows, where a tap does something else
   HOLD.lostdoor = RULES.lostDoorHold; // then a choice (choice.js), with RULES.lostDoorChoice
   HOLD.choose = RULES.choiceHold;
@@ -230,7 +253,7 @@
       (a === 'choose' && !!near.opt.off) || (a === 'setblock' && !near.spot);
   }
   /** Seconds E must be held for this action, or 0 for a tap. Losing something of yours takes longer. */
-  const holdTime = (near) => (blockedNow(near) ? 0
+  const holdTime = (near) => (blockedNow(near) ? 0 : near.refuse ? REFUSE_HOLD
     : (HOLD[near.action] || 0) * (near.lose && near.action !== 'choose' ? RULES.rerollLoseFactor : 1));
 
   // What's being held: the action and its box (and a choice's pick), so a different target restarts the ring.
@@ -245,7 +268,7 @@
   function pressE() {
     const near = actionNear(state.player);
     const h = state.hold;
-    h.sig = null; h.t = 0; h.spent = false; h.down = true;
+    h.sig = null; h.t = 0; h.spent = false; h.down = true; h.refused = null;
     h.tap = near && near.onTap && holdTime(near) ? near : null;
     if (near && !holdTime(near)) { h.spent = true; act(near); }
   }
@@ -253,7 +276,7 @@
   function releaseE(cancel) {
     const h = state.hold;
     const tap = !cancel && h.down && !h.spent && h.tap;
-    h.down = false; h.sig = null; h.t = 0; h.spent = false; h.tap = null;
+    h.down = false; h.sig = null; h.t = 0; h.spent = false; h.tap = null; h.refused = null;
     if (state.grab) W.endGrab(cancel);
     if (tap && !state.paused) tap.onTap();
   }
@@ -273,10 +296,17 @@
       h.t += dt;
       const need = holdTime(near);
       if (!near.onTap || h.t >= TAP_GRACE) {
-        h.ring = { v: Math.min(1, h.t / need), icon: near.icon || HOLD_ICON[near.action] || '',
+        h.ring = { v: Math.min(1, h.t / need), icon: near.refuse ? HOLD_ICON.reroll : near.icon || HOLD_ICON[near.action] || '',
           things: near.action === 'choose' ? null : near.things || null, lose: !!near.lose };
       }
-      if (h.t >= need) { h.spent = true; act(near); }
+      if (h.t >= need) {
+        h.spent = true;
+        if (near.refuse) { h.refused = h.sig; W.showCaption(near.refuse); } else act(near);
+      }
+    }
+    // A refused hold stays up, full and marked, until you let go or look away.
+    if (h.down && h.spent && h.refused && near && near.refuse && holdSig(near) === h.refused) {
+      h.ring = { v: 1, icon: '⊘', refused: true };
     }
     // A lost path's door shows what's beyond it as soon as you face it (no
     // ring yet, and not red: that's for when you hold E to let it go).

@@ -1003,6 +1003,20 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-28: **Every door has a hold now.** Before, only a door into a
+  room you could still reroll had a hold. Every other door ignored a held
+  E, and nothing said why.
+  - A tap still opens or closes any door, on letting go.
+  - Where nothing can be rerolled, holding E fills the ring with ↻ for
+    0.6 s. Then it refuses: the ring turns to ⊘ and a caption says why.
+    The reasons are:
+    - the room beyond holds now (a door out of it has opened);
+    - there's nothing beyond the door yet;
+    - close the door first;
+    - reroll from the side it opened from;
+    - the door joins two rooms you've been in;
+    - a ghost lingers in the room;
+    - not enough entropy.
 - 2026-10-27: **A lost path's door warns you before you lose it.** On a
   keyboard or gamepad the door used to show only the hold ring's ↻. Now:
   - **A warning line.** Its E line shows ("hold: reroll your lost path ·

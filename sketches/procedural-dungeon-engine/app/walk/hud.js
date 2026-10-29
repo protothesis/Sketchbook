@@ -107,7 +107,7 @@
     // it's the only E button.
     const warn = nearE && (nearE.path || (nearE.action === 'reroll' && nearE.lose));
     const e = (touch() || warn) && nearE && eLine(nearE), f = nearF && fLine(nearF);
-    if (e && W.holdTime(nearE) && !/^hold|· hold:/.test(e.text)) e.text += ' · hold';
+    if (e && W.holdTime(nearE) && !nearE.refuse && !/^hold|· hold:/.test(e.text)) e.text += ' · hold';
     showLine(promptEl, 'E', e);
     showLine(promptF, 'F', f);
     promptF.classList.toggle('alone', !e);
@@ -151,6 +151,7 @@
     const on = !!(ring && (ring.v > 0.02 || ring.idle) && focusRect);
     ringEl.hidden = !on;
     ringEl.classList.toggle('idle', !!(on && ring.idle));
+    ringEl.classList.toggle('refused', !!(on && ring.refused));
     promptEl.style.setProperty('--p', on ? ring.v.toFixed(3) : 0);
     if (!on) return;
     ringFg.setAttribute('stroke-dashoffset', (RING_C * (1 - ring.v)).toFixed(2));

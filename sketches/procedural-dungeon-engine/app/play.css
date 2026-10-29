@@ -236,6 +236,8 @@ kbd {
   background: rgba(14, 10, 8, 0.7); color: #ffd9a8; box-sizing: border-box; }
 .things .thing svg { width: 100%; height: 100%; display: block; }
 .holdring.idle > svg, .holdring.idle > span { visibility: hidden; }
+.holdring.refused .fg { stroke: #8a6a78; }
+.holdring.refused > span { color: #ffb2a6; }
 .things .thing.path { width: auto; min-width: 24px; max-width: 72px; height: 28px; padding: 3px;
   color: #c3adff; background: rgba(28, 18, 48, 0.8); box-shadow: 0 0 6px rgba(165, 140, 255, 0.55); }
 .things .thing.path svg { height: 22px; }
