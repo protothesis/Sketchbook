@@ -1003,6 +1003,38 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-10-28: **Every door has a hold now.** Before, only a door into a
+  room you could still reroll had a hold. Every other door ignored a held
+  E, and nothing said why.
+  - A tap still opens or closes any door, on letting go.
+  - Where nothing can be rerolled, holding E fills the ring with ↻ for
+    0.6 s. Then it refuses: the ring turns to ⊘ and a caption says why.
+    The reasons are:
+    - the room beyond holds now (a door out of it has opened);
+    - there's nothing beyond the door yet;
+    - close the door first;
+    - reroll from the side it opened from;
+    - the door joins two rooms you've been in;
+    - a ghost lingers in the room;
+    - not enough entropy.
+- 2026-10-27: **A lost path's door warns you before you lose it.** On a
+  keyboard or gamepad the door used to show only the hold ring's ↻. Now:
+  - **A warning line.** Its E line shows ("hold: reroll your lost path ·
+    n rooms · the path is gone"). So does a reroll's E line when the
+    reroll would take something of yours. Every other E prompt stays off.
+  - **The path's own icon.** The lost rooms' cells are drawn as a little
+    violet map, like the minimap's lost paths. It shows, with the icons of
+    anything of yours beyond the door, as soon as you face the door.
+  - **Red while you hold.** While you hold E, the path icon blinks red,
+    since letting the path go always loses it.
+  - **Icons no longer squashed.** The hold ring's CSS rotated every SVG
+    inside it, the at-stake icons included. It now rotates only the ring.
+- 2026-10-27: **The banded light pools are back**, for the lamp, sconces,
+  save lanterns and packs. They had vanished in #39. The figure's new
+  shadow (`figure.js`) pastes its own copy of three.js's light-loop chunk
+  into the Lambert and Phong shaders, and it loads before `light.js`. The
+  pools only patched the shared chunk, which those shaders no longer read.
+  `light.js` now patches the pasted copies too.
 - 2026-10-27: **A powered waystone keeps glowing in your hands.** Its light
   used to go out while you carried it. It's still off your ley lines
   until you set it down. Its light now also sits at the stone's centre

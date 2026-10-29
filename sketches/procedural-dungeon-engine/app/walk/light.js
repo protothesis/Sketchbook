@@ -72,10 +72,16 @@ vec3 poolLight(vec3 color, vec3 viewPos, vec3 normal, float index) {
   return color * mix(1.0, m, flatness);
 }
 `;
-  THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begin.replace(
-    'getPointLightInfo( pointLight, geometryPosition, directLight );',
-    `getPointLightInfo( pointLight, geometryPosition, directLight );
+  const POINT = 'getPointLightInfo( pointLight, geometryPosition, directLight );';
+  const withPools = (src) => src.replace(POINT, `${POINT}
 		directLight.color = poolLight( directLight.color, geometryPosition, geometryNormal, float( UNROLLED_LOOP_INDEX ) );`);
+  THREE.ShaderChunk.lights_fragment_begin = withPools(THREE.ShaderChunk.lights_fragment_begin);
+  // The figure's shadow (figure.js, loaded first) pastes its own copy of
+  // that chunk into Lambert and Phong, so those copies need the pools too.
+  for (const k of ['lambert', 'phong']) {
+    const lib = THREE.ShaderLib[k];
+    if (!lib.fragmentShader.includes('#include <lights_fragment_begin>')) lib.fragmentShader = withPools(lib.fragmentShader);
+  }
 
   // ---------------------------------------------------------------------------
   // Pools for the game. A pool: { x, y, r (cells: centre and radius on the

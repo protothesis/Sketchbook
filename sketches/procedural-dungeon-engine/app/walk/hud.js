@@ -50,8 +50,8 @@
       case 'letgo': {
         // Retracing is the hourglass's (F with it in hand), shown on its own line.
         const n = near.path.traces.length;
-        return { cls: near.lose ? 'lose' : 'collapse', text: `reroll your lost path · ${n} room${n === 1 ? '' : 's'} · the path is gone` +
-          (near.lose ? ` · what's yours on it goes too` : '') +
+        return { cls: 'lose', text: `hold: reroll your lost path · ${n} room${n === 1 ? '' : 's'} · the path is gone` +
+          (near.things.length > 1 ? ` · what's yours on it goes too` : '') +
           (near.charged && state.sel !== 'hourglass' ? ' · or your hourglass in hand to retrace it' : '') };
       }
       case 'lostdoor': {
@@ -102,9 +102,12 @@
 
   function updatePrompt(nearE, nearF) {
     // E has no prompt on a keyboard (fewer callouts; the hold ring is its
-    // feedback). On touch the E line stays: it's the only E button.
-    const e = touch() && nearE && eLine(nearE), f = nearF && fLine(nearF);
-    if (e && W.holdTime(nearE)) e.text += ' · hold';
+    // feedback), except where holding it loses something: a lost path's
+    // door, or a reroll that takes what's yours. On touch the E line stays:
+    // it's the only E button.
+    const warn = nearE && (nearE.path || (nearE.action === 'reroll' && nearE.lose));
+    const e = (touch() || warn) && nearE && eLine(nearE), f = nearF && fLine(nearF);
+    if (e && W.holdTime(nearE) && !nearE.refuse && !/^hold|· hold:/.test(e.text)) e.text += ' · hold';
     showLine(promptEl, 'E', e);
     showLine(promptF, 'F', f);
     promptF.classList.toggle('alone', !e);
@@ -145,8 +148,10 @@
   document.body.append(ringEl);
   const ringFg = ringEl.querySelector('.fg'), ringIcon = ringEl.querySelector('span');
   function updateRing(ring) {
-    const on = !!(ring && ring.v > 0.02 && focusRect);
+    const on = !!(ring && (ring.v > 0.02 || ring.idle) && focusRect);
     ringEl.hidden = !on;
+    ringEl.classList.toggle('idle', !!(on && ring.idle));
+    ringEl.classList.toggle('refused', !!(on && ring.refused));
     promptEl.style.setProperty('--p', on ? ring.v.toFixed(3) : 0);
     if (!on) return;
     ringFg.setAttribute('stroke-dashoffset', (RING_C * (1 - ring.v)).toFixed(2));
