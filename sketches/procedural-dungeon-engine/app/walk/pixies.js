@@ -148,5 +148,5 @@
     for (const px of state.pixies.slice()) if (ids.has(spaceAt(px.x, px.y))) removePixie(px);
   }
 
-  Object.assign(W, { PIXIE, addPixie, clearPixies, spawnPixie, updatePixies, pixieNear, catchPixie, dropPixiesIn });
+  Object.assign(W, { PIXIE, addPixie, removePixie, clearPixies, spawnPixie, updatePixies, pixieNear, catchPixie, dropPixiesIn });
 })(window);
