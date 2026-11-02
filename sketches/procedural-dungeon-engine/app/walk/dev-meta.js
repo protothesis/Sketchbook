@@ -1,7 +1,8 @@
 // The dev panel's map of the tuning tables (dev.js): which tab and section
 // each number sits in, and what it is, for the hover tooltip.
 //
-// TABS lists sections in order; a section takes every number whose path
+// TABS lists sections in order (grp() folds several into one dropdown,
+// as subheadings); a section takes every number whose path
 // starts with one of its prefixes (first match wins, across all tabs, so a
 // narrower prefix goes before a wider one). A number no section takes still
 // shows, under "Other", so nothing new goes missing.
@@ -18,6 +19,8 @@
   const W = global.DungeonPlay.walk;
 
   const sec = (title, when, ...prefixes) => ({ title, when, prefixes });
+  // Sections under one dropdown, as subheadings (one per creature).
+  const grp = (group, ...sections) => sections.map((s) => Object.assign(s, { group }));
 
   const TABS = [
     { id: 'cheats', label: 'Cheats', sections: [
@@ -32,18 +35,23 @@
       sec('Figure shadow', null, 'SHADOW'),
     ] },
     { id: 'creatures', label: 'Creatures', sections: [
-      sec('Spawning', 'room', 'RULES.ghost', 'RULES.creeper', 'RULES.pixie'),
-      sec('Creeper · senses', null, 'CREEPER.notice', 'CREEPER.lose', 'CREEPER.mark', 'CREEPER.lightH'),
-      sec('Creeper · the light\'s edge', null, 'CREEPER.margin', 'CREEPER.bold', 'CREEPER.directPips', 'CREEPER.post',
-        'CREEPER.rays', 'CREEPER.look', 'CREEPER.step'),
-      sec('Creeper · drain', null, 'CREEPER.reach', 'CREEPER.touch', 'CREEPER.bands', 'CREEPER.dashDrain',
-        'CREEPER.dashLinger', 'CREEPER.stack'),
-      sec('Creeper · moving', null, 'CREEPER.hop', 'CREEPER.dip', 'CREEPER.dash', 'CREEPER.circle', 'CREEPER.daze'),
-      sec('Creeper · looks', null, 'CREEPER.blink', 'CREEPER.rapid', 'CREEPER.burstGap', 'CREEPER.disc'),
-      sec('Ghost · contact', null, 'GHOST.contact', 'GHOST.swell', 'GHOST.stun'),
-      sec('Ghost · noticing you', null, 'GHOST.noticeTime', 'GHOST.alert', 'GHOST.ring', 'GHOST.lose', 'GHOST.mark'),
-      sec('Ghost · moving', null, 'GHOST'),
-      sec('Pixie', null, 'PIXIE'),
+      ...grp('Creeper',
+        sec('Spawning', 'room', 'RULES.creeper'),
+        sec('Senses', null, 'CREEPER.notice', 'CREEPER.lose', 'CREEPER.mark', 'CREEPER.lightH'),
+        sec('The light\'s edge', null, 'CREEPER.margin', 'CREEPER.bold', 'CREEPER.directPips', 'CREEPER.post',
+          'CREEPER.rays', 'CREEPER.look', 'CREEPER.step'),
+        sec('Drain', null, 'CREEPER.reach', 'CREEPER.touch', 'CREEPER.bands', 'CREEPER.dashDrain',
+          'CREEPER.dashLinger', 'CREEPER.stack'),
+        sec('Moving', null, 'CREEPER.hop', 'CREEPER.dip', 'CREEPER.dash', 'CREEPER.circle', 'CREEPER.daze'),
+        sec('Looks', null, 'CREEPER.blink', 'CREEPER.rapid', 'CREEPER.burstGap', 'CREEPER.disc')),
+      ...grp('Ghost',
+        sec('Spawning', 'room', 'RULES.ghost'),
+        sec('Contact', null, 'GHOST.contact', 'GHOST.swell', 'GHOST.stun'),
+        sec('Noticing you', null, 'GHOST.noticeTime', 'GHOST.alert', 'GHOST.ring', 'GHOST.lose', 'GHOST.mark'),
+        sec('Moving', null, 'GHOST')),
+      ...grp('Pixie',
+        sec('Spawning', 'room', 'RULES.pixie'),
+        sec('Behaviour', null, 'PIXIE')),
       sec('Ecology (who seeks or flees what)', null, 'ECOLOGY'),
       sec('Shared by all creatures', null, 'CREATURE'),
     ] },

@@ -456,6 +456,6 @@
     cls: (c) => (c.mode === 'stalk' ? 'stalk' : 'idle lurk'),
   });
 
-  Object.assign(W, { CREEPER, addCreeper, clearCreepers, spawnCreeper, dropCreepersIn, updateCreepers });
+  Object.assign(W, { CREEPER, addCreeper, removeCreeper, clearCreepers, spawnCreeper, dropCreepersIn, updateCreepers });
   Object.assign(DP, { addCreeper }); // handy from the console
 })(window);

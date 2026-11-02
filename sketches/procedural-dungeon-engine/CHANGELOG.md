@@ -129,6 +129,27 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-11-01: **Dev panel, second pass: hands in the world.**
+  - **Place by clicking the game.** With the panel open, the Cheats tab's
+    palette arms a block (crate, block, vessel, waystone) or a creature
+    (ghost, pixie, creeper). Then a click on the game puts it there. A yellow
+    ring shows where it will go, and blocks stack on whatever top you click.
+    "move player" puts you where you click. Click the button again, or
+    press Esc, to stop. Blocks no longer appear in your hands, and creatures
+    no longer appear in front of you.
+  - **Pick and delete.** With nothing armed, a click picks the creature or
+    loose object under the cursor (ringed). Delete or Backspace, or the
+    delete button, removes it. A block with something on it refuses until
+    that's taken off. A deleted room object doesn't come back when its
+    room is rebuilt.
+  - **Give is split** into lamp and stamina (+1 shard, ±1 charge,
+    stamina full or −¼, faint) and items for your bag. Blocks moved to the
+    palette.
+  - **Dropdowns start closed**, and the ones you open are remembered.
+    Double-click a tab to open or close all of its dropdowns.
+  - **One dropdown per creature** in the Creatures tab (Creeper, Ghost,
+    Pixie), with senses, drain, moving and the rest as subheadings inside,
+    and each creature's spawn chances with it.
 - 2026-11-01: **The dev panel is organized.** Tabs replace the one long
   scroll: Cheats, Player, Creatures, Lamp & light, World, FX and Changes.
   Each tab is split into sections by what you're tuning ("Creeper · drain",

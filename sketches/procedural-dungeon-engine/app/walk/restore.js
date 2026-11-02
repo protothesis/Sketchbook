@@ -784,6 +784,39 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
     }
     return false;
   }
+  // ---------------------------------------------------------------------------
+  // The dev panel's hands (dev.js): objects made and unmade anywhere.
+
+  /** A new loose object `o` ({ kind, ... }) at half-cell (o.sx, o.sy), resting on what's there. Null if it can't go there. */
+  function devPlaceObject(key, o) {
+    const room = state.exp.registry[cellOf(o.sx, o.sy)];
+    if (room === undefined || !state.spaces.get(room) || inDoorMouth(o.sx, o.sy)) return null;
+    const base = restHeight(o.sx, o.sy, null);
+    if (base === null || levelOf(base) + 1 > STACK_MAX) return null;
+    o.lv = levelOf(base);
+    state.run.objects[key] = o;
+    const b = makeObject(key, o);
+    inRoom(b, room);
+    b.mesh.position.set((b.x0 + 0.25) * S, b.base * S, (b.y0 + 0.25) * S);
+    state.pushBlocks.push(b);
+    indexBlock(b, true);
+    return b;
+  }
+
+  /** A loose object gone for good. False if something rests on it. */
+  function devRemoveObject(b) {
+    if (b.carried || loaded(b)) return false;
+    const run = state.run, o = run.objects[b.key];
+    indexBlock(b, false);
+    if (b.mesh.parent) b.mesh.parent.remove(b.mesh);
+    state.pushBlocks = state.pushBlocks.filter((x) => x !== b);
+    delete run.objects[b.key];
+    // Listed as despawned, so its room doesn't make it again when rebuilt.
+    if (o) run.despawned.push({ key: b.key, kind: o.kind, color: o.color || null, holds: o.holds || null, n: o.n || 0, room: b.spaceId, at: Math.round(run.walked), dev: true });
+    if (run.despawned.length > 200) run.despawned.shift();
+    return true;
+  }
+
   /** Can something be set on top of `o` (KINDS)? A loose object by its kind; anything else, unless it's a jar. */
   const bearsStack = (o) => (o.push ? !!(KINDS[kindOf(o)] || {}).bearsStack : !o.jar);
   /** Where something set on `o` rests: a whole number of units up (a vessel is a little short of one). */
@@ -1006,7 +1039,7 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
   /** Your walking speed carrying `b`, as a share of the usual. */
   const carryPace = (b) => CARRY_PACE[kindOf(b)];
 
-  Object.assign(W, { SCONCE_Y, carryPace, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
+  Object.assign(W, { SCONCE_Y, carryPace, devPlaceObject, devRemoveObject, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
     setDownBlock, updatePushBlocks, addSconces, KINDS, covered, SHADOW_FADE,
     sconceNear, lightSconce, snuffSconce, updateSconces, SCONCE_LIGHT, sconceLight, sconcePools });
 })(window);

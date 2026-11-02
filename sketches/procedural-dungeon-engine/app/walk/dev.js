@@ -1,5 +1,6 @@
 // Walk mode's dev panel: ` (backquote, above Tab) opens it. Give yourself
-// things, jump around, drop creatures in, and tune the numbers live.
+// things, place blocks and creatures with a click, pick one and delete it,
+// jump around, and tune the numbers live.
 //
 // The sliders are built from the tuning tables on DungeonPlay.walk
 // (TABLES below), so a new number in one of them shows up here by itself.
@@ -14,7 +15,8 @@
 // clipboard as JSON, to paste back to Claude as new defaults.
 //
 // Everything else lives here too: the only hooks are the script tag in
-// play.html and the tables' exports.
+// play.html, the tables' exports, and the add/remove functions the
+// creatures and restore.js export (devPlaceObject, devRemoveObject).
 (function (global) {
   'use strict';
 
@@ -84,12 +86,6 @@
   const devId = (kind) => 'dev:' + kind + ':' + Date.now().toString(36) + (++seq);
   const inWorld = (x, y) => state.exp.registry[DE.key(Math.floor(x), Math.floor(y))] !== undefined;
 
-  /** A spot about a cell in front of you, if it's floor; else where you stand. */
-  function ahead(dist = 1.2) {
-    const q = p(), x = q.x + Math.sin(q.angle) * dist, y = q.y + Math.cos(q.angle) * dist;
-    return inWorld(x, y) ? { x, y } : { x: q.x, y: q.y };
-  }
-
   function after(caption) {
     W.savePlayer();
     W.refreshHotbar();
@@ -97,23 +93,17 @@
     if (caption) W.showCaption('dev · ' + caption);
   }
 
-  /** Something carried in your hands, made from nothing (it goes where you set it down). */
-  function giveObject(kind, extra) {
-    const run = state.run;
-    if (state.carry || run.carry) { W.showCaption('dev · set down what you carry first'); return; }
-    const q = p(), key = devId(kind);
-    run.objects[key] = Object.assign({ kind, sx: Math.floor(q.x * 2), sy: Math.floor(q.y * 2), lv: 0 }, extra);
-    run.carry = key;
-    W.buildCarried();
-    after('a ' + kind + ' in your hands');
-  }
+  const fuelText = () => 'lamp ' + +state.run.fuel.toFixed(2) + ' / ' + W.maxCharges();
+  const METERS = [
+    ['+1 shard', () => { W.gainFuel(1 / RULES.shardsPerCharge, true); after('+1 shard · ' + fuelText()); }],
+    ['+1 charge', () => { W.gainFuel(1, true); after('+1 charge · ' + fuelText()); }],
+    ['−1 charge', () => { state.run.fuel = Math.max(0, state.run.fuel - 1); after('−1 charge · ' + fuelText()); }],
+    ['stamina full', () => { state.run.stamina = 1; after('stamina full'); }],
+    ['stamina −¼', () => { state.run.stamina = Math.max(0, state.run.stamina - 0.25); after('stamina ' + state.run.stamina.toFixed(2)); }],
+    ['faint', () => { W.passOut('dev · you faint'); }],
+  ];
 
   const GIVE = [
-    ['shard', () => { W.gainFuel(1 / RULES.shardsPerCharge, true); after('a shard'); }],
-    ['fill lamp', () => { state.run.fuel = W.maxCharges(); after('lamp full'); }],
-    ['empty lamp', () => { state.run.fuel = 0; after('lamp empty'); }],
-    ['stamina', () => { state.run.stamina = 1; after('stamina full'); }],
-    ['faint', () => { W.passOut('dev · you faint'); }],
     ['key', () => { state.run.keys++; after('a key'); }],
     ['doorstone', () => { state.run.doorstones++; after('a doorstone'); }],
     ['jar', () => { state.run.jars.push({ id: 'j' + (++state.run.jarSeq), holds: null }); after('an empty jar'); }],
@@ -125,26 +115,187 @@
       state.run.chalks[c] = (state.run.chalks[c] || 0) + W.STROKES;
       after('a stick of ' + c + ' chalk');
     }]),
-    ['crate', () => giveObject('crate')],
-    ['block', () => giveObject('block', { color: RULES.pushColors[seq % RULES.pushColors.length] })],
-    ['vessel', () => giveObject('vessel', { holds: null, n: 0 })],
-    ['waystone', () => giveObject('waystone', { holds: null })],
-    ['waystone: awake', () => giveObject('waystone', { holds: 'entropy' })],
   ];
 
-  const SPAWN = [
-    ['ghost', () => { const s = ahead(1.5); W.addGhost({ id: devId('ghost'), x: s.x, y: s.y }); after('a ghost'); }],
-    ['pixie', () => { const s = ahead(); W.addPixie({ id: devId('pixie'), x: s.x, y: s.y }); after('a pixie'); }],
-    ['creeper', () => { const s = ahead(2); W.addCreeper({ id: devId('creeper'), x: s.x, y: s.y }); after('a creeper'); }],
-    ['clear all', () => { W.clearGhosts(); W.clearPixies(); W.clearCreepers(); after('creatures cleared'); }],
-  ];
-
-  function teleport(x, y) {
+  function teleport(x, y, z = 0) {
     const q = p();
-    Object.assign(q, { x, y, z: 0, vz: 0 });
+    Object.assign(q, { x, y, z, vz: 0 });
     W.snapCamera();
     after('teleported to ' + (q.spaceId || '?'));
   }
+
+  // ---------------------------------------------------------------------------
+  // The world under the cursor. With the panel open, a click on the game is
+  // the dev's: it places whatever the palette has armed, or else picks the
+  // creature or object under it (Delete removes what's picked). Esc disarms.
+
+  const { THREE, UNIT, S } = W;
+
+  /** A new loose object at a spot, resting on what's there. */
+  function placeObject(kind, extra, at) {
+    const b = W.devPlaceObject(devId(kind), Object.assign({ kind, sx: at.sx, sy: at.sy }, extra));
+    if (!b) { W.showCaption('dev · it can\'t go there'); return; }
+    after('a ' + kind);
+  }
+  function placeCreature(kind, add, at) {
+    add({ id: devId(kind), x: at.x, y: at.y });
+    after('a ' + kind);
+  }
+
+  // [label, place(at)]; `at`: { x, y (cells), sx, sy (half-cells), top (cells: the surface there) }
+  const PALETTE = {
+    blocks: [
+      ['crate', (at) => placeObject('crate', {}, at)],
+      ['block', (at) => placeObject('block', { color: RULES.pushColors[seq % RULES.pushColors.length] }, at)],
+      ['vessel', (at) => placeObject('vessel', { holds: null, n: 0 }, at)],
+      ['waystone', (at) => placeObject('waystone', { holds: null }, at)],
+      ['waystone: awake', (at) => placeObject('waystone', { holds: 'entropy' }, at)],
+    ],
+    creatures: [
+      ['ghost', (at) => placeCreature('ghost', W.addGhost, at)],
+      ['pixie', (at) => placeCreature('pixie', W.addPixie, at)],
+      ['creeper', (at) => placeCreature('creeper', W.addCreeper, at)],
+    ],
+    you: [
+      ['move player', (at) => teleport(at.x, at.y, at.top)],
+    ],
+  };
+  let armed = null; // { label, place, btn }
+
+  /** The highest surface over half-cell (sx, sy): the floor, or a block's top. */
+  function topAt(sx, sy) {
+    const x0 = sx / 2, y0 = sy / 2;
+    let top = 0;
+    for (const o of state.blockAt.get(DE.key(Math.floor(x0), Math.floor(y0))) || []) {
+      if (o.x0 < x0 + 0.5 && o.x1 > x0 && o.y0 < y0 + 0.5 && o.y1 > y0) top = Math.max(top, o.top);
+    }
+    return top;
+  }
+
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const hit = new THREE.Vector3(), tmp = new THREE.Vector3(), box = new THREE.Box3();
+
+  /** The spot under the cursor: a block's top if you're pointing at one, else the floor. Null off the map. */
+  function spotAt(cx, cy) {
+    const r = W.canvas.getBoundingClientRect();
+    ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, W.camera);
+    for (let lv = 3; lv >= 0; lv--) { // the highest surface first: the ray meets it before what's behind it
+      plane.constant = -lv * UNIT * S;
+      if (!ray.ray.intersectPlane(plane, hit)) continue;
+      const x = hit.x / S, y = hit.z / S;
+      if (!inWorld(x, y)) continue;
+      const sx = Math.floor(x * 2), sy = Math.floor(y * 2), top = topAt(sx, sy);
+      if (lv === 0 || Math.abs(top - lv * UNIT) < 0.02) return { x, y, sx, sy, top };
+    }
+    return null;
+  }
+
+  const kindOfBlock = (b) => (b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block');
+  /** Everything a click can pick: { kind, ref, mesh, remove() → false if it can't go }. */
+  function pickables() {
+    return [
+      ...state.ghosts.map((g) => ({ kind: 'ghost', ref: g, mesh: g.mesh, remove: () => { W.removeGhost(g); return true; } })),
+      ...state.pixies.map((o) => ({ kind: 'pixie', ref: o, mesh: o.mesh, remove: () => { W.removePixie(o); return true; } })),
+      ...state.creepers.map((c) => ({ kind: 'creeper', ref: c, mesh: c.mesh, remove: () => { W.removeCreeper(c); return true; } })),
+      ...state.pushBlocks.filter((b) => !b.carried && b.mesh.parent)
+        .map((b) => ({ kind: kindOfBlock(b), ref: b, mesh: b.mesh, remove: () => W.devRemoveObject(b) })),
+    ];
+  }
+
+  /** On screen, in px: the middle of a mesh. */
+  function screenOf(mesh) {
+    box.setFromObject(mesh).getCenter(tmp).project(W.camera);
+    const r = W.canvas.getBoundingClientRect();
+    return { x: r.left + (tmp.x + 1) / 2 * r.width, y: r.top + (1 - tmp.y) / 2 * r.height, z: tmp.z };
+  }
+
+  /** The pickable nearest the cursor on screen, within a finger's width. */
+  function pickAt(cx, cy) {
+    let best = null, bd = 32;
+    for (const e of pickables()) {
+      const s = screenOf(e.mesh);
+      const d = Math.hypot(s.x - cx, s.y - cy);
+      if (s.z < 1 && d < bd) { best = e; bd = d; }
+    }
+    return best;
+  }
+
+  let picked = null; // a pickable
+  const pickedRef = () => picked && pickables().find((e) => e.ref === picked.ref);
+
+  function pick(e) {
+    picked = e;
+    pickBox.replaceChildren(...(e
+      ? [el('span', null, e.kind + ' · ' + (e.ref.id || e.ref.key || '')), button('delete', removePicked)]
+      : [el('span', { class: 'note' }, 'nothing picked: click a creature or an object in the game')]));
+    marker.visible = !!e;
+  }
+  function removePicked() {
+    const e = pickedRef();
+    if (!e) { pick(null); return; }
+    if (!e.remove()) { W.showCaption('dev · something rests on it: take that off first'); return; }
+    pick(null);
+    after(e.kind + ' removed');
+  }
+
+  function arm(tool, btn) {
+    for (const b of panel.querySelectorAll('.palette button')) b.classList.remove('on');
+    armed = tool && (!armed || armed.label !== tool[0]) ? { label: tool[0], place: tool[1] } : null;
+    if (armed) btn.classList.add('on');
+    W.canvas.style.cursor = armed ? 'crosshair' : '';
+    armHint.textContent = armed ? `click the game to place: ${armed.label} (again, or Esc, to stop)` : 'click a creature or an object in the game to pick it';
+    marker.visible = !!(armed || picked);
+  }
+
+  // A ring on the floor: under what's picked, or where the armed tool would go.
+  const marker = new THREE.Mesh(new THREE.RingGeometry(0.2 * S, 0.26 * S, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.85, depthTest: false, side: THREE.DoubleSide }));
+  marker.rotation.x = -Math.PI / 2;
+  marker.renderOrder = 20;
+  marker.visible = false;
+  W.scene.add(marker);
+  let hover = null; // the spot under the cursor, while a tool is armed
+
+  function follow() {
+    requestAnimationFrame(follow);
+    if (panel.hidden) { marker.visible = false; return; }
+    const e = armed ? null : pickedRef();
+    if (armed && hover) {
+      marker.visible = true;
+      marker.position.set((hover.sx / 2 + 0.25) * S, hover.top * S + 0.02, (hover.sy / 2 + 0.25) * S);
+      marker.scale.setScalar(PALETTE.blocks.some((t) => t[0] === armed.label) ? 1 : 1.3);
+    } else if (e) {
+      box.setFromObject(e.mesh).getCenter(tmp);
+      marker.visible = true;
+      marker.position.set(tmp.x, box.min.y + 0.02, tmp.z);
+      marker.scale.setScalar(1.3);
+    } else {
+      if (picked && !e) pick(null); // it went (caught, collapsed, despawned)
+      marker.visible = false;
+    }
+  }
+  requestAnimationFrame(follow);
+
+  // Capture: ahead of the game's own canvas handler (the touch stick).
+  global.addEventListener('pointerdown', (e) => {
+    if (panel.hidden || e.target !== W.canvas || e.button !== 0) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    if (armed) {
+      const at = spotAt(e.clientX, e.clientY);
+      if (!at) { W.showCaption('dev · no floor there'); return; }
+      armed.place(at);
+    } else pick(pickAt(e.clientX, e.clientY));
+  }, true);
+  global.addEventListener('pointermove', (e) => {
+    hover = armed && !panel.hidden && e.target === W.canvas ? spotAt(e.clientX, e.clientY) : null;
+  });
+  global.addEventListener('keydown', (e) => {
+    if (panel.hidden || (e.target && /INPUT|TEXTAREA/.test(e.target.tagName) && e.target.type !== 'range' && e.target.type !== 'checkbox')) return;
+    if (e.key === 'Escape' && (armed || picked)) { arm(null); pick(null); e.stopImmediatePropagation(); e.preventDefault(); }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && picked) { removePicked(); e.preventDefault(); }
+  }, true);
 
   // Map teleport: with it on, a click (not a drag) on the big map puts you there.
   let mapTeleport = false;
@@ -192,6 +343,11 @@
     font: inherit; padding: 3px 7px; cursor: pointer; }
   #dev-panel button:hover { background: #3a3150; }
   #dev-panel button.small { padding: 0 5px; font-size: 10px; float: right; }
+  #dev-panel .sub { padding: 2px 0 6px 10px; }
+  #dev-panel .sub[hidden] { display: none; }
+  #dev-panel .sub h4 { margin: 6px 0 2px; font-size: 11px; font-weight: normal; color: #9c93b4; }
+  #dev-panel .palette button.on { background: #6a4d14; border-color: #ffd27a; color: #ffe7b0; }
+  #dev-panel .picked { min-height: 24px; color: #ffd27a; }
   #dev-panel .row { display: grid; grid-template-columns: 1fr 110px 62px 52px; gap: 4px; align-items: center; padding: 1px 0; }
   #dev-panel .row.changed label { color: #ffd27a; }
   #dev-panel .row label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
@@ -222,8 +378,8 @@
     for (const c of kids) if (c != null) n.append(c);
     return n;
   };
-  const button = (label, fn, cls) => el('button', { type: 'button', class: cls || '', onclick: (e) => { fn(); e.currentTarget.blur(); } }, label);
-  const section = (title, open, ...kids) => el('details', { open }, el('summary', null, title), ...kids);
+  // (preventDefault: a button in a dropdown's summary shouldn't also open or close it)
+  const button = (label, fn, cls) => el('button', { type: 'button', class: cls || '', onclick: (e) => { e.preventDefault(); fn(); e.currentTarget.blur(); } }, label);
 
   const panel = el('div', { id: 'dev-panel', hidden: true });
   const chip = el('div', { id: 'dev-chip', hidden: true, title: 'dev tweaks are active (` opens the panel)' }, 'dev tweaks');
@@ -401,25 +557,87 @@
     }
   }
 
-  function sectionEl(x) {
-    const reset = button('reset', () => {
-      for (const r of x.rows) {
-        const def = getAt(defaults[r.name], r.path);
-        if (Array.isArray(def)) putDefaults(getAt(W[r.name], r.path), def); // in place: the game may hold the array
-        else setAt(W[r.name], r.path, def);
-      }
-      for (const r of x.rows) r.sync();
-      changed();
-    }, 'small');
-    const summary = el('summary', null, x.s.title, x.s.when ? el('span', { class: 'badge', title: WHEN[x.s.when] }, BADGE[x.s.when]) : null, reset);
-    x.el = el('details', { open: true }, summary, ...x.rows.map((r) => r.el));
-    return x.el;
+  // Dropdowns start closed; which ones you open is remembered (per browser).
+  // Double-click a tab to open or close all of its dropdowns.
+  const OPEN_KEY = 'dungeon-engine:dev-open';
+  let openSet = new Set();
+  try { openSet = new Set(JSON.parse(global.localStorage.getItem(OPEN_KEY) || '[]')); } catch (e) { /* storage blocked */ }
+  const folds = []; // { id, tab, el, defOpen }
+  let finding = false; // a search or "changed only" opens what matches, without remembering it
+  function fold(tab, id, defOpen, summary, ...kids) {
+    const f = { id: tab + '/' + id, tab, defOpen };
+    f.el = el('details', { open: openSet.has(f.id) !== defOpen }, summary, ...kids);
+    f.el.addEventListener('toggle', () => {
+      if (finding) return;
+      if (f.el.open !== f.defOpen) openSet.add(f.id); else openSet.delete(f.id);
+      try { global.localStorage.setItem(OPEN_KEY, JSON.stringify([...openSet])); } catch (e) { /* storage blocked */ }
+    });
+    folds.push(f);
+    return f.el;
+  }
+  function foldAll(tab) {
+    const mine = folds.filter((f) => f.tab === tab);
+    const open = mine.some((f) => !f.el.open);
+    for (const f of mine) f.el.open = open;
   }
 
+  function resetRows(list) {
+    for (const r of list) {
+      const def = getAt(defaults[r.name], r.path);
+      if (Array.isArray(def)) putDefaults(getAt(W[r.name], r.path), def); // in place: the game may hold the array
+      else setAt(W[r.name], r.path, def);
+    }
+    for (const r of list) r.sync();
+    changed();
+  }
+
+  const badge = (when) => (when ? el('span', { class: 'badge', title: WHEN[when] }, BADGE[when]) : null);
+
+  /** A tab's sections: a dropdown each, or one per group with the group's sections as subheadings. */
+  function sectionEls(x) {
+    const out = [], groups = new Map();
+    for (const s of x.sections) {
+      if (!s.rows.length) continue;
+      const reset = button('reset', () => resetRows(s.rows), 'small');
+      if (!s.s.group) {
+        s.el = fold(x.t.id, s.s.title, false, el('summary', null, s.s.title, badge(s.s.when), reset), ...s.rows.map((r) => r.el));
+        out.push(s.el);
+        continue;
+      }
+      let g = groups.get(s.s.group);
+      if (!g) {
+        g = { subs: [] };
+        g.rows = () => g.subs.flatMap((t) => t.rows);
+        g.el = fold(x.t.id, s.s.group, false, el('summary', null, s.s.group, button('reset', () => resetRows(g.rows()), 'small')));
+        groups.set(s.s.group, g);
+        out.push(g.el);
+      }
+      s.el = el('div', { class: 'sub' }, el('h4', null, s.s.title, badge(s.s.when), reset), ...s.rows.map((r) => r.el));
+      s.groupEl = g.el;
+      g.subs.push(s);
+      g.el.append(s.el);
+    }
+    return out;
+  }
+
+  const btnRow = (list, cls) => el('div', { class: 'btns ' + (cls || '') }, ...list.map(([l, fn]) => button(l, fn)));
+  const pickBox = el('div', { class: 'tools picked' });
+  const armHint = el('div', { class: 'note' });
+  const paletteRow = (list) => el('div', { class: 'btns palette' }, ...list.map((tool) => {
+    const b = button(tool[0], () => arm(tool, b));
+    return b;
+  }));
   const cheats = el('div', { class: 'cheat' },
-    section('give', true, el('div', { class: 'btns' }, ...GIVE.map(([l, fn]) => button(l, fn)))),
-    section('spawn (in front of you)', true, el('div', { class: 'btns' }, ...SPAWN.map(([l, fn]) => button(l, fn)))),
-    section('teleport', true,
+    fold('cheats', 'place', true, el('summary', null, 'place (click the game)'),
+      el('div', { class: 'note' }, 'blocks'), paletteRow(PALETTE.blocks),
+      el('div', { class: 'note' }, 'creatures'), paletteRow(PALETTE.creatures),
+      el('div', { class: 'note' }, 'you'), paletteRow(PALETTE.you),
+      armHint,
+      el('div', { class: 'note' }, 'picked (Delete removes it):'), pickBox,
+      btnRow([['clear all creatures', () => { W.clearGhosts(); W.clearPixies(); W.clearCreepers(); pick(null); after('creatures cleared'); }]])),
+    fold('cheats', 'meters', true, el('summary', null, 'lamp and stamina'), btnRow(METERS)),
+    fold('cheats', 'give', true, el('summary', null, 'give (into your bag)'), btnRow(GIVE)),
+    fold('cheats', 'teleport', false, el('summary', null, 'teleport'),
       el('div', { class: 'tools' }, el('label', null, mapBox, ' click the big map (Tab) to go there')),
       el('div', { class: 'note' }, 'to a waystone (✦ awake):'), stoneBox));
   const changesPane = el('div', { class: 'pane cheat' },
@@ -429,17 +647,19 @@
 
   for (const x of tabs) {
     x.heading = el('h3', null, x.t.label);
-    x.pane = el('div', { class: 'pane' }, x.heading, x.t.id === 'cheats' ? cheats : null, ...x.sections.filter((s) => s.rows.length).map(sectionEl));
-    x.tabBtn = button(x.t.label, () => pick(x.t.id));
+    x.pane = el('div', { class: 'pane' }, x.heading, x.t.id === 'cheats' ? cheats : null, ...sectionEls(x));
+    x.tabBtn = button(x.t.label, () => showTab(x.t.id));
+    x.tabBtn.addEventListener('dblclick', () => foldAll(x.t.id));
+    x.tabBtn.title = 'double-click: open or close all';
   }
   const CHANGES = { t: { id: 'changes', label: 'Changes' }, pane: changesPane };
-  CHANGES.tabBtn = button('Changes', () => pick('changes'));
+  CHANGES.tabBtn = button('Changes', () => showTab('changes'));
   const allTabs = tabs.filter((x) => x.t !== OTHER || x.sections[0].rows.length).concat(CHANGES);
 
   const TAB_KEY = 'dungeon-engine:dev-tab';
   let current = 'cheats';
   try { current = global.localStorage.getItem(TAB_KEY) || current; } catch (e) { /* storage blocked */ }
-  function pick(id) {
+  function showTab(id) {
     current = allTabs.some((x) => x.t.id === id) ? id : 'cheats';
     try { global.localStorage.setItem(TAB_KEY, current); } catch (e) { /* storage blocked */ }
     filter();
@@ -454,13 +674,15 @@
   search.addEventListener('keydown', (e) => { if (e.key === 'Escape') { search.value = ''; filter(); search.blur(); } });
 
   function filter() {
-    const q = search.value.trim().toLowerCase(), only = onlyBox.checked, finding = !!q || only;
+    const q = search.value.trim().toLowerCase(), only = onlyBox.checked, was = finding;
+    finding = !!q || only;
     tabBar.hidden = finding;
     for (const x of allTabs) {
       const isCur = x.t.id === current;
       x.tabBtn.classList.toggle('on', isCur);
       if (x === CHANGES) { x.pane.hidden = finding || !isCur; continue; }
       let shown = 0;
+      const groupN = new Map();
       for (const s of x.sections) {
         if (!s.el) continue;
         let n = 0;
@@ -470,13 +692,16 @@
           if (!r.el.hidden) n++;
         }
         s.el.hidden = finding && !n;
-        if (finding && n) s.el.open = true;
+        if (finding && n && !s.groupEl) s.el.open = true;
+        if (s.groupEl) groupN.set(s.groupEl, (groupN.get(s.groupEl) || 0) + n);
         shown += n;
       }
+      for (const [g, n] of groupN) { g.hidden = finding && !n; if (finding && n) g.open = true; }
       x.heading.hidden = !finding;
       if (x.t.id === 'cheats') cheats.hidden = finding;
       x.pane.hidden = finding ? !shown : !isCur;
     }
+    if (was && !finding) for (const f of folds) f.el.open = openSet.has(f.id) !== f.defOpen; // back as you left them
     countTabs();
   }
 
@@ -533,7 +758,7 @@
 
   function toggle(open = panel.hidden) {
     panel.hidden = !open;
-    if (!open) tip.hidden = true;
+    if (!open) { tip.hidden = true; arm(null); W.canvas.style.cursor = ''; }
     if (open) fillStones();
     changed();
   }
@@ -549,7 +774,9 @@
     if (e.target.type === 'range' || e.target.type === 'checkbox') e.target.blur();
   });
 
-  pick(current);
+  showTab(current);
+  pick(null);
+  arm(null);
   changed();
   W.dev = { toggle, changes, resetAll, teleport, TABLES };
 })(window);
