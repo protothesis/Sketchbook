@@ -984,8 +984,12 @@ equipped, the lantern and its fuel) was left for later.
   is where each stack sits.
 - **Equipment** (2×4): the duster, the hourglass, the coin purse, the
   backpack. Capacity grows through equipment: the **backpack** adds another
-  4×4 of items. The **coin purse** has its own 2×4 grid, coins only (A on
-  it goes to that grid, under Collectables).
+  4×4 of items. The **coin purse** has its own 2×4 grid, coins only.
+- **Bags open to their own screen** (user, 2026-11-02): the purse's and
+  the backpack's grids aren't on show. A bag is one cell (in the equipment
+  grid; the purse also beside the collectables, and both at a chest); A on
+  it opens its grid on a sub-screen, and B goes back up a level. A stack
+  you picked up comes with you, which is how things move between bags.
 - **Collectables** (4×4), its own tab: things with no use. Coins (a metal
   and a marking) and curios (dishware, odds and ends, bug specimens) for
   now.
@@ -994,7 +998,9 @@ equipped, the lantern and its fuel) was left for later.
 hotbar. Since you hold one thing at a time, LB / RB step the thing in hand
 through the whole items grid in its order, with empty hands as a stop; the
 screen shows the thing in hand and one stop to either side. Reordering the
-grid reorders the carousel. A collectable gets into your hand from the
+grid reorders the carousel. The order is the menu's, cell by cell (user,
+2026-11-02: "as if pressing RB and LB would do the same as selecting
+through the rows"): items, the backpack's, then the equipment with a use. A collectable gets into your hand from the
 menu (Y / F on it), and rides the carousel until you scroll off it. The
 user's reference was Breath of the Wild: quick selection is great, but
 dropping and combining took too many clicks and pages. A BotW-style "hold

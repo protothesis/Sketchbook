@@ -190,20 +190,24 @@
   }
 
   /**
-   * What you can have in hand, in carousel order (inventory.js): the
-   * duster, every stack in your items grid in its cell's order (each chalk
-   * colour and each jar fill its own), the equipment with a use (the
-   * hourglass), and a collectable you took in hand from the menu. Empty
+   * What you can have in hand, in carousel order: the menu's own order
+   * (inventory.js), cell by cell. Every stack in your items grid (the
+   * backpack's after it; each chalk colour and each jar fill its own), then
+   * the equipment with a use in its grid's order (the duster, the
+   * hourglass), then a collectable you took in hand from the menu. Empty
    * hands are the stop before the first. A slot's `cur` is its one variant
    * (a chalk colour, a jar fill), for the code that asks it.
    */
   function slots() {
-    const run = state.run, out = [];
-    const kindSlot = (k) => !ITEMS[k].equip && ITEMS[k].slot && ITEMS[k].slot(run);
-    for (const k in ITEMS) if (ITEMS[k].first && kindSlot(k)) out.push(kindSlot(k)); // a kind that keeps slot 1 (the duster)
+    const run = state.run, out = [], seen = new Set();
+    const kindSlot = (k) => ITEMS[k] && !ITEMS[k].equip && ITEMS[k].slot && ITEMS[k].slot(run);
     for (const id of W.layoutItems(run)) if (id) out.push(itemSlot(run, id));
+    for (const k of W.layoutEquip(run)) {
+      const slot = k && kindSlot(k);
+      if (slot) { out.push(slot); seen.add(k); }
+    }
     for (const k in ITEMS) {
-      const slot = !ITEMS[k].first && kindSlot(k);
+      const slot = !seen.has(k) && kindSlot(k);
       if (slot) out.push(slot);
     }
     const hc = handCell();
@@ -259,7 +263,7 @@
     state.handColl = null;
     refreshHotbar();
   }
-  /** B: put away what's in your hand, or take out the last thing you held (else slot 1). */
+  /** B: put away what's in your hand, or take out the last thing you held (else the first stop). */
   function toggleHands() {
     if (state.carry) { shakeHotbar(); return; } // set the block down first
     if (selectedSlot()) { putAway(); return; }
@@ -376,7 +380,7 @@
     bar.innerHTML = '';
     bar.hidden = false;
     updateHeld(cur);
-    const stops = [null].concat(s), i = cur ? stops.indexOf(cur) : 0;
+    const stops = [null].concat(s), i = cur ? stops.findIndex((x) => x && x.key === cur.key) : 0;
     const at = (d) => stops[((i + d) % stops.length + stops.length) % stops.length];
     const g = (k) => (W.glyph ? W.glyph(k) : k);
     const pad = W.padMode && W.padMode();
@@ -409,7 +413,32 @@
       b.addEventListener('click', (e) => { e.preventDefault(); useEquip(); b.blur(); });
       bar.prepend(b);
     }
+    placeHotbar();
   }
+
+  /**
+   * The carousel sits just right of the lamp, level with it. Where that
+   * doesn't fit (a narrow window; on touch, the jump and use buttons keep
+   * the bottom right), it goes under the lamp instead and the lamp rises
+   * over it (the hud-stacked class, play.css).
+   */
+  function placeHotbar() {
+    const bar = $('hotbar'), lamp = $('lamp');
+    if (!bar || !lamp || bar.hidden) return;
+    const root = document.documentElement, gap = 10;
+    const help = document.querySelector('.help'); // the lamp and the carousel sit over it, however many lines it wraps to
+    if (help && help.offsetParent) root.style.setProperty('--hud-bottom', Math.round(global.innerHeight - help.getBoundingClientRect().top + 8) + 'px');
+    else root.style.setProperty('--hud-bottom', 'max(12px, env(safe-area-inset-bottom))');
+    const touch = !global.matchMedia('(hover: hover)').matches;
+    const lw = lamp.offsetWidth, bw = bar.offsetWidth;
+    const left = lamp.offsetLeft;
+    const fits = left + lw + gap + bw + (touch ? 160 : 12) <= global.innerWidth;
+    document.body.classList.toggle('hud-stacked', !fits);
+    root.style.setProperty('--bar-left', (fits ? left + lw + gap : left) + 'px');
+    root.style.setProperty('--bar-h', bar.offsetHeight + 'px');
+  }
+  global.addEventListener('resize', placeHotbar);
+  if (global.ResizeObserver && $('lamp')) new ResizeObserver(placeHotbar).observe($('lamp'));
 
   // --- chalk marks: drawn on a quarter-tile (floor, or the top of a one-unit
   // block); they show on the maps too. Persist with the run.

@@ -233,7 +233,8 @@ Determinism).
 
   The pool's size and glow show its level, on the maps too. Times are
   walking time.
-- **The lamp on the HUD** sits bottom left, by the carousel (twice the size
+- **The lamp on the HUD** sits bottom left, the carousel just right of it (on a
+  narrow screen, under it) (twice the size
   it was; smaller on phones): a lantern icon in the lamp's colour and a
   fluid meter, one section per charge, with the one that's burning shown
   dimmer. The icon's flame sways while it burns, stutters in danger, and
@@ -368,15 +369,18 @@ Determinism).
     charged. Charged, it's the key to a lost path: F with it in hand at
     the path's door retraces it, and spends the pixie. **The feather
     duster** (`app/walk/dust.js`) is in your bag from the start, for now,
-    and is the carousel's first stop: take it out (2 from empty hands, or B on a pad) and F (RT on a gamepad) swipes it at the dust
+    and a carousel stop after your items: take it out (step the carousel to it, or B on a pad) and F (RT on a gamepad) swipes it at the dust
     (see Dusting, below).
   - **Creatures** (ghosts, pixies) aren't items: they move on their own,
     by the ecology's rules.
 - **The carousel** (where the hotbar was, 2026-11-01) shows what's in
   your hand, big, with the stop before and after it to either side. **1 /
   2** (LB / RB, the mouse wheel, or a tap on a side) step through the
-  duster, every stack in your items grid in its order, the hourglass, and
-  empty hands. A tap on the middle opens your inventory. **E** interacts
+  menu's own order, cell by cell: every stack in your items grid (then the
+  backpack's), then the equipment with a use (the duster, the hourglass)
+  in the equipment grid's order, then empty hands. The two side icons are
+  always the stops just before and after. It sits right of the lamp; on a
+  narrow screen, under it. A tap on the middle opens your inventory. **E** interacts
   with the world (doors, lifting a jar, wiping a chalk mark
   you're facing). **F** (RT on a gamepad, or "use" on touch) uses the
   selected item: the one in your hand, with a fast side-to-side slash
@@ -525,17 +529,22 @@ Determinism).
   the last tab you had, and walking pauses while it's open.
   - **Map** is the big map: it opens zoomed in on you (two wheel steps
     back from the closest zoom); drag to pan, wheel or pinch to zoom.
-  - **Inventory**: the items grid (4×4), the backpack's (4×4, once you
-    have it) and the equipment grid (2×4). **Collectables**: coins and
-    curios (4×4), and the coin purse's own grid (2×4, coins only).
+  - **Inventory**: the items grid (4×4) and the equipment grid (2×4).
+    **Collectables**: coins and curios (4×4), and a Bags cell for the coin
+    purse. The grids fill the screen: a cell is as big as the screen
+    allows, up to 140px.
+  - **Bags** (the coin purse, the backpack; marked ▸) show as one cell.
+    Space (A) on one opens its grid on a screen of its own (the backpack's
+    4×4 of items, the purse's 2×4 of coins); Esc (B) comes back to it.
+    Something you picked up comes along, so that's how a stack moves in
+    or out of a bag.
   - In a grid, WASD or the arrows (d-pad or stick) move the cursor.
     **Space** (A) picks up a stack and puts it down on another cell,
-    swapping (the order is the carousel's); on the purse or the backpack
-    it goes to that grid. **F** (Y) takes it in your hand and closes the
+    swapping (the order is the carousel's); on a bag it opens it. **F** (Y) takes it in your hand and closes the
     menu (a collectable too: it rides the carousel until you scroll off
     it). **X** (X) drops one where you stand, lying as it did before you
     took it (step off it before it can be picked up again). **Esc** (B)
-    puts back what you picked up, else closes. On touch, tap a cell, or
+    leaves a bag, else puts back what you picked up, else closes. On touch, tap a cell, or
     use the buttons along the bottom.
   - **Chests** (`app/walk/restore.js`): a crate with a lid. Tap E to open
     it (hold E grabs it, like any crate). The chest's grid (4×2) is on
@@ -571,7 +580,7 @@ you pass out and wake by your save lantern.
 | Chest | a crate's size, dark boards, two iron bands and a brass latch | holds a 4×2 grid |
 | Chalk | sticks in five colours; in the items grid and the carousel, one stack per colour: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
-| Hotbar | bottom-centre slots: the duster (always slot 1, lit violet while a swipe would find dust), ⚱ jars (one group slot: empty, a violet pip for a pixie or a violet bar for entropy, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
+| Carousel | bottom left, right of the lamp (under it on a narrow screen): the thing in hand big in the middle, the stops before and after it to either side, its name under it. Icons: the duster (lit violet while a swipe would find dust), ⚱ jars (empty, a violet pip for a pixie or a violet bar for entropy), chalk (the colour's symbol over its stick), ⌂ doorstones, ⚷ keys; a stack's count in a dark tab in the corner | a "use" button on touch screens |
 | Held item | the selected tool in the figure's left hand, tilted up; a jar or block over its head; all at their true size, and casting no shadow; nothing with empty hands | |
 | Slash | using what's in your hand whips it side to side across in front of you: 0.16 s across (`SLASH.time`, turning from −0.55 to +2.5 radians off its rest, `from`, `to`, reaching out 0.1 cells), 0.14 s back (`back`); a flat ring at tool-tip height (0.2–0.52 cells round the figure) lights the 1.3 radians behind the tip (`trail`) in a 2-px Bayer dither, densest at the outside, gone in 0.22 s (`trailLife`) | |
 | Jar | a small glass jar with a dark lid; a pixie flits inside when it holds one | a solid half-cell |
@@ -680,7 +689,7 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Chests | 1 room in 6 at depth 1+, not halls (`chestChance`, own `'chest'` stream, a vessel's kind of spot, never on the vessel); 1–4 cells filled on `'chest-loot'`: coins 40%, curios 35%, a stick of chalk, an empty jar, a doorstone |
 | Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), F with a charged hourglass in hand, which spends its pixie; reroll: E held at the door (the path turns to corruption); `lostDoorChoice`: a choice between the two instead; unchosen: dim at the next faint, fade at the one after |
 | Dust | by room mood (`dustMood`): dusty 70% of free half-cells up to 3 layers; still, hollow 35% / 2; warm 30% / 2; echoing, tilted 15% / 1; humming 12% / 1; damp, cold, breathing none. On the floor and the tops of 1- and 2-unit blocks (not crates), in noise patches `dustScale` (3) half-cells across, block tops +0.15 (`dustTops`), thickest in a patch's middle; never on a sigil, well, waystone or save lantern cell, a tool's cell, or under a loose object's start, mark or a vessel. Seeded on the `'dust'` stream (`DP.dust`); saved as `run.dust` (layers taken off, per room and half-cell) |
-| Duster | equipment, protected, with you from the start, the carousel's first stop; F (RT on a pad): one press, one swing (no sooner than 0.18 s, `DUST.swingEvery`). Hits every dusted half-cell whose centre is within 0.75 cells in front (a ±70° arc, `reach`, `arc`; within 0.32 any way you face), 0.5 below to 0.55 above your feet (`reachDown`, `reachUp`: a one-unit block's top from the floor, a two-unit one in a jump), and a crusted crystal the same way; one layer off each |
+| Duster | equipment, protected, with you from the start, a carousel stop after your items; F (RT on a pad): one press, one swing (no sooner than 0.18 s, `DUST.swingEvery`). Hits every dusted half-cell whose centre is within 0.75 cells in front (a ±70° arc, `reach`, `arc`; within 0.32 any way you face), 0.5 below to 0.55 above your feet (`reachDown`, `reachUp`: a one-unit block's top from the floor, a two-unit one in a jump), and a crusted crystal the same way; one layer off each |
 | Chits | per layer taken off: 45% one chit, 10% a second (`chit`, `chitTwo`); after 3 swings in a row that hit dust and threw none, the next throws one (`pity`). Violet diamonds (points) 0.15 cells across (`chitSize`), thrown out at 1.78 cells/s (`launch`) and bouncing (`bounce` 0.42); within 0.9 cells (`magnet`) they drift to you, gathered within 0.28, each with a 0.32 s dithered violet flash over the figure (seen through anything). Saved where they lie (`run.chits`) |
 | Pre-pool | 6 chits (`perShard`) pour a shard into the lamp (the gain that starts `lampGrace`); full with no room in the lamp, it waits, and chits stay on the floor. Six pips under the lamp meter, shown once you've gathered one. A faint leaves it in your pack (`run.dustPool`) |
 | Crusted crystals | 80% of shards in a room with dust (`dustCrust`, drawn first on the `'dust'` stream) lie crusted over: today's shard, dull and tilted, half sunk among grey lumps, its cell dusted at least 2 layers deep; a glint every 1.7 s (`glintEvery`) where your lamp's pool reaches it. 3 swipes (`crustLayers`) wake it: the crust falls away, a violet flash, and it rises as an ordinary shard pickup. Saved as `run.crust` |

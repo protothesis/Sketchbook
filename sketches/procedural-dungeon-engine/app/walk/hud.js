@@ -585,7 +585,7 @@
     const from = opts && opts.travelFrom;
     const tab = from ? 'map' : (opts && opts.chest) ? 'chest' : (opts && opts.tab) || lastTab;
     state.bigmap = { cx: state.player.x, cy: state.player.y, px: BIGMAP_MAX_PX * WHEEL_STEP * WHEEL_STEP, travel: null,
-      tab, chest: (opts && opts.chest) || null, cur: null, pick: null };
+      tab, chest: (opts && opts.chest) || null, cur: null, pick: null, sub: null };
     if (from) {
       const pts = state.waystones.filter((o) => o.awake).map((o) => o.ws.wake);
       const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y);
@@ -607,7 +607,7 @@
     const v = state.bigmap;
     if (!v || v.travel || v.chest) return;
     v.tab = lastTab = tab;
-    v.cur = null; v.pick = null;
+    v.cur = null; v.pick = null; v.sub = null;
     W.renderMenu();
   }
   /** The awake waystone (not the one you're at) nearest a screen point on the travel map, if one is close. */

@@ -996,6 +996,26 @@ All notable changes to this sketch are logged here, per
       you wake, fading in with the last static dying away. Timings are in
       `PSYCHE` in the dev panel.
 
+- 2026-11-02: **The inventory, stitched up after a first playtest.**
+  - The carousel's side icons are now always the stops just before and
+    after the one in hand. They were stuck: the carousel looked its stop
+    up by object, and the list is rebuilt each time, so it never matched.
+  - The carousel follows the menu's order, cell by cell: items, the
+    backpack's, then the duster and the hourglass in the equipment grid's
+    order (the duster isn't first any more).
+  - The carousel sits just right of the lamp, so they no longer overlap
+    when the window narrows; where it won't fit (a phone), under the lamp.
+    Both sit clear of the help line however many lines it wraps to.
+  - Everything bigger and heavier: the carousel (an 88px middle), slot
+    borders and the menu's borders 2px, the menu's tabs and text, prompts,
+    captions and the lamp's line. The menu's grids fill the screen (cells
+    up to 140px), icons scale with their cell, and a stack's count is a
+    dark tab in the corner, clear of the icon.
+  - Bags (the coin purse, the backpack) are one cell that opens to its own
+    screen: Space (A) on it opens its grid, Esc (B) comes back. Their grids
+    aren't on show any more. The Collectables tab, and a chest, have a
+    Bags cell for them.
+
 - 2026-11-01: **An inventory, a menu with tabs, and chests**
   (GAME-DESIGN §20; `app/walk/inventory.js`, `app/walk/menu.js`).
   - Tab (View on a pad, or a tap on the minimap or the carousel) opens a
