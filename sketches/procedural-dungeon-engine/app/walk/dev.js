@@ -142,25 +142,63 @@
     after('a ' + kind);
   }
 
-  // [label, place(at)]; `at`: { x, y (cells), sx, sy (half-cells), top (cells: the surface there) }
+  // The armed thing's preview: the real mesh, see-through, where a click would put it.
+  /** A mesh made see-through: its own copies of its materials, no shadows. */
+  function seeThrough(mesh) {
+    mesh.traverse((o) => {
+      o.castShadow = o.receiveShadow = false;
+      if (!o.material) return;
+      o.material = o.material.clone();
+      o.material.transparent = true;
+      o.material.opacity = (o.material.opacity != null ? o.material.opacity : 1) * 0.6;
+      o.material.depthWrite = false;
+      // Lit by itself, in its own colour, so it reads in a dark room too.
+      if (o.material.emissive && o.material.color) o.material.emissive.copy(o.material.color).multiplyScalar(0.7);
+    });
+    return mesh;
+  }
+  const nextColor = () => RULES.pushColors[seq % RULES.pushColors.length];
+  const objectLook = (kind, extra) => () => ({ mesh: W.devPreviewMesh(Object.assign({ kind, sx: 0, sy: 0 }, extra())), lift: 0, onGrid: true });
+  /** A creature's look: made the usual way, then taken straight back out of the game's list (so it never acts). */
+  const creatureLook = (add, list, lift) => () => {
+    const c = add({ id: 'dev:preview', x: 0, y: 0 });
+    state[list] = state[list].filter((o) => o !== c);
+    W.scene.remove(c.mesh);
+    return { mesh: c.mesh, lift: lift(), onGrid: false };
+  };
+
+  // [label, place(at), look() → { mesh, lift (cells above the surface), onGrid }]
+  // `at`: { x, y (cells), sx, sy (half-cells), top (cells: the surface there) }
   const PALETTE = {
     blocks: [
-      ['crate', (at) => placeObject('crate', {}, at)],
-      ['block', (at) => placeObject('block', { color: RULES.pushColors[seq % RULES.pushColors.length] }, at)],
-      ['vessel', (at) => placeObject('vessel', { holds: null, n: 0 }, at)],
-      ['waystone', (at) => placeObject('waystone', { holds: null }, at)],
-      ['waystone: awake', (at) => placeObject('waystone', { holds: 'entropy' }, at)],
+      ['crate', (at) => placeObject('crate', {}, at), objectLook('crate', () => ({}))],
+      ['block', (at) => placeObject('block', { color: nextColor() }, at), objectLook('block', () => ({ color: nextColor() }))],
+      ['vessel', (at) => placeObject('vessel', { holds: null, n: 0 }, at), objectLook('vessel', () => ({ holds: null, n: 0 }))],
+      ['waystone', (at) => placeObject('waystone', { holds: null }, at), objectLook('waystone', () => ({ holds: null }))],
+      ['waystone: awake', (at) => placeObject('waystone', { holds: 'entropy' }, at), objectLook('waystone', () => ({ holds: 'entropy' }))],
     ],
     creatures: [
-      ['ghost', (at) => placeCreature('ghost', W.addGhost, at)],
-      ['pixie', (at) => placeCreature('pixie', W.addPixie, at)],
-      ['creeper', (at) => placeCreature('creeper', W.addCreeper, at)],
+      ['ghost', (at) => placeCreature('ghost', W.addGhost, at), creatureLook(W.addGhost, 'ghosts', () => W.GHOST.height)],
+      ['pixie', (at) => placeCreature('pixie', W.addPixie, at), creatureLook(W.addPixie, 'pixies', () => W.PIXIE.height)],
+      ['creeper', (at) => placeCreature('creeper', W.addCreeper, at), creatureLook(W.addCreeper, 'creepers', () => 0)],
     ],
     you: [
       ['move player', (at) => teleport(at.x, at.y, at.top)],
     ],
   };
-  let armed = null; // { label, place, btn }
+  let armed = null; // { label, place, look, preview }
+
+  function setPreview(look) {
+    if (armed && armed.preview) {
+      W.scene.remove(armed.preview.mesh);
+      armed.preview.mesh.traverse((o) => { if (o.material) o.material.dispose(); }); // the copies; geometry is shared
+      armed.preview = null;
+    }
+    if (!armed || !look) return;
+    armed.preview = look();
+    seeThrough(armed.preview.mesh).visible = false;
+    W.scene.add(armed.preview.mesh);
+  }
 
   /** The highest surface over half-cell (sx, sy): the floor, or a block's top. */
   function topAt(sx, sy) {
@@ -241,7 +279,10 @@
 
   function arm(tool, btn) {
     for (const b of panel.querySelectorAll('.palette button')) b.classList.remove('on');
-    armed = tool && (!armed || armed.label !== tool[0]) ? { label: tool[0], place: tool[1] } : null;
+    const next = tool && (!armed || armed.label !== tool[0]) ? { label: tool[0], place: tool[1], look: tool[2] } : null;
+    setPreview(null);
+    armed = next;
+    if (armed) setPreview(armed.look);
     if (armed) btn.classList.add('on');
     W.canvas.style.cursor = armed ? 'crosshair' : '';
     armHint.textContent = armed ? `click the game to place: ${armed.label} (again, or Esc, to stop)` : 'click a creature or an object in the game to pick it';
@@ -261,10 +302,15 @@
     requestAnimationFrame(follow);
     if (panel.hidden) { marker.visible = false; return; }
     const e = armed ? null : pickedRef();
+    const pv = armed && armed.preview;
+    if (pv) pv.mesh.visible = !!hover;
     if (armed && hover) {
       marker.visible = true;
       marker.position.set((hover.sx / 2 + 0.25) * S, hover.top * S + 0.02, (hover.sy / 2 + 0.25) * S);
       marker.scale.setScalar(PALETTE.blocks.some((t) => t[0] === armed.label) ? 1 : 1.3);
+      if (pv && pv.onGrid) pv.mesh.position.set((hover.sx / 2 + 0.25) * S, hover.top * S, (hover.sy / 2 + 0.25) * S);
+      else if (pv) pv.mesh.position.set(hover.x * S, (hover.top + pv.lift) * S, hover.y * S);
+      if (pv && !pv.onGrid) marker.position.set(hover.x * S, hover.top * S + 0.02, hover.y * S); // a creature goes where you point, not on the grid
     } else if (e) {
       box.setFromObject(e.mesh).getCenter(tmp);
       marker.visible = true;
@@ -286,6 +332,7 @@
       const at = spotAt(e.clientX, e.clientY);
       if (!at) { W.showCaption('dev · no floor there'); return; }
       armed.place(at);
+      if (armed.preview && armed.preview.onGrid) setPreview(armed.look); // a block's next colour
     } else pick(pickAt(e.clientX, e.clientY));
   }, true);
   global.addEventListener('pointermove', (e) => {
@@ -343,9 +390,8 @@
     font: inherit; padding: 3px 7px; cursor: pointer; }
   #dev-panel button:hover { background: #3a3150; }
   #dev-panel button.small { padding: 0 5px; font-size: 10px; float: right; }
-  #dev-panel .sub { padding: 2px 0 6px 10px; }
-  #dev-panel .sub[hidden] { display: none; }
-  #dev-panel .sub h4 { margin: 6px 0 2px; font-size: 11px; font-weight: normal; color: #9c93b4; }
+  #dev-panel details.sub { margin-left: 12px; border-bottom: 0; padding: 2px 0; }
+  #dev-panel details.sub > summary { color: #9c93b4; }
   #dev-panel .palette button.on { background: #6a4d14; border-color: #ffd27a; color: #ffe7b0; }
   #dev-panel .picked { min-height: 24px; color: #ffd27a; }
   #dev-panel .row { display: grid; grid-template-columns: 1fr 110px 62px 52px; gap: 4px; align-items: center; padding: 1px 0; }
@@ -593,7 +639,7 @@
 
   const badge = (when) => (when ? el('span', { class: 'badge', title: WHEN[when] }, BADGE[when]) : null);
 
-  /** A tab's sections: a dropdown each, or one per group with the group's sections as subheadings. */
+  /** A tab's sections: a dropdown each, or one per group with the group's sections as dropdowns inside it. */
   function sectionEls(x) {
     const out = [], groups = new Map();
     for (const s of x.sections) {
@@ -612,7 +658,8 @@
         groups.set(s.s.group, g);
         out.push(g.el);
       }
-      s.el = el('div', { class: 'sub' }, el('h4', null, s.s.title, badge(s.s.when), reset), ...s.rows.map((r) => r.el));
+      s.el = fold(x.t.id, s.s.group + '/' + s.s.title, false, el('summary', null, s.s.title, badge(s.s.when), reset), ...s.rows.map((r) => r.el));
+      s.el.classList.add('sub');
       s.groupEl = g.el;
       g.subs.push(s);
       g.el.append(s.el);
@@ -692,7 +739,7 @@
           if (!r.el.hidden) n++;
         }
         s.el.hidden = finding && !n;
-        if (finding && n && !s.groupEl) s.el.open = true;
+        if (finding && n) s.el.open = true;
         if (s.groupEl) groupN.set(s.groupEl, (groupN.get(s.groupEl) || 0) + n);
         shown += n;
       }

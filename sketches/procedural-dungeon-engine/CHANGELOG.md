@@ -148,8 +148,10 @@ All notable changes to this sketch are logged here, per
   - **Dropdowns start closed**, and the ones you open are remembered.
     Double-click a tab to open or close all of its dropdowns.
   - **One dropdown per creature** in the Creatures tab (Creeper, Ghost,
-    Pixie), with senses, drain, moving and the rest as subheadings inside,
-    and each creature's spawn chances with it.
+    Pixie), with each creature's spawn chances with it. Senses, drain,
+    moving and the rest are their own dropdowns inside it, closed by default.
+  - **A see-through preview** of what's armed (the real block, waystone or
+    creature) follows the cursor, self-lit so it reads in a dark room.
 - 2026-11-01: **The dev panel is organized.** Tabs replace the one long
   scroll: Cheats, Player, Creatures, Lamp & light, World, FX and Changes.
   Each tab is split into sections by what you're tuning ("Creeper · drain",

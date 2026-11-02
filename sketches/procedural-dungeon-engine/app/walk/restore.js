@@ -803,6 +803,9 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
     return b;
   }
 
+  /** What an object `o` would look like: its mesh alone, in no room and not in the world. */
+  const devPreviewMesh = (o) => makeObject('dev:preview', o).mesh;
+
   /** A loose object gone for good. False if something rests on it. */
   function devRemoveObject(b) {
     if (b.carried || loaded(b)) return false;
@@ -1039,7 +1042,7 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
   /** Your walking speed carrying `b`, as a share of the usual. */
   const carryPace = (b) => CARRY_PACE[kindOf(b)];
 
-  Object.assign(W, { SCONCE_Y, carryPace, devPlaceObject, devRemoveObject, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
+  Object.assign(W, { SCONCE_Y, carryPace, devPlaceObject, devPreviewMesh, devRemoveObject, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
     setDownBlock, updatePushBlocks, addSconces, KINDS, covered, SHADOW_FADE,
     sconceNear, lightSconce, snuffSconce, updateSconces, SCONCE_LIGHT, sconceLight, sconcePools });
 })(window);

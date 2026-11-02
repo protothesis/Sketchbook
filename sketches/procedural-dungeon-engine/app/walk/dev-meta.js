@@ -1,8 +1,8 @@
 // The dev panel's map of the tuning tables (dev.js): which tab and section
 // each number sits in, and what it is, for the hover tooltip.
 //
-// TABS lists sections in order (grp() folds several into one dropdown,
-// as subheadings); a section takes every number whose path
+// TABS lists sections in order (grp() nests several in one dropdown,
+// each its own dropdown inside); a section takes every number whose path
 // starts with one of its prefixes (first match wins, across all tabs, so a
 // narrower prefix goes before a wider one). A number no section takes still
 // shows, under "Other", so nothing new goes missing.
@@ -19,7 +19,7 @@
   const W = global.DungeonPlay.walk;
 
   const sec = (title, when, ...prefixes) => ({ title, when, prefixes });
-  // Sections under one dropdown, as subheadings (one per creature).
+  // Sections nested in one dropdown (one per creature).
   const grp = (group, ...sections) => sections.map((s) => Object.assign(s, { group }));
 
   const TABS = [
