@@ -233,7 +233,7 @@ Determinism).
 
   The pool's size and glow show its level, on the maps too. Times are
   walking time.
-- **The lamp on the HUD** sits bottom left, by the hotbar (twice the size
+- **The lamp on the HUD** sits bottom left, by the carousel (twice the size
   it was; smaller on phones): a lantern icon in the lamp's colour and a
   fluid meter, one section per charge, with the one that's burning shown
   dimmer. The icon's flame sways while it burns, stutters in danger, and
@@ -328,7 +328,7 @@ Determinism).
   later use. A room lost to a faint isn't rerolled: what's in it waits,
   and comes back if you retrace the path.
 - **Hands full.** With a block in your hands, E only sets it down; F does
-  nothing ("your hands are full"), the hotbar won't switch (it shakes),
+  nothing ("your hands are full"), the carousel won't switch (it shakes),
   and you can't run, and a jump is only a hop. The block you carry is saved with the run
   (`run.carry`).
 - **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
@@ -343,32 +343,40 @@ Determinism).
   three lit sconces nearest you get real lights (a fixed pool, so lighting
   more never recompiles materials). Doors carved later through a sconce's
   wall take the sconce's place.
-- **Four kinds of item.** Every item belongs to one class, and the class
+- **Five kinds of item.** Every item belongs to one class, and the class
   decides how it behaves (`ITEMS` in `app/walk/items.js`):
   - **Pickups** (shards) float and turn where they lie. Walk into one to
-    collect it. They're on the HUD (entropy), never hotbar slots.
-  - **Tools** (chalk, doorstones, keys) lie flat on the floor. Walk over
-    one to collect it. They live on the hotbar and work only in your hand,
-    with F, used up and never put back. Collected, a tool goes in the
-    bag; what's in your hands never changes by itself.
+    collect it. They're on the HUD (entropy), never in the inventory.
+  - **Tools** (chalk, doorstones, keys, jars) lie flat on the floor. Walk
+    over one to collect it. They live in your **items grid** and work only
+    in your hand, with F. Collected, a tool goes in the grid; what's in
+    your hands never changes by itself. With no room for it (a new stack
+    and the grid full), it stays on the floor and a caption says so.
+  - **Collectables** (coins, curios; since 2026-11-01) have no use. Walk
+    over one to collect it: coins go in the coin purse if you have one,
+    else with curios in the **collectables grid**.
   - **Objects** (crates, push blocks, vessels) are things in the world as
     themselves, never in the bag. Hold E to grab one and lift it, E to set
     it down again, with whatever's inside.
-  - **Equipment** (the hourglass, the duster; a draft class) is always with you, kept
-    through faints along with what's in it. One of each, collected like a
-    tool, on the hotbar if it has a use. **The hourglass**
+  - **Equipment** (the duster, the hourglass, the coin purse, the
+    backpack) sits in the equipment grid. One of each, collected like a
+    tool, in the carousel if it has a use. On a faint it falls with your
+    pack, all but the duster and the hourglass (protected). **The hourglass**
     (`app/walk/hourglass.js`) holds one pixie: F near a pixie catches it,
     F at a vessel pours it in or takes one out of a vessel of pixies. A
-    pixie glows in its lower bulb (and its hotbar glyph) when it's
+    pixie glows in its lower bulb (and its carousel glyph) when it's
     charged. Charged, it's the key to a lost path: F with it in hand at
     the path's door retraces it, and spends the pixie. **The feather
     duster** (`app/walk/dust.js`) is in your bag from the start, for now,
-    and keeps hotbar slot 1: take it out (1, or B on a pad) and F (RT on a gamepad) swipes it at the dust
+    and is the carousel's first stop: take it out (2 from empty hands, or B on a pad) and F (RT on a gamepad) swipes it at the dust
     (see Dusting, below).
   - **Creatures** (ghosts, pixies) aren't items: they move on their own,
     by the ecology's rules.
-- **The hotbar.** Tools and objects sit in slots at the bottom of the
-  screen. Pick a slot with 1–9, the mouse wheel, or a tap. **E** interacts
+- **The carousel** (where the hotbar was, 2026-11-01) shows what's in
+  your hand, big, with the stop before and after it to either side. **1 /
+  2** (LB / RB, the mouse wheel, or a tap on a side) step through the
+  duster, every stack in your items grid in its order, the hourglass, and
+  empty hands. A tap on the middle opens your inventory. **E** interacts
   with the world (doors, lifting a jar, wiping a chalk mark
   you're facing). **F** (RT on a gamepad, or "use" on touch) uses the
   selected item: the one in your hand, with a fast side-to-side slash
@@ -377,13 +385,11 @@ Determinism).
   and the figure shows it: a tool in its left hand (the lantern is in the
   right), a jar held over its head. The lamp isn't a slot (since
   2026-10-27): R (R3) covers or relights it. You start with **empty
-  hands**. The selected slot's number, or a tap on it, puts it away again;
-  on a gamepad, B puts it away or takes the last thing you held back out.
+  hands**. On a gamepad, B puts it away or takes the last thing you held back out.
   Lifting or grabbing a block puts it away too: both hands for the block. With nothing in
   hand that wants it, F at a dormant waystone wakes it from your lamp.
-  Some slots are **groups**: one slot, several variants
-  (chalk colours; jars by contents). Click a selected group again (or press and
-  hold it) to open its picker, or press its number again to cycle.
+  Each chalk colour and each jar fill (empty, pixie, entropy) is its own
+  stop.
 - **Focus and prompts.** E acts on one thing at a time: of everything in
   reach, the one you're most squarely facing (nearer breaks a tie; the
   score is distance + 0.6 × (1 − cos of the angle to it)). Nothing on
@@ -439,7 +445,7 @@ Determinism).
   the maps. Chalk comes in five colours, each with its own simple mark:
   silver arrow (it points the way you faced), gold triangle, crimson
   cross, teal waves, violet crescent. A stick is good for **3 strokes**,
-  and its hotbar icon loses a third per stroke. F draws a mark on the
+  and its carousel icon loses a third per stroke. F draws a mark on the
   nearest free quarter-tile ahead (the floor, or the top of a one-unit
   block). E, facing a mark within 0.7 cells (or standing on it, facing
   ahead), wipes it. You start with one silver stick,
@@ -505,7 +511,7 @@ Determinism).
   locked. The engine records the door (a `carve` event), so replay, export
   and the chart view all keep it.
 - **Locked doors.** Rare, and they appear past depth 3. Select a key (it's
-  a tool on the hotbar) and press F at the door: the key turns. Then open
+  a tool in your items grid) and press F at the door: the key turns. Then open
   it as usual (E). E alone at a locked door only says so. The **first room past a locked door** is special:
   it's worked out from seeds (the door it was opened through was generated
   locked), so every client and every replay agrees. It has a faint gold
@@ -513,9 +519,28 @@ Determinism).
   on the maps. Nothing more yet: it's a hook. The expedition-record /
   leave-the-dungeon screen (`showRecord`) is still in the code, unused, for
   whatever a lock leads to later.
-- **The big map** (Tab, or tap the minimap) is a view: it opens zoomed in on
-  you (two wheel steps back from the closest zoom); drag to pan, wheel or
-  pinch to zoom.
+- **The menu** (Tab; View on a pad; tap the minimap or the carousel)
+  has three tabs, switched with 1 / 2 (LB / RB) or a tap: **Map**,
+  **Inventory** and **Collectables** (`app/walk/menu.js`). It opens on
+  the last tab you had, and walking pauses while it's open.
+  - **Map** is the big map: it opens zoomed in on you (two wheel steps
+    back from the closest zoom); drag to pan, wheel or pinch to zoom.
+  - **Inventory**: the items grid (4×4), the backpack's (4×4, once you
+    have it) and the equipment grid (2×4). **Collectables**: coins and
+    curios (4×4), and the coin purse's own grid (2×4, coins only).
+  - In a grid, WASD or the arrows (d-pad or stick) move the cursor.
+    **Space** (A) picks up a stack and puts it down on another cell,
+    swapping (the order is the carousel's); on the purse or the backpack
+    it goes to that grid. **F** (Y) takes it in your hand and closes the
+    menu (a collectable too: it rides the carousel until you scroll off
+    it). **X** (X) drops one where you stand, lying as it did before you
+    took it (step off it before it can be picked up again). **Esc** (B)
+    puts back what you picked up, else closes. On touch, tap a cell, or
+    use the buttons along the bottom.
+  - **Chests** (`app/walk/restore.js`): a crate with a lid. Tap E to open
+    it (hold E grabs it, like any crate). The chest's grid (4×2) is on
+    top, yours below. Space (A, or a tap) on a chest cell takes that
+    stack; on one of yours, gives it. X or E (X) takes everything that fits.
 
 There's no passive regen, only wells. Entropy buys rerolls, waking
 waystones, travel and lighting sconces, and the lamp burns it. Running out
@@ -534,15 +559,17 @@ you pass out and wake by your save lantern.
 | Closed door | dark panel with a warm orange seam of light under it | the same orange as the chart view's open doorways |
 | Locked door | iron-grey panel with two bands and a cold blue seam | blue on the minimap; once unlocked it keeps its bands and gets an orange seam |
 | Minimap | unopened doors orange, locked doors blue, opened doors green, doors to a lost path (its own, or onto ground it holds) violet; traces grey; lost paths violet and hatched, by stage: since your last faint, a fill that breathes, close hatching and a solid glowing edge; dimmed (it fades at the next faint), fainter, sparse hatching and a dashed edge (faded ones not drawn); imprinted cells get a violet tick | so overlapping rooms stay readable |
-| Big map | Tab or tapping the minimap opens the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close (on a gamepad: View opens it, the stick pans, LT / RT zoom, Y centers, B closes) | walking pauses while it's open |
+| Big map | the menu's Map tab (Tab or tapping the minimap) shows the same chart nearly full-screen; drag to pan, wheel or pinch to zoom, Center / Close (on a gamepad: View opens it, the stick pans, LT / RT zoom, Y centers, LB / RB switch tabs, B closes) | walking pauses while it's open |
 | Cracks | canvas-drawn fissures with a violet core on imprinted tiles; more trace layers, more cracks | seeded per cell; glows faintly even in the dark |
 | Blocks | flat-shaded boxes a shade darker than the walls, filling half-cell subgrid squares flush (no gaps between neighbours), 1–3 units of 0.43 cells tall, one seamless box each | cast shadows; never dither. The figure shows through them instead |
 | Silhouette | the parts of the figure hidden behind anything (a block, a door, the solid part of a wall) draw as a dithered lantern-orange silhouette, 85% opacity | GreaterDepth pass, so it only appears where something is in front; the figure's own parts mark the stencil, so the figure never dithers itself (head over body, lamp over either). The figure draws after every other solid thing (renderOrder 5), or it would mark pixels that a block then covers |
 | Floor detail | thin slabs (bricks, tiles), 1–3 per cell on about a third of cells | no collision; just texture under the lantern |
 | Crouch | the figure squashes to 55% height, and the lantern drops with it | a lowered lantern throws long shadows off low blocks |
 | Hash ghost | translucent violet head with a trailing wisp and four orbiting "bits"; faintly self-lit so you can see one coming | watching you: an amber "?" with a ring (violet and filling while lit, dim and rewinding when not; drawn over walls), slow bits, and an amber dot on the maps. Following you: a purple "!!" whose ring is its cool-down, hotter magenta glow, flicker, jitter, faster bits, and a magenta dot. Off-screen: an edge marker with an arrow. Hidden behind something: a dithered violet silhouette |
-| Doorstone | a small white slab with a dark doorway in it; a ⌂ slot on the hotbar; a "open a door here" prompt at a bare wall | the door looks like any other |
-| Chalk | sticks in five colours; on the hotbar, one group slot: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
+| Doorstone | a small white slab with a dark doorway in it; a ⌂ in the items grid; a "open a door here" prompt at a bare wall | the door looks like any other |
+| Inventory | the menu's grids: cells 46 px (40 on a phone), the cursor an orange ring, a picked-up stack shaded with a dashed outline, the thing in your hand marked ✋, cells past a grid's size red; the chest's screen shows yours smaller under it | coins: a disc in their metal, stamped with their mark; curios: a glyph in their colour |
+| Chest | a crate's size, dark boards, two iron bands and a brass latch | holds a 4×2 grid |
+| Chalk | sticks in five colours; in the items grid and the carousel, one stack per colour: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
 | Hotbar | bottom-centre slots: the duster (always slot 1, lit violet while a swipe would find dust), ⚱ jars (one group slot: empty, a violet pip for a pixie or a violet bar for entropy, ×n), chalk (a group slot with a colour picker), ⌂ doorstones, ⚷ keys; the selected slot is outlined in orange | a "use" button on touch screens |
 | Held item | the selected tool in the figure's left hand, tilted up; a jar or block over its head; all at their true size, and casting no shadow; nothing with empty hands | |
@@ -646,14 +673,18 @@ All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost 
 | Hash ghosts | spawn 1/14 per room (seeded, `'ghost'` stream); cracked rooms +0.1 +0.3 × cracked share, max 0.4. Wander 0.35 cells/s; paths on the half-cell grid around blocks taller than 1.5 units and hovers 0.45 above lower ones. "?" after 0.25 s lit (light: a 3D ray from the lamp, range 4.5 cells, blocked by walls, closed doors and blocks), then a 0.8 s pause; the ring fills over 3 s of light, drains over 2.5 s without, and the ghost returns to wandering 1.2 s after the ring empties. Chase 0.5 cells/s; give up after 2 s unlit or with a room between you; contact within 0.34 cells, swelling to 0.8 while it touches you and shrinking back over 1 s (`swell`, `swellShrink`). No catching; a room with a ghost in it can't be rerolled |
 | Reroll price | 1 charge; only a provisional room (no door out of it ever opened) |
 | Checkpoint | written when you save at a lantern: where you wake, and which rooms were standing. A faint makes every room opened since a lost path; it rolls nothing back (doors carved since stay, and a retraced path comes back as you left it, its ghosts, pixies and creepers rolled again) |
-| Pack | `run.packs`: [{ id, spaceId, seed, x, y, fuel, keys, doorstones, jars, chalks }]; follows its room (`packStatus`: here, lost, dim, or gone) |
+| Pack | `run.packs`: [{ id, spaceId, seed, x, y, fuel, keys, doorstones, jars, chalks, dust, coll, equip, layout }]; everything you carry but protected equipment (`PROTECTED`: duster, hourglass); taken back, it all goes to the cells it was in; follows its room (`packStatus`: here, lost, dim, or gone) |
+| Inventory | `INV` in `app/walk/inventory.js` (in the dev panel): items 4×4, backpack +4×4, equipment 2×4, collectables 4×4, purse 2×4, chest 4×2; a full stack: 9 keys, 9 doorstones, 10 sticks of chalk, 6 jars, 50 coins, 9 curios. A stack is one kind (a chalk colour, a jar fill, a coin type) |
+| Coins | 22% of rooms at depth 1+ (`coinChance`), a metal (copper ×3, silver ×2, gold) and a marking (sun, moon, eye, key, wheel), on their own `'finds'` stream with the purse and backpack, on a cell nothing else uses |
+| Coin purse, backpack | 1 room in 10 at depth 1+ / 1 in 14 at depth 2+ (`purseChance`, `backpackChance`); equipment, one of each |
+| Chests | 1 room in 6 at depth 1+, not halls (`chestChance`, own `'chest'` stream, a vessel's kind of spot, never on the vessel); 1–4 cells filled on `'chest-loot'`: coins 40%, curios 35%, a stick of chalk, an empty jar, a doorstone |
 | Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), F with a charged hourglass in hand, which spends its pixie; reroll: E held at the door (the path turns to corruption); `lostDoorChoice`: a choice between the two instead; unchosen: dim at the next faint, fade at the one after |
 | Dust | by room mood (`dustMood`): dusty 70% of free half-cells up to 3 layers; still, hollow 35% / 2; warm 30% / 2; echoing, tilted 15% / 1; humming 12% / 1; damp, cold, breathing none. On the floor and the tops of 1- and 2-unit blocks (not crates), in noise patches `dustScale` (3) half-cells across, block tops +0.15 (`dustTops`), thickest in a patch's middle; never on a sigil, well, waystone or save lantern cell, a tool's cell, or under a loose object's start, mark or a vessel. Seeded on the `'dust'` stream (`DP.dust`); saved as `run.dust` (layers taken off, per room and half-cell) |
-| Duster | equipment, in your bag from the start for now, hotbar slot 1; F (RT on a pad): one press, one swing (no sooner than 0.18 s, `DUST.swingEvery`). Hits every dusted half-cell whose centre is within 0.75 cells in front (a ±70° arc, `reach`, `arc`; within 0.32 any way you face), 0.5 below to 0.55 above your feet (`reachDown`, `reachUp`: a one-unit block's top from the floor, a two-unit one in a jump), and a crusted crystal the same way; one layer off each |
+| Duster | equipment, protected, with you from the start, the carousel's first stop; F (RT on a pad): one press, one swing (no sooner than 0.18 s, `DUST.swingEvery`). Hits every dusted half-cell whose centre is within 0.75 cells in front (a ±70° arc, `reach`, `arc`; within 0.32 any way you face), 0.5 below to 0.55 above your feet (`reachDown`, `reachUp`: a one-unit block's top from the floor, a two-unit one in a jump), and a crusted crystal the same way; one layer off each |
 | Chits | per layer taken off: 45% one chit, 10% a second (`chit`, `chitTwo`); after 3 swings in a row that hit dust and threw none, the next throws one (`pity`). Violet diamonds (points) 0.15 cells across (`chitSize`), thrown out at 1.78 cells/s (`launch`) and bouncing (`bounce` 0.42); within 0.9 cells (`magnet`) they drift to you, gathered within 0.28, each with a 0.32 s dithered violet flash over the figure (seen through anything). Saved where they lie (`run.chits`) |
 | Pre-pool | 6 chits (`perShard`) pour a shard into the lamp (the gain that starts `lampGrace`); full with no room in the lamp, it waits, and chits stay on the floor. Six pips under the lamp meter, shown once you've gathered one. A faint leaves it in your pack (`run.dustPool`) |
 | Crusted crystals | 80% of shards in a room with dust (`dustCrust`, drawn first on the `'dust'` stream) lie crusted over: today's shard, dull and tilted, half sunk among grey lumps, its cell dusted at least 2 layers deep; a glint every 1.7 s (`glintEvery`) where your lamp's pool reaches it. 3 swipes (`crustLayers`) wake it: the crust falls away, a violet flash, and it rises as an ordinary shard pickup. Saved as `run.crust` |
-| Hourglass | 1 room in 20 at depth 3+ (`hourglassChance`, `hourglassMinDepth`, last on the loot stream; loot id still `thread`), one per run; equipment: kept for the rest of the run, never in your pack, pixie and all; holds one pixie (F: catch one, pour into / take from a vessel of pixies, or retrace a lost path at its door); a hotbar slot, an hourglass glyph with the lower bulb lit when charged; in the world, two glass bulbs in a wooden frame, a pixie glowing in the lower one when charged |
+| Hourglass | 1 room in 20 at depth 3+ (`hourglassChance`, `hourglassMinDepth`, last on the loot stream; loot id still `thread`), one per run; equipment, protected: kept through faints, never in your pack, pixie and all; holds one pixie (F: catch one, pour into / take from a vessel of pixies, or retrace a lost path at its door); a carousel stop, an hourglass glyph with the lower bulb lit when charged; in the world, two glass bulbs in a wooden frame, a pixie glowing in the lower one when charged |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded on the loot stream, drawn after chalk); a tool, collected by walking over it; holds one pixie or one charge |
 | Vessels | 1/10 of rooms at depth 1+, not dead ends (`vesselChance`, own `'vessel'` stream; a free half-cell, off doors, items, sigils, wells, waystones, props and push blocks' starts and marks); up to 3 of one kind (`vesselCapacity`); a loose object in `run.objects` |

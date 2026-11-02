@@ -303,6 +303,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       group.add(mesh);
       state.items.set(key, { mesh, item, spaceId: space.id, tile });
     }
+    W.addDrops(space, group, tileAt); // what you dropped here (inventory.js)
 
     world.add(group);
     state.spaces.set(space.id, rec);

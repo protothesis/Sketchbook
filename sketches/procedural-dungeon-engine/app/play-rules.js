@@ -75,6 +75,23 @@
     retraceMin: 1,
     hourglassChance: 1 / 20,
     hourglassMinDepth: 3,
+    // The inventory (GAME-DESIGN.md, section 20). Coins lie loose now and
+    // then (a metal and a marking, seeded); the coin purse and the backpack
+    // are equipment, one of each. Chests are loose objects with a few
+    // cells of seeded things: coins, curios (collectables with no use),
+    // now and then a tool.
+    coinChance: 0.22,
+    coinMinDepth: 1,
+    coinMetals: ['copper', 'copper', 'copper', 'silver', 'silver', 'gold'], // drawn evenly: copper is commonest
+    coinMarks: ['sun', 'moon', 'eye', 'key', 'wheel'],
+    purseChance: 1 / 10,
+    purseMinDepth: 1,
+    backpackChance: 1 / 14,
+    backpackMinDepth: 2,
+    chestChance: 1 / 6,
+    chestMinDepth: 1,
+    chestCells: [1, 4],       // how many cells a chest has something in
+    curios: ['teacup', 'saucer', 'spoon', 'button', 'thimble', 'marble', 'moth', 'beetle'],
     // Props: blocks on a half-cell subgrid, stacked in half-cell-ish units
     // (3 units = floor to ceiling), plus flat floor detail.
     propAttempts: 0.32,       // placement attempts per chamber cell
@@ -211,8 +228,50 @@
     return space.exits.filter((e) => !e.loopMade && !(e.tags && e.tags.includes('carved')));
   }
 
-  /** Items lying in a space: [{ id, kind: 'shard'|'key'|'chalk'|'jar', cell }]. */
+  /**
+   * Items lying in a space: [{ id, kind, cell, color?, type? }]. The room's
+   * first finds (shards, keys, doorstones, jars, chalk, the hourglass), and
+   * then the inventory's (coins, the purse, the backpack: finds()). Placing
+   * anything else in a room works from the first ones only (baseLoot), so
+   * adding finds never moved a prop, a vessel or a sigil in a room you'd seen.
+   */
   function loot(space) {
+    const base = baseLoot(space);
+    return base.concat(finds(space, base));
+  }
+
+  /**
+   * The inventory's finds (GAME-DESIGN.md, section 20), on their own stream:
+   * each on a cell nothing else uses (no door, item, sigil, well, waystone,
+   * prop, push block, vessel or chest).
+   */
+  function finds(space, base) {
+    if (!space.parentId) return [];
+    const r = DE.deriveRng(space.seed, 'finds');
+    const want = [];
+    if (r.chance(RULES.coinChance) && space.depth >= RULES.coinMinDepth) want.push({ id: 'coin', kind: 'coin', type: coinType(r) });
+    if (r.chance(RULES.purseChance) && space.depth >= RULES.purseMinDepth) want.push({ id: 'purse', kind: 'purse' });
+    if (r.chance(RULES.backpackChance) && space.depth >= RULES.backpackMinDepth) want.push({ id: 'backpack', kind: 'backpack' });
+    if (!want.length) return [];
+    const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
+    for (const it of base) avoid.add(DE.key(it.cell.x, it.cell.y));
+    for (const f of [sigil(space), well(space), waystone(space)]) if (f) avoid.add(DE.key(f.cell.x, f.cell.y));
+    const solid = new Set();
+    for (const b of props(space, true).blocks) {
+      for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) solid.add(x + ',' + y);
+    }
+    for (const pb of pushBlocks(space)) { solid.add(pb.from.sx + ',' + pb.from.sy); solid.add(pb.to.sx + ',' + pb.to.sy); }
+    for (const q of [vessel(space), chest(space)]) if (q) solid.add(q.sx + ',' + q.sy);
+    const cells = r.shuffle(space.cells.slice().sort()).filter((k) => {
+      if (avoid.has(k)) return false;
+      const c = DE.parseKey(k);
+      for (let q = 0; q < 4; q++) if (solid.has((c.x * 2 + (q & 1)) + ',' + (c.y * 2 + (q >> 1)))) return false;
+      return true;
+    });
+    return want.slice(0, cells.length).map((it, i) => Object.assign(it, { cell: DE.parseKey(cells[i]) }));
+  }
+
+  function baseLoot(space) {
     if (!space.parentId) return [];
     const r = DE.deriveRng(space.seed, 'loot');
     const cells = space.cells.map(DE.parseKey);
@@ -242,7 +301,7 @@
     if (r.chance(RULES.stickChance) && space.depth >= RULES.stickMinDepth) {
       items.push({ id: 'pin', kind: 'chalk', color: r.pick(RULES.chalkColors), cell: spots[(n + 4) % spots.length] }); // id kept from 'map pin'
     }
-    // The hourglass (retrace lost paths), drawn last.
+    // The hourglass (retrace lost paths).
     if (r.chance(RULES.hourglassChance) && space.depth >= RULES.hourglassMinDepth) {
       items.push({ id: 'thread', kind: 'hourglass', cell: spots[(n + 5) % spots.length] }); // id kept from 'the thread'
     }
@@ -258,8 +317,50 @@
     if (!space.parentId || space.deadEnd || space.depth < RULES.vesselMinDepth) return null;
     const r = DE.deriveRng(space.seed, 'vessel');
     if (!r.chance(RULES.vesselChance)) return null;
+    const free = freeSubs(space);
+    return free.length ? free[Math.floor(r.next() * free.length)] : null;
+  }
+
+  /** "copper-sun": a coin's metal and marking. */
+  const coinType = (r) => r.pick(RULES.coinMetals) + '-' + r.pick(RULES.coinMarks);
+
+  /**
+   * A chest standing in this space, if it has one: { sx, sy } (a
+   * half-cell), on its own stream, where a vessel could stand (and not on
+   * this room's vessel).
+   */
+  function chest(space) {
+    if (!space.parentId || space.archetype === 'hall' || space.depth < RULES.chestMinDepth) return null;
+    const r = DE.deriveRng(space.seed, 'chest');
+    if (!r.chance(RULES.chestChance)) return null;
+    const v = vessel(space);
+    const free = freeSubs(space).filter((q) => !v || q.sx !== v.sx || q.sy !== v.sy);
+    return free.length ? free[Math.floor(r.next() * free.length)] : null;
+  }
+
+  /** What's in a chest when you first find it: its cells, [{ kind, n, ... } | null] (INV.chest's size is 8). */
+  function chestLoot(space, cells = 8) {
+    const r = DE.deriveRng(space.seed, 'chest-loot');
+    const out = new Array(cells).fill(null);
+    const n = r.int(RULES.chestCells[0], RULES.chestCells[1]);
+    const at = r.shuffle(out.map((_, i) => i));
+    for (let k = 0; k < n; k++) {
+      const roll = r.next();
+      let c;
+      if (roll < 0.4) c = { kind: 'coin', type: coinType(r), n: r.int(1, 4) };
+      else if (roll < 0.75) c = { kind: 'curio', type: r.pick(RULES.curios), n: 1 };
+      else if (roll < 0.86) c = { kind: 'chalk', color: r.pick(RULES.chalkColors), n: 3 };
+      else if (roll < 0.94) c = { kind: 'jar', holds: null, n: 1 };
+      else c = { kind: 'doorstone', n: 1 };
+      out[at[k]] = c;
+    }
+    return out;
+  }
+
+  /** Half-cells free for a standing object: not on a door, item, sigil, well or waystone cell, a prop, or a push block's start or mark. */
+  function freeSubs(space) {
     const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
-    for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
+    for (const it of baseLoot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     for (const f of [sigil(space), well(space), waystone(space)]) if (f) avoid.add(DE.key(f.cell.x, f.cell.y));
     const solid = new Set();
     for (const b of props(space, true).blocks) {
@@ -275,7 +376,7 @@
         if (!solid.has(sx + ',' + sy)) free.push({ sx, sy });
       }
     }
-    return free.length ? free[Math.floor(r.next() * free.length)] : null;
+    return free;
   }
 
   /**
@@ -287,7 +388,7 @@
     const r = DE.deriveRng(space.seed, 'sigil');
     if (!r.chance(RULES.sigilChance)) return null;
     const doors = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
-    const items = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
+    const items = new Set(baseLoot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
     const ws = waystone(space);
     if (ws) items.add(DE.key(ws.cell.x, ws.cell.y));
     const free = space.cells.slice().sort().filter((k) => !doors.has(k) && !items.has(k));
@@ -306,7 +407,7 @@
     if (!r.chance(RULES.wellChance)) return null;
     const kind = r.chance(RULES.wellSurge) ? 'surge' : 'trickle';
     const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
-    for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
+    for (const it of baseLoot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     const sg = sigil(space), ws = waystone(space);
     if (sg) avoid.add(DE.key(sg.cell.x, sg.cell.y));
     if (ws) avoid.add(DE.key(ws.cell.x, ws.cell.y));
@@ -343,7 +444,7 @@
     const made = exitsMadeWith(space);
     const doorCells = new Set(made.map((e) => DE.key(e.cell.x, e.cell.y)));
     const laterCells = space.exits.filter((e) => !made.includes(e)).map((e) => e.cell);
-    const lootCells = new Set(loot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
+    const lootCells = new Set(baseLoot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
     const sg = sigil(space); // keep a sigil tile clear of blocks
     if (sg) lootCells.add(DE.key(sg.cell.x, sg.cell.y));
     const wl = well(space); // and a well's
@@ -460,7 +561,7 @@
     const m = RULES.dustMood[space.meta && space.meta.mood];
     if (!m || !(m.cover > 0) || !(m.layers > 0)) return out;
     const r = DE.deriveRng(space.seed, 'dust');
-    const items = loot(space);
+    const items = baseLoot(space);
     // The crusted shards first, one draw each, so the patches never shift them.
     for (const it of items) if (it.kind === 'shard' && r.chance(RULES.dustCrust)) out.crust.push(it.id);
     const ox = r.next() * 1000, oy = r.next() * 1000, salt = r.int(1, 1e9);
@@ -622,7 +723,7 @@
     if (!want) return [];
     const sk = (x, y) => x + ',' + y;
     const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
-    for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
+    for (const it of baseLoot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     const sg = sigil(space);
     if (sg) avoid.add(DE.key(sg.cell.x, sg.cell.y));
     const wl = well(space);
@@ -824,15 +925,14 @@
   function stoneSpot(space) {
     const r = DE.deriveRng(space.seed, 'waystone-spot');
     const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
-    for (const it of loot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
+    for (const it of baseLoot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
     for (const f of [sigil(space), well(space), waystone(space)]) if (f) avoid.add(DE.key(f.cell.x, f.cell.y));
     const solid = new Set();
     for (const b of props(space, true).blocks) {
       for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) solid.add(x + ',' + y);
     }
     for (const pb of pushBlocks(space)) { solid.add(pb.from.sx + ',' + pb.from.sy); solid.add(pb.to.sx + ',' + pb.to.sy); }
-    const v = vessel(space);
-    if (v) solid.add(v.sx + ',' + v.sy);
+    for (const q of [vessel(space), chest(space)]) if (q) solid.add(q.sx + ',' + q.sy);
     const free = [];
     for (const k of space.cells.slice().sort()) {
       if (avoid.has(k)) continue;
@@ -940,5 +1040,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, vessel, sigil, well, props, dust, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, saveLantern, hallKeepsStone, hallStone, stoneSpot, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, vessel, chest, chestLoot, sigil, well, props, dust, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, saveLantern, hallKeepsStone, hallStone, stoneSpot, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

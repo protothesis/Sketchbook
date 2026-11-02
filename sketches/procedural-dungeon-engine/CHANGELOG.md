@@ -996,6 +996,39 @@ All notable changes to this sketch are logged here, per
       you wake, fading in with the last static dying away. Timings are in
       `PSYCHE` in the dev panel.
 
+- 2026-11-01: **An inventory, a menu with tabs, and chests**
+  (GAME-DESIGN §20; `app/walk/inventory.js`, `app/walk/menu.js`).
+  - Tab (View on a pad, or a tap on the minimap or the carousel) opens a
+    menu with **Map**, **Inventory** and **Collectables** tabs, switched
+    with 1 / 2 (LB / RB). Map is the big map as before.
+  - **Grids**: items 4×4 (tools: one stack per kind, each chalk colour and
+    jar fill its own), equipment 2×4, collectables 4×4. All sizes and full
+    stacks are in `INV` (dev panel). WASD or the d-pad move the cursor;
+    Space (A) picks up and places (swapping), F (Y) takes it in hand, X
+    drops one where you stand, Esc (B) puts back or closes. Touch: tap
+    cells, or use the buttons.
+  - **The hotbar became a carousel**: the thing in hand, with one stop to
+    either side. 1 / 2, LB / RB or the wheel step through the duster, the
+    items grid in its order, the hourglass and empty hands. 3-9 no longer
+    select, and group pickers are gone.
+  - **Coins and curios** (a new collectable class): coins lie in 22% of
+    rooms; curios come from chests. **Coin purse** (equipment, its own 2×4
+    grid for coins) and **backpack** (equipment, +4×4 items) are rare
+    finds. Seeded on a new `'finds'` stream, on cells nothing else uses.
+    Every room you've already seen keeps its props, vessels and sigils.
+  - **A full grid** leaves a new find on the floor, with a caption.
+    **Dropped things** lie where you stood, in that room, and save with the
+    run (`run.dropped`).
+  - **Chests**: a crate with a lid in 1 room in 6 (not halls), 1-4 cells of
+    seeded coins, curios, chalk, jars or doorstones. Tap E to open (hold
+    grabs it). The chest's grid is on top, yours below; Space (A) takes or
+    gives a stack, X or E takes everything.
+  - **Faints: everything falls** with your pack (collectables, equipment
+    and what's in it) except protected equipment: the duster and the
+    hourglass. Taking the pack back puts everything back in its cell.
+  - Run save v10 (`run.inv`, `run.dropped`). Older runs migrate: their
+    stacks find cells from what they carry.
+
 ### Removed
 
 - 2026-10-26: Vaulting. Pushing into a block, or pressing E facing it, no

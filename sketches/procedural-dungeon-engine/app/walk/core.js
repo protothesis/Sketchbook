@@ -126,10 +126,9 @@
     sigils: new Map(),   // spaceId -> { cell, mat, stage } for built rooms
     buff: 0,             // powered sigils: +1 entropy max each
     buffReady: false,    // false until the first sigil pass (no caption on load)
-    sel: 'hands',        // the selected hotbar slot's key; 'hands' for empty hands (how you start)
+    sel: 'hands',        // the carousel stop in your hand (items.js slots); 'hands' for empty hands (how you start)
     lastSel: null,       // the last slot you had in hand (B takes it out again)
-    variant: {},         // per group slot: the variant in use (e.g. chalk colour)
-    expanded: null,      // the group slot whose picker is open
+    handColl: null,      // a collectable taken in hand from the menu: { grid: 'coll' | 'purse', i } (items.js)
     marks: [],           // chalk marks drawn in the world
     fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9, // screen effects, 0..1
       levels: {},        // per effect profile (FX_PROFILES in fx.js): how strong it is right now
@@ -198,7 +197,10 @@
       roomsLost: 0,          // rooms lost to them
       retraces: 0,           // lost paths retraced
       pathsLetGo: 0,         // lost paths let go
-      equipment: {},         // always with you, kept through faints: { hourglass: { holds } } (hourglass.js)
+      equipment: {},         // gear: { hourglass: { holds }, purse: { cells }, backpack: {} }; only protected kinds stay through a faint (inventory.js)
+      inv: { items: [], equip: [], coll: [] }, // the inventory's grids: where each stack sits, and the collectables (inventory.js)
+      dropped: [],           // things you dropped, lying where you stood: [{ id, kind, n, ..., x, y, spaceId, seed }] (inventory.js)
+      dropSeq: 0,
       dust: {},              // dust taken off: { "spaceId:seed": { "sx,sy,h": layers } } (dust.js)
       crust: {},             // swipes taken off crusted shards: { item key: n } (RULES.crustLayers wakes one)
       chits: [],             // entropy chits lying loose: [{ x, y, z, s: "spaceId:seed" }]
@@ -296,7 +298,7 @@
   // but that's for changes to what a history builds: when `run` changes
   // shape, add a step here (NOTES.md, "Saves"). Saves from before
   // versioning count as version 0.
-  const RUN_VERSION = 9;
+  const RUN_VERSION = 10;
   const RUN_MIGRATIONS = [
     // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
     (run) => {
@@ -361,6 +363,12 @@
       run.equipment = run.equipment || {};
       if (run.thread) run.equipment.hourglass = { holds: null };
       delete run.thread;
+    },
+    // 9 -> 10: the inventory's grids. The stacks find their cells from what you carry.
+    (run) => {
+      run.inv = run.inv || { items: [], equip: [], coll: [] };
+      run.dropped = run.dropped || [];
+      run.dropSeq = run.dropSeq || 0;
     },
   ];
   /** Bring a saved run up to RUN_VERSION, in place. */

@@ -721,6 +721,9 @@ pickups, tools and objects: things that are always with you, and so is
 what's in them. A faint keeps them, whatever it does with the rest of what
 you carry (the coin purse will be equipment too). Code: `hourglass.js`,
 with `canRetrace()` and `spendHourglass()` for the door code.
+(Changed 2026-11-01, section 20: on a faint, everything falls with your
+pack, equipment too, except protected equipment. The hourglass starts
+protected, since it's what brings you back to the pack.)
 
 **The hourglass is the key (built 2026-10-26, after the door rework).**
 With the choice at a lost path's door (below) working, the hourglass took
@@ -961,6 +964,75 @@ won't load (section 17's policy).
 - The network rebuilds from where the powered stones stand whenever one
   moves (each links to its two nearest), so moving stones rewires it.
 - Whether pixie stones reach farther: tune with the dev panel.
+
+## 20. The inventory (built 2026-11-01)
+
+Designed in chat on 2026-11-01 (the action list's "needs its own
+conversation"), from the user's overview and their answers to the open
+choices. Code: `app/walk/inventory.js` (grids, stacks, coins, curios,
+purse, backpack, drops, chest contents) and `app/walk/menu.js` (the menu).
+
+**One menu, several tabs.** The button that opened the map (Tab, View on a
+pad) opens a menu: Map, Inventory, Collectables. LB / RB (1 / 2 on the
+keyboard) switch tabs. A Character tab (a little figure with what's
+equipped, the lantern and its fuel) was left for later.
+
+**Grids, all tunable** (`INV`, in the dev panel):
+
+- **Items** (4×4): tools. One stack per kind a cell (keys together, each
+  chalk colour, each jar fill). The run's counters stay the truth; the grid
+  is where each stack sits.
+- **Equipment** (2×4): the duster, the hourglass, the coin purse, the
+  backpack. Capacity grows through equipment: the **backpack** adds another
+  4×4 of items. The **coin purse** has its own 2×4 grid, coins only (A on
+  it goes to that grid, under Collectables).
+- **Collectables** (4×4), its own tab: things with no use. Coins (a metal
+  and a marking) and curios (dishware, odds and ends, bug specimens) for
+  now.
+
+**The hotbar is gone; a carousel replaces it.** The user didn't love the
+hotbar. Since you hold one thing at a time, LB / RB step the thing in hand
+through the whole items grid in its order, with empty hands as a stop; the
+screen shows the thing in hand and one stop to either side. Reordering the
+grid reorders the carousel. A collectable gets into your hand from the
+menu (Y / F on it), and rides the carousel until you scroll off it. The
+user's reference was Breath of the Wild: quick selection is great, but
+dropping and combining took too many clicks and pages. A BotW-style "hold
+to scroll through everything" may come later, once inventories get big.
+
+**In the menu:** A picks a stack up and puts it down (swapping), Y takes it
+in hand, X drops one where you stand (it lies there as it did before you
+took it), B puts back or closes.
+
+**A full grid:** what doesn't fit stays on the floor, and a caption says
+why. Hence dropping from the menu.
+
+**Faints: everything you carry falls** with your pack, equipment and its
+contents included, unless the equipment is protected. Taking the pack back
+puts it all back where it was (coins to the purse, stacks to their cells).
+The user wants one simple rule a player can count on. Protection is meant
+to be an unlock earned through play later (XP, a skill). For now the
+duster and the hourglass start protected. The hourglass has to be: it's
+what retraces the lost path your pack usually lies on. The user suspects
+the hourglass will become a skill rather than equipment once there's a
+skill system to discuss.
+
+**Containers use the same grids.** A normal chest is 2×4 (4 wide, 2 deep):
+a crate with a lid, 1 room in 6. A tap of E opens it; holding E grabs it
+like any crate. Its grid is on top, yours below, condensed. A on a chest
+cell takes that stack, on one of yours gives it; X takes everything.
+Containers take anything.
+
+**Display furniture is direct, no menu** (decided, not built). Library
+shelves, dish cabinets and pedestals have visible spots: E at a spot sets
+down what's in your hand, and E on a placed thing takes it back. Closed
+containers (chests, cabinets with doors, safes) open the grid screen. The
+rule: if you can see the spots, you use them directly. Display containers
+still take anything and react to sets (the action list, 2026-10-25).
+
+**Not yet:** carrying weight (park it unless a single carried-load value
+can feed movement), the vortex satchel, the Character tab, a gamepad
+"hold to browse", combining items, linked storage, vaults and safes.
 
 ## First slice (built 2026-10-21)
 

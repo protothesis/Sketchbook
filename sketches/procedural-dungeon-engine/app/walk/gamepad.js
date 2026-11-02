@@ -7,11 +7,14 @@
 //
 //   A  jump (Space; held for full height)       B  back out of anything; in the world, put away / take out the item in hand
 //   X  E (tap to act, hold to fill the ring)     Y  on the map, recenter (free in the world)
-//   L3  crouch (C)    R3  the lamp (R)           D-pad ◀ ▶  the variant in a group
-//   LB / RB  the hotbar slot left / right        LT  run    RT  F (use the item in hand)
-//   (on the map, LT / RT zoom)
-//   View  the map    Menu  pause
+//   L3  crouch (C)    R3  the lamp (R)
+//   LB / RB  the carousel: the item in hand, back / on   LT  run    RT  F (use the item in hand)
+//   View  the menu (map, inventory)    Menu  pause
 //
+// In the menu (menu.js), LB / RB switch tabs and B closes it. On the map
+// the stick pans and LT / RT zoom; in a grid the d-pad or stick moves the
+// cursor, A picks up and places (at a chest: takes or gives), X drops (at
+// a chest: takes everything) and Y puts the thing in your hand.
 // In a choice, a dialog or the waystone travel map, the d-pad (and in a
 // choice or dialog, the stick) moves between options and A (or, in a
 // choice, X) confirms.
@@ -54,7 +57,7 @@
   function padHelp() {
     const g = GLYPH[style], k = (s) => `<kbd>${s}</kbd>`;
     return `${k('◖')} move · ${k('◗')} look · ${k(g.run)} run · ${k(g.Space)} jump · ${k(g.C)} crouch · ${k(g.E)} interact · ` +
-      `${k(g.F)} use item · ${k(g.Esc)} put away · ${k(g.R)} lamp · ${k(g.bumpers)} select · ${k(g.Tab)} map · ${k(g.Menu)} menu`;
+      `${k(g.F)} use item · ${k(g.Esc)} put away · ${k(g.R)} lamp · ${k(g.bumpers)} item in hand · ${k(g.Tab)} map & inventory · ${k(g.Menu)} pause`;
   }
 
   function setPad(on, kind) {
@@ -105,10 +108,10 @@
     if (state.choice) { if (x) W.moveChoice(x); return; }
     const o = state.paused && overlay();
     if (o) { focusStep(o, x || y); return; }
-    if (state.bigmap) { if (state.bigmap.travel && x) travelStep(x); return; }
-    if (state.paused || state.carry || !x) return;
-    const slot = W.selectedSlot();
-    if (slot && slot.variants && slot.variants.length > 1) { W.cycleVariant(slot, x); }
+    if (state.bigmap) {
+      if (state.bigmap.tab !== 'map') W.menuMove(x, y);
+      else if (state.bigmap.travel && x) travelStep(x);
+    }
   }
 
   function press(i) {
@@ -121,27 +124,27 @@
           else document.activeElement.click();
         } else if (state.bigmap) {
           const v = state.bigmap;
-          if (v.travel && v.hover) { const from = v.travel, to = v.hover; W.closeBigMap(); W.travelTo(to, from); }
+          if (v.tab !== 'map') key('keydown', ' ');
+          else if (v.travel && v.hover) { const from = v.travel, to = v.hover; W.closeBigMap(); W.travelTo(to, from); }
         } else {
           aKey = state.choice ? 'e' : ' '; // in a choice, A confirms like X
           key('keydown', aKey);
         }
         return;
       }
-      case B.b: if (busy || state.expanded) key('keydown', 'escape'); else W.toggleHands(); return;
-      case B.x: key('keydown', 'e'); return;
+      case B.b: if (busy) key('keydown', 'escape'); else W.toggleHands(); return;
+      case B.x: key('keydown', state.bigmap ? 'x' : 'e'); return;
       case B.y:
-        if (state.bigmap) { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; }
+        if (state.bigmap && state.bigmap.tab === 'map') { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; }
+        else if (state.bigmap) key('keydown', 'f');
         return;
       case B.l3: key('keydown', 'c'); return;
       case B.rt: if (!state.bigmap) key('keydown', 'f'); return; // on the map it zooms (poll)
       case B.r3: key('keydown', 'r'); return;
-      case B.lb: case B.rb: {
-        if (busy) return;
-        const s = W.slots(), at = s.findIndex((x) => x.key === state.sel);
-        W.select(at + (i === B.rb ? 1 : -1));
+      case B.lb: case B.rb:
+        if (state.bigmap) key('keydown', i === B.rb ? '2' : '1'); // the menu's tabs
+        else if (!busy) W.cycle(i === B.rb ? 1 : -1);
         return;
-      }
       case B.view: if (!state.paused) key('keydown', 'tab'); return;
       case B.menu: key('keydown', 'escape'); return;
     }
@@ -187,7 +190,7 @@
     prev = down;
 
     // Directions for menus: the d-pad, or the stick in a choice or dialog.
-    const menuStick = state.choice || (state.paused && overlay());
+    const menuStick = state.choice || (state.paused && overlay()) || (state.bigmap && state.bigmap.tab !== 'map');
     let nx = (down[B.right] ? 1 : 0) - (down[B.left] ? 1 : 0), ny = (down[B.down] ? 1 : 0) - (down[B.up] ? 1 : 0);
     if (!nx && !ny && menuStick) {
       const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
@@ -204,7 +207,7 @@
 
     // The map: the stick pans, the triggers zoom about the middle.
     const v = state.bigmap;
-    if (v) {
+    if (v && v.tab === 'map') {
       v.cx += s.x * s.mag * PAN * dt / v.px;
       v.cy += s.y * s.mag * PAN * dt / v.px;
       const z = value(gp, B.rt) - value(gp, B.lt);

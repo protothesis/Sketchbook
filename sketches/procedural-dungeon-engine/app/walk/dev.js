@@ -23,7 +23,7 @@
 
   const DEV_KEY = 'dungeon-engine:dev';
   // Shown in this order; a table that isn't exported is skipped.
-  const TABLES = ['RULES', 'POOL', 'LIGHT', 'HALO', 'UNREST', 'EMBER', 'STREAM', 'DRIP', 'FEED_GLOW', 'CREEPER', 'GHOST', 'PIXIE', 'CREATURE',
+  const TABLES = ['RULES', 'INV', 'POOL', 'LIGHT', 'HALO', 'UNREST', 'EMBER', 'STREAM', 'DRIP', 'FEED_GLOW', 'CREEPER', 'GHOST', 'PIXIE', 'CREATURE',
     'ECOLOGY', 'WELL', 'DUST', 'SLASH', 'GLOW', 'SCONCE_LIGHT', 'SAVE_LANTERN', 'PACK_LIGHT', 'JUMP', 'CAMERA', 'SHADOW', 'SETDOWN', 'SHADOW_FADE', 'PSYCHE'];
   // Numbers that size arrays or pools when the game starts: changing them live breaks things.
   const FIXED = new Set(['STREAM.count', 'GLOW.lights', 'WELL.motes', 'WELL.notches']);
@@ -122,7 +122,12 @@
       state.run.chalks[c] = (state.run.chalks[c] || 0) + W.STROKES;
       after('a stick of ' + c + ' chalk');
     }]),
+    ['coin', () => { W.receive(state.run, { kind: 'coin', type: RULES.coinMetals[seq % RULES.coinMetals.length] + '-' + RULES.coinMarks[seq++ % RULES.coinMarks.length], n: 1 }, { force: true }); after('a coin'); }],
+    ['curio', () => { W.receive(state.run, { kind: 'curio', type: RULES.curios[seq++ % RULES.curios.length], n: 1 }, { force: true }); after('a curio'); }],
+    ['coin purse', () => { if (!state.run.equipment.purse) W.ITEMS.purse.take(state.run); after('a coin purse'); }],
+    ['backpack', () => { state.run.equipment.backpack = {}; after('a backpack'); }],
     ['crate', () => giveObject('crate')],
+    ['chest', () => giveObject('chest', { cells: [{ kind: 'coin', type: 'gold-sun', n: 3 }, { kind: 'curio', type: 'teacup', n: 1 }, { kind: 'chalk', color: 'teal', n: 3 }, null, null, { kind: 'jar', holds: null, n: 2 }, null, null] })],
     ['block', () => giveObject('block', { color: RULES.pushColors[seq % RULES.pushColors.length] })],
     ['vessel', () => giveObject('vessel', { holds: null, n: 0 })],
     ['waystone', () => giveObject('waystone', { holds: null })],

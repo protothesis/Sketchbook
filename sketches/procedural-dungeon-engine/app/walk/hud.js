@@ -21,7 +21,7 @@
   const promptF = $('prompt-f') || document.createElement('button');
 
   /** "crate", "block", "vessel" (with what's in it). */
-  const objName = (b) => (b.crate ? 'crate' : b.waystone ? (b.holds ? 'waystone' : 'dormant waystone') : !b.vessel ? 'block'
+  const objName = (b) => (b.chest ? 'chest' : b.crate ? 'crate' : b.waystone ? (b.holds ? 'waystone' : 'dormant waystone') : !b.vessel ? 'block'
     : !b.n ? 'empty vessel' : `vessel (${b.n} ${b.holds === 'pixie' ? (b.n === 1 ? 'pixie' : 'pixies') : (b.n === 1 ? 'charge' : 'charges')})`);
 
   /** E's line for the focused thing: { text, cls }. */
@@ -40,6 +40,7 @@
         : { cls: near.opt.lose ? 'lose' : 'collapse', text: `${near.opt.label} · ${near.opt.detail || ''}` };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
       case 'lift': return near.block.waystone && near.block.holds ? { cls: 'collapse', text: 'tap: travel from the waystone · hold: grab it' }
+        : near.block.chest ? { cls: 'jar', text: 'tap: open the chest · hold: grab it' }
         : { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
       case 'grabbed': return { cls: 'jar', text: state.grab && state.grab.moved
         ? `pushing or pulling the ${objName(near.block)} · let go of E to let go`
@@ -561,7 +562,7 @@
     if (state.bigmap) return;
     drawChart(mm, mmCtx, state.player.x, state.player.y, mm.clientWidth / 26);
   }
-  mm.addEventListener('click', () => openBigMap());
+  mm.addEventListener('click', () => openBigMap({ tab: 'map' }));
 
   // The enlarged map: M (or tapping the minimap) opens it; drag to pan,
   // wheel or pinch to zoom. Walking pauses while it's open.
@@ -570,14 +571,21 @@
   // Zoom limits for the big map; it opens two wheel steps back from the closest.
   const BIGMAP_MAX_PX = 60, WHEEL_STEP = Math.exp(-100 * 0.0015);
   /**
-   * Open the big map. With `travelFrom` (a waystone), it's the travel
-   * picker: framed on every awake waystone, which glow; tap one to go there.
+   * Open the menu (menu.js): the big map is its first tab, and state.bigmap
+   * stays set while any tab is up (walking pauses). `tab`: which tab
+   * ('map', 'inv', 'coll'; else the last one open); `chest`: a chest's key,
+   * for its take-and-give screen. With `travelFrom` (a waystone), it's the
+   * travel picker, no tabs: framed on every awake waystone, which glow; tap
+   * one to go there.
    */
+  let lastTab = 'map';
   function openBigMap(opts) {
     if (state.paused) return;
     keys.clear();
-    state.bigmap = { cx: state.player.x, cy: state.player.y, px: BIGMAP_MAX_PX * WHEEL_STEP * WHEEL_STEP, travel: null };
     const from = opts && opts.travelFrom;
+    const tab = from ? 'map' : (opts && opts.chest) ? 'chest' : (opts && opts.tab) || lastTab;
+    state.bigmap = { cx: state.player.x, cy: state.player.y, px: BIGMAP_MAX_PX * WHEEL_STEP * WHEEL_STEP, travel: null,
+      tab, chest: (opts && opts.chest) || null, cur: null, pick: null };
     if (from) {
       const pts = state.waystones.filter((o) => o.awake).map((o) => o.ws.wake);
       const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y);
@@ -592,6 +600,15 @@
     $('bigmap-hint').hidden = !from;
     $('bigmap').hidden = false;
     mm.classList.add('hidden');
+    W.renderMenu();
+  }
+  /** Switch the open menu to a tab (menu.js does the rest). */
+  function menuTab(tab) {
+    const v = state.bigmap;
+    if (!v || v.travel || v.chest) return;
+    v.tab = lastTab = tab;
+    v.cur = null; v.pick = null;
+    W.renderMenu();
   }
   /** The awake waystone (not the one you're at) nearest a screen point on the travel map, if one is close. */
   function travelPick(sx, sy) {
@@ -610,9 +627,10 @@
     $('bigmap').hidden = true;
     $('bigmap-hint').hidden = true;
     mm.classList.remove('hidden');
+    W.renderMenu();
   }
   function drawBigMap() {
-    if (!state.bigmap) return;
+    if (!state.bigmap || state.bigmap.tab !== 'map') return;
     drawChart(bm, bmCtx, state.bigmap.cx, state.bigmap.cy, state.bigmap.px);
   }
   function zoomBigMap(f, sx, sy) {
@@ -828,6 +846,6 @@
   });
 
   Object.assign(W, { updatePrompt, showCaption, stanceEl, refreshHud, notice,
-    REFRESH_HINT, drawMinimap, openBigMap, closeBigMap, drawBigMap, zoomBigMap, showRecord,
+    REFRESH_HINT, drawMinimap, openBigMap, closeBigMap, menuTab, drawBigMap, zoomBigMap, showRecord,
     hideRecord, openDialog, closeDialog });
 })(window);

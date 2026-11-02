@@ -749,3 +749,67 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 .pick.on { border-color: var(--accent); }
 .pick .chalkic { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+
+/* The carousel (items.js), where the hotbar was: the item in hand big in
+   the middle, the stops before and after it small to either side. */
+.hotbar.carousel { align-items: center; gap: 4px; padding: 6px 6px 18px; }
+.carousel .slot.side { width: 38px; height: 38px; opacity: 0.7; }
+.carousel .slot.side .ic { line-height: 38px; font-size: 16px; }
+.carousel .slot.side:disabled { opacity: 0.25; cursor: default; }
+.carousel .slot.mid { width: 54px; height: 54px; }
+.carousel .slot.mid .ic { line-height: 54px; font-size: 24px; }
+.carousel .ic.hands { color: var(--muted); }
+.carousel-label {
+  position: absolute; left: 0; right: 0; bottom: 3px;
+  text-align: center; font-size: 10px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px;
+}
+.slot .toolic, .slot .coinic, .slot .curioic { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.slot .toolic .ic, .slot .curioic .ic { line-height: 1; }
+.slot .toolic .ct, .slot .coinic .ct, .slot .curioic .ct { position: absolute; right: 3px; bottom: 1px; font-size: 9px; color: var(--muted); }
+.coinic .disc {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; color: rgba(40, 24, 8, 0.8); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+.slot .ic svg { vertical-align: middle; }
+
+/* The menu (menu.js): tabs over the big map, the inventory's grids, a chest. */
+.bigmap .off { display: none !important; }
+.menu-tabs {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 8px; border-bottom: 1px solid var(--border);
+}
+.menu-tabs[hidden] { display: none; }
+.menu-tabs .tab {
+  padding: 5px 12px; border-radius: 6px; border: 1px solid transparent;
+  background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+}
+.menu-tabs .tab.on { color: var(--text); border-color: var(--accent); background: rgba(232, 147, 95, 0.12); }
+.menu-tabs .tab.close { margin-left: auto; }
+.menu-tabs .tab-key { font-size: 10px; color: var(--muted); padding: 2px 5px; border: 1px solid var(--border); border-radius: 4px; }
+.inv { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; --cell: 46px; }
+.inv[hidden] { display: none; }
+.inv-body { display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.inv-row { display: flex; flex-wrap: wrap; gap: 18px 28px; justify-content: center; align-items: flex-start; }
+.inv-sec { display: flex; flex-direction: column; gap: 12px; }
+.inv-grid-wrap h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--text); }
+.inv-grid-wrap h3 .ct { font-weight: 400; color: var(--muted); }
+.inv-grid { display: grid; gap: 4px; }
+.inv .slot.cell { width: var(--cell); height: var(--cell); }
+.inv .slot.cell .ic { line-height: var(--cell); }
+.inv .slot.cell.empty { background: rgba(255, 255, 255, 0.015); }
+.inv .slot.cell.cur { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.inv .slot.cell.picked { background: rgba(232, 147, 95, 0.22); outline: 1px dashed var(--accent); outline-offset: 2px; }
+.inv .slot.cell.hand::after { content: '✋'; position: absolute; left: 3px; top: 1px; font-size: 9px; color: var(--muted); }
+.inv .slot.cell.over { border-color: rgba(255, 120, 120, 0.7); background: rgba(255, 90, 90, 0.08); }
+.inv .inv-sec.small { --cell: 36px; }
+.inv .inv-sec.small .slot .ic { font-size: 16px; }
+.inv-info { margin: 0; min-height: 1.4em; text-align: center; font-size: 13px; color: var(--text); }
+.inv-info .dim, .inv-info .note { color: var(--muted); }
+.inv-hint { margin: 0; text-align: center; font-size: 11px; color: var(--muted); }
+.inv-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+@media (max-width: 560px) {
+  .inv { --cell: 40px; padding: 10px 8px; }
+  .inv .inv-sec.small { --cell: 32px; }
+}
