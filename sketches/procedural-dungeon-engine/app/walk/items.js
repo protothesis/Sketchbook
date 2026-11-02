@@ -4,7 +4,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, $, S, RADIUS, PICKUP_RANGE, scene, state, CHALK, el, savePlayer,
+  const { DE, DP, RULES, THREE, $, S, RADIUS, PLAYER, scene, state, CHALK, el, savePlayer,
     geo, doorMat, passable } = W;
 
   // ---------------------------------------------------------------------------
@@ -166,7 +166,7 @@
     for (const [k, it] of state.items) {
       if (ITEMS[it.item.kind].cls === 'object') continue;
       const dx = p.x - (it.item.cell.x + 0.5), dy = p.y - (it.item.cell.y + 0.5);
-      if (dx * dx + dy * dy <= PICKUP_RANGE * PICKUP_RANGE) takeItem(k, it);
+      if (dx * dx + dy * dy <= PLAYER.pickupRange * PLAYER.pickupRange) takeItem(k, it);
     }
   }
 

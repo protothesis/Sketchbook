@@ -3,9 +3,11 @@
 //
 // The sliders are built from the tuning tables on DungeonPlay.walk
 // (TABLES below), so a new number in one of them shows up here by itself.
+// Where each one goes (tab, section) and what it means (the hover tooltip)
+// comes from dev-meta.js; a number it doesn't know lands under "Other".
 // They write straight into the tables, which the game reads every frame,
 // so a change takes effect at once. A few numbers are only read when
-// something is made (a new room, a new creature); those take effect then.
+// something is made (a new room, a new run); dev-meta.js marks those.
 //
 // Tweaks are kept in localStorage (DEV_KEY, never the save) and come back
 // on reload until you reset them. "Copy changes" puts them on the
@@ -23,10 +25,11 @@
 
   const DEV_KEY = 'dungeon-engine:dev';
   // Shown in this order; a table that isn't exported is skipped.
-  const TABLES = ['RULES', 'POOL', 'LIGHT', 'HALO', 'UNREST', 'EMBER', 'STREAM', 'DRIP', 'FEED_GLOW', 'CREEPER', 'GHOST', 'PIXIE', 'CREATURE',
+  const TABLES = ['PLAYER', 'RULES', 'POOL', 'LIGHT', 'HALO', 'UNREST', 'EMBER', 'STREAM', 'DRIP', 'FEED_GLOW', 'CREEPER', 'GHOST', 'PIXIE', 'CREATURE',
     'ECOLOGY', 'WELL', 'DUST', 'SLASH', 'GLOW', 'SCONCE_LIGHT', 'SAVE_LANTERN', 'PACK_LIGHT', 'JUMP', 'CAMERA', 'SHADOW', 'SETDOWN', 'SHADOW_FADE', 'PSYCHE'];
+  const META = W.DEV_META || { TABS: [], DOCS: {} };
   // Numbers that size arrays or pools when the game starts: changing them live breaks things.
-  const FIXED = new Set(['STREAM.count', 'GLOW.lights', 'WELL.motes', 'WELL.notches']);
+  const FIXED = new Set(Object.keys(META.DOCS).filter((k) => Array.isArray(META.DOCS[k]) && META.DOCS[k][1].when === 'fixed'));
 
   // ---------------------------------------------------------------------------
   // Tables: defaults, tweaks, paths
@@ -164,29 +167,48 @@
   // The panel
 
   const css = `
-  #dev-panel { position: fixed; top: 8px; right: 8px; bottom: 8px; width: min(360px, calc(100vw - 16px)); z-index: 60;
-    background: rgba(14, 12, 20, 0.94); color: #ddd6ea; font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace;
+  #dev-panel { position: fixed; top: 8px; right: 8px; bottom: 8px; width: min(440px, calc(100vw - 16px)); z-index: 60;
+    background: rgba(14, 12, 20, 0.95); color: #ddd6ea; font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace;
     border: 1px solid #3b3450; border-radius: 8px; display: flex; flex-direction: column; }
   #dev-panel[hidden] { display: none; }
-  #dev-panel header { display: flex; gap: 6px; align-items: center; padding: 8px; border-bottom: 1px solid #3b3450; }
+  #dev-panel header { display: flex; gap: 6px; align-items: center; padding: 8px 8px 6px; }
   #dev-panel header b { flex: 1; color: #b9a6ff; }
+  #dev-panel .find { display: flex; gap: 8px; align-items: center; padding: 0 8px 6px; }
+  #dev-panel .find input[type=search] { flex: 1; background: #1c1828; color: inherit; border: 1px solid #3b3450;
+    border-radius: 4px; font: inherit; padding: 3px 6px; }
+  #dev-panel .tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 0 8px; border-bottom: 1px solid #3b3450; }
+  #dev-panel .tabs button { border: 1px solid transparent; border-bottom: 0; border-radius: 4px 4px 0 0; background: none; color: #9c93b4; }
+  #dev-panel .tabs button.on { background: #2a2438; border-color: #463d60; color: #ddd6ea; }
+  #dev-panel .tabs button .n { color: #ffd27a; margin-left: 3px; }
+  #dev-panel .tabs[hidden] { display: none; }
   #dev-panel .body { overflow-y: auto; padding: 4px 8px 12px; flex: 1; }
+  #dev-panel .pane[hidden], #dev-panel .row[hidden], #dev-panel details[hidden], #dev-panel .cheat[hidden] { display: none; }
+  #dev-panel .pane > h3 { margin: 10px 0 2px; font-size: 11px; color: #8a829e; text-transform: uppercase; letter-spacing: 0.08em; }
   #dev-panel details { border-bottom: 1px solid #2a2438; padding: 4px 0; }
   #dev-panel summary { cursor: pointer; color: #b9a6ff; padding: 2px 0; }
-  #dev-panel details details { margin-left: 8px; border: 0; }
-  #dev-panel details details summary { color: #9c93b4; }
+  #dev-panel .badge { font-size: 10px; color: #8a829e; border: 1px solid #3b3450; border-radius: 3px; padding: 0 4px; margin-left: 6px; }
   #dev-panel .btns { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0; }
   #dev-panel button { background: #2a2438; color: #ddd6ea; border: 1px solid #463d60; border-radius: 4px;
     font: inherit; padding: 3px 7px; cursor: pointer; }
   #dev-panel button:hover { background: #3a3150; }
-  #dev-panel .row { display: grid; grid-template-columns: 1fr 96px 58px; gap: 4px; align-items: center; padding: 1px 0; }
+  #dev-panel button.small { padding: 0 5px; font-size: 10px; float: right; }
+  #dev-panel .row { display: grid; grid-template-columns: 1fr 110px 62px 52px; gap: 4px; align-items: center; padding: 1px 0; }
   #dev-panel .row.changed label { color: #ffd27a; }
-  #dev-panel .row label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #dev-panel .row label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+  #dev-panel .row label.nodoc { color: #8a829e; font-style: italic; }
+  #dev-panel .row .unit { color: #6f6886; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #dev-panel .row .pair { grid-column: 2 / 4; display: flex; gap: 4px; }
   #dev-panel .row input[type=range] { width: 100%; }
-  #dev-panel .row input[type=number] { width: 100%; background: #1c1828; color: inherit; border: 1px solid #3b3450; font: inherit; }
+  #dev-panel .row input[type=number] { width: 100%; min-width: 0; background: #1c1828; color: inherit; border: 1px solid #3b3450; font: inherit; }
   #dev-panel .tools { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
   #dev-panel .note { color: #8a829e; padding: 2px 0; }
-  #dev-panel textarea { width: 100%; height: 70px; background: #1c1828; color: #ffd27a; border: 1px solid #3b3450; font: inherit; }
+  #dev-panel textarea { width: 100%; height: 160px; background: #1c1828; color: #ffd27a; border: 1px solid #3b3450; font: inherit; }
+  #dev-tip { position: fixed; z-index: 61; width: 260px; pointer-events: none; background: #1c1828; color: #ddd6ea;
+    font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; border: 1px solid #463d60; border-radius: 6px; padding: 7px 9px; }
+  #dev-tip[hidden] { display: none; }
+  #dev-tip b { color: #b9a6ff; }
+  #dev-tip .meta { color: #8a829e; margin-top: 5px; font-size: 11px; }
+  #dev-tip .when { color: #ffd27a; margin-top: 4px; font-size: 11px; }
   #dev-chip { position: fixed; top: 8px; right: 8px; z-index: 59; background: #3a2a10; color: #ffd27a;
     font: 11px ui-monospace, monospace; padding: 2px 6px; border-radius: 4px; pointer-events: auto; cursor: pointer; }
   #dev-chip[hidden] { display: none; }`;
@@ -200,7 +222,7 @@
     for (const c of kids) if (c != null) n.append(c);
     return n;
   };
-  const button = (label, fn) => el('button', { type: 'button', onclick: (e) => { fn(); e.currentTarget.blur(); } }, label);
+  const button = (label, fn, cls) => el('button', { type: 'button', class: cls || '', onclick: (e) => { fn(); e.currentTarget.blur(); } }, label);
   const section = (title, open, ...kids) => el('details', { open }, el('summary', null, title), ...kids);
 
   const panel = el('div', { id: 'dev-panel', hidden: true });
@@ -221,84 +243,250 @@
   }
   const mapBox = el('input', { type: 'checkbox', onchange: (e) => { mapTeleport = e.target.checked; } });
 
-  // --- a slider row per number, a checkbox per switch, a group per object
+  // --- what each number is (dev-meta.js)
 
-  const rows = []; // { name, path, sync() }: to refresh after a reset
+  const WHEN = { room: 'applies to rooms grown after the change', run: 'applies when a new run starts', fixed: 'fixed at start' };
+  const BADGE = { room: 'new rooms', run: 'new runs', fixed: 'fixed' };
+  const wild = Object.keys(META.DOCS).filter((k) => k.includes('*'))
+    .map((k) => [new RegExp('^' + k.replace(/\./g, '\\.').replace(/\*/g, '[^.]+') + '$'), META.DOCS[k]]);
 
-  function numRow(name, path, label) {
+  /** { unit, text, opts } for a path, or null. */
+  function docFor(key) {
+    let d = META.DOCS[key];
+    if (d === undefined) { const w = wild.find(([re]) => re.test(key)); d = w ? w[1] : undefined; }
+    if (d === undefined) return null;
+    const [s, opts] = Array.isArray(d) ? d : [d, {}];
+    const i = s.indexOf('|');
+    return i < 0 ? { unit: '', text: s, opts } : { unit: s.slice(0, i).trim(), text: s.slice(i + 1).trim(), opts };
+  }
+
+  /** The section a path belongs to: [tab, section], or null (it goes under Other). */
+  const takes = (p, key) => (p.includes('.') ? key.startsWith(p) : key === p || key.startsWith(p + '.'));
+  function placeOf(key) {
+    for (const tab of META.TABS) for (const s of tab.sections) if (s.prefixes.some((p) => takes(p, key))) return [tab, s];
+    return null;
+  }
+
+  const human = (k) => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  /** A row's label: its path inside the table, in words ("hops · lurk · len"). */
+  function labelOf(name, path) {
+    const out = [];
+    let obj = W[name];
+    for (const k of path) {
+      const v = obj[k];
+      out.push(Array.isArray(obj) && v && typeof v === 'object' && v.who ? `${v.who} ${v.does}s ${v.what}` : human(k));
+      obj = v;
+    }
+    return out.join(' · ') || human(name);
+  }
+
+  // --- the tooltip: next to the panel, so it never covers the sliders
+
+  const tip = el('div', { id: 'dev-tip', hidden: true });
+  function showTip(row, r) {
+    const d = r.doc, def = getAt(defaults[r.name], r.path);
+    const fmt = (v) => (Array.isArray(v) ? v.map(fmt).join(' – ') : typeof v === 'number' ? String(+v.toFixed(4)) : String(v));
+    const when = r.when && WHEN[r.when];
+    tip.replaceChildren(...[
+      el('b', null, r.label),
+      el('div', null, d ? d.text : 'No description yet: add one to dev-meta.js.'),
+      when ? el('div', { class: 'when' }, when) : null,
+      el('div', { class: 'meta' }, r.key + (d && d.unit ? ' · ' + d.unit : '') + ' · default ' + fmt(def)),
+    ].filter(Boolean));
+    tip.hidden = false;
+    const b = row.getBoundingClientRect(), pb = panel.getBoundingClientRect();
+    const x = pb.left - tip.offsetWidth - 8;
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top = Math.min(innerHeight - tip.offsetHeight - 8, Math.max(8, b.top - 4)) + 'px';
+    if (x < 8) tip.style.top = Math.min(innerHeight - tip.offsetHeight - 8, b.bottom + 4) + 'px'; // a narrow screen: under the row
+  }
+
+  // --- a row per number (a slider), switch (a checkbox) or pair of numbers (a range)
+
+  const rows = []; // { key, name, path, label, doc, when, el, sync(), text }
+
+  function makeRow(name, path, when) {
     const key = [name].concat(path).join('.');
     const def = getAt(defaults[name], path);
-    const isColor = /colou?r/i.test(label) || /colors$/i.test(path[path.length - 2] || '') || def > 0xffff;
+    const doc = docFor(key);
+    if (doc && 'when' in doc.opts) when = doc.opts.when;
+    const r = { key, name, path, label: (doc && doc.opts.label) || labelOf(name, path), doc, when };
+    r.text = (r.label + ' ' + key + ' ' + (doc ? doc.text : '')).toLowerCase();
     const row = el('div', { class: 'row' });
-    const lab = el('label', { title: key }, label);
-    let input, num;
+    const lab = el('label', { class: doc ? '' : 'nodoc' }, r.label);
+    lab.addEventListener('pointerenter', () => showTip(lab, r));
+    lab.addEventListener('pointerleave', () => { tip.hidden = true; });
+    const unit = el('span', { class: 'unit' }, doc ? doc.unit : '');
+    const isChanged = () => JSON.stringify(getAt(W[name], path)) !== JSON.stringify(def);
+    const set = (sub, v) => { setAt(W[name], path.concat(sub), v); r.sync(); changed(); };
+    let sync;
     if (FIXED.has(key)) {
-      row.append(lab, el('span', { class: 'note' }, 'fixed at start'), el('span', null, String(def)));
-      return row;
-    }
-    if (isColor) {
-      input = el('input', { type: 'color' });
-      num = el('span');
+      row.append(lab, el('span', { class: 'note' }, 'fixed at start'), el('span', null, String(def)), unit);
+      sync = () => {};
+    } else if (Array.isArray(def)) {
+      const nums = def.map((d, i) => {
+        const n = el('input', { type: 'number', step: 'any' });
+        n.addEventListener('change', () => { if (Number.isFinite(+n.value)) set([i], +n.value); });
+        return n;
+      });
+      row.append(lab, el('span', { class: 'pair' }, ...nums), unit);
+      sync = () => { getAt(W[name], path).forEach((v, i) => { nums[i].value = +v.toFixed(4); }); };
+      lab.addEventListener('dblclick', () => { def.forEach((v, i) => setAt(W[name], path.concat(i), v)); r.sync(); changed(); });
+    } else if (typeof def === 'boolean') {
+      const box = el('input', { type: 'checkbox' });
+      box.addEventListener('change', () => set([], box.checked));
+      row.append(lab, box, el('span'), unit);
+      sync = () => { box.checked = getAt(W[name], path); };
+    } else if (doc && doc.unit === 'colour' || /colou?r/i.test(r.label) || def > 0xffff) {
+      const input = el('input', { type: 'color' }), num = el('span');
       const hex = (v) => '#' + (v >>> 0).toString(16).padStart(6, '0');
-      const sync = () => { const v = getAt(W[name], path); input.value = hex(v); num.textContent = hex(v); row.classList.toggle('changed', v !== def); };
-      input.addEventListener('input', () => { setAt(W[name], path, parseInt(input.value.slice(1), 16)); sync(); changed(); });
-      rows.push({ sync });
-      sync();
+      input.addEventListener('input', () => set([], parseInt(input.value.slice(1), 16)));
+      row.append(lab, input, num, unit);
+      sync = () => { const v = getAt(W[name], path); input.value = hex(v); num.textContent = hex(v); };
+      lab.addEventListener('dblclick', () => set([], def));
     } else {
-      const int = Number.isInteger(def) && Math.abs(def) >= 1;
+      const o = (doc && doc.opts) || {};
+      const unitIs = (u) => doc && doc.unit === u;
+      const share = unitIs('chance') || unitIs('share') || unitIs('opacity');
+      const int = Number.isInteger(def) && Math.abs(def) >= 1 && !share;
       const span = def === 0 ? 1 : Math.abs(def) * 2;
-      const lo = def < 0 ? -span : 0, hi = int ? Math.max(span, def + 4) : span;
-      const step = int ? 1 : Math.pow(10, Math.floor(Math.log10(span / 100))); // a round step: 0.01, 0.001, ...
-      input = el('input', { type: 'range', min: lo, max: hi, step });
-      num = el('input', { type: 'number', step: int ? 1 : 'any' });
-      const sync = () => {
+      const lo = o.min !== undefined ? o.min : def < 0 ? -span : 0;
+      const hi = o.max !== undefined ? o.max : share ? Math.max(1, def) : int ? Math.max(span, def + 4) : span;
+      const step = int ? 1 : Math.pow(10, Math.floor(Math.log10((hi - lo) / 100))); // a round step: 0.01, 0.001, ...
+      const input = el('input', { type: 'range', min: lo, max: hi, step });
+      const num = el('input', { type: 'number', step: int ? 1 : 'any' });
+      input.addEventListener('input', () => set([], +input.value));
+      num.addEventListener('change', () => { if (Number.isFinite(+num.value)) set([], +num.value); });
+      lab.addEventListener('dblclick', () => set([], def)); // double-click a name: back to its default
+      row.append(lab, input, num, unit);
+      sync = () => {
         const v = getAt(W[name], path);
         if (v < +input.min) input.min = v;
         if (v > +input.max) input.max = v;
         input.value = v; num.value = +v.toFixed(4);
-        row.classList.toggle('changed', v !== def);
       };
-      const set = (v) => { if (!Number.isFinite(v)) return; setAt(W[name], path, v); sync(); changed(); };
-      input.addEventListener('input', () => set(+input.value));
-      num.addEventListener('change', () => set(+num.value));
-      lab.addEventListener('dblclick', () => set(def)); // double-click a name: back to its default
-      rows.push({ sync });
-      sync();
     }
-    row.append(lab, input, num);
-    return row;
+    r.el = row;
+    r.changed = isChanged;
+    r.sync = () => { sync(); row.classList.toggle('changed', isChanged()); };
+    r.sync();
+    rows.push(r);
+    return r;
   }
 
-  function boolRow(name, path, label) {
-    const def = getAt(defaults[name], path);
-    const box = el('input', { type: 'checkbox' });
-    const row = el('div', { class: 'row' }, el('label', { title: [name].concat(path).join('.') }, label), box, el('span'));
-    const sync = () => { const v = getAt(W[name], path); box.checked = v; row.classList.toggle('changed', v !== def); };
-    box.addEventListener('change', () => { setAt(W[name], path, box.checked); sync(); changed(); });
-    rows.push({ sync });
-    sync();
-    return row;
+  /** Every tunable leaf of a table: [path, ...]. A short all-number array is one leaf (a range or stop). */
+  function leaves(name) {
+    const out = [];
+    const walk = (v, path) => {
+      if (Array.isArray(v) && v.length && v.length <= 4 && v.every((x) => typeof x === 'number')) out.push(path);
+      else if (typeof v === 'number' || typeof v === 'boolean') out.push(path);
+      else if (v && typeof v === 'object') for (const k of Object.keys(v)) walk(v[k], path.concat(k));
+    };
+    walk(W[name], []);
+    return out;
   }
 
-  /** One table's (or sub-object's) rows: plain leaves first, then nested groups. */
-  function tableRows(name, path) {
-    const obj = getAt(W[name], path), leaves = [], groups = [];
-    for (const k of Object.keys(obj)) {
-      const v = obj[k], sub = path.concat(k);
-      const label = Array.isArray(obj) && v && typeof v === 'object' && v.who ? `${k}: ${v.who} ${v.does} ${v.what}` : k;
-      if (typeof v === 'number') leaves.push(numRow(name, sub, label));
-      else if (typeof v === 'boolean') leaves.push(boolRow(name, sub, label));
-      else if (v && typeof v === 'object') {
-        const kids = tableRows(name, sub);
-        if (kids.length) groups.push(section(label, false, ...kids));
+  // --- tabs of sections
+
+  const OTHER = { id: 'other', label: 'Other', sections: [{ title: 'Not in dev-meta.js yet', when: null, prefixes: [] }] };
+  const tabs = META.TABS.concat(OTHER).map((t) => ({ t, sections: t.sections.map((s) => ({ s, rows: [] })) }));
+  const tabOf = new Map(tabs.map((x) => [x.t, x]));
+  for (const name of Object.keys(defaults)) {
+    for (const path of leaves(name)) {
+      const key = [name].concat(path).join('.');
+      const at = placeOf(key);
+      const tab = at ? tabOf.get(at[0]) : tabs[tabs.length - 1];
+      const s = at ? tab.sections[at[0].sections.indexOf(at[1])] : tab.sections[0];
+      s.rows.push(makeRow(name, path, s.s.when));
+    }
+  }
+
+  function sectionEl(x) {
+    const reset = button('reset', () => {
+      for (const r of x.rows) {
+        const def = getAt(defaults[r.name], r.path);
+        if (Array.isArray(def)) putDefaults(getAt(W[r.name], r.path), def); // in place: the game may hold the array
+        else setAt(W[r.name], r.path, def);
       }
-    }
-    return leaves.concat(groups);
+      for (const r of x.rows) r.sync();
+      changed();
+    }, 'small');
+    const summary = el('summary', null, x.s.title, x.s.when ? el('span', { class: 'badge', title: WHEN[x.s.when] }, BADGE[x.s.when]) : null, reset);
+    x.el = el('details', { open: true }, summary, ...x.rows.map((r) => r.el));
+    return x.el;
   }
 
-  function tableSection(name) {
-    const reset = button('reset', () => { putDefaults(W[name], defaults[name]); for (const r of rows) r.sync(); changed(); });
-    return section(name, false, el('div', { class: 'tools' }, reset), ...tableRows(name, []));
+  const cheats = el('div', { class: 'cheat' },
+    section('give', true, el('div', { class: 'btns' }, ...GIVE.map(([l, fn]) => button(l, fn)))),
+    section('spawn (in front of you)', true, el('div', { class: 'btns' }, ...SPAWN.map(([l, fn]) => button(l, fn)))),
+    section('teleport', true,
+      el('div', { class: 'tools' }, el('label', null, mapBox, ' click the big map (Tab) to go there')),
+      el('div', { class: 'note' }, 'to a waystone (✦ awake):'), stoneBox));
+  const changesPane = el('div', { class: 'pane cheat' },
+    el('div', { class: 'note' }, 'Every number that differs from its default, kept across reloads. Copy it and paste it to Claude to make them the new defaults.'),
+    el('div', { class: 'tools' }, button('copy changes', copyChanges), button('reset all', resetAll)),
+    changesBox);
+
+  for (const x of tabs) {
+    x.heading = el('h3', null, x.t.label);
+    x.pane = el('div', { class: 'pane' }, x.heading, x.t.id === 'cheats' ? cheats : null, ...x.sections.filter((s) => s.rows.length).map(sectionEl));
+    x.tabBtn = button(x.t.label, () => pick(x.t.id));
+  }
+  const CHANGES = { t: { id: 'changes', label: 'Changes' }, pane: changesPane };
+  CHANGES.tabBtn = button('Changes', () => pick('changes'));
+  const allTabs = tabs.filter((x) => x.t !== OTHER || x.sections[0].rows.length).concat(CHANGES);
+
+  const TAB_KEY = 'dungeon-engine:dev-tab';
+  let current = 'cheats';
+  try { current = global.localStorage.getItem(TAB_KEY) || current; } catch (e) { /* storage blocked */ }
+  function pick(id) {
+    current = allTabs.some((x) => x.t.id === id) ? id : 'cheats';
+    try { global.localStorage.setItem(TAB_KEY, current); } catch (e) { /* storage blocked */ }
+    filter();
+  }
+
+  // --- search, and "changed only": both show matches from every tab at once
+
+  const search = el('input', { type: 'search', placeholder: 'search every tab: name, path or description' });
+  const onlyBox = el('input', { type: 'checkbox' });
+  search.addEventListener('input', filter);
+  onlyBox.addEventListener('change', filter);
+  search.addEventListener('keydown', (e) => { if (e.key === 'Escape') { search.value = ''; filter(); search.blur(); } });
+
+  function filter() {
+    const q = search.value.trim().toLowerCase(), only = onlyBox.checked, finding = !!q || only;
+    tabBar.hidden = finding;
+    for (const x of allTabs) {
+      const isCur = x.t.id === current;
+      x.tabBtn.classList.toggle('on', isCur);
+      if (x === CHANGES) { x.pane.hidden = finding || !isCur; continue; }
+      let shown = 0;
+      for (const s of x.sections) {
+        if (!s.el) continue;
+        let n = 0;
+        for (const r of s.rows) {
+          const hit = (!q || r.text.includes(q)) && (!only || r.changed());
+          r.el.hidden = finding && !hit;
+          if (!r.el.hidden) n++;
+        }
+        s.el.hidden = finding && !n;
+        if (finding && n) s.el.open = true;
+        shown += n;
+      }
+      x.heading.hidden = !finding;
+      if (x.t.id === 'cheats') cheats.hidden = finding;
+      x.pane.hidden = finding ? !shown : !isCur;
+    }
+    countTabs();
+  }
+
+  /** Each tab's count of changed numbers, by its name. */
+  function countTabs() {
+    for (const x of allTabs) {
+      if (x === CHANGES) continue;
+      const n = x.sections.reduce((a, s) => a + s.rows.filter((r) => r.changed()).length, 0);
+      x.tabBtn.replaceChildren(x.t.label, ...(n ? [el('span', { class: 'n' }, String(n))] : []));
+    }
   }
 
   function changed() {
@@ -306,6 +494,8 @@
     changesBox.value = n ? JSON.stringify(c, null, 1) : '';
     chip.hidden = !n || !panel.hidden;
     chip.textContent = `dev tweaks · ${n}`;
+    CHANGES.tabBtn.replaceChildren('Changes', ...(n ? [el('span', { class: 'n' }, String(n))] : []));
+    if (onlyBox.checked) filter(); else countTabs();
     store();
   }
 
@@ -331,23 +521,19 @@
     changed();
   }
 
+  const tabBar = el('div', { class: 'tabs' }, ...allTabs.map((x) => x.tabBtn));
   panel.append(
     el('header', null, el('b', null, 'dev'), button('copy changes', copyChanges), button('reset all', resetAll),
       button('close `', () => toggle(false))),
-    el('div', { class: 'body' },
-      section('give', true, el('div', { class: 'btns' }, ...GIVE.map(([l, fn]) => button(l, fn)))),
-      section('spawn (in front of you)', true, el('div', { class: 'btns' }, ...SPAWN.map(([l, fn]) => button(l, fn)))),
-      section('teleport', true,
-        el('div', { class: 'tools' }, el('label', null, mapBox, ' click the big map (Tab) to go there')),
-        el('div', { class: 'note' }, 'to a waystone (✦ awake):'), stoneBox),
-      el('div', { class: 'note' }, 'Tuning: changes apply at once. Gold = changed; double-click a name to reset it. ' +
-        'RULES chances apply to rooms generated after the change.'),
-      ...Object.keys(defaults).map(tableSection),
-      section('changes (kept across reloads)', false, changesBox)));
-  document.body.append(panel, chip);
+    el('div', { class: 'find' }, search, el('label', { title: 'show only numbers that differ from their defaults' }, onlyBox, ' changed only')),
+    tabBar,
+    el('div', { class: 'body' }, ...allTabs.map((x) => x.pane)));
+  panel.addEventListener('scroll', () => { tip.hidden = true; }, true);
+  document.body.append(panel, chip, tip);
 
   function toggle(open = panel.hidden) {
     panel.hidden = !open;
+    if (!open) tip.hidden = true;
     if (open) fillStones();
     changed();
   }
@@ -363,6 +549,7 @@
     if (e.target.type === 'range' || e.target.type === 'checkbox') e.target.blur();
   });
 
+  pick(current);
   changed();
   W.dev = { toggle, changes, resetAll, teleport, TABLES };
 })(window);

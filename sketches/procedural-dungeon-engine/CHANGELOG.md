@@ -129,6 +129,23 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-11-01: **The dev panel is organized.** Tabs replace the one long
+  scroll: Cheats, Player, Creatures, Lamp & light, World, FX and Changes.
+  Each tab is split into sections by what you're tuning ("Creeper · drain",
+  "Loot", "Halo"). The sections come from the new `app/walk/dev-meta.js`,
+  which also gives every number a unit and a one-line description, shown
+  in a tooltip beside the panel when you hover its name (along with its path and
+  default). Sections and numbers that only take effect on new rooms or new
+  runs are badged. A search box looks across every tab (names, paths,
+  descriptions), "changed only" shows just your tweaks, each section has
+  its own reset, and each tab shows how many of its numbers you've changed.
+  Two-number ranges (`rest: [0.7, 2]`) are one row with a min and a max.
+  Chances and shares get 0–1 sliders. Any number `dev-meta.js` doesn't
+  know yet still shows, in an "Other" tab, so new ones aren't lost.
+- 2026-11-01: **Movement is tunable.** Walk, run and crawl speeds, crouch
+  height, hiding range, gravity, use and pickup reach and door swing time
+  move from constants into a `PLAYER` table, read every frame, so the dev
+  panel's Player tab can tune them live. (The unused `PUSH_TIME` is gone.)
 - 2026-10-27: **Controls: the lamp leaves the hotbar, use moves to RT.**
   The lantern is no longer a hotbar slot: R (R3) is the lamp, and with
   nothing in hand that wants it, F at a dormant waystone wakes it from

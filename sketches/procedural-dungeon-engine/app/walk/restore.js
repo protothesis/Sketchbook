@@ -370,7 +370,7 @@
 
   const kindOf = (b) => b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block';
   // Dragging speed, cells a second: lighter things move quicker; pulling is slower.
-  const DRAG = { crate: 0.55 * W.SPEED, vessel: 0.6 * W.SPEED, block: 0.35 * W.SPEED, waystone: 0.35 * W.SPEED };
+  const DRAG = { crate: 0.55, vessel: 0.6, block: 0.35, waystone: 0.35 }; // × PLAYER.speed
   const PULL = 0.7;
   // Heft: how fast it gets going (cells/s²); it stops HEFT_STOP times as fast.
   const HEFT = { crate: 8, vessel: 9, block: 3, waystone: 3 };
@@ -401,7 +401,7 @@
       along = 0;
     }
     const k = kindOf(b);
-    const want = along * DRAG[k] * (along < 0 ? PULL : 1);
+    const want = along * DRAG[k] * W.PLAYER.speed * (along < 0 ? PULL : 1);
     const speedingUp = want && Math.sign(want) === Math.sign(g.v || want) && Math.abs(want) >= Math.abs(g.v);
     const a = HEFT[k] * (speedingUp ? 1 : HEFT_STOP) * dt;
     g.v = g.v < want ? Math.min(want, g.v + a) : Math.max(want, g.v - a);
@@ -445,7 +445,7 @@
       if (ok && Math.hypot(ex, ey) < RADIUS - 1e-3) ok = false;
     }
     if (!ok) { finishGrab(); return; }
-    const T = THREE.MathUtils.clamp(2 * Math.max(Math.abs(a), Math.abs(c)) / DRAG[kindOf(b)], 0.08, 0.2);
+    const T = THREE.MathUtils.clamp(2 * Math.max(Math.abs(a), Math.abs(c)) / (DRAG[kindOf(b)] * W.PLAYER.speed), 0.08, 0.2);
     g.settle = { bx: -b.ox, by: -b.oy, fx: follow ? -a * ax : 0, fy: follow ? -a * ay : 0, k: 0, T };
   }
 

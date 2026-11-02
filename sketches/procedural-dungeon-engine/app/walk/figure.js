@@ -4,7 +4,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, RULES, THREE, $, S, JAMB, RADIUS, UNIT, GRAVITY, JUMP, LANTERN, LANTERN_RANGE, OPP, ekey, scene,
+  const { DE, RULES, THREE, $, S, JAMB, RADIUS, UNIT, PLAYER, JUMP, LANTERN, LANTERN_RANGE, OPP, ekey, scene,
     state } = W;
 
   // ---------------------------------------------------------------------------
@@ -324,7 +324,7 @@ float blobCut(vec3 lightView) {
     }
     const before = p.z;
     if (p.z > support || p.vz > 0) {
-      p.vz -= (p.vz > 0 && j.held && !j.hop ? JUMP.riseG : GRAVITY) * dt;
+      p.vz -= (p.vz > 0 && j.held && !j.hop ? JUMP.riseG : PLAYER.gravity) * dt;
       p.z += p.vz * dt;
     }
     if (p.z <= support) {
