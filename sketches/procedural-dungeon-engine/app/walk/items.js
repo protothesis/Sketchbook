@@ -192,7 +192,9 @@
   /**
    * What you can have in hand, in carousel order: the menu's own order
    * (inventory.js), cell by cell. Every stack in your items grid (the
-   * backpack's after it; each chalk colour and each jar fill its own), then
+   * backpack's after it; each chalk colour and each jar fill its own, at
+   * its first cell, counting every cell of it: two cells of empty jars are
+   * one stop), then
    * the equipment with a use in its grid's order (the duster, the
    * hourglass), then a collectable you took in hand from the menu. Empty
    * hands are the stop before the first. A slot's `cur` is its one variant
@@ -201,7 +203,8 @@
   function slots() {
     const run = state.run, out = [], seen = new Set();
     const kindSlot = (k) => ITEMS[k] && !ITEMS[k].equip && ITEMS[k].slot && ITEMS[k].slot(run);
-    for (const id of W.layoutItems(run)) if (W.isTool(id)) out.push(itemSlot(run, id)); // (a collectable in the backpack isn't a stop)
+    const ids = new Set(W.layoutItems(run).filter(W.isTool)); // (a collectable in the backpack isn't a stop)
+    for (const id of ids) out.push(itemSlot(run, id));
     for (const k of W.layoutEquip(run)) {
       const slot = k && kindSlot(k);
       if (slot) { out.push(slot); seen.add(k); }

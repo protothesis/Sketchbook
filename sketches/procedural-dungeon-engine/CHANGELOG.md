@@ -1156,6 +1156,19 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-11-05: **A full stack of tools spills into a new cell.** With a
+  full stack of something (6 jars, 9 keys, 10 sticks of a chalk colour),
+  picking up one more said "no room for it in your pack" even with empty
+  cells, because each tool kind had exactly one cell in the items grid.
+  Now a kind can fill several cells, each up to a full stack, with their
+  counts kept in `run.inv.itemN` beside `run.inv.items` (`inventory.js`).
+  "No room" appears only when no cell of that kind has room and no cell is
+  empty. This applies to every path in: floor pickups and drops, chests,
+  a faint's pack, and the backpack. In the menu each cell shows its own
+  count, taking or dropping from a cell takes from that cell, and putting
+  a cell on another of the same kind tops that one up. The carousel keeps
+  one stop per kind, with the total. Collectables already spilled like
+  this.
 - 2026-11-05: **Doors side by side no longer open into the same room.**
   When a room has two doors near each other, opening one used to build a
   room that often covered the doorstep of the other, so both doors led

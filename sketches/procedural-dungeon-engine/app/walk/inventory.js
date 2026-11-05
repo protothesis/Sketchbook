@@ -2,9 +2,12 @@
 // carry lives in grids, all sized from INV (the dev panel tunes it):
 //
 //   items       tools: keys, doorstones, chalk by colour, jars by what they
-//               hold. One stack per kind a cell. The truth stays in the run's
-//               counters (run.keys, run.chalks, run.jars ...); run.inv.items
-//               is only where each stack sits, kept in step by layoutItems().
+//               hold. A cell holds one kind, up to a full stack (INV.stack);
+//               more of it spills into another cell. The truth stays in the
+//               run's counters (run.keys, run.chalks, run.jars ...);
+//               run.inv.items is where each stack sits (its id, once per
+//               cell it fills) and run.inv.itemN how many each cell holds,
+//               both kept in step with the counters by layoutItems().
 //               A backpack adds a second grid after it (cells INV.items on),
 //               which takes collectables too: a collectable cell there is
 //               the cell itself, like one in coll.
@@ -78,10 +81,14 @@
     return out;
   }
   const capOf = (kind) => INV.stack[kind] || 1;
+  /** A full cell of a tool, in the counters' units (chalk: in strokes). */
+  const fullOf = (kind) => capOf(kind) * (kind === 'chalk' ? STROKES : 1);
+  /** How many each items cell holds (null for an empty cell or a collectable): run.inv.itemN, beside run.inv.items. */
+  const itemN = (run) => inv(run).itemN || (inv(run).itemN = []);
 
   const isTool = (x) => typeof x === 'string'; // an items layout entry: a stack id, or a collectable cell (the backpack's)
-  /** Pack the cells past `cap` into holes below it (from `from`, for what can't go lower), and drop trailing empties past it. */
-  function settle(a, cap, from = () => 0) {
+  /** Pack the cells past `cap` into holes below it (from `from`, for what can't go lower), and drop trailing empties past it. `par`: an array kept beside a (moved with it). */
+  function settle(a, cap, from = () => 0, par = null) {
     for (let i = cap; i < a.length; i++) {
       if (a[i] == null) continue;
       const f = from(a[i]);
@@ -89,27 +96,72 @@
       if (hole < 0) continue;
       a[hole] = a[i];
       a[i] = null;
+      if (par) { par[hole] = par[i]; par[i] = null; }
     }
     while (a.length > cap && a[a.length - 1] == null) a.pop();
     for (let i = 0; i < a.length; i++) if (a[i] === undefined) a[i] = null;
+    if (par) { par.length = a.length; for (let i = 0; i < a.length; i++) if (par[i] === undefined) par[i] = null; }
     return a;
   }
-  /** Where each item stack sits: run.inv.items, brought in step with what you carry. */
+  /**
+   * Where each item stack sits: run.inv.items (and run.inv.itemN, how many
+   * in each cell), brought in step with what you carry. More than the cells
+   * hold goes onto your cells of it with room, then into the first empty
+   * cells (past the grid if need be: over); less comes off the smallest cell
+   * of it first (the partial stack), and a cell left with none is empty.
+   */
   function layoutItems(run) {
-    const st = itemStacks(run), a = inv(run).items, cap = itemCap(run);
-    for (let i = 0; i < a.length; i++) if (isTool(a[i]) && !st.has(a[i])) a[i] = null;
-    for (const id of st.keys()) {
-      if (a.includes(id)) continue;
-      let i = a.findIndex((x, j) => j < cap && x == null);
-      if (i < 0) i = a.length < cap ? a.length : Math.max(a.length, cap);
-      a[i] = id;
+    const st = itemStacks(run), a = inv(run).items, N = itemN(run), cap = itemCap(run);
+    for (let i = 0; i < a.length; i++) if (!isTool(a[i]) || !st.has(a[i])) { if (isTool(a[i])) a[i] = null; N[i] = null; }
+    for (const [id, s] of st) {
+      const full = fullOf(s.kind), at = [];
+      for (let i = 0; i < a.length; i++) if (a[i] === id) { N[i] = Math.max(0, Math.min(full, N[i] || 0)); at.push(i); }
+      let diff = s.n - at.reduce((t, i) => t + N[i], 0);
+      for (const i of at) { if (diff <= 0) break; const t = Math.min(diff, full - N[i]); N[i] += t; diff -= t; }
+      while (diff > 0) {
+        let i = a.findIndex((x, j) => j < cap && x == null);
+        if (i < 0) i = a.length < cap ? a.length : Math.max(a.length, cap);
+        a[i] = id;
+        N[i] = Math.min(diff, full);
+        diff -= N[i];
+      }
+      if (diff < 0) for (const i of at.slice().sort((p, q) => N[p] - N[q] || q - p)) { // the smallest first; the latest cell of a tie
+        const t = Math.min(-diff, N[i]);
+        N[i] -= t; diff += t;
+        if (diff >= 0) break;
+      }
+      for (const i of at) if (N[i] <= 0) { a[i] = null; N[i] = null; }
     }
-    return settle(a, cap, (x) => (isTool(x) ? 0 : size('items'))); // collectables only in the backpack's cells
+    return settle(a, cap, (x) => (isTool(x) ? 0 : size('items')), N); // collectables only in the backpack's cells
   }
-  /** The first empty cell of a in [from, to), or -1. */
-  function hole(a, from, to) {
-    for (let i = from; i < to; i++) if (a[i] == null) return i;
-    return -1;
+  /** Items cell i as a cell ({ kind, n, ... }; a tool's n is that cell's own), or null. */
+  function itemCell(run, i) {
+    const x = layoutItems(run)[i];
+    if (!x) return null;
+    return isTool(x) ? Object.assign(cellOfId(x), { n: itemN(run)[i] }) : x;
+  }
+  /** Swap items cells i and j, their counts with them. */
+  function swapItems(run, i, j) {
+    const a = inv(run).items, N = itemN(run);
+    while (a.length <= Math.max(i, j)) a.push(null);
+    while (N.length < a.length) N.push(null);
+    [a[i], a[j]] = [a[j], a[i]];
+    [N[i], N[j]] = [N[j], N[i]];
+  }
+  /** Items cell i onto cell j, the same kind: as much as j has room for. */
+  function mergeItems(run, i, j) {
+    const a = layoutItems(run), N = itemN(run);
+    if (i === j || !isTool(a[i]) || a[i] !== a[j]) return;
+    const t = Math.min(N[i], fullOf(cellOfId(a[i]).kind) - N[j]);
+    N[j] += t; N[i] -= t;
+    if (N[i] <= 0) { a[i] = null; N[i] = null; }
+  }
+  /** Add to the run's counters for a tool (layoutItems() finds it cells). */
+  function addTools(run, cell, n) {
+    if (cell.kind === 'key') run.keys += n;
+    else if (cell.kind === 'doorstone') run.doorstones += n;
+    else if (cell.kind === 'chalk') run.chalks[cell.color] = (run.chalks[cell.color] || 0) + n;
+    else for (let i = 0; i < n; i++) run.jars.push({ id: 'j' + (++run.jarSeq), holds: cell.holds || null });
   }
   /** The equipment you have, duster first: kinds in run.inv.equip order. */
   function layoutEquip(run) {
@@ -135,17 +187,15 @@
    */
   function receive(run, cell, { force = false, dry = false } = {}) {
     let n = cell.n || 1;
-    if (TOOLS.has(cell.kind)) {
-      const stacks = itemStacks(run), st = stacks.get(idOf(cell));
-      const full = capOf(cell.kind) * (cell.kind === 'chalk' ? STROKES : 1); // chalk: in strokes
-      const room = force ? Infinity : st ? full - st.n : hole(layoutItems(run), 0, itemCap(run)) >= 0 ? full : 0;
-      const take = Math.min(n, Math.max(0, room));
-      if (!dry && take > 0) {
-        if (cell.kind === 'key') run.keys += take;
-        else if (cell.kind === 'doorstone') run.doorstones += take;
-        else if (cell.kind === 'chalk') run.chalks[cell.color] = (run.chalks[cell.color] || 0) + take;
-        else for (let i = 0; i < take; i++) run.jars.push({ id: 'j' + (++run.jarSeq), holds: cell.holds || null });
+    if (TOOLS.has(cell.kind)) { // onto your cells of it with room, then into empty cells (layoutItems puts it there)
+      let room = Infinity;
+      if (!force) {
+        const a = layoutItems(run), N = itemN(run), id = idOf(cell), full = fullOf(cell.kind), cap = itemCap(run);
+        room = 0;
+        for (let i = 0; i < cap; i++) room += a[i] == null ? full : a[i] === id ? full - N[i] : 0;
       }
+      const take = Math.min(n, Math.max(0, room));
+      if (!dry && take > 0) addTools(run, cell, take);
       return n - take;
     }
     if (!COLLECTABLE.has(cell.kind)) return n;
@@ -189,7 +239,7 @@
       const id = layoutItems(run)[i];
       if (!id) return null;
       if (!isTool(id)) return takeCell(inv(run).items, i, one);
-      const st = itemStacks(run).get(id);
+      const st = itemCell(run, i); // this cell's stack, not every one of the kind
       const n = !one ? st.n : st.kind === 'chalk' ? ((st.n - 1) % STROKES) + 1 : 1;
       if (st.kind === 'key') run.keys -= n;
       else if (st.kind === 'doorstone') run.doorstones -= n;
@@ -197,6 +247,7 @@
         let left = n;
         run.jars = run.jars.filter((j) => !(left > 0 && (j.holds || null) === st.holds && left--));
       }
+      itemN(run)[i] -= n; // out of this cell (layoutItems empties it at 0)
       layoutItems(run);
       return Object.assign({}, st, { n });
     }
@@ -237,11 +288,14 @@
     cells.forEach((c, j) => {
       if (!c) return;
       const at = main + j;
-      if (TOOLS.has(c.kind)) {
-        const had = itemStacks(run).has(idOf(c));
-        receive(run, c, { force: true });
-        const lay = layoutItems(run), from = lay.indexOf(idOf(c));
-        if (!had && from >= 0 && from !== at && lay[at] == null) { while (lay.length <= at) lay.push(null); lay[at] = lay[from]; lay[from] = null; }
+      if (TOOLS.has(c.kind)) { // back in its own cell if that's free, else with the rest
+        const lay = layoutItems(run), N = itemN(run), n = c.n || 1;
+        if (lay[at] == null && n <= fullOf(c.kind)) {
+          while (lay.length <= at) lay.push(null);
+          while (N.length < lay.length) N.push(null);
+          lay[at] = idOf(c); N[at] = n;
+        }
+        addTools(run, c, n);
         return;
       }
       const lay = layoutItems(run);
@@ -467,10 +521,9 @@
     (pk.coll || []).forEach((c, i) => { if (!c) return; if (!a[i]) a[i] = c; else receive(run, c, { force: true }); });
     const lay = layoutItems(run);
     (pk.layout || []).forEach((id, i) => { // stacks back in their cells (whatever's there moves to make room)
-      const at = isTool(id) ? lay.indexOf(id) : -1;
-      if (at < 0 || at === i || (lay[i] && !isTool(lay[i]))) return;
-      while (lay.length <= i) lay.push(null);
-      [lay[at], lay[i]] = [lay[i], lay[at]];
+      if (!isTool(id) || lay[i] === id || (lay[i] && !isTool(lay[i]))) return;
+      const at = lay.findIndex((x, j) => x === id && pk.layout[j] !== id); // a cell of it not already where one was
+      if (at >= 0) swapItems(run, at, i);
     });
     layoutItems(run);
     (pk.layout || []).forEach((c, i) => { // the backpack's collectables back in theirs
@@ -497,6 +550,6 @@
   }
 
   Object.assign(W, { INV, PROTECTED, TOOLS, COLLECTABLE, BAGS, takeBag, giveBag, isTool, invSize: size, inv, itemCap, purseCells, idOf, cellOfId, itemStacks,
-    layoutItems, layoutEquip, collCells, receive, fits, takeOut, cellName, cellIcon, equipIcon, equipName, coinName, CURIO,
+    layoutItems, itemCell, swapItems, mergeItems, layoutEquip, collCells, receive, fits, takeOut, cellName, cellIcon, equipIcon, equipName, coinName, CURIO,
     dropCell, addDrops, takeDrop, packInventory, packHasInventory, unpackInventory, chestCells, giveToChest });
 })(window);
