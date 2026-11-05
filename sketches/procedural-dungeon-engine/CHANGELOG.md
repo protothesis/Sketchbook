@@ -1117,6 +1117,22 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-11-05: **Doors side by side no longer open into the same room.**
+  When a room has two doors near each other, opening one used to build a
+  room that often covered the doorstep of the other, so both doors led
+  into one space. Now a room opened through a door can't cover the
+  doorstep (the cell just beyond) of any other unopened door in the room
+  it's opened from. It can share a wall with the neighbouring door's
+  space, turn away from it, or be a one-cell closet if nothing else fits.
+  - Engine: `doorstepsOf()` in `engine/expedition.js`, gated by a new
+    `params.doorsteps`. Saved expeditions made before this don't have it,
+    so they replay exactly as before; only new expeditions get the rule.
+  - A room coming back from a trace keeps its old footprint either way.
+  - In a headless run of about 12,000 doors opened next to a waiting
+    sibling door, rooms covering the sibling's doorstep went from about
+    1 in 11 to none. The room-type mix barely moved: one-cell closets
+    went from 1024 to 1062.
+
 - 2026-10-28: **Every door has a hold now.** Before, only a door into a
   room you could still reroll had a hold. Every other door ignored a held
   E, and nothing said why.

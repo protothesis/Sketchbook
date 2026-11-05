@@ -114,6 +114,10 @@
       // older records keep).
       hallChance: 0.01,
       hallMinDepth: 3,
+      // A room opened through one door leaves its neighbours' doorsteps
+      // clear (see doorstepsOf). Records from before have no `doorsteps`,
+      // so their rooms are placed as they were.
+      doorsteps: true,
     };
     // Only when on, so with regions off the params are as they always were
     // (and records from before regions, without `moodInherit`, stay off).
@@ -387,6 +391,28 @@
     return res;
   }
 
+  /**
+   * The doorsteps (the cell just beyond) of a space's other unopened doors,
+   * as "x,y" keys. A room opened through one door mustn't cover these, or
+   * two doors side by side would both open into the same room. It can share
+   * a wall with the next one, turn away, or be a one-cell closet if nothing
+   * else fits. Only once `params.doorsteps` is on (older records replay as
+   * they were).
+   */
+  function doorstepsOf(exp, space, exit) {
+    const out = new Set();
+    if (!exp.params.doorsteps) return out;
+    const b0 = step(exit.cell, exit.facing);
+    const own = key(b0.x, b0.y);
+    for (const e of space.exits) {
+      if (e === exit || e.connectionId) continue;
+      const b = step(e.cell, e.facing);
+      const k = key(b.x, b.y);
+      if (k !== own) out.add(k); // two doors onto one notch cell: nothing to keep clear
+    }
+    return out;
+  }
+
   /** Seeded sequence of alternative shapes to try when the first overlaps. */
   function attemptShapes(rng, params, archetype) {
     const out = [];
@@ -494,7 +520,10 @@
     // do. The rng draws the same either way, so its doors come out the same
     // when its neighbours are.
     const want = restore && restore.cells.slice().sort().join(';');
+    // A room coming back keeps its old footprint, doorsteps or not.
+    const steps = restore ? new Set() : doorstepsOf(exp, parent, exit);
     const ok = (candidate) => fits(exp, candidate, restore && restore.id) &&
+      (!steps.size || !candidate.cells.some((c) => steps.has(key(c.x, c.y)))) &&
       (!want || candidate.cells.map((c) => key(c.x, c.y)).sort().join(';') === want);
     const rng = createRng(seed);
     const depth = parent.depth + 1;
