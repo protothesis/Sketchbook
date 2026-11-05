@@ -38,7 +38,7 @@
   const THREE = global.THREE;
   const $ = (id) => document.getElementById(id);
   const STORAGE_KEY = 'dungeon-engine:expedition'; // the record, for the chart view
-  const PLAYER_KEY = 'dungeon-engine:player';       // the run, before save slots (read once, see game.js)
+  const PLAYER_KEY = 'dungeon-engine:player';       // the run, before save slots (no longer read)
   const SAVES = DP.saves;
 
   // Tunables, in cells unless noted. PLAY.md has the reasoning.
@@ -295,87 +295,17 @@
     SAVES.write('resume', snap);
   }
 
-  // The old run save's format versions, for bringing a save from before
-  // save slots over (game.js). Saves are stamped with DP.saves.BUILD too,
-  // but that's for changes to what a history builds: when `run` changes
-  // shape, add a step here (NOTES.md, "Saves"). Saves from before
-  // versioning count as version 0.
+  // The run's format version, within one build. Saves are stamped with
+  // DP.saves.BUILD too, and a save from another build isn't loaded at all,
+  // so only changes to `run` made within a build need a step here: when
+  // `run` changes shape, bump RUN_VERSION and add RUN_MIGRATIONS[old] (a
+  // function that brings a run from version old to old + 1). The steps for
+  // runs from before build 2 went with them (NOTES.md, "Versioning").
   const RUN_VERSION = 10;
-  const RUN_MIGRATIONS = [
-    // 0 -> 1: door chalk became doorstones; map pins and echoes are gone.
-    (run) => {
-      if (typeof run.chalk === 'number' && run.chalk > 0) { run.doorstones = (run.doorstones || 0) + run.chalk; run.chalk = 0; }
-      delete run.pins;
-      delete run.echoes;
-    },
-    // 1 -> 2: whole charges plus shards became one fluid amount of fuel.
-    (run) => {
-      run.fuel = (run.charges || 0) + (run.shards || 0) / RULES.shardsPerCharge;
-      delete run.charges;
-      delete run.shards;
-    },
-    // 2 -> 3: jars held up to three ghosts; now one pixie. Any filled jar
-    // keeps a pixie, so a jar that powered a sigil still does.
-    (run) => {
-      for (const j of (run.jars || []).concat(run.placedJars || [])) j.fill = j.fill > 0 ? 1 : 0;
-    },
-    // 3 -> 4: a jar says what it holds (a pixie, or a charge of entropy
-    // swiped from a well) instead of a pixie count.
-    (run) => {
-      for (const j of (run.jars || []).concat(run.placedJars || [])) {
-        j.holds = j.fill > 0 ? 'pixie' : null;
-        delete j.fill;
-      }
-    },
-    // 4 -> 5: moved crates and push blocks (run.pushed, by room) become
-    // run-wide loose objects. Their kind, colour and mark come back from
-    // their room's generation when it's built (restore.js spawnObjects).
-    (run) => {
-      run.objects = Object.assign({}, run.pushed || {});
-      delete run.pushed;
-      run.despawned = run.despawned || [];
-    },
-    // 5 -> 6: jars are a tool (in the bag) now, and what stood in the world
-    // is a vessel: a jar set down becomes a vessel holding what it held.
-    (run) => {
-      run.objects = run.objects || {};
-      for (const j of run.placedJars || []) {
-        run.objects['vessel:' + j.id] = { kind: 'vessel', sx: j.sx, sy: j.sy, holds: j.holds || null, n: j.holds ? 1 : 0 };
-      }
-      delete run.placedJars;
-    },
-    // 6 -> 7: save lanterns take over respawning from waystones. A hall whose
-    // waystone you woke counts as saved at (it already showed its waypoints),
-    // and your hearth (the same "spaceId:seed" key) is now its lantern.
-    (run) => {
-      run.lanterns = Object.assign({}, run.waystones || {});
-      run.packs = run.packs || [];
-      run.packSeq = run.packSeq || 0;
-    },
-    // 7 -> 8: waystones are blocks; the network is rebuilt from where the
-    // powered ones stand, so stored links go. A hall whose stone you woke
-    // (run.waystones) gets its block powered when it turns up.
-    (run) => {
-      delete run.ley;
-      run.stonePaid = run.stonePaid || {};
-    },
-    // 8 -> 9: the thread became the hourglass, equipment that starts empty
-    // (it needs a pixie to retrace a lost path).
-    (run) => {
-      run.equipment = run.equipment || {};
-      if (run.thread) run.equipment.hourglass = { holds: null };
-      delete run.thread;
-    },
-    // 9 -> 10: the inventory's grids. The stacks find their cells from what you carry.
-    (run) => {
-      run.inv = run.inv || { items: [], equip: [], coll: [] };
-      run.dropped = run.dropped || [];
-      run.dropSeq = run.dropSeq || 0;
-    },
-  ];
+  const RUN_MIGRATIONS = {};
   /** Bring a saved run up to RUN_VERSION, in place. */
   function migrateRun(run, version) {
-    for (let v = version || 0; v < RUN_VERSION; v++) RUN_MIGRATIONS[v](run);
+    for (let v = version == null ? RUN_VERSION : version; v < RUN_VERSION; v++) if (RUN_MIGRATIONS[v]) RUN_MIGRATIONS[v](run);
     return run;
   }
 

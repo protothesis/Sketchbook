@@ -10,7 +10,12 @@
 //                never expands)
 //   Space      { id, seed, parentId, viaExitId, entropy, archetype,
 //                cells: "x,y"[], exits: Exit[], depth, deadEnd, meta,
-//                nextExitIndex, reserveId? }
+//                nextExitIndex, regionId, role, heading?, reserveId? }
+//                (archetype is the room's shape; role is its part in its
+//                region's structure: see regions.js)
+//   Region     { id, seed, type, mood, hue, size, parentId, anchor:{x,y},
+//                originId, plan? }   (regions.js; never removed, so a
+//                restored room finds its region again)
 //   Connection { id, a:{spaceId,exitId}, b:{spaceId,exitId}, loop }
 //   Trace      { id, seed, parentId, viaExitId, entropy, archetype, cells,
 //                depth, deadEnd, meta, revertedAt, cause?, quiet?, reserveId? }
@@ -18,10 +23,13 @@
 //                quiet trace leaves no imprint)
 //   Reserve    { id, seed, kind, cells: "x,y"[], spaceId|null, ...data }
 //                (cells claimed ahead of time for a space that isn't there
-//                yet; extra fields are the application's, kept as-is)
-//   Expedition { version:1, rootSeed, params, spaces, connections,
+//                yet; extra fields are the application's, kept as-is.
+//                A region's claims also carry regionId, role, part,
+//                ownerId; kind 'void' is ground nothing is ever built on)
+//   Expedition { version:1, build, rootSeed, params, spaces, connections,
 //                registry: { "x,y": spaceId }, history: Event[], counters,
-//                traces: { spaceId: Trace }, reserves: { id: Reserve } }
+//                traces: { spaceId: Trace }, reserves: { id: Reserve },
+//                regions: { id: Region } }
 //   Event      { type:'commit', parentId, viaExitId, entropy, loop?, restore? }
 //            | { type:'revert', spaceId, cause?, quiet? }
 //            | { type:'tag', ids, cause, quiet }   (traces re-tagged)
@@ -39,7 +47,14 @@
 //
 // Determinism rule: same seed + same registry state => same candidate. Replay
 // re-applies `history` in order from the root, which reproduces every seed,
-// id and cell exactly.
+// id and cell exactly, within one BUILD.
+//
+// Versioning (NOTES.md, "Versioning"): every record carries `build`. A
+// record from another build isn't replayed (importRecord refuses it): the
+// generator may have changed. Bump BUILD whenever a change alters what a
+// history builds, and don't keep old behaviour around behind params. To
+// look at an old record, check out the commit of its build and open it
+// there.
 //
 // Traces: a reverted space is gone from the map, but never forgotten. Its
 // seed and cells stay in `traces` (a branch that existed but wasn't kept).
@@ -60,115 +75,77 @@
   const { hash, createRng, deriveRng, drawEntropy } = DE;
   const { OPPOSITE, key, parseKey, step } = DE;
 
-  const MOODS = ['still', 'damp', 'humming', 'cold', 'echoing', 'dusty', 'breathing', 'tilted', 'warm', 'hollow'];
-
-  // Mood regions: a room usually carries on its parent's mood (and a hue
-  // near its parent's), so a branch has stretches of one character. When it
-  // doesn't, the new mood starts a region of its own, and sometimes it's one
-  // the old mood tends to lead into (MOOD_JUNCTIONS).
-  //
-  // Tuning, read when an expedition is created (so it needs a new one, not
-  // a reload): copied into its params, which its record keeps, so a replay
-  // always uses the values it was made with.
-  //   inherit   chance a room keeps its parent's mood. 0 = off: params and
-  //             every room are exactly as before regions existed.
-  //   junction  chance a new mood is one the old one leads into (else any)
-  //   hueDrift  how far (degrees, either way) an inherited hue wanders
-  // The decision has its own stream ('region'), so the 'meta' draws, and
-  // everything else seeded, are unchanged either way.
-  const MOOD_REGIONS = { inherit: 0.8, junction: 0.6, hueDrift: 14 };
-  const MOOD_JUNCTIONS = {
-    still: ['hollow', 'cold', 'dusty'],
-    damp: ['cold', 'breathing', 'echoing'],
-    humming: ['warm', 'breathing', 'tilted'],
-    cold: ['still', 'damp', 'echoing'],
-    echoing: ['hollow', 'damp', 'still'],
-    dusty: ['still', 'warm', 'hollow'],
-    breathing: ['damp', 'humming', 'warm'],
-    tilted: ['humming', 'hollow', 'echoing'],
-    warm: ['humming', 'dusty', 'breathing'],
-    hollow: ['echoing', 'still', 'tilted'],
-  };
+  /**
+   * The generator's build: stamped on every record (`exp.build`) and every
+   * walk-mode save. Bump it (and BUILD_DATE) whenever a change alters what
+   * a history builds. See the versioning note at the top of this file.
+   */
+  const BUILD = 2;
+  const BUILD_DATE = '2026-11-05';
 
   /** Global generation parameters, set by the root seed (caps by the user). */
   function deriveParams(rootSeed) {
     const r = deriveRng(rootSeed, 'params');
-    const p = {
+    return {
       chamberMin: r.int(2, 3),
       chamberMax: r.int(5, 8),
       corridorMin: 3,
       corridorMax: r.int(6, 10),
       corridorWeight: +r.range(0.3, 0.55).toFixed(3),
       exitBias: +r.range(1.2, 2.6).toFixed(3),
+      // Meander regions only; structured regions set their own (loopChanceFor).
       loopChance: +r.range(0.25, 0.5).toFixed(3),
       maxAttempts: 20,
       maxSpaces: null,
       maxArea: null,
       maxDepth: null,
-      // The root room. Records from before halls have no `starter`, so
-      // their replays keep the root chamber they were made with.
-      starter: 'hall',
-      // A rare ordinary room is a hall, from this depth on. Records from
-      // before random halls have no `hallChance`, so their rooms don't change.
-      // Rare, so waypoint halls stay special: 1 in 100 (was 1 in 40, which
-      // older records keep).
+      // A rare meander room is a hall, from this depth on. Rare, so
+      // waypoint halls stay special.
       hallChance: 0.01,
       hallMinDepth: 3,
-      // A room opened through one door leaves its neighbours' doorsteps
-      // clear (see doorstepsOf). Records from before have no `doorsteps`,
-      // so their rooms are placed as they were.
-      doorsteps: true,
     };
-    // Only when on, so with regions off the params are as they always were
-    // (and records from before regions, without `moodInherit`, stay off).
-    if (MOOD_REGIONS.inherit > 0) {
-      p.moodInherit = MOOD_REGIONS.inherit;
-      p.moodJunction = MOOD_REGIONS.junction;
-      p.moodHueDrift = MOOD_REGIONS.hueDrift;
-    }
-    return p;
   }
 
   function createExpedition(rootSeed, caps, paramsOverride) {
     const exp = {
       version: 1,
+      build: BUILD,
       rootSeed: String(rootSeed),
       params: paramsOverride ? Object.assign({}, paramsOverride) : deriveParams(rootSeed),
       spaces: {},
       connections: {},
       registry: {},
       history: [],
-      counters: { space: 0, connection: 0, reserve: 0 },
+      counters: { space: 0, connection: 0, reserve: 0, region: 0 },
       traces: {},
       reserves: {},
+      regions: {},
     };
-    // Space 0 at the origin, seeded straight from the root seed: a hall
-    // (with a door up to the surface), or a chamber in older records.
+    // Space 0 at the origin, seeded straight from the root seed: a hall,
+    // with a door up to the surface, in the root region.
     const seed = hash(exp.rootSeed, 'root');
     const rng = createRng(seed);
-    let placed;
-    if (exp.params.starter === 'hall') {
-      const h = DE.hallCells(rng, 6, 8);
-      const ox = Math.floor(h.w / 2), oy = Math.floor(h.d / 2);
-      placed = { archetype: 'hall', cells: h.cells.map((c) => ({ x: c.x - ox, y: c.y - oy })), end: null };
-    } else {
-      placed = DE.placeShape(DE.chamberShape(rng, exp.params), { x: 0, y: 0 }, 'N');
-    }
+    const region = DE.rollRegion(hash(exp.rootSeed, 'region'), null, { x: 0, y: 0 });
+    region.id = 'g0';
+    region.originId = 's0';
+    exp.regions.g0 = region;
+    exp.counters.region = 1;
+    const h = DE.hallCells(rng, 6, 8);
+    const ox = Math.floor(h.w / 2), oy = Math.floor(h.d / 2);
+    const placed = { archetype: 'hall', cells: h.cells.map((c) => ({ x: c.x - ox, y: c.y - oy })), end: null };
     const space = buildSpace(exp, rng, {
       id: 's0', seed, parentId: null, viaExitId: null, entropy: null, depth: 0,
-      placed, entry: null, deadEnd: false, minExits: 2,
+      placed, entry: null, deadEnd: false, minExits: 2, region, role: 'hall',
     });
-    if (exp.params.starter === 'hall') {
-      // The surface door: on a north wall, where the camera sees it.
-      const used = new Set(space.exits.map((e) => key(e.cell.x, e.cell.y)));
-      const north = DE.boundarySlots(space.cells).filter((s) => s.facing === 'N' && !used.has(key(s.cell.x, s.cell.y)));
-      const slot = north[Math.floor(rng.next() * north.length)];
-      space.exits.push({
-        id: 'e' + space.nextExitIndex, index: space.nextExitIndex,
-        cell: { x: slot.cell.x, y: slot.cell.y }, facing: 'N', kind: 'surface', connectionId: null,
-      });
-      space.nextExitIndex++;
-    }
+    // The surface door: on a north wall, where the camera sees it.
+    const used = new Set(space.exits.map((e) => key(e.cell.x, e.cell.y)));
+    const north = DE.boundarySlots(space.cells).filter((s) => s.facing === 'N' && !used.has(key(s.cell.x, s.cell.y)));
+    const slot = north[Math.floor(rng.next() * north.length)];
+    space.exits.push({
+      id: 'e' + space.nextExitIndex, index: space.nextExitIndex,
+      cell: { x: slot.cell.x, y: slot.cell.y }, facing: 'N', kind: 'surface', connectionId: null,
+    });
+    space.nextExitIndex++;
     writeSpace(exp, space);
     exp.counters.space = 1;
     // Caps go through history so replay sees them change at the right moment.
@@ -179,21 +156,28 @@
   // ---------------------------------------------------------------------------
   // Space construction
 
-  function exitSlotOk(exp, rng, ownSet, slot, forbidKey, restoring) {
+  /** The claim on a cell: a reserve, or one of the candidate's own claims not yet written (`o.pending`). */
+  function claimAt(exp, o, k) {
+    return (o && o.pending && o.pending[k]) || reservedAt(exp, k);
+  }
+
+  function exitSlotOk(exp, rng, ownSet, slot, forbidKey, o, loopChance) {
     const b = step(slot.cell, slot.facing);
     const bk = key(b.x, b.y);
     if (ownSet.has(bk) || bk === forbidKey) return false;
-    if (reservedAt(exp, bk)) return true; // a way into a reserved footprint
+    const claim = claimAt(exp, o, bk);
+    if (claim) return claim.kind !== 'void'; // a way into a reserved footprint (never into a courtyard)
     // Facing into an existing space, or ground a lost path holds: keep it
     // only sometimes, as a loop door. (A room coming back is built as it
     // first was, when that ground was free: held ground doesn't count.)
-    if (exp.registry[bk] !== undefined || (!restoring && heldAt(exp, bk))) return rng.chance(exp.params.loopChance);
+    if (exp.registry[bk] !== undefined || (!o.restoring && heldAt(exp, bk))) return rng.chance(loopChance);
     return true;
   }
 
   function buildSpace(exp, rng, o) {
     const cells = o.placed.cells.map((c) => key(c.x, c.y));
     const ownSet = new Set(cells);
+    const role = o.deadEnd ? 'stub' : o.role || 'room';
     const space = {
       id: o.id,
       seed: o.seed,
@@ -207,7 +191,13 @@
       deadEnd: !!o.deadEnd,
       meta: {},
       nextExitIndex: 0,
+      regionId: o.region.id,
+      role,
     };
+    // The role its region asked for, when the room fell back to another
+    // (a gallery with no room becomes a cubicle): what a restore asks again.
+    if (o.askedRole && o.askedRole !== role) space.askedRole = o.askedRole;
+    if (o.heading) space.heading = o.heading;
     if (o.reserveId) space.reserveId = o.reserveId;
     const usedCells = new Set();
     const addExit = (cell, facing) => {
@@ -234,36 +224,66 @@
     }
 
     if (!space.deadEnd) {
+      const region = o.region;
+      const tryAdd = (slot, loop) => {
+        if (usedCells.has(key(slot.cell.x, slot.cell.y))) return false;
+        if (!exitSlotOk(exp, rng, ownSet, slot, forbid, o, loop)) return false;
+        addExit(slot.cell, slot.facing);
+        return true;
+      };
       // Corridors carry on from their far tip.
-      if (o.placed.end) {
-        const slot = o.placed.end;
-        if (!usedCells.has(key(slot.cell.x, slot.cell.y)) &&
-            exitSlotOk(exp, rng, ownSet, slot, forbid, o.restoring)) {
-          addExit(slot.cell, slot.facing);
+      if (o.placed.end) tryAdd(o.placed.end, DE.loopChanceFor(exp.params, role, true));
+      const loop = DE.loopChanceFor(exp.params, role, false);
+      if (role === 'gallery' || role === 'walk') {
+        // Doors along the run on the region's 2-cell module. A cloister walk
+        // opens only outward: never onto its courtyard or along its own ring.
+        const outward = (s) => {
+          if (role !== 'walk') return true;
+          const b = step(s.cell, s.facing);
+          const c = claimAt(exp, o, key(b.x, b.y));
+          return !(c && c.regionId === region.id);
+        };
+        const slots = rng.shuffle(DE.boundarySlots(cells).filter((s) => outward(s) && DE.onModule(s, region)));
+        let count = role === 'walk' ? 1 + Math.floor(rng.next() * 3) : 4;
+        const chance = role === 'walk' ? 0.6 : 0.32;
+        for (const slot of slots) {
+          if (count <= 0) break;
+          if (!rng.chance(chance)) continue;
+          if (tryAdd(slot, loop)) count--;
+        }
+      } else {
+        let count;
+        if (role === 'threshold') count = 0;
+        else if (role === 'cubicle') count = rng.chance(0.25) ? 1 : 0;
+        else if (role === 'cell') count = rng.chance(0.3) ? 1 : 0;
+        else if (space.archetype === 'chamber') count = 1 + Math.floor(rng.next() * exp.params.exitBias * 1.5);
+        else if (space.archetype === 'corridor') count = rng.chance(0.2) ? 1 : 0;
+        else if (space.archetype === 'hall') count = 2 + Math.floor(rng.next() * 2);
+        else count = 0;
+        if (o.minExits) count = Math.max(count, o.minExits);
+        for (const slot of rng.shuffle(DE.boundarySlots(cells))) {
+          if (count <= 0) break;
+          if (tryAdd(slot, loop)) count--;
         }
       }
-      let count;
-      if (space.archetype === 'chamber') {
-        count = 1 + Math.floor(rng.next() * exp.params.exitBias * 1.5);
-      } else if (space.archetype === 'corridor') {
-        count = rng.chance(0.2) ? 1 : 0;
-      } else if (space.archetype === 'hall') {
-        count = 2 + Math.floor(rng.next() * 2);
-      } else {
-        count = 0;
-      }
-      if (o.minExits) count = Math.max(count, o.minExits);
-      const slots = rng.shuffle(DE.boundarySlots(cells));
-      for (const slot of slots) {
-        if (count <= 0) break;
-        if (usedCells.has(key(slot.cell.x, slot.cell.y))) continue;
-        if (!exitSlotOk(exp, rng, ownSet, slot, forbid, o.restoring)) continue;
-        addExit(slot.cell, slot.facing);
-        count--;
+      // Keep the dungeon open: when few doors are left unopened anywhere,
+      // a room gets at least `minExits` onward (expand decides; the root
+      // always gets two).
+      const onward = () => space.exits.length - (o.entry ? 1 : 0);
+      if (o.minExits && onward() < o.minExits) {
+        for (const slot of rng.shuffle(DE.boundarySlots(cells))) {
+          if (onward() >= o.minExits) break;
+          tryAdd(slot, 0);
+        }
       }
       // Built against a reserved footprint: always at least one door into
-      // it. No draws, so spaces nowhere near a reserve are unchanged.
-      const into = (ex) => { const b = step(ex.cell, ex.facing); return reservedAt(exp, key(b.x, b.y)); };
+      // it (never into a courtyard). No draws, so spaces nowhere near a
+      // reserve are unchanged.
+      const into = (ex) => {
+        const b = step(ex.cell, ex.facing);
+        const c = claimAt(exp, o, key(b.x, b.y));
+        return c && c.kind !== 'void' ? c : null;
+      };
       for (const slot of DE.boundarySlots(cells)) {
         const res = into(slot);
         if (!res || usedCells.has(key(slot.cell.x, slot.cell.y))) continue;
@@ -273,33 +293,17 @@
     }
 
     // Seed-derived extras on their own stream, so they never shift layouts.
+    // A room takes its region's mood and a hue near its region's; a waypoint
+    // (`ownMeta`) keeps its own roll, so it's the same whichever door
+    // reaches it.
     const m = deriveRng(space.seed, 'meta');
-    space.meta = { hue: m.int(0, 359), mood: m.pick(MOODS) };
-    regionMeta(exp, space);
+    space.meta = { hue: m.int(0, 359), mood: m.pick(DE.MOODS) };
+    if (!o.ownMeta) {
+      const d = DE.REGION_TUNING.hueDrift;
+      space.meta.mood = o.region.mood;
+      space.meta.hue = (((o.region.hue + m.int(-d, d)) % 360) + 360) % 360;
+    }
     return space;
-  }
-
-  /**
-   * Mood regions (MOOD_REGIONS): carry on the parent's mood, or start a new
-   * region. Reserved spaces (waypoints) and the root keep their own roll, so
-   * a reserved space is the same whichever door reaches it.
-   */
-  function regionMeta(exp, space) {
-    const p = exp.params;
-    const parent = space.parentId && exp.spaces[space.parentId];
-    if (!p.moodInherit || !parent || space.reserveId) return;
-    const r = deriveRng(space.seed, 'region');
-    if (r.chance(p.moodInherit)) {
-      space.meta.mood = parent.meta.mood;
-    } else if (r.chance(p.moodJunction || 0) && MOOD_JUNCTIONS[parent.meta.mood]) {
-      space.meta.mood = r.pick(MOOD_JUNCTIONS[parent.meta.mood]);
-    }
-    // Same mood as the parent (inherited, or rolled again): a hue near its
-    // parent's, so the region reads as one. A new region keeps its own hue.
-    if (space.meta.mood === parent.meta.mood) {
-      const d = p.moodHueDrift || 0;
-      space.meta.hue = (((parent.meta.hue + r.int(-d, d)) % 360) + 360) % 360;
-    }
   }
 
   function writeSpace(exp, space) {
@@ -360,7 +364,7 @@
       const idx = {};
       for (const id in exp.reserves) {
         const r = exp.reserves[id];
-        if (!r.spaceId) for (const k of r.cells) idx[k] = r;
+        if (!r.spaceId && !r.dormant) for (const k of r.cells) idx[k] = r;
       }
       Object.defineProperty(exp, '_reserved', { value: idx, writable: true, configurable: true, enumerable: false });
     }
@@ -396,12 +400,10 @@
    * as "x,y" keys. A room opened through one door mustn't cover these, or
    * two doors side by side would both open into the same room. It can share
    * a wall with the next one, turn away, or be a one-cell closet if nothing
-   * else fits. Only once `params.doorsteps` is on (older records replay as
-   * they were).
+   * else fits.
    */
   function doorstepsOf(exp, space, exit) {
     const out = new Set();
-    if (!exp.params.doorsteps) return out;
     const b0 = step(exit.cell, exit.facing);
     const own = key(b0.x, b0.y);
     for (const e of space.exits) {
@@ -484,14 +486,19 @@
     // Into a reserved footprint: the reserved space itself, from its own seed
     // (restoring one built there: the same space, under its old id).
     const res = reservedAt(exp, bk);
+    if (res && res.kind === 'void') throw new Error('That wall backs onto open air');
     if (restore && (exp.registry[bk] !== undefined || (res && res.id !== restore.reserveId))) return null;
     if (restore && restore.reserveId && !res) return null;
     if (res) {
+      // A region's claim (a cloister walk) is that region's; a waypoint
+      // belongs to the region you reach it from, but keeps its own mood.
+      const region = (res.regionId && exp.regions[res.regionId]) || exp.regions[parent.regionId];
       const space = buildSpace(exp, createRng(res.seed), {
         id: restore ? restore.id : 's' + exp.counters.space, seed: res.seed, parentId: spaceId, viaExitId: exitId,
         entropy: null, depth: parent.depth + 1, deadEnd: false, reserveId: res.id, restoring: !!restore,
         placed: { archetype: res.kind, cells: res.cells.map(parseKey), end: null },
         entry: { cell: beyond, facing: facingBack },
+        region, role: res.role || (res.kind === 'hall' ? 'hall' : 'room'), ownMeta: !res.regionId,
       });
       const rc = { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: null, space, reserveId: res.id };
       if (restore) rc.restore = restore.id;
@@ -525,35 +532,96 @@
     const ok = (candidate) => fits(exp, candidate, restore && restore.id) &&
       (!steps.size || !candidate.cells.some((c) => steps.has(key(c.x, c.y)))) &&
       (!want || candidate.cells.map((c) => key(c.x, c.y)).sort().join(';') === want);
+    // Cells a region claims ahead (a cloister's ring and courtyard) must be
+    // free too, and clear of the parent's doorsteps.
+    const okKeys = (keys) => keys.every((k) => exp.registry[k] === undefined && !reservedAt(exp, k) &&
+      (!heldAt(exp, k) || heldAt(exp, k).id === (restore && restore.id)) && !steps.has(k));
+    // A courtyard may not cover any unopened door's doorstep, anywhere: that
+    // door would open onto nothing.
+    let doorsteps = null;
+    const okVoid = (keys) => {
+      if (!doorsteps) {
+        doorsteps = new Set();
+        for (const sid in exp.spaces) for (const e of exp.spaces[sid].exits) {
+          if (e.connectionId || (sid === spaceId && e.id === exitId)) continue;
+          const b = step(e.cell, e.facing);
+          doorsteps.add(key(b.x, b.y));
+        }
+      }
+      return keys.every((k) => !doorsteps.has(k));
+    };
+    const okPart = (pt) => okKeys(pt.cells) && (pt.kind !== 'void' || okVoid(pt.cells));
     const rng = createRng(seed);
     const depth = parent.depth + 1;
     const p = exp.params;
+    const id = restore ? restore.id : 's' + exp.counters.space;
+
+    // Which region, and what part of it: the trace's own when coming back,
+    // else rolled (regions.js). A stub stays in its parent's region.
+    let ctx;
+    if (restore) ctx = { region: exp.regions[restore.regionId], role: restore.role, isNew: false };
+    else if (capsReached(exp, depth)) ctx = { region: exp.regions[parent.regionId], role: 'stub', isNew: false };
+    else ctx = DE.resolveRegion(exp, parent, exit, seed, beyond);
+    const region = ctx.region;
+    let role = ctx.role;
 
     let placed = null;
     let deadEnd = false;
-    if (restore && restore.deadEnd) {
+    let plan = null, claims = [], wake = [];
+    if ((restore && restore.deadEnd) || role === 'stub') {
       placed = DE.placeShape(DE.stubShape(), beyond, exit.facing);
       deadEnd = true;
-      if (!ok(placed)) return null;
-    } else if (!restore && capsReached(exp, depth)) {
-      placed = DE.placeShape(DE.stubShape(), beyond, exit.facing);
-      deadEnd = true;
+      if (restore && !ok(placed)) return null;
     } else {
-      // A rare hall, decided and shaped on its own stream so the usual
-      // draws below are untouched; if it doesn't fit, the room is ordinary.
-      if (p.hallChance && depth >= p.hallMinDepth) {
-        const hr = deriveRng(seed, 'hall');
-        if (hr.chance(p.hallChance)) {
-          for (let i = 0; i < 3 && !placed; i++) {
-            const candidate = DE.placeShape(DE.hallShape(hr, 6, 8), beyond, exit.facing);
-            if (ok(candidate)) placed = candidate;
+      if (role === 'walk') {
+        // A cloister's first walk: the side you enter on, built now, with
+        // the rest of the ring and the courtyard claimed ahead. Coming back,
+        // it's the plan it made, and it claims again what it lost.
+        if (restore) {
+          if (region.plan && region.originId === restore.id) {
+            // Its dormant claims wake. Ground a lost walk of its own holds
+            // is still its own.
+            wake = Object.values(exp.reserves).filter((r) => r.ownerId === id && r.dormant);
+            const free = (r) => r.cells.every((k) => exp.registry[k] === undefined && !reservedAt(exp, k) &&
+              (!heldAt(exp, k) || heldAt(exp, k).id === id || heldAt(exp, k).reserveId === r.id));
+            if (!wake.every((r) => free(r) && (r.kind !== 'void' || okVoid(r.cells)))) return null;
+            placed = { archetype: 'corridor', cells: region.plan.near.map(parseKey), end: null };
+            if (!ok(placed)) return null;
+          }
+        } else {
+          for (const pl of DE.cloisterPlans(region, beyond, exit.facing)) {
+            if (okKeys(pl.near) && pl.parts.every(okPart)) { plan = pl; break; }
+          }
+          if (plan) {
+            placed = { archetype: 'corridor', cells: plan.near.map(parseKey), end: null };
+            claims = DE.planClaims(region, plan, id);
           }
         }
+        if (!placed) role = 'cell'; // the ring won't fit: a cloister without its walk
       }
-      const archetype = rng.chance(p.corridorWeight) ? 'corridor' : 'chamber';
-      for (const shape of placed ? [] : attemptShapes(rng, p, archetype)) {
-        const candidate = DE.placeShape(shape, beyond, exit.facing);
-        if (ok(candidate)) { placed = candidate; break; }
+      if (!placed && role === 'room') {
+        // Meander: the original generator. A rare hall, decided and shaped
+        // on its own stream so the usual draws below are untouched; if it
+        // doesn't fit, the room is ordinary.
+        if (p.hallChance && depth >= p.hallMinDepth) {
+          const hr = deriveRng(seed, 'hall');
+          if (hr.chance(p.hallChance)) {
+            for (let i = 0; i < 3 && !placed; i++) {
+              const candidate = DE.placeShape(DE.hallShape(hr, 6, 8), beyond, exit.facing);
+              if (ok(candidate)) placed = candidate;
+            }
+          }
+        }
+        const archetype = rng.chance(p.corridorWeight) ? 'corridor' : 'chamber';
+        for (const shape of placed ? [] : attemptShapes(rng, p, archetype)) {
+          const candidate = DE.placeShape(shape, beyond, exit.facing);
+          if (ok(candidate)) { placed = candidate; break; }
+        }
+      } else if (!placed) {
+        for (const t of DE.roleTries(rng, p, role)) {
+          const candidate = DE.placeShape(t.shape, beyond, exit.facing);
+          if (ok(candidate)) { placed = candidate; role = t.role; break; }
+        }
       }
       if (!placed && restore) return null; // its footprint is taken: it can't come back
       if (!placed) {
@@ -563,12 +631,26 @@
       }
     }
 
+    const pending = {};
+    for (const c of claims.concat(wake)) for (const k of c.cells) pending[k] = c;
+    // Few doors left unopened anywhere (structured regions have few): this
+    // room keeps the way on open.
+    let open = 0;
+    for (const sid in exp.spaces) for (const e of exp.spaces[sid].exits) {
+      if (!e.connectionId && e.kind !== 'surface' && !(sid === spaceId && e.id === exitId)) open++;
+    }
+    const minExits = deadEnd || open >= 3 ? 0 : open === 0 ? 2 : 1;
     const space = buildSpace(exp, rng, {
-      id: restore ? restore.id : 's' + exp.counters.space, seed, parentId: spaceId, viaExitId: exitId,
+      id, seed, parentId: spaceId, viaExitId: exitId,
       entropy: ent, depth, placed, deadEnd, restoring: !!restore,
       entry: { cell: beyond, facing: facingBack },
+      region, role, askedRole: ctx.role, pending, minExits, heading: role === 'gallery' || role === 'threshold' ? exit.facing : null,
     });
     const cand = { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: ent, space };
+    if (ctx.isNew) cand.region = region;
+    if (plan) cand.plan = plan;
+    if (claims.length) cand.claims = claims;
+    if (wake.length) cand.wake = wake.map((r) => r.id);
     if (restore) cand.restore = restore.id;
     return cand;
   }
@@ -617,6 +699,28 @@
     for (const k of space.cells) {
       if (exp.registry[k] !== undefined) throw new Error('Stale candidate: cell ' + k + ' now occupied');
     }
+    if (cand.region && cand.region.id !== 'g' + exp.counters.region) throw new Error('Stale candidate: expedition changed');
+    for (const c of cand.claims || []) if (!canReserve(exp, c.cells)) throw new Error('Stale candidate: claimed ground now taken');
+    // A new region, and what it claims ahead, are written with the room
+    // that opened them (so a reroll leaves nothing). No events of their own:
+    // replay's expand makes them again.
+    if (cand.region) {
+      cand.region.originId = space.id;
+      exp.regions[cand.region.id] = cand.region;
+      exp.counters.region++;
+    }
+    if (cand.plan) {
+      const region = exp.regions[space.regionId];
+      region.plan = { shape: cand.plan.shape, w: cand.plan.w, d: cand.plan.d, near: cand.plan.near.slice(),
+        parts: cand.plan.parts.map((pt) => ({ part: pt.part, kind: pt.kind, role: pt.role, cells: pt.cells.slice() })) };
+      region.originId = space.id;
+    }
+    for (const c of cand.claims || []) {
+      const r = Object.assign({}, c, { id: 'r' + exp.counters.reserve++, cells: c.cells.slice(), spaceId: null });
+      exp.reserves[r.id] = r;
+    }
+    for (const rid of cand.wake || []) if (exp.reserves[rid]) delete exp.reserves[rid].dormant;
+    if (cand.claims || cand.wake) clearReserved(exp);
     writeSpace(exp, space);
     if (cand.restore) { delete exp.traces[cand.restore]; if (exp._imprints) exp._imprints = null; }
     else exp.counters.space++;
@@ -661,8 +765,21 @@
     }
     for (const k of space.cells) delete exp.registry[k];
     delete exp.spaces[spaceId];
-    // A reserved space goes back to waiting (its door would rebuild it as is).
-    if (space.reserveId && exp.reserves[space.reserveId]) { exp.reserves[space.reserveId].spaceId = null; clearReserved(exp); }
+    // A reserved space goes back to waiting (its door would rebuild it as
+    // is), or dormant if the room that claimed it is gone too.
+    if (space.reserveId && exp.reserves[space.reserveId]) {
+      const r = exp.reserves[space.reserveId];
+      r.spaceId = null;
+      if (r.ownerId && !exp.spaces[r.ownerId]) r.dormant = true;
+      clearReserved(exp);
+    }
+    // What it claimed ahead and nothing stands on goes dormant: it no
+    // longer claims the ground, but keeps its id, and wakes if the room
+    // comes back. Its region stays, for that.
+    for (const rid in exp.reserves) {
+      const r = exp.reserves[rid];
+      if (r.ownerId === spaceId && !r.spaceId) { r.dormant = true; clearReserved(exp); }
+    }
     const ev = { type: 'revert', spaceId };
     if (cause) ev.cause = cause;
     if (quiet) ev.quiet = true;
@@ -672,6 +789,7 @@
       id: space.id, seed: space.seed, parentId: space.parentId, viaExitId: space.viaExitId,
       entropy: space.entropy, archetype: space.archetype, cells: space.cells.slice(),
       depth: space.depth, deadEnd: space.deadEnd, meta: space.meta, revertedAt: exp.history.length - 1,
+      regionId: space.regionId, role: space.askedRole || space.role,
     };
     if (cause) trace.cause = cause;
     if (quiet) trace.quiet = true;
@@ -692,6 +810,8 @@
     const n = step(cell, facing);
     const other = exp.registry[key(n.x, n.y)];
     if (other === spaceId) return false;
+    const claim = reservedAt(exp, key(n.x, n.y));
+    if (claim && claim.kind === 'void') return false; // a courtyard: nothing opens into it
     if (sp.exits.some((e) => e.cell.x === cell.x && e.cell.y === cell.y && e.facing === facing)) return false;
     if (other !== undefined && exp.spaces[other].exits.some((e) =>
       e.cell.x === n.x && e.cell.y === n.y && e.facing === OPPOSITE[facing])) return false;
@@ -837,6 +957,10 @@
   function importRecord(json) {
     const record = typeof json === 'string' ? JSON.parse(json) : json;
     if (record.version !== 1) throw new Error('Unsupported expedition version ' + record.version);
+    if (record.build !== BUILD) {
+      throw new Error('This record was made by build ' + (record.build || 1) + ' of the generator; this is build ' + BUILD +
+        '. To see it, open it in a checkout of that build (NOTES.md, "Versioning").');
+    }
     const exp = replay(record);
     const mismatches = [];
     if (record.spaces) {
@@ -902,11 +1026,12 @@
       connections: Object.keys(exp.connections).length,
       openExits: open,
       cycles: cycleCount(exp),
+      regions: Object.keys(exp.regions || {}).length,
     };
   }
 
   Object.assign(DE, {
-    MOODS, MOOD_REGIONS, MOOD_JUNCTIONS, deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
+    BUILD, BUILD_DATE, deriveParams, createExpedition, expand, commit, canRevert, revert, setCaps,
     canCarve, carve, uncarve, restorable, restore, tagTraces, replay, exportRecord, importRecord, rebuildRegistry,
     pathToRoot, cycleCount, stats, parseKey, imprintAt, reservedAt, heldAt, holdLostPaths, canReserve, reserve,
   });

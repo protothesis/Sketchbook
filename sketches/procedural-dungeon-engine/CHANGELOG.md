@@ -126,9 +126,46 @@ All notable changes to this sketch are logged here, per
   the size (`chitSize`), and gathering one flashes the figure violet.
   New defaults from the playtest's tweaks: `launch` 1.78, `bounce` 0.42,
   `moteSize` 0.047.
+- 2026-11-05: **Regions: structure, mood and size as three layers.**
+  Every room now belongs to a region (`engine/regions.js`), rolled from a
+  seed the first time a door leads into it, the room seed chain one level
+  up. A region picks, each on its own stream, a structure type, a mood (the
+  existing moods, now a separate layer: a dusty catacomb and a damp one)
+  and a size (a room budget, long-tailed: mostly a handful of rooms, now
+  and then 50+). Rooms opened inside a region spend its budget; each door
+  has a chance, rising as the budget runs out, of leading into a new
+  region, sometimes through a short threshold passage, and a spent
+  region's doors always lead out. Rerolling the door that starts a region
+  rerolls the whole region. Three structure types:
+  - **meander**: the generator as it was, now one type among others.
+  - **catacomb**: long straight galleries on a 2-cell module, small
+    burial rooms (cubicula) off their sides, crossing galleries, few loops.
+  - **cloister**: a ring of walk around a courtyard nothing may fill, with
+    cells off its outside. Its first walk claims the rest of the ring and
+    the courtyard ahead (reserves); a U when a full ring won't fit, a
+    cluster of cells when nothing does.
+  Rooms keep their shape archetype (chamber / corridor / hall / stub) and
+  gain a `role` (gallery, cubicle, walk, cell, room, threshold, hall). The
+  chart view's inspector and candidate bar, and walk mode's room caption,
+  show region and role. `notes/structure-types.md` catalogues the types
+  these come from, and plans seeded region sequences for shareable runs.
+- 2026-11-05: **Versioned records.** Engine exports carry `build`
+  (`DungeonEngine.BUILD`, now 2), the same number walk-mode saves are
+  stamped with. A record or save from another build is refused with a
+  message saying which build made it; to look at it, check out that
+  build's commit (NOTES.md, "Versioning").
 
 ### Changed
 
+- 2026-11-05: **No more backward compatibility for old records.** The
+  params that only kept old records replaying as they were (`starter`,
+  `doorsteps`, the mood-region params) are gone, with the old code paths
+  behind them. The root is always a hall; doorsteps are always kept clear.
+  Records and saves from build 1 no longer load.
+- 2026-11-05: Rooms take their region's mood and a hue near its own,
+  instead of inheriting from their parent room (mood regions, replaced by
+  regions). When few unopened doors are left anywhere, a new room keeps
+  at least one way on open, so a run can't seal itself off.
 - 2026-11-01: **Dev panel, second pass: hands in the world.**
   - **Place by clicking the game.** With the panel open, the Cheats tab's
     palette arms a block (crate, block, vessel, waystone) or a creature
@@ -1112,6 +1149,8 @@ All notable changes to this sketch are logged here, per
 
 ### Removed
 
+- 2026-11-05: Walk mode's run migrations for saves from before build 2,
+  and the one-time import of a save from before save slots.
 - 2026-10-26: Vaulting. Pushing into a block, or pressing E facing it, no
   longer climbs it; you jump.
 

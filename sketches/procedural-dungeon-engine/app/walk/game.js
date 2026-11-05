@@ -186,26 +186,8 @@
   const exportBtn = $('title-export');
   const fileEl = $('title-file');
 
-  /**
-   * A save from before save slots: the record the chart view shares, plus
-   * the run key. Nothing in build 1 changes what those histories build, so
-   * build 1 brings one over (once: it then lives in the slots).
-   */
-  /** A snapshot's run, brought up to RUN_VERSION (snapshots from before runVersion are version 3). */
-  const snapRun = (snap) => migrateRun(JSON.parse(JSON.stringify(snap.run)), snap.runVersion || 3);
-
-  function legacySave() {
-    if (SAVES.BUILD !== 1) return null;
-    try {
-      const text = localStorage.getItem(STORAGE_KEY);
-      const pl = JSON.parse(localStorage.getItem(PLAYER_KEY) || 'null');
-      if (!text || !pl || !pl.run) return null;
-      const record = JSON.parse(text);
-      if (pl.rootSeed !== record.rootSeed) return null;
-      const run = Object.assign(freshRun(record.rootSeed), migrateRun(pl.run, pl.v));
-      return SAVES.make({ record, run, player: { x: pl.x, y: pl.y, angle: pl.angle || 0 }, runVersion: RUN_VERSION });
-    } catch (e) { return null; }
-  }
+  /** A snapshot's run, brought up to RUN_VERSION. */
+  const snapRun = (snap) => migrateRun(JSON.parse(JSON.stringify(snap.run)), snap.runVersion);
 
   function ago(iso) {
     const s = (Date.now() - Date.parse(iso)) / 1000;
@@ -355,12 +337,8 @@
 
   $('menu-btn').addEventListener('click', (e) => { openPause(); e.currentTarget.blur(); });
 
-  /** At boot: bring a save from before slots over, then show the title. */
+  /** At boot: show the title. */
   function boot() {
-    if (SAVES.read('resume').status === 'none') {
-      const legacy = legacySave();
-      if (legacy) { SAVES.write('resume', legacy); SAVES.write('checkpoint', legacy); }
-    }
     showTitle();
   }
 

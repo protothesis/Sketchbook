@@ -51,6 +51,7 @@
       ['cells', sp.cells.length],
       ['exits', sp.exits.map((e) => `${e.id}${e.facing}${e.connectionId ? '·' + e.connectionId : '·open'}`).join(' ')],
       ['mood', `${sp.meta.mood}, hue ${sp.meta.hue}`],
+      ['region', regionText(exp, sp)],
     ] : [['', 'Tap a space to inspect it.']];
     for (const [k, v] of rows) {
       const dt = document.createElement('dt'); dt.textContent = k;
@@ -65,10 +66,18 @@
     if (c) {
       $('candidate-text').textContent = c.type === 'loop'
         ? `Opens into ${c.targetId} — a loop`
-        : `${c.space.archetype}${c.space.deadEnd ? ' (dead end)' : ''}, ${c.space.cells.length} cells, ${c.space.exits.length - 1} new door${c.space.exits.length === 2 ? '' : 's'}`;
+        : `${c.space.archetype}${c.space.deadEnd ? ' (dead end)' : ''}, ${c.space.cells.length} cells, ${c.space.exits.length - 1} new door${c.space.exits.length === 2 ? '' : 's'}` +
+          (c.region ? ` · a new region: ${c.region.type}, ${c.region.mood}, ${c.region.size} rooms` : ` · ${c.space.role}`);
       $('reroll-btn').disabled = c.type === 'loop';
     }
     redraw();
+  }
+
+  /** "g3 catacomb · damp · 4/12 rooms · gallery" for the inspector. */
+  function regionText(exp, sp) {
+    const g = exp.regions[sp.regionId];
+    if (!g) return '—';
+    return `${g.id} ${g.type} · ${g.mood} · ${DE.regionSpent(exp, g.id)}/${g.size} rooms · ${sp.role}`;
   }
 
   function save() {

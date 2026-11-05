@@ -755,7 +755,7 @@
       ['collapses', run.collapses], ['rooms collapsed', run.roomsCollapsed], ['charges spent', run.chargesSpent],
       ['entropy left', chargeText(run.fuel)],
       ['waystones awake', state.waystones.filter((o) => o.awake).length],
-      ['waypoints reached', Object.values(exp.reserves || {}).filter((r) => r.spaceId).length],
+      ['waypoints reached', Object.values(exp.reserves || {}).filter((r) => r.spaceId && r.pin).length],
       ['passed out', run.gutters || 0],
       ['rooms lost to faints', run.roomsLost || 0],
       ['paths retraced', run.retraces || 0],
