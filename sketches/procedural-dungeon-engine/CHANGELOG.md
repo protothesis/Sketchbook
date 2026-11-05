@@ -1156,6 +1156,31 @@ All notable changes to this sketch are logged here, per
 
 ### Fixed
 
+- 2026-11-05: **Lost paths hold their ground again, and come back whole
+  (build 3).** Since regions, `stress-test.js` failed most runs on its
+  held-ground checks: a room lost to a faint could be built over, or
+  couldn't be retraced. There were three causes, all fixed in
+  `engine/expedition.js`:
+  - A lost room that stood on a reserve (a cloister walk) put the reserve
+    back to waiting, and another door could build it there again under a
+    new id. `expand` now checks held ground before reserves.
+  - What a lost cloister walk had claimed ahead (the rest of its ring and
+    its courtyard) went dormant and stopped holding the ground, so other
+    rooms grew there and the walk could never come back. `heldAt` now
+    counts those claims as the lost room's ground, and no new door faces
+    a held courtyard.
+  - A restored room drew its doors again, and rooms built nearby since
+    could shift those draws. Its doors then came out in other places, so
+    its lost children's doors no longer led to their ground. Traces now
+    keep their doors (`exits`, `nextExitIndex`), and a room comes back
+    with exactly those.
+  - In walk mode, a door facing a lost walk's held ring or courtyard is a
+    door onto that lost path (retrace or let go), like a door onto its
+    rooms.
+  - `BUILD` is now 3: records and saves from build 2 no longer load. With
+    this, 25 stress-test runs in a row pass, and so do 1,000 seeded
+    held-ground runs (57 of 300 failed before).
+
 - 2026-11-05: **A full stack of tools spills into a new cell.** With a
   full stack of something (6 jars, 9 keys, 10 sticks of a chalk colour),
   picking up one more said "no room for it in your pack" even with empty
