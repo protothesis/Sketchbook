@@ -22,7 +22,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { THREE, S, SPEED, RUN, CAM_OFFSET, camera, state } = W;
+  const { THREE, S, PLAYER, CAM_OFFSET, camera, state } = W;
 
   const CAMERA = {
     smooth: 0.15,     // s: the follow's spring (bigger: more drag and lag)
@@ -63,6 +63,7 @@
 
   /** How far ahead to look at a speed (cells/s). */
   function leadAt(speed) {
+    const { speed: SPEED, run: RUN } = PLAYER;
     if (speed <= SPEED) return CAMERA.lookWalk * speed / SPEED;
     return CAMERA.lookWalk + (CAMERA.lookRun - CAMERA.lookWalk) * Math.min(1, (speed - SPEED) / (RUN - SPEED));
   }

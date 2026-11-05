@@ -397,7 +397,7 @@
 
   const kindOf = (b) => b.chest ? 'chest' : b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block';
   // Dragging speed, cells a second: lighter things move quicker; pulling is slower.
-  const DRAG = { crate: 0.55 * W.SPEED, chest: 0.5 * W.SPEED, vessel: 0.6 * W.SPEED, block: 0.35 * W.SPEED, waystone: 0.35 * W.SPEED };
+  const DRAG = { crate: 0.55, chest: 0.5, vessel: 0.6, block: 0.35, waystone: 0.35 }; // × PLAYER.speed
   const PULL = 0.7;
   // Heft: how fast it gets going (cells/s²); it stops HEFT_STOP times as fast.
   const HEFT = { crate: 8, chest: 7, vessel: 9, block: 3, waystone: 3 };
@@ -428,7 +428,7 @@
       along = 0;
     }
     const k = kindOf(b);
-    const want = along * DRAG[k] * (along < 0 ? PULL : 1);
+    const want = along * DRAG[k] * W.PLAYER.speed * (along < 0 ? PULL : 1);
     const speedingUp = want && Math.sign(want) === Math.sign(g.v || want) && Math.abs(want) >= Math.abs(g.v);
     const a = HEFT[k] * (speedingUp ? 1 : HEFT_STOP) * dt;
     g.v = g.v < want ? Math.min(want, g.v + a) : Math.max(want, g.v - a);
@@ -472,7 +472,7 @@
       if (ok && Math.hypot(ex, ey) < RADIUS - 1e-3) ok = false;
     }
     if (!ok) { finishGrab(); return; }
-    const T = THREE.MathUtils.clamp(2 * Math.max(Math.abs(a), Math.abs(c)) / DRAG[kindOf(b)], 0.08, 0.2);
+    const T = THREE.MathUtils.clamp(2 * Math.max(Math.abs(a), Math.abs(c)) / (DRAG[kindOf(b)] * W.PLAYER.speed), 0.08, 0.2);
     g.settle = { bx: -b.ox, by: -b.oy, fx: follow ? -a * ax : 0, fy: follow ? -a * ay : 0, k: 0, T };
   }
 
@@ -811,6 +811,42 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
     }
     return false;
   }
+  // ---------------------------------------------------------------------------
+  // The dev panel's hands (dev.js): objects made and unmade anywhere.
+
+  /** A new loose object `o` ({ kind, ... }) at half-cell (o.sx, o.sy), resting on what's there. Null if it can't go there. */
+  function devPlaceObject(key, o) {
+    const room = state.exp.registry[cellOf(o.sx, o.sy)];
+    if (room === undefined || !state.spaces.get(room) || inDoorMouth(o.sx, o.sy)) return null;
+    const base = restHeight(o.sx, o.sy, null);
+    if (base === null || levelOf(base) + 1 > STACK_MAX) return null;
+    o.lv = levelOf(base);
+    state.run.objects[key] = o;
+    const b = makeObject(key, o);
+    inRoom(b, room);
+    b.mesh.position.set((b.x0 + 0.25) * S, b.base * S, (b.y0 + 0.25) * S);
+    state.pushBlocks.push(b);
+    indexBlock(b, true);
+    return b;
+  }
+
+  /** What an object `o` would look like: its mesh alone, in no room and not in the world. */
+  const devPreviewMesh = (o) => makeObject('dev:preview', o).mesh;
+
+  /** A loose object gone for good. False if something rests on it. */
+  function devRemoveObject(b) {
+    if (b.carried || loaded(b)) return false;
+    const run = state.run, o = run.objects[b.key];
+    indexBlock(b, false);
+    if (b.mesh.parent) b.mesh.parent.remove(b.mesh);
+    state.pushBlocks = state.pushBlocks.filter((x) => x !== b);
+    delete run.objects[b.key];
+    // Listed as despawned, so its room doesn't make it again when rebuilt.
+    if (o) run.despawned.push({ key: b.key, kind: o.kind, color: o.color || null, holds: o.holds || null, n: o.n || 0, room: b.spaceId, at: Math.round(run.walked), dev: true });
+    if (run.despawned.length > 200) run.despawned.shift();
+    return true;
+  }
+
   /** Can something be set on top of `o` (KINDS)? A loose object by its kind; anything else, unless it's a jar. */
   const bearsStack = (o) => (o.push ? !!(KINDS[kindOf(o)] || {}).bearsStack : !o.jar);
   /** Where something set on `o` rests: a whole number of units up (a vessel is a little short of one). */
@@ -1033,7 +1069,7 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
   /** Your walking speed carrying `b`, as a share of the usual. */
   const carryPace = (b) => CARRY_PACE[kindOf(b)];
 
-  Object.assign(W, { SCONCE_Y, carryPace, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
+  Object.assign(W, { SCONCE_Y, carryPace, devPlaceObject, devPreviewMesh, devRemoveObject, addPushBlocks, buildCarried, pruneObjects, despawnObjectsIn, saveObject, liftNear, liftBlock, startGrab, endGrab, grabInput, blockSpot,
     setDownBlock, updatePushBlocks, addSconces, KINDS, covered, SHADOW_FADE,
     sconceNear, lightSconce, snuffSconce, updateSconces, SCONCE_LIGHT, sconceLight, sconcePools });
 })(window);

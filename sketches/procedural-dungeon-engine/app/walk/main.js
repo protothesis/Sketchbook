@@ -4,8 +4,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, THREE, $, S, WALL_H, RADIUS, SPEED, RUN,
-    CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, DOOR_SWING,
+  const { DE, DP, THREE, $, S, WALL_H, RADIUS, PLAYER,
     DITHER_RADIUS, LANTERN, renderer, scene, camera, state, world, freshRun,
     isLockedNow, save, savePlayer, dither, doorMat, buildWorld, easeOut, easeInOut,
     applyReveal, applyDissolve, figure, bodyRig, lantern, fill, resolveCollisions, placeLamp,
@@ -35,7 +34,7 @@
     }
 
     if (inp.mag > 0) {
-      const sp = (state.crouch ? CROUCH_SPEED : inp.run ? RUN : SPEED) * inp.mag * (state.carry ? W.carryPace(state.carry) : 1);
+      const sp = (state.crouch ? PLAYER.crouchSpeed : inp.run ? PLAYER.run : PLAYER.speed) * inp.mag * (state.carry ? W.carryPace(state.carry) : 1);
       p.x += inp.x * sp * dt;
       p.y += inp.y * sp * dt;
       const target = Math.atan2(inp.x, inp.y);
@@ -109,7 +108,7 @@
     fill.position.set(p.x * S, 1.0 * S, (p.y + 0.6) * S);
     state.crouchAmt += ((state.crouch ? 1 : 0) - state.crouchAmt) * Math.min(1, dt * 10);
     const ca = state.crouchAmt;
-    bodyRig.scale.y = 1 - (1 - CROUCH_SCALE) * ca;
+    bodyRig.scale.y = 1 - (1 - PLAYER.crouchScale) * ca;
     bodyRig.position.y = moving ? Math.abs(Math.sin(p.phase)) * 0.05 * S * (1 - 0.7 * ca) : 0;
     // Never let the lantern rise above the walls (it would light other rooms).
     placeLamp(p, Math.max(0.2, Math.min(0.75 - 0.4 * ca, WALL_H - 0.15 - p.z)));
@@ -123,7 +122,7 @@
         for (const b of state.blockAt.get(DE.key(cx + dx, cy + dy)) || []) {
           if (b.top - p.z < 0.38) continue; // must rise above a crouched figure
           const ex = Math.max(b.x0 - p.x, 0, p.x - b.x1), ey = Math.max(b.y0 - p.y, 0, p.y - b.y1);
-          if (Math.hypot(ex, ey) < RADIUS + HIDE_RANGE) { hidden = true; break; }
+          if (Math.hypot(ex, ey) < RADIUS + PLAYER.hideRange) { hidden = true; break; }
         }
       }
     }
@@ -154,7 +153,7 @@
     // Doors swinging open (dir 1) or shut (dir -1).
     for (const d of state.doors.values()) {
       if (!d.dir) continue;
-      d.t = THREE.MathUtils.clamp(d.t + d.dir * dt / DOOR_SWING, 0, 1);
+      d.t = THREE.MathUtils.clamp(d.t + d.dir * dt / PLAYER.doorSwing, 0, 1);
       d.pivot.rotation.y = d.openAngle * easeOut(d.t);
       if (d.dir < 0 && d.t <= 0) {
         d.seam.visible = true;

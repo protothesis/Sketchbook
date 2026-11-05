@@ -129,6 +129,46 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-11-01: **Dev panel, second pass: hands in the world.**
+  - **Place by clicking the game.** With the panel open, the Cheats tab's
+    palette arms a block (crate, block, vessel, waystone) or a creature
+    (ghost, pixie, creeper). Then a click on the game puts it there. A yellow
+    ring shows where it will go, and blocks stack on whatever top you click.
+    "move player" puts you where you click. Click the button again, or
+    press Esc, to stop. Blocks no longer appear in your hands, and creatures
+    no longer appear in front of you.
+  - **Pick and delete.** With nothing armed, a click picks the creature or
+    loose object under the cursor (ringed). Delete or Backspace, or the
+    delete button, removes it. A block with something on it refuses until
+    that's taken off. A deleted room object doesn't come back when its
+    room is rebuilt.
+  - **Give is split** into lamp and stamina (+1 shard, ±1 charge,
+    stamina full or −¼, faint) and items for your bag. Blocks moved to the
+    palette.
+  - **Dropdowns start closed**, and the ones you open are remembered.
+    Double-click a tab to open or close all of its dropdowns.
+  - **One dropdown per creature** in the Creatures tab (Creeper, Ghost,
+    Pixie), with each creature's spawn chances with it. Senses, drain,
+    moving and the rest are their own dropdowns inside it, closed by default.
+  - **A see-through preview** of what's armed (the real block, waystone or
+    creature) follows the cursor, self-lit so it reads in a dark room.
+- 2026-11-01: **The dev panel is organized.** Tabs replace the one long
+  scroll: Cheats, Player, Creatures, Lamp & light, World, FX and Changes.
+  Each tab is split into sections by what you're tuning ("Creeper · drain",
+  "Loot", "Halo"). The sections come from the new `app/walk/dev-meta.js`,
+  which also gives every number a unit and a one-line description, shown
+  in a tooltip beside the panel when you hover its name (along with its path and
+  default). Sections and numbers that only take effect on new rooms or new
+  runs are badged. A search box looks across every tab (names, paths,
+  descriptions), "changed only" shows just your tweaks, each section has
+  its own reset, and each tab shows how many of its numbers you've changed.
+  Two-number ranges (`rest: [0.7, 2]`) are one row with a min and a max.
+  Chances and shares get 0–1 sliders. Any number `dev-meta.js` doesn't
+  know yet still shows, in an "Other" tab, so new ones aren't lost.
+- 2026-11-01: **Movement is tunable.** Walk, run and crawl speeds, crouch
+  height, hiding range, gravity, use and pickup reach and door swing time
+  move from constants into a `PLAYER` table, read every frame, so the dev
+  panel's Player tab can tune them live. (The unused `PUSH_TIME` is gone.)
 - 2026-10-27: **Controls: the lamp leaves the hotbar, use moves to RT.**
   The lantern is no longer a hotbar slot: R (R3) is the lamp, and with
   nothing in hand that wants it, F at a dormant waystone wakes it from

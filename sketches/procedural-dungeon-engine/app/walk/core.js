@@ -49,13 +49,19 @@
   const DOOR_H = 1.0;
   const JAMB = (1 - DOOR_W) / 2;
   const RADIUS = 0.2;
-  const SPEED = 2.4;
-  const RUN = 4.0;
-  const CROUCH_SPEED = 1.1; // a crawl
-  const CROUCH_SCALE = 0.55; // figure height when crouched (standing is ~0.64 cells tall)
-  const HIDE_RANGE = 0.2;
+  // Moving about, read every frame (so the dev panel can tune it live).
+  const PLAYER = {
+    speed: 2.4,          // cells/s, walking
+    run: 4.0,            // cells/s, running
+    crouchSpeed: 1.1,    // cells/s: a crawl
+    crouchScale: 0.55,   // figure height when crouched (standing is ~0.64 cells tall)
+    hideRange: 0.2,      // cells: crouch this near a block taller than you and you hide
+    gravity: 30,         // cells/s^2: falling, and rising once jump is let go
+    useRange: 0.6,       // cells: E / tap reach to a door's midpoint
+    pickupRange: 0.42,   // cells: walk this close to an item and you take it
+    doorSwing: 0.6,      // seconds a door takes to swing open
+  };
   const UNIT = RULES.blockUnit; // one stacked block unit, in cells
-  const GRAVITY = 30;           // cells/s^2: falling, and rising once jump is let go
   // Jumping (figure.js): take-off speed (cells/s), gravity while jump is held
   // and you're still rising, the most rising speed left once it's let go, a
   // hop's take-off speed (a block in your hands, or a press let go before
@@ -68,10 +74,6 @@
   // (1/s): how fast the figure catches up when a lip lifts you, instead of
   // popping up.
   const JUMP = { v: 5.0, riseG: 20, cut: 0.5, hop: 2.2, coyote: 0.1, buffer: 0.12, ledge: 0.1, foot: 0.17, ease: 18 };
-  const PUSH_TIME = 0.35;   // seconds of walking into a door to open it
-  const USE_RANGE = 0.6;    // E / tap reach to a door's midpoint
-  const PICKUP_RANGE = 0.42;
-  const DOOR_SWING = 0.6;   // seconds
   const SWING_ANGLE = THREE.MathUtils.degToRad(92);
   const REVEAL_STEP = 0.07; // seconds of delay per cell from the door
   const REVEAL_DUR = 0.45;
@@ -378,8 +380,8 @@
   }
 
   Object.assign(W, { DE, DP, RULES, THREE, $, STORAGE_KEY, PLAYER_KEY, S, WALL_H, WALL_T,
-    DOOR_W, DOOR_H, JAMB, RADIUS, SPEED, RUN, CROUCH_SPEED, CROUCH_SCALE, HIDE_RANGE, UNIT,
-    GRAVITY, JUMP, PUSH_TIME, USE_RANGE, PICKUP_RANGE, DOOR_SWING, SWING_ANGLE,
+    DOOR_W, DOOR_H, JAMB, RADIUS, PLAYER, UNIT,
+    JUMP, SWING_ANGLE,
     REVEAL_STEP, REVEAL_DUR, DISSOLVE_DUR, DITHER_RADIUS, DITHER_APPROACH, CAM_OFFSET, SEAM,
     LOCK_SEAM, OPEN_SEAM, LANTERN, LANTERN_RANGE, OPP, ekey, canvas, renderer, scene, camera, state, world,
     freshRun, rebuildExitIndex, isLockedNow, isClosed, rerollThrough, ownsDoorPanel, CHALK, chargeText, el, save, migrateRun,

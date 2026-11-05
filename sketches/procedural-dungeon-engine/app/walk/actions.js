@@ -8,7 +8,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, RADIUS, USE_RANGE, UNIT, DOOR_W, DOOR_H, PUSH_TIME, state, rebuildExitIndex, isLockedNow, chargeText, save,
+  const { DE, DP, RULES, RADIUS, PLAYER, UNIT, DOOR_W, DOOR_H, state, rebuildExitIndex, isLockedNow, chargeText, save,
     savePlayer, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows, dissolveSpace, edgeEnds,
     removeMarkFromWorld, markNear, wipeMarksIn,
     liftNear, sconceNear, lightSconce } = W;
@@ -34,7 +34,7 @@
     const exp = state.exp;
     const sp = exp.spaces[exp.registry[DE.key(Math.floor(p.x), Math.floor(p.y))]];
     if (!sp) return null;
-    let best = null, bestD = USE_RANGE;
+    let best = null, bestD = PLAYER.useRange;
     const fx = Math.sin(p.angle), fy = Math.cos(p.angle);
     for (const ex of sp.exits) {
       const [ax, ay, bx, by] = edgeEnds(ex.cell.x, ex.cell.y, ex.facing);

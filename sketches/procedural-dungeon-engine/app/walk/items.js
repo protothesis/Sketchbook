@@ -4,7 +4,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, DP, RULES, THREE, $, S, RADIUS, PICKUP_RANGE, scene, state, CHALK, el, savePlayer,
+  const { DE, DP, RULES, THREE, $, S, RADIUS, PLAYER, scene, state, CHALK, el, savePlayer,
     geo, doorMat, passable } = W;
 
   // ---------------------------------------------------------------------------
@@ -167,8 +167,8 @@
       if (ITEMS[it.item.kind].cls === 'object') continue;
       const dx = p.x - (it.item.cell.x + 0.5), dy = p.y - (it.item.cell.y + 0.5);
       const d2 = dx * dx + dy * dy;
-      if (it.fresh) { if (d2 > PICKUP_RANGE * PICKUP_RANGE * 2) it.fresh = false; continue; } // just dropped: step off it first
-      if (d2 > PICKUP_RANGE * PICKUP_RANGE) { if (fullAt === k) fullAt = null; continue; }
+      if (it.fresh) { if (d2 > PLAYER.pickupRange * PLAYER.pickupRange * 2) it.fresh = false; continue; } // just dropped: step off it first
+      if (d2 > PLAYER.pickupRange * PLAYER.pickupRange) { if (fullAt === k) fullAt = null; continue; }
       const cls = ITEMS[it.item.kind].cls;
       if ((cls === 'tool' || cls === 'collectable') &&
           !W.fits(state.run, { kind: it.item.kind, color: it.item.color || (it.item.kind === 'chalk' ? 'silver' : undefined),

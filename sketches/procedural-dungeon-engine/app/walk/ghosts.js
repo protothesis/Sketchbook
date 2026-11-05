@@ -355,5 +355,5 @@
     return gone.length;
   }
 
-  Object.assign(W, { GHOST, addGhost, clearGhosts, updateGhosts, ghostIn, banishGhostsIn });
+  Object.assign(W, { GHOST, addGhost, removeGhost, clearGhosts, updateGhosts, ghostIn, banishGhostsIn });
 })(window);

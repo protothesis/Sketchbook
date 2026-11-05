@@ -11,7 +11,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { DE, THREE, S, PICKUP_RANGE, scene, state, savePlayer, chargeText } = W;
+  const { DE, THREE, S, PLAYER, scene, state, savePlayer, chargeText } = W;
 
   const PENDING = new Set(['lost', 'lost-dim']);
 
@@ -164,7 +164,7 @@
       const s = (0.12 + 0.3 * k) * S * (1 + 0.08 * Math.sin(state.time * 3 + pk.x));
       m.glow.scale.set(s, s, 1);
       m.glow.material.opacity = pk.fuel > 0.01 ? 0.35 + 0.4 * k : 0;
-      if (p.z <= 0.05 && Math.hypot(p.x - pk.x, p.y - pk.y) <= PICKUP_RANGE) takePack(pk);
+      if (p.z <= 0.05 && Math.hypot(p.x - pk.x, p.y - pk.y) <= PLAYER.pickupRange) takePack(pk);
     }
   }
 
