@@ -1,8 +1,9 @@
 # Style system: draft spec
 
 **Started:** 2026-10-12. **Status:** agreed in a design session; migration
-steps 1–4 built on 2026-10-12, except step 4's frame circle (see *As built
-so far* at the end). The look
+steps 1–4 and a first cut of step 6 (`board` plus the Look switcher) built
+on 2026-10-12. Step 5 (generator areas) isn't built; renderer stop-gaps
+stand in. See *As built so far* at the end. The look
 it should produce first is in [`visual-direction.md`](visual-direction.md).
 
 ## Goal
@@ -317,7 +318,7 @@ Each step is shippable on its own:
 - Do style IDs get saved with locked places in the atlas, or is style
   always a view choice?
 
-## As built so far (steps 1–4)
+## As built so far (steps 1–4, 6)
 
 Where the code differs from the draft above, for whoever picks up step 4:
 
@@ -404,3 +405,235 @@ Step 4 (focus clip and patterns; the frame circle isn't built yet):
 - `natural` uses none of this and is pixel-identical (diff harness, 7
   towns × 16 zooms and states).
 
+Step 6, first cut (`ui/styles/board.js` and the Look switcher):
+
+- **Picking a style:** only the switcher exists so far. It's a select
+  under Layers, V cycles it, and it's kept in the URL as `st` (left out
+  for `natural`). Natural is still the default. Place overrides, profile
+  and planet defaults aren't built. A style with `dev: true` is left out
+  of the switcher.
+- **Frame:** `style.frame` (`shape: 'circle'`, `centre: 'origin' |
+  'settlement'`, `r`) clips every world-space layer unless it sets
+  `frame: false`. It's applied in the same `save()` as the focus clip.
+  Screen layers and `.unclipped` functions aren't framed. A road's run to
+  its exit is drawn outside it, like the focus clip. `board` lets the
+  shore run past it.
+- **`terrain.bands`** is baked once per settlement and style. Paint:
+  `{ ground, fill, alpha, water, shallow, shallowDepth }`. Band k of n
+  mixes `ground` toward `fill` by `alpha · k / n`. Without `ground`, the
+  land is left transparent. Water is flat.
+- **Stop-gap areas** now include `settled` (buildings and squares grown
+  by 9 m, holes kept, small bits dropped) and `forest` (where tree-crown
+  coverage, blurred 12 m, passes 0.42). They're built by `rasterArea()`,
+  which `boundary` uses too. `S.areas` still wins.
+- **Tints:** `'name~k'` mixes toward `palette.paper` when the palette has
+  one, else toward the map paper as before. That's how board keeps its
+  light paper inside the frame in dark mode, while the surround follows
+  the theme. That's a small departure from "dark mode: no change", in
+  board's favour.
+- **Highlight:** `states.highlight[layer.match]` (for example
+  `'building.*': { fill: '@category', stroke, width }`) is applied by the
+  generic `fill` to items of the highlighted category.
+- **Fonts:** `caps: true` and `tracking` (in ems, through
+  `ctx.letterSpacing` where supported, reset every frame) work in every
+  label function. `halo.width` 0 skips the halo. Board keeps a thin paper
+  halo for now, because labels over hatching need it.
+- **Board's departures from the draft:**
+  - Roads have a grey casing at every zoom: white on near-white paper
+    vanished.
+  - Main roads get an ink edge from 1.2.
+  - Floor plans reuse natural's `buildings` function from zoom 7, in
+    board colours.
+  - Forests outside the boundary are a dotted hairline.
+  - Lone trees show inside from zoom 1.6.
+- **Performance:** board isn't baked, so a 9,000-person city costs about
+  30–55 ms per frame, against natural's baked layers. The first frame
+  adds about 80 ms for the areas. Baking the generic fills is the obvious
+  next step if it feels sluggish.
+
+Revised after the first look (2026-10-12):
+
+- **Frame:** board now frames only what needs a hard edge, mainly open
+  water, so a coastline ends on the arc. The bands, contours and the
+  territory ground aren't framed. The bands and contours use a layer
+  `fade: { inner, outer }`: drawn offscreen, then faded radially from the
+  origin (`destination-in`), so the land dissolves before the tile's
+  square edge. Focus and frame don't apply to a faded layer.
+- **Paper:** `style.paper` other than 'theme' is a colour reference used
+  for the whole canvas. Board uses its palette's paper, so the land and
+  the surround match, in dark mode too.
+- **Water** is a feature now: `water.*` gives one item whose rings are
+  traced from the terrain at the water line. The height grid is upsampled
+  2× (bilinear), traced with marching squares and given one Chaikin pass,
+  then cached as `renderer.terrainRings('water')`. `terrain.bands` uses
+  the same tracer per contour level (`terrainRings(k)`). Each level is
+  filled at `alpha / levels`, so it's vector and crisp, with no bake. The
+  first frame costs about 0.5 s for this plus the areas.
+- **`area.territory`** (stop-gap) is the focus area for board. It's the
+  farmed extent grown by 40 m, unioned with a disc 0.76 × the frame's
+  radius on the frame's centre. The disc has a seeded fbm edge and pulls
+  in over ground higher than the town. Step 5 should decide whether this
+  becomes a generator area (it probably should, alongside `boundary`).
+- **The exit rule for 'outside' layers:** their exit pass keeps the
+  outside-focus clip (only the frame is dropped). That way a grey
+  context casing doesn't paint over the inside part of a road.
+- Board drops settled ground and the woodland crown pattern: roads,
+  squares and buildings are white with no outline on grass, and woods
+  are flat, darker green.
+
+Revised after the second look (2026-10-12):
+
+- **`area.territory`** no longer has a disc; it was too big and
+  disconnected. It's the fields, buildings and squares grown by 60 m and
+  smoothed, unioned with 70 m arms along the roads. The arms taper to
+  nothing between the farmland's reach (its 90th-percentile distance from
+  the centre) and about 1.7 × that, with a seeded fbm edge. An outlying
+  farmstead with fields can make a separate island.
+- **Area parts:** `renderer.area(key)` returns `{ rings, bounds, parts }`.
+  `parts` is each outer ring with its holes (`areaParts`), and
+  `features('area.x')` gives one item per part. `renderer.focusShare(part)`
+  samples how much of a part is inside the focus area (cached; the focus
+  area is rasterised at 512² for the test). Board uses it to fill a wood
+  whole when it's at least 40% inside, or else to hatch and outline it.
+- **Filters:** a value can be `{ min, max }`, meaning [min, max).
+- **`fade: 'focus'`** masks a faded layer with `renderer.focusMask()`: the
+  focus area rasterised at 192², box-blurred over about a fifth of the
+  map, roughened with fbm and smoothstepped. It's drawn with smoothing
+  over the tile, so it's soft and uneven rather than a circle. Board's
+  contours and outside-wood hatch use it.
+- **Board's topography sits over the ground now:** bands (ink at 0.2
+  across all levels) are `focus: 'inside'` only, and contours (ink, alpha
+  0.3 at zoom 0.08 to 0.5 at zoom 1) run everywhere with the focus fade.
+- The first frame of a town in board costs about 0.9 s (areas, wood
+  shares, the mask and the terrain rings), then 5–45 ms a frame.
+
+Revised after the third look (2026-10-12):
+
+- **Territory is bent to the land** (`territoryGrid`). After the "use"
+  field (fields, buildings, squares and tapering road arms), the ground
+  is split into contour-band regions by flood fill on the 256² grid.
+  - A region at least 55% inside is taken in whole if it closes up
+    nearby: its outside part is under half the territory and it doesn't
+    touch the map edge.
+  - A region at most 20% inside that clips under 15% of the territory is
+    carved out, except within 35 m of fields, buildings and squares.
+  - Then a light blur, and tracing.
+  - `area.reach` is that grid blurred about 60 m, roughened, and traced
+    at 0.25.
+- **Layer `within: 'area.x'`** adds an inside-clip to another area (none:
+  nothing). Board shades woods and lakes that are mostly outside within
+  `area.reach`, so the shading runs a little past the territory edge on a
+  crisp, uneven line, not an opacity fade. Beyond it they're hatched.
+- **Water is an area:** `STOPGAP_AREAS.water` gives the terrain rings, so
+  water gets parts, `focusShare`, and a `sea` flag (the part runs off the
+  tile's edge). It's keyed `water.sea` / `water.lake`.
+- **`renderer.areaGrid(key)`** is a 512² raster of any area with
+  `.has(x, y)`. `focusShare` and the trees' `outside` use it.
+  `renderer.treesOutside(key)` caches a tree grid without the trees in
+  that area.
+- **Patterns:** `px` makes the period at least that many screen pixels,
+  so the hatch shows at any zoom. It scales with zoom then, by design.
+- **`focusMask`:** the blur (over about 0.45 W) is normalised to its
+  peak, smoothstepped from 0 to 0.15, given a floor of 0.45, and faded to
+  0 between 0.36 W and 0.5 W from the origin. Contours now show faintly
+  across most of the map.
+- **Board's order:** territory, then wood hatch and wood shading, then
+  bands and contours, then fields, squares and water.
+- The first frame now costs about 1.2 s (band flood fill, areas, wood
+  and lake shares, mask, terrain rings). Fine for a sketch; caching or
+  moving it to the engine (step 5) would cut it.
+
+Revised after the fourth look (2026-10-12):
+
+- **`territoryGrid` steps are now use → join → snap → blur.** The old
+  whole-band take-in and carve rule is gone; it rarely fired, and when it
+  carved it shrank the town too far.
+  - **Join** (`joinAlongRoads`): from the town's piece, a breadth-first
+    search runs through territory and road cells. Road cells come from the
+    ways rasterised 20 m (or 2 cells) wide. Each other piece with fields
+    or buildings in it that the search reaches is joined by its path,
+    widened 25 m.
+  - **Snap** (`snapToContours`): the zone within 150 m outside the edge
+    (and, carving, 80 m inside it) is split into runs of one contour band.
+    A run that touches the territory and barely meets the same band
+    beyond the zone (at most 3 cells or 8%) is closed off by a contour,
+    so it's taken in or carved out. Carving spares cells within 35 m of
+    fields, buildings and squares. Water counts as a closing edge. In the
+    valley test town it adds about 17% and carves about 5%.
+- **`DRAW.halftone`:** paint `{ area, color, spacing, radius, reach,
+  patches, patchSize, minRadius }`. The dots sit on a staggered lattice
+  outside the area, with radius `radius × (1 − d / reach) × patch`, where
+  `d` is a chamfer distance on a 512² raster of the area and `patch` is a
+  smoothstepped fbm. They're cached per layer and settlement.
+- **Faded layers** take the focus clip and the exit rule, so board's
+  outside road casing fades out with the contours and no road end shows.
+- **Pattern `px`** periods are rounded to whole screen pixels, which
+  stopped thin horizontal hatches flickering.
+- **Trees `inside`:** only trees centred in that area are kept, drawn
+  whole and unclipped.
+- **Board:**
+  - Woods sit over the band shading, so the shading no longer stops
+    visibly at the territory edge across a wood.
+  - Lakes are all-or-nothing and unframed, so only the sea meets the
+    frame.
+  - Roads are the paper's colour.
+  - The hatches are a fixed 6 px apart with 1.1 px lines, and their
+    outlines are 1.1 px.
+- The first frame of a small town in board is about 1.4 s now; the
+  generator should own this work (step 5).
+
+Revised after the fifth look (2026-10-12):
+
+- **One trace for the land.** `renderer.heightGrid()` (the terrain grid
+  upsampled 2×) is now the only source for water, bands
+  (`terrainRings(k)`), the generic `contour.*` lines (built from the same
+  rings, every fifth level major, with the segments along the map's edge
+  left out) and the territory's edge. natural's `contours` function still
+  uses `buildContours`.
+- **`traceTerritory`.** The coarse territory grid (use, join, snap) now
+  records what each step changed (`mark`: joined, or the band of a pocket
+  taken in or carved out) and keeps the smooth use field (`base`). Each
+  height-grid node is then inside or out from that: a pocket node only if
+  it's in that pocket's own band. Its marching-squares value is signed:
+  - A node with an across-the-edge neighbour in a different band gets
+    |h − L|, with L the contour level between the two bands (the water
+    line for water). So that edge crosses exactly where the band and
+    contour rings cross.
+  - Other nodes get |base − 0.5| scaled to one interval.
+  - Then one Chaikin pass, like the rings.
+  - The coarse `inside` field still drives `reach` and the focus mask.
+- **Halftone dots** carry their band and are shaded with the bands' paint
+  (`shade: { fill, alpha }`): band b mixes ground toward fill by
+  1 − (1 − alpha / levels)^b, the same as the stacked band fills.
+- **`fade: 'halftone'`** uses the style's `halftoneFade: { area, spacing,
+  minPx, reach, size, gamma }`.
+  - Per frame, a mask canvas gets the area filled, then hex-grid dots of
+    radius `size × spacing × cover`. `cover` is (1 − d / reach)^gamma,
+    with d from `areaDistance` (a 512² chamfer) and reach a share of W,
+    also faded to 0 between 0.36 W and 0.49 W of the map's square edge.
+  - The grid is world-anchored, and its spacing doubles until it's at
+    least `minPx` on screen.
+  - The layer is composited `destination-in` through the mask.
+  - `renderer.fadeShare(part)` is the mean cover over a part, or 0 if the
+    part reaches past 0.46 W, where trees and so woods stop. Board hatches
+    a wood whole at 0.5 or more, else through the fade.
+- Board's contours, outside road casing and far woods use the halftone
+  fade; the focus (transparency) fade is still available.
+- The first frame of the test hamlet is about 1.9 s: territory 0.7 s,
+  wood shares and the distance field 0.5 s, the rest rings and areas.
+
+Revised after the sixth look (2026-10-12):
+
+- **The halftone fade is reversed.** The mask is now solid, with holes
+  punched (`destination-out`) of radius `size × spacing × (1 − cover)`.
+  They're nothing at the area's edge and overlapping (all cut) by `reach`
+  and before the tile's edge.
+- **Where the territory's edge rides contours.** `traceTerritory` only
+  uses the contour magnitude for a node pair across the edge in different
+  bands if one of them is in a snapped pocket or carve, or if contours
+  there are under 22 m apart (`steep`). Elsewhere it uses the smooth use
+  field. That field is now the continuous value before thresholding
+  (`g.base`), not a blurred binary, which caused rounded stair steps
+  when traced on the fine grid. So: smooth edges in the open, exact on
+  pockets, and stepped along the contours on steep ground. Road-join
+  corridors are still a little blocky (they come from coarse cells).
