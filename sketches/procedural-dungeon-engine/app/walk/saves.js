@@ -10,14 +10,16 @@
 // works. `checkpoint` is progress: written when you use a waystone, and
 // what a faint rolls back to.
 //
-// Every snapshot carries BUILD. A save from another build isn't loaded (the
-// generator may have changed, and replaying its history would build a
-// different dungeon); the title screen offers a new run instead. So bump
-// BUILD whenever a change alters what a history builds, rather than gating
-// the change behind params for old records. Within one build, replay is
-// exact. A change to the shape of `run` alone doesn't need a new build: the
-// snapshot carries `runVersion` (walk mode's RUN_VERSION, core.js), and an
-// older run is migrated as it loads (snapshots without one are version 3).
+// Every snapshot carries BUILD, the generator's build (DungeonEngine.BUILD,
+// engine/expedition.js: one number for the engine and walk mode). A save
+// from another build isn't loaded (the generator may have changed, and
+// replaying its history would build a different dungeon); the title screen
+// offers a new run instead. So bump BUILD whenever a change alters what a
+// history builds, rather than keeping old behaviour around for old saves.
+// Within one build, replay is exact. A change to the shape of `run` alone
+// doesn't need a new build: the snapshot carries `runVersion` (walk mode's
+// RUN_VERSION, core.js), and a run from an earlier version of the same
+// build is migrated as it loads.
 //
 // The backend is swappable (setBackend): anything with get / set / remove
 // of strings by key. localStorage by default.
@@ -26,7 +28,7 @@
 
   const DP = (global.DungeonPlay = global.DungeonPlay || {});
 
-  const BUILD = 1;
+  const BUILD = global.DungeonEngine.BUILD;
   const FORMAT = 'dungeon-walk-save';
   const FILE_FORMAT = 'dungeon-walk-savefile';
   const KEYS = { resume: 'dungeon-engine:save:resume', checkpoint: 'dungeon-engine:save:checkpoint' };
@@ -123,7 +125,9 @@
       const st = check(o);
       return st === 'ok' ? { status: 'ok', resume: o, checkpoint: o } : { status: st, build: o.build };
     }
-    if (o && o.version === 1 && o.rootSeed && Array.isArray(o.history)) return { status: 'record', record: o };
+    if (o && o.version === 1 && o.rootSeed && Array.isArray(o.history)) {
+      return o.build === BUILD ? { status: 'record', record: o } : { status: 'old', build: o.build || 1 };
+    }
     return { status: 'bad' };
   }
 

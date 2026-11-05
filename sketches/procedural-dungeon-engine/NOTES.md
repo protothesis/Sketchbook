@@ -23,6 +23,81 @@ Each one is a default that can change.
   `H(rootSeed | "params")`: chamber size range, corridor length range,
   corridor weight, exit bias, loop chance.
 - `meta` (hue, mood) comes from `H(seed | "meta")`, so it never shifts layouts.
+  The mood is the room's region's; the hue drifts a little from the
+  region's (see "Regions").
+
+## Versioning
+
+- One number, `DungeonEngine.BUILD` (`engine/expedition.js`, with
+  `BUILD_DATE`), versions everything that decides what a history builds:
+  the engine, and walk-mode code that feeds it (waypoint reserves). Every
+  expedition record carries it (`exp.build`, so every export does), and
+  every walk-mode save is stamped with it (`saves.js` reads the same
+  constant).
+- **Bump it whenever a change alters what a history builds.** Don't keep
+  old behaviour alive behind params so old records replay; that habit
+  (build 1's `starter`, `doorsteps`, mood params) was dropped on
+  2026-11-05.
+- A record or save from another build is refused: `importRecord` throws
+  saying which build made it, and walk mode's title says so.
+- **To look at an old record:** find the commit where `BUILD` had that
+  value (`git log -S "const BUILD = " -- engine/expedition.js`), check it
+  out (a `git worktree` keeps your current work untouched), and open that
+  checkout's `index.html` or `play.html` there. You get the game exactly
+  as it was, spawns and all, since much of a room's contents comes from
+  code, not the record. Records also store every room's cells and doors,
+  so a plain viewer could draw an old map without any generator.
+- Exported records live in `local/`, which git ignores: keep copies
+  somewhere backed up if they matter.
+
+## Regions
+
+Added 2026-11-05 (`engine/regions.js`; the catalogue and reasoning are in
+`notes/structure-types.md`).
+
+- **Data.** `exp.regions[id]` = `{ id, seed, type, mood, hue, size,
+  parentId, anchor, originId, plan? }`, ids `g0`, `g1`, ...
+  (`counters.region`). Every space has `regionId` and `role`; a room that
+  fell back from the role it was asked for (a gallery with no room becomes
+  a cubiculum) keeps `askedRole`, which its trace records so a restore asks
+  again for the same thing. Galleries and thresholds keep `heading`.
+- **Rolling.** In `expand`, `resolveRegion` decides from the room seed's
+  `region` stream whether the room stays in its parent's region (the role
+  then comes from `childRole`, on the `role` stream) or starts a new one
+  (`rollRegion(H(seed | "region"), parent, beyond)`). A new region draws
+  type, mood, hue and size each from its own stream of the region seed.
+  The root region comes from `H(rootSeed | "region")`. Layout draws are on
+  the room's own rng, as before.
+- **Budget.** `regionSpent` counts the region's rooms with a spending role
+  (room, gallery, cubicle, cell; not walks, thresholds, halls or stubs).
+  A door leaves with chance `leaveBase + leaveRamp × (spent/size)²`, always
+  once spent ≥ size.
+- **Candidates.** A new region, a cloister's plan and its claims ride on
+  the candidate (`cand.region`, `cand.plan`, `cand.claims`) and are only
+  written by `commit`, with no history events of their own: replay's
+  `expand` makes them again. A reroll leaves nothing behind
+  (`stress-test.js` checks).
+- **Regions are never removed.** Reverting a region's first room leaves
+  the region, so a restore finds it (and its plan) again.
+- **Claims.** A cloister's walk claims the rest of its ring (`kind:
+  'corridor'`, `role: 'walk'`) and its courtyard (`kind: 'void'`) as
+  reserves carrying `regionId`, `part` and `ownerId`. A void is never
+  built on: no door is generated, carved, or added facing one, and
+  `expand` refuses one. A courtyard may not cover any unopened door's
+  doorstep. Reverting the owner makes its unbuilt claims **dormant**
+  (`dormant: true`: they stop claiming ground but keep their ids), and so
+  does reverting a walk whose owner is already gone. Restoring the owner
+  wakes them (`cand.wake`), if their ground is still free.
+- **Doors.** Galleries and walks put side doors only on cells even
+  relative to the region's anchor along the wall (`onModule`), so rooms
+  off neighbouring runs line up. Walks open only outward. Loop chance by
+  role: `loopChanceFor`.
+- **Keeping it open.** When fewer than three unopened doors are left
+  anywhere, a new room keeps at least one way on (two if none are left),
+  since structured roles have few doors.
+- Applications read `space.archetype` as before (chamber, corridor, hall,
+  stub); region and role are extra. Walk mode's waypoint count counts only
+  reserves with a `pin`.
 
 ## Placement
 
@@ -118,19 +193,13 @@ Each one is a default that can change.
   file is `{ format: 'dungeon-walk-savefile', build, savedAt, resume,
   checkpoint }`; importing also accepts a single snapshot or a bare record.
   The backend is swappable (`setBackend({ get, set, remove })`).
-- **Versioning.** `BUILD` in `saves.js` stamps every snapshot. A save with
-  another build isn't loaded (title screen: "from an older build"). Bump it
-  whenever a change alters what a history builds (generator, placement,
-  anything replay touches). A change to the shape of `run` alone doesn't
-  need one: snapshots carry `runVersion` (`RUN_VERSION` in `core.js`), and
-  an older run is migrated as it loads (`RUN_MIGRATIONS`; a snapshot with
-  no `runVersion` is version 3). That replaces the old
-  habit of gating generator changes behind params for old records (the
-  existing gates, like `params.starter` and `params.hallChance`, stay but
-  needn't grow). Within one build, replay is exact.
-- Build 1 brings a save from before slots over once: the shared record
-  (`dungeon-engine:expedition`) plus `dungeon-engine:player`, through the
-  old `RUN_MIGRATIONS` in `core.js`, into both slots.
+- **Versioning.** Every snapshot is stamped with the generator's build
+  (`DungeonEngine.BUILD`; see "Versioning" above). A save with another
+  build isn't loaded (title screen: "from an older build"). A change to the
+  shape of `run` alone doesn't need a new build: snapshots carry
+  `runVersion` (`RUN_VERSION` in `core.js`), and a run from an earlier
+  version of the same build is migrated as it loads (`RUN_MIGRATIONS[v]`
+  brings version v to v + 1). Within one build, replay is exact.
 - A record's JSON is cached per slot by history length, so the
   every-second resume write doesn't re-serialize a big record.
 - **Faint** (`faint()` in `game.js`): pending lost paths age first
@@ -167,17 +236,14 @@ Each one is a default that can change.
 Added 2026-10-22 for walk mode's waypoints (see `GAME-DESIGN.md`).
 
 - **Halls** (`hallCells`) aren't grown from a door. They're placed whole, in
-  plain grid coordinates: a rectangle with notched corners. New
-  expeditions' root is one (`params.starter: 'hall'`, centred on the
-  origin). Records without `starter` replay with their root chamber, so old
-  saves are unchanged.
-- **Unmarked halls** (`params.hallChance`, `hallMinDepth`): a rare ordinary
+  plain grid coordinates: a rectangle with notched corners. The root is
+  one, centred on the origin.
+- **Unmarked halls** (`params.hallChance`, `hallMinDepth`): a rare meander
   room is a hall, grown from its door (`hallShape`, the hall in the travel
   frame with the entry on an unnotched near-wall cell). Whether it's a hall
   and its shape are drawn from the room's own `'hall'` stream, so the usual
   draws are untouched, and if it doesn't fit (three tries) the room is
-  ordinary. Records without `hallChance` never roll one, so their replays
-  don't change.
+  ordinary.
 - **Reserves** claim cells ahead of time: `reserve(exp, { seed, kind,
   cells, ...data })` records a `reserve` history event; extra fields (walk
   mode's `pin` and `tier`) are kept as-is. `reservedAt` indexes waiting

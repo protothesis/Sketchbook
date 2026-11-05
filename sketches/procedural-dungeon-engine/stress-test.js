@@ -7,6 +7,7 @@
 'use strict';
 require('./engine/rng.js');
 require('./engine/shapes.js');
+require('./engine/regions.js');
 require('./engine/expedition.js');
 const DE = globalThis.DungeonEngine;
 
@@ -37,7 +38,7 @@ function checkNoOverlap(exp) {
   for (const id in exp.reserves) {
     const r = exp.reserves[id];
     if (r.spaceId) assert(exp.spaces[r.spaceId].cells.join(';') === r.cells.join(';'), 'reserved space ' + r.spaceId + ' differs from ' + id);
-    else for (const k of r.cells) assert(exp.registry[k] === undefined, 'cell ' + k + ' of waiting ' + id + ' built on');
+    else if (!r.dormant) for (const k of r.cells) assert(exp.registry[k] === undefined, 'cell ' + k + ' of waiting ' + id + ' built on');
   }
   const seen = {};
   for (const id in exp.spaces) {
@@ -116,25 +117,68 @@ for (let run = 0; run < RUNS; run++) {
 }
 assert(totalCycles > 0, 'no cycles in any run');
 
-// Mood regions: on (the default), most rooms carry on their parent's mood;
-// off, the params carry no mood keys (rooms roll as they did before).
+// Regions: every space is in a region that exists; rooms take its mood;
+// every type turns up; type, mood and size vary independently (each type
+// is seen with more than one mood); a rerolled region-opening door leaves
+// no region or claim behind; nothing is built on a courtyard; cloisters'
+// claims go with the room that made them; and records from another build
+// are refused.
 {
-  const exp = DE.createExpedition(DE.randomRootSeed());
-  for (let i = 0; i < 200; i++) {
-    const open = [];
-    for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId && e.kind !== 'surface') open.push([id, e.id]);
-    if (!open.length) break;
-    const [sid, eid] = pick(open);
-    DE.commit(exp, DE.expand(exp, sid, eid));
+  const types = {}, moodsByType = {};
+  let regions = 0, rings = 0, rerolledAway = 0, maxSize = 0;
+  for (let run = 0; run < 8; run++) {
+    const exp = DE.createExpedition(DE.randomRootSeed());
+    for (let i = 0; i < 300; i++) {
+      const open = [];
+      for (const id in exp.spaces) for (const e of exp.spaces[id].exits) if (!e.connectionId && e.kind !== 'surface') open.push([id, e.id]);
+      if (!open.length) break;
+      const [sid, eid] = pick(open);
+      let cand = DE.expand(exp, sid, eid);
+      // Look at a candidate and let it go: nothing it would add is written.
+      if (cand.type === 'space' && (cand.region || cand.claims) && Math.random() < 0.5) {
+        const before = JSON.stringify([exp.regions, exp.reserves, exp.counters]);
+        cand = DE.expand(exp, sid, eid);
+        assert(JSON.stringify([exp.regions, exp.reserves, exp.counters]) === before, 'a rerolled candidate left something behind');
+        rerolledAway++;
+      }
+      DE.commit(exp, cand);
+      if (Math.random() < 0.04) {
+        const leaves = Object.keys(exp.spaces).filter((id) => DE.canRevert(exp, id));
+        if (leaves.length) DE.revert(exp, pick(leaves));
+      }
+    }
+    for (const id in exp.spaces) {
+      const s = exp.spaces[id], g = exp.regions[s.regionId];
+      assert(g, id + ' has no region');
+      if (!s.reserveId || exp.reserves[s.reserveId].regionId) assert(s.meta.mood === g.mood, id + ' mood differs from its region');
+    }
+    for (const r of Object.values(exp.reserves)) {
+      if (r.dormant) { assert(!exp.spaces[r.ownerId], 'claim ' + r.id + ' dormant while its room stands'); continue; }
+      if (r.kind === 'void') for (const k of r.cells) assert(exp.registry[k] === undefined, 'built on a courtyard: ' + k);
+      if (r.ownerId && !r.spaceId) assert(exp.spaces[r.ownerId], 'claim ' + r.id + ' outlived its room');
+    }
+    for (const g of Object.values(exp.regions)) {
+      regions++;
+      types[g.type] = (types[g.type] || 0) + 1;
+      (moodsByType[g.type] = moodsByType[g.type] || new Set()).add(g.mood);
+      maxSize = Math.max(maxSize, g.size);
+      if (g.plan) rings++;
+    }
+    const res = DE.importRecord(DE.exportRecord(exp));
+    assert(res.verified, 'regions: replay mismatch ' + res.mismatches.slice(0, 5).join(', '));
+    assert(DE.exportRecord(res.expedition) === DE.exportRecord(exp), 'regions: replayed record differs');
   }
-  const kids = Object.values(exp.spaces).filter((s) => s.parentId && !s.reserveId);
-  const same = kids.filter((s) => s.meta.mood === exp.spaces[s.parentId].meta.mood).length / kids.length;
-  assert(same > 0.5, 'mood regions: only ' + (100 * same).toFixed(0) + '% of rooms keep their parent\'s mood');
-  const was = DE.MOOD_REGIONS.inherit;
-  DE.MOOD_REGIONS.inherit = 0;
-  assert(!Object.keys(DE.deriveParams('x')).some((k) => k.startsWith('mood')), 'mood regions off still sets params');
-  DE.MOOD_REGIONS.inherit = was;
-  console.log(`mood regions: ${(100 * same).toFixed(0)}% of rooms keep their parent's mood`);
+  for (const t of Object.keys(DE.REGION_TYPES)) {
+    assert(types[t], 'no ' + t + ' region in 8 runs');
+    assert(moodsByType[t].size > 1, t + ' only ever came with one mood');
+  }
+  const old = JSON.parse(DE.exportRecord(DE.createExpedition('x')));
+  old.build = DE.BUILD - 1;
+  let refused = false;
+  try { DE.importRecord(old); } catch (e) { refused = /build/.test(e.message); }
+  assert(refused, 'a record from another build was replayed');
+  console.log(`regions: ${regions} across 8 runs (${Object.entries(types).map(([t, n]) => t + ' ' + n).join(', ')}), ` +
+    `${rings} cloister plans, largest budget ${maxSize}, ${rerolledAway} region rerolls left nothing; other builds refused`);
 }
 
 // Lost paths hold their ground: once 'hold' is on, rooms lost to a faint

@@ -85,7 +85,8 @@
         showCaption(`${sp.id} · ${state.arrival.text}`);
         state.arrival = null;
       } else if (sp) {
-        const kind = sp.deadEnd ? 'dead end' : sp.archetype;
+        const g = exp.regions && exp.regions[sp.regionId];
+        const kind = (sp.deadEnd ? 'dead end' : sp.archetype) + (g ? ` · ${g.type} ${sp.role}` : '');
         const sealed = DP.pastLock(exp, sp) ? ' · beyond a lock' : '';
         // A hall whose lantern isn't where you'd wake: passing through
         // doesn't move it; saving at the lantern does.

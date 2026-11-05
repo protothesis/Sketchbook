@@ -841,6 +841,13 @@ after tidying".
 
 ## 18. Mood regions (built 2026-10-25)
 
+> **Superseded 2026-11-05 by regions** (`engine/regions.js`, NOTES.md
+> "Regions", `notes/structure-types.md`). Mood is now one of three layers a
+> region rolls (structure, mood, size), and every room takes its region's
+> mood, so the per-room inheritance below and its `MOOD_REGIONS` params are
+> gone. The junction table survives: a new region's mood often follows from
+> the previous one. Kept for the reasoning.
+
 The atmosphere is the game's main character, so areas should have one,
 not a fresh mood behind every door. A first, simplest step, before moods
 do anything:
