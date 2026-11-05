@@ -82,6 +82,15 @@
       }
     }
     for (const [k, id] of margin) ground.set(k, { regionId: id, kind: 'margin' });
+    // Each region's whole ground, margin included: what its outline goes round.
+    for (const [k, v] of ground) {
+      const r = regions[v.regionId];
+      if (!r) continue;
+      const c = DE.parseKey(k);
+      const o = r.outer || (r.outer = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+      o.x0 = Math.min(o.x0, c.x); o.y0 = Math.min(o.y0, c.y);
+      o.x1 = Math.max(o.x1, c.x + 1); o.y1 = Math.max(o.y1, c.y + 1);
+    }
 
     for (const id in regions) {
       const r = regions[id];
@@ -112,33 +121,73 @@
     return `${r.g.id} ${r.g.type} · ${r.g.mood} · ${r.spent}/${r.g.size}`;
   }
 
-  /** Under the rooms: each region's ground, a soft fill (claims hatched). */
-  function drawUnder(ctx, exp, by, s, X, Y) {
+  /**
+   * Ground a cloister has claimed and not built yet. A walk to come is
+   * hatched in its region's colour; a courtyard (open air, never built on)
+   * is negative space: its region's colour with stripes cut out of it.
+   * Structure is what claims belong to, so this shows when the layer is
+   * coloured by structure or by region, never by mood. `only` limits it to
+   * those regions; `bg` is the map's background, for the cut.
+   */
+  function drawClaims(ctx, exp, by, s, X, Y, only, bg) {
+    if (by === 'mood' || s < 4) return;
     const { ground } = layout(exp);
-    const alpha = { margin: 0.22, room: 0.3, claim: 0.34, void: 0.2 };
+    const walks = [], voids = [];
+    for (const [k, v] of ground) {
+      if (only && !only.has(v.regionId)) continue;
+      if (v.kind === 'claim') walks.push([DE.parseKey(k), v]);
+      else if (v.kind === 'void') voids.push([DE.parseKey(k), v]);
+    }
+    ctx.lineWidth = Math.max(1, s * 0.06);
+    ctx.globalAlpha = 0.75;
+    for (const [c, v] of walks) {
+      ctx.strokeStyle = colorOf(exp.regions[v.regionId], by);
+      ctx.beginPath();
+      for (const t of [0.25, 0.75]) {
+        ctx.moveTo(X(c.x), Y(c.y + t)); ctx.lineTo(X(c.x + t), Y(c.y));
+        ctx.moveTo(X(c.x + t), Y(c.y + 1)); ctx.lineTo(X(c.x + 1), Y(c.y + t));
+      }
+      ctx.stroke();
+    }
+    if (voids.length) {
+      ctx.globalAlpha = 0.5;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const [c, v] of voids) {
+        ctx.fillStyle = colorOf(exp.regions[v.regionId], by);
+        ctx.fillRect(X(c.x), Y(c.y), s + 0.5, s + 0.5);
+        x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x + 1); y1 = Math.max(y1, c.y + 1);
+      }
+      // Cut stripes out, inside the courtyards only.
+      ctx.save();
+      ctx.beginPath();
+      for (const [c] of voids) ctx.rect(X(c.x), Y(c.y), s + 0.5, s + 0.5);
+      ctx.clip();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = bg;
+      ctx.lineWidth = Math.max(2, s * 0.2);
+      ctx.beginPath();
+      const span = (x1 - x0) + (y1 - y0);
+      for (let t = 0; t <= span; t += 0.5) { // "\\" stripes, against the walks' "/"
+        ctx.moveTo(X(x0 + t - (y1 - y0)), Y(y0)); ctx.lineTo(X(x0 + t), Y(y1));
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Under the rooms: each region's ground, a soft fill (claims as drawClaims). */
+  function drawUnder(ctx, exp, by, s, X, Y, bg) {
+    const { ground } = layout(exp);
+    const alpha = { margin: 0.22, room: 0.3, claim: 0.34, void: 0.12 };
     for (const [k, v] of ground) {
       const c = DE.parseKey(k);
       ctx.globalAlpha = alpha[v.kind];
       ctx.fillStyle = colorOf(exp.regions[v.regionId], by);
       ctx.fillRect(X(c.x), Y(c.y), s + 0.5, s + 0.5);
     }
-    // Claimed, unbuilt ground: hatched in its region's colour.
-    if (s >= 4) {
-      ctx.globalAlpha = 0.7;
-      ctx.lineWidth = Math.max(1, s * 0.05);
-      for (const [k, v] of ground) {
-        if (v.kind !== 'claim' && v.kind !== 'void') continue;
-        const c = DE.parseKey(k);
-        ctx.strokeStyle = colorOf(exp.regions[v.regionId], by);
-        ctx.beginPath();
-        for (const t of v.kind === 'void' ? [0.5] : [0.25, 0.75]) {
-          ctx.moveTo(X(c.x), Y(c.y + t)); ctx.lineTo(X(c.x + t), Y(c.y));
-          ctx.moveTo(X(c.x + t), Y(c.y + 1)); ctx.lineTo(X(c.x + 1), Y(c.y + t));
-        }
-        ctx.stroke();
-      }
-    }
     ctx.globalAlpha = 1;
+    drawClaims(ctx, exp, by, s, X, Y, null, bg);
   }
 
   /**
@@ -146,7 +195,7 @@
    * colour. `only` (a Set of region ids) draws just those, heavier, with a
    * wash over their ground: the highlight for hovering and selecting.
    */
-  function drawOutlines(ctx, exp, by, s, X, Y, only) {
+  function drawOutlines(ctx, exp, by, s, X, Y, only, bg) {
     const { ground } = layout(exp);
     const inset = only ? 0.1 : 0.14;
     ctx.lineWidth = only ? Math.max(2.5, s * 0.16) : Math.max(1.2, s * 0.07);
@@ -171,6 +220,8 @@
         ctx.fillStyle = colorOf(exp.regions[v.regionId], by);
         ctx.fillRect(X(c.x), Y(c.y), s + 0.5, s + 0.5);
       }
+      ctx.globalAlpha = 1;
+      drawClaims(ctx, exp, by, s, X, Y, only, bg); // a highlighted cloister shows its claims too
     }
     ctx.globalAlpha = only ? 1 : 0.85;
     for (const [id, segs] of byRegion) {
@@ -212,7 +263,8 @@
       seen.add(id);
       const text = labelText(r, s);
       const w = ctx.measureText(text).width + size * 1.1, h = size * 1.5;
-      const x = X(r.box.x0), y = Y(r.box.y0) - h - 2 * dpr;
+      const o = r.outer || r.box; // the corner of what its outline goes round
+      const x = X(o.x0), y = Y(o.y0) - h - 2 * dpr;
       if (placed.some((q) => x < q.x + q.w && x + w > q.x && y < q.y + q.h && y + h > q.y)) continue;
       placed.push({ x, y, w, h });
       ctx.fillStyle = 'rgba(20, 18, 15, 0.86)';

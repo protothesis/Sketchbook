@@ -205,7 +205,7 @@
       // Regions (regions-view.js): their ground under everything live.
       const RV = global.DungeonApp.regions;
       const reg = state.regions || {};
-      if (RV && reg.show) RV.drawUnder(ctx, exp, reg.by, s, X, Y);
+      if (RV && reg.show) RV.drawUnder(ctx, exp, reg.by, s, X, Y, colors.bg);
 
       // Traces of reverted spaces: greyed and dashed, under everything live.
       const traces = Object.values(exp.traces || {}).filter((t) => t.cause !== 'faded');
@@ -237,8 +237,8 @@
       // Region outlines over the rooms; highlighted regions on top (pinned
       // first, what the pointer is over last).
       const groups = RV ? regionHighlights(exp, state) : [];
-      if (RV && reg.show) RV.drawOutlines(ctx, exp, reg.by, s, X, Y, null);
-      for (const g of groups) RV.drawOutlines(ctx, exp, g.by, s, X, Y, g.ids);
+      if (RV && reg.show) RV.drawOutlines(ctx, exp, reg.by, s, X, Y, null, colors.bg);
+      for (const g of groups) RV.drawOutlines(ctx, exp, g.by, s, X, Y, g.ids, colors.bg);
 
       // Room contents. Hovering a kind's label previews it (if it's off) or
       // emphasises it (if it's on).

@@ -189,11 +189,14 @@ All notable changes to this sketch are logged here, per
   - **Show regions** draws each region's ground under the rooms: its rooms'
     cells plus a one-cell margin, so it shows in the gaps, with an outline
     just inside its edge. Ground a cloister has claimed and not built yet
-    is hatched.
+    is hatched: a walk to come with stripes, a courtyard (open air) as
+    negative space, its region's colour with stripes cut out. Claims show
+    whenever regions are seen by structure (the layer coloured by type or
+    region, or a highlighted cloister), never by mood.
   - **Labels only when asked for**, so a big map stays readable. Pointing
     at a region on the map shows its label. Clicking it (a room, or its
     margin) pins it, and clicking empty ground clears the pins. A label
-    sits just above the top-left of its region's ground and says more the
+    sits just above the top-left corner of its region's outline and says more the
     closer you zoom: `g3`, then `g3 catacomb · damp`, then
     `g3 catacomb · damp · 7/12 rooms` (7 rooms spent of a 12-room budget).
     Labels that would overlap are left out, the one you're pointing at
