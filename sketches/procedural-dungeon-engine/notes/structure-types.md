@@ -168,6 +168,29 @@ Built so far: **meander**, **catacomb**, **cloister**. The rest are ideas.
   reads on the map.
 - Meander is unchanged, so meander regions still blob.
 
+## Planned: a region overlay on the map
+
+**Status: planned, not built.** Playtest (2026-11-05): regions turn over
+too fast, and there's no way to see where one ends and the next begins.
+Room hue drifts from its region's, but that's too subtle to count regions
+by eye.
+
+- Draw each region as a visible shape: a shaded fill in the region's own
+  colour, or an outline (bounding box or hull) around its rooms, with a
+  small label (`g3 catacomb · damp · 7/12`). Claimed-but-unbuilt ground
+  (cloister walks, courtyards) could show hatched.
+- **A visibility toggle** in the chart view's Debug toggles (next to Grid,
+  Seed labels...), and in walk mode's map / dev panel. Off by default in
+  play.
+- Most useful together with whole-dungeon generation (opening doors
+  automatically up to N rooms, being built in another thread): generate
+  300 rooms, switch the overlay on, and see region count, size and shape at
+  a glance. Pair it with a few numbers (region count, mean and max rooms
+  per region, rooms per type) so tuning `leaveBase` / `leaveRamp` and the
+  size tails is measurable rather than felt.
+- Data it needs is all there already: `space.regionId`, `exp.regions`
+  (type, mood, hue, size), `DE.regionSpent`, and reserves with `regionId`.
+
 ## Planned: seeded region sequences (shareable runs)
 
 **Status: planned, not built.**
