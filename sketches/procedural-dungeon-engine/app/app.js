@@ -15,6 +15,8 @@
     candidate: null,
     selectedId: null,
     toggles: { grid: true, labels: false, occupancy: false, path: true },
+    // Room contents overlay (renderer.drawContents), by kind.
+    show: { creatures: false, push: false, features: false, locks: false, items: false, props: false },
   };
 
   // ---------------------------------------------------------------------------
@@ -38,6 +40,8 @@
     $('stats').textContent =
       `${s.spaces} spaces · ${s.cells} cells · ${s.connections} connections · ${s.cycles} loops · ${s.openExits} open doors`;
 
+    shapePanel(exp, s);
+
     const sp = exp.spaces[state.selectedId];
     const dl = $('inspector');
     dl.innerHTML = '';
@@ -59,6 +63,7 @@
       dl.append(dt, dd);
     }
     $('revert-btn').disabled = !sp || !DE.canRevert(exp, sp.id) || !!state.candidate;
+    $('grow-here-btn').disabled = !sp || !!state.candidate;
 
     const bar = $('candidate-bar');
     const c = state.candidate;
@@ -73,6 +78,49 @@
     redraw();
   }
 
+  /**
+   * The dungeon's shape at a glance: rooms at each depth (a bar chart, in
+   * buckets when it runs deep), dead ends, the room mix, and what the rooms
+   * hold in total (only while the contents overlay is on: it's the slow part).
+   */
+  function shapePanel(exp, s) {
+    const byDepth = [], arch = {};
+    let dead = 0;
+    for (const id in exp.spaces) {
+      const sp = exp.spaces[id];
+      byDepth[sp.depth] = (byDepth[sp.depth] || 0) + 1;
+      if (sp.deadEnd) dead++;
+      else arch[sp.archetype] = (arch[sp.archetype] || 0) + 1;
+    }
+    const maxDepth = byDepth.length - 1;
+    const per = Math.max(1, Math.ceil(byDepth.length / 60));
+    const bars = [];
+    for (let d = 0; d < byDepth.length; d += per) {
+      let n = 0;
+      for (let i = d; i < d + per; i++) n += byDepth[i] || 0;
+      bars.push({ d, n });
+    }
+    const top = Math.max(...bars.map((b) => b.n));
+    const chart = $('depth-chart');
+    chart.innerHTML = '';
+    if (s.spaces > 1) {
+      for (const b of bars) {
+        const el = document.createElement('div');
+        el.style.height = Math.max(1, Math.round((b.n / top) * 100)) + '%';
+        el.title = `depth ${b.d}${per > 1 ? '–' + (b.d + per - 1) : ''}: ${b.n} room${b.n === 1 ? '' : 's'}`;
+        chart.appendChild(el);
+      }
+    }
+    const mix = Object.entries(arch).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${v} ${k}${v === 1 ? '' : 's'}`).join(', ');
+    $('shape-stats').textContent = `Rooms by depth, 0–${maxDepth} (deepest ${maxDepth}). ${mix}, ${dead} dead end${dead === 1 ? '' : 's'}. ${s.regions} regions.`;
+
+    const on = Object.values(state.show).some(Boolean);
+    const n = on && global.DungeonApp.contentCounts(exp);
+    $('contents-stats').textContent = !n ? '' :
+      `${n.ghost} ghosts, ${n.pixie} pixies, ${n.creeper} creepers · ${n.push} push blocks · ${n.lock} locked doors · ` +
+      `${n.sigil} sigils, ${n.well} wells, ${n.chest} chests, ${n.vessel} vessels, ${n.sconce} sconces · ${n.items} items · ${n.props} props, ${n.crates} crates`;
+  }
+
   /** "g3 catacomb · damp · 4/12 rooms · gallery" for the inspector. */
   function regionText(exp, sp) {
     const g = exp.regions[sp.regionId];
@@ -80,8 +128,9 @@
     return `${g.id} ${g.type} · ${g.mood} · ${DE.regionSpent(exp, g.id)}/${g.size} rooms · ${sp.role}`;
   }
 
+  /** Autosave. Returns false if it didn't fit (a few thousand rooms can outgrow localStorage). */
   function save() {
-    try { localStorage.setItem(STORAGE_KEY, DE.exportRecord(state.exp)); } catch (e) { /* storage unavailable */ }
+    try { localStorage.setItem(STORAGE_KEY, DE.exportRecord(state.exp)); return true; } catch (e) { return false; }
   }
 
   function loadCapsInputs() {
@@ -139,6 +188,34 @@
   }
 
   function cancel() { state.candidate = null; refreshPanels(); }
+
+  function growOpts() {
+    const n = parseInt($('grow-rooms').value, 10);
+    return { rooms: n > 0 ? Math.min(n, 5000) : 400, order: $('grow-order').value };
+  }
+
+  /** Grow the current expedition (from `from`'s branch, or anywhere). */
+  function growMap(from) {
+    if (state.candidate) state.candidate = null;
+    const o = growOpts();
+    o.from = from || null;
+    const t = performance.now();
+    const r = DE.grow(state.exp, o);
+    const ms = Math.round(performance.now() - t);
+    renderer.fit(state.exp);
+    const saved = save();
+    refreshPanels();
+    setStatus(`Grew ${r.rooms} room${r.rooms === 1 ? '' : 's'}${from ? ' from ' + from : ''} (${o.order}), ${r.loops} loops, in ${ms} ms.` +
+      (r.rooms < o.rooms ? (from ? ` No unopened doors left in ${from}'s branch.` : ' No unopened doors left.') : '') +
+      (saved ? '' : ' Too big to autosave: use Export JSON to keep it.'));
+  }
+
+  /** One click: a fresh seed, grown to the chosen size. */
+  function newDungeon() {
+    const seed = DE.randomRootSeed();
+    setExpedition(DE.createExpedition(seed, readCaps()), '');
+    growMap(null);
+  }
 
   function revertSelected() {
     const id = state.selectedId;
@@ -287,6 +364,16 @@
     reader.readAsText(file);
   };
 
+  $('grow-new-btn').onclick = newDungeon;
+  $('grow-btn').onclick = () => growMap(null);
+  $('grow-here-btn').onclick = () => { if (state.selectedId) growMap(state.selectedId); };
+
+  for (const t in state.show) {
+    const el = $('c-' + t);
+    el.checked = state.show[t];
+    el.onchange = () => { state.show[t] = el.checked; refreshPanels(); };
+  }
+
   for (const t of ['grid', 'labels', 'occupancy', 'path']) {
     const el = $('t-' + t);
     el.checked = state.toggles[t];
@@ -294,7 +381,7 @@
   }
 
   document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     if (e.key === 'Enter') accept();
     else if (e.key === 'r' || e.key === 'R') reroll();
     else if (e.key === 'Escape') cancel();

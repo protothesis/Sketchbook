@@ -60,11 +60,13 @@ engine/          pure data + logic, no DOM; also loads under Node
   shapes.js        grid helpers + chamber / corridor / hall / stub generators
   expedition.js    createExpedition, expand, commit, revert, setCaps, reserve,
                    replay, exportRecord, importRecord, stats
+  grow.js          grow(): open many doors at once (random / breadth / depth)
+  contents.js      what rooms hold: props, push blocks, items, locks, where
+                   creatures start (global DungeonPlay); read by both clients
 app/             clients of the engine
   renderer.js      Canvas 2D top-down map, hit-testing, pan/zoom
   app.js           controls, inspector, pointer input, autosave
   styles.css
-  play-rules.js    walk mode's game rules: seeded loot + locks, collapse cost
   walk/            walk mode, as classic scripts loaded in this order:
     core.js          tunables, renderer/scene/camera, run state, saving
     world.js         dither, materials, building and dissolving spaces

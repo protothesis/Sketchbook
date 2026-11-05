@@ -1,5 +1,5 @@
 // Walk mode: dusting (notes/dusting-2026-10-27.md). Rooms gather dust by
-// their mood (DP.dust, play-rules.js): a thin light-grey plane a little
+// their mood (DP.dust, engine/contents.js): a thin light-grey plane a little
 // above the floor or a low block's top, in a scaled-up pixel dither whose
 // density is how many layers are left. The feather duster, a carousel stop,
 // swipes it (F or RT; one press, one swing): each swing takes a layer off

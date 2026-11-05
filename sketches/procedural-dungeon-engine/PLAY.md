@@ -6,7 +6,7 @@ it, and closing one can un-write it, at a price. This is the engine's
 "exploring *is* generating" idea, played instead of clicked on a chart.
 
 The engine stays free of game rules. Everything game-like lives in
-`app/play-rules.js`, which only reads engine data, and anything placed in
+`engine/contents.js`, which only reads engine data, and anything placed in
 the world comes from a space's seed on its own named stream (see
 Determinism).
 
@@ -660,7 +660,7 @@ gameplay at once:
 
 ## Game parameters
 
-All in `RULES` (`app/play-rules.js`) or at the top of `app/walk/core.js` (ghost tunables are in `GHOST`, in `app/walk/ghosts.js`).
+All in `RULES` (`engine/contents.js`) or at the top of `app/walk/core.js` (ghost tunables are in `GHOST`, in `app/walk/ghosts.js`).
 
 | Parameter | Value |
 | --- | --- |

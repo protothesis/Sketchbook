@@ -57,6 +57,42 @@
       </section>
 
       <section>
+        <h2>Grow</h2>
+        <div class="row">
+          <label class="grow">Rooms <input type="number" id="grow-rooms" min="1" max="5000" value="400" /></label>
+          <label class="grow">Order
+            <select id="grow-order">
+              <option value="random">Random door</option>
+              <option value="breadth">Breadth first (bushy)</option>
+              <option value="depth">Depth first (winding)</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button id="grow-new-btn" class="primary" title="A new random seed, grown to this many rooms">New dungeon</button>
+          <button id="grow-btn" title="Add this many rooms, from any open door">Grow</button>
+          <button id="grow-here-btn" title="Add this many rooms, only in the selected room's branch">Grow from selected</button>
+        </div>
+        <p class="muted small">Opens doors in bulk and keeps every room: no rerolls, faints or waypoints. Caps above still apply. The same seed, count and order always grow the same dungeon.</p>
+        <div id="depth-chart" class="depth-chart" aria-label="Rooms at each depth"></div>
+        <p id="shape-stats" class="muted small"></p>
+      </section>
+
+      <section>
+        <h2>Room contents</h2>
+        <div class="toggles">
+          <label><input type="checkbox" id="c-creatures" /> <span class="sw" style="background:#8e2fa8"></span>Creatures</label>
+          <label><input type="checkbox" id="c-push" /> <span class="sw" style="background:#e0a94a"></span>Push blocks</label>
+          <label><input type="checkbox" id="c-features" /> <span class="sw" style="background:#2f7fd1"></span>Features</label>
+          <label><input type="checkbox" id="c-locks" /> <span class="sw" style="background:#d0392b"></span>Locked doors</label>
+          <label><input type="checkbox" id="c-items" /> <span class="sw" style="background:#3fb6c9"></span>Items</label>
+          <label><input type="checkbox" id="c-props" /> <span class="sw" style="background:#a0703c"></span>Props, crates</label>
+        </div>
+        <p class="muted small">Where things start, as each room's seed places them (engine/contents.js). Creatures: <b style="color:#9fb4cc">ghost</b> · <b style="color:#c9a800">pixie</b> · <b style="color:#8e2fa8">creeper</b>. Features: sigil ◆, well ○, chests, vessels, sconces, hall waystones. Zoomed far out, only creatures, locks, push blocks, sigils and wells show.</p>
+        <p id="contents-stats" class="muted small"></p>
+      </section>
+
+      <section>
         <h2>Inspector</h2>
         <dl id="inspector" class="inspector"></dl>
         <div class="row">
@@ -81,6 +117,8 @@
   <script src="engine/shapes.js"></script>
   <script src="engine/regions.js"></script>
   <script src="engine/expedition.js"></script>
+  <script src="engine/grow.js"></script>
+  <script src="engine/contents.js"></script>
   <script src="app/renderer.js"></script>
   <script src="app/app.js"></script>
 </body>

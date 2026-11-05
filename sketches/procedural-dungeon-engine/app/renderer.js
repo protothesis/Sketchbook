@@ -5,6 +5,63 @@
 
   const DE = global.DungeonEngine;
   const CELL = 24; // px per cell at scale 1
+  const MIN_SCALE = 0.03; // far enough out to see a thousand rooms at once
+
+  // ---------------------------------------------------------------------------
+  // Room contents (engine/contents.js), for the map's overlay and counts.
+
+  // Colours for the overlay: the same in light and dark (mid tones read on both).
+  const CONTENT_COLORS = {
+    prop: null, crate: '#a0703c',
+    shard: '#3fb6c9', key: '#d9a52f', doorstone: '#8d8577', jar: '#7fb0d8', chalk: '#e6e0d2',
+    hourglass: '#c9a36a', coin: '#d9a52f', purse: '#b07a46', backpack: '#8b6b4a',
+    sigil: '#8f5bd6', well: '#2f7fd1', chest: '#9b6a2f', vessel: '#5fa082', sconce: '#e07a2a', hall: '#efe3c0',
+    lock: '#d0392b', ghost: '#9fb4cc', pixie: '#f2cf3a', creeper: '#8e2fa8',
+  };
+
+  /**
+   * Everything a room holds, from DungeonPlay, cached per room. What a room
+   * holds depends only on its seed and doors, so the cache keeps until a
+   * door is added; locks (opened or not) and the ghost (which follows
+   * imprints) are cheap, and worked out fresh each time.
+   */
+  const contentCache = new Map();
+  function roomContents(exp, sp) {
+    const DP = global.DungeonPlay;
+    if (!DP) return null;
+    const k = sp.seed + '|' + sp.exits.length;
+    let c = contentCache.get(sp.id);
+    if (!c || c.k !== k) {
+      const cells = sp.cells.map(DE.parseKey);
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const p of cells) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x + 1); y1 = Math.max(y1, p.y + 1); }
+      const hall = sp.archetype === 'hall';
+      c = {
+        k, box: { x0, y0, x1, y1 },
+        props: DP.props(sp).blocks, push: DP.pushBlocks(sp), items: DP.loot(sp),
+        sigil: DP.sigil(sp), well: DP.well(sp), chest: DP.chest(sp), vessel: DP.vessel(sp), sconces: DP.sconces(sp),
+        hall: hall ? [DP.waystone(sp), DP.saveLantern(sp)].filter(Boolean) : [],
+        pixie: DP.pixieSpawn(sp), creeper: DP.creeperSpawn(sp),
+      };
+      contentCache.set(sp.id, c);
+    }
+    c.locks = sp.exits.filter((e) => DP.isLocked(sp, e));
+    c.ghost = DP.ghostSpawn(sp, exp);
+    return c;
+  }
+
+  /** Totals across the map: { props, crates, push, items, sigil, ... }. */
+  function contentCounts(exp) {
+    const n = { props: 0, crates: 0, push: 0, items: 0, chest: 0, vessel: 0, sigil: 0, well: 0, sconce: 0, lock: 0, ghost: 0, pixie: 0, creeper: 0 };
+    for (const id in exp.spaces) {
+      const c = roomContents(exp, exp.spaces[id]);
+      if (!c) return null;
+      for (const b of c.props) { if (b.crate) n.crates++; else n.props++; }
+      n.push += c.push.length; n.items += c.items.length; n.sconce += c.sconces.length; n.lock += c.locks.length;
+      for (const f of ['chest', 'vessel', 'sigil', 'well', 'ghost', 'pixie', 'creeper']) if (c[f]) n[f]++;
+    }
+    return n;
+  }
 
   function createRenderer(canvas) {
     const ctx = canvas.getContext('2d');
@@ -166,6 +223,8 @@
         ctx.stroke();
       }
 
+      if (state.show && Object.values(state.show).some(Boolean)) drawContents(exp, state.show, s, X, Y, W, H);
+
       if (toggles.path && selectedId && exp.spaces[selectedId]) {
         const path = DE.pathToRoot(exp, selectedId).map((id) => centroid(exp.spaces[id]));
         ctx.strokeStyle = colors.path;
@@ -211,12 +270,104 @@
       }
     }
 
+    /**
+     * The contents overlay. Up close, everything where it stands; far out
+     * (a few px per cell), only what tells you about the dungeon as a whole
+     * (creatures, locks, push blocks, wells, sigils) as dots big enough to see.
+     */
+    function drawContents(exp, show, s, X, Y, W, H) {
+      const C = CONTENT_COLORS;
+      const near = s >= 7;
+      const dot = (x, y, r, color) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(X(x), Y(y), r, 0, Math.PI * 2); ctx.fill(); };
+      const rectW = (x0, y0, x1, y1) => ctx.fillRect(X(x0), Y(y0), (x1 - x0) * s, (y1 - y0) * s);
+      const minR = 2.2 * (global.devicePixelRatio || 1);
+      const big = Math.max(minR, s * 0.28), mid = Math.max(minR * 0.8, s * 0.16), small = Math.max(1, s * 0.1);
+      const creatures = [];
+      for (const id in exp.spaces) {
+        const sp = exp.spaces[id];
+        const c = roomContents(exp, sp);
+        if (!c) return;
+        const b = c.box; // off screen: skip
+        if (X(b.x1) < 0 || X(b.x0) > W || Y(b.y1) < 0 || Y(b.y0) > H) continue;
+
+        if (show.props && near) {
+          for (const p of c.props) {
+            ctx.fillStyle = p.crate ? C.crate : colors.ink;
+            ctx.globalAlpha = p.crate ? 0.85 : 0.18 + 0.12 * p.units;
+            rectW(p.x0, p.y0, p.x1, p.y1);
+          }
+          ctx.globalAlpha = 1;
+        }
+        if (show.push) {
+          for (const pb of c.push) {
+            const fx = pb.from.sx / 2, fy = pb.from.sy / 2, tx = pb.to.sx / 2, ty = pb.to.sy / 2;
+            if (!near) { dot(fx + 0.25, fy + 0.25, mid, pb.color); continue; }
+            ctx.strokeStyle = pb.color; ctx.lineWidth = Math.max(1, s * 0.05);
+            ctx.setLineDash([s * 0.08, s * 0.08]);
+            ctx.beginPath(); ctx.moveTo(X(fx + 0.25), Y(fy + 0.25)); ctx.lineTo(X(tx + 0.25), Y(ty + 0.25)); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.strokeRect(X(tx + 0.04), Y(ty + 0.04), s * 0.42, s * 0.42); // its home mark
+            ctx.fillStyle = pb.color; rectW(fx + 0.04, fy + 0.04, fx + 0.46, fy + 0.46);
+          }
+        }
+        if (show.items && near) {
+          c.items.forEach((it, i) => {
+            const col = it.kind === 'chalk' && it.color && C[it.color] ? C[it.color] : C[it.kind] || colors.ink;
+            dot(it.cell.x + 0.3 + (i % 3) * 0.2, it.cell.y + 0.35 + Math.floor(i / 3) * 0.3, small * 1.3, col);
+          });
+        }
+        if (show.features) {
+          if (c.sigil) { // a diamond
+            const x = X(c.sigil.cell.x + 0.5), y = Y(c.sigil.cell.y + 0.5), r = near ? s * 0.32 : mid * 1.2;
+            ctx.fillStyle = C.sigil; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.fill();
+          }
+          if (c.well) { // a ring
+            ctx.strokeStyle = C.well; ctx.lineWidth = Math.max(1.5, s * 0.08);
+            ctx.beginPath(); ctx.arc(X(c.well.cell.x + 0.5), Y(c.well.cell.y + 0.5), near ? s * 0.3 : mid, 0, Math.PI * 2); ctx.stroke();
+          }
+          if (near) {
+            if (c.chest) { ctx.fillStyle = C.chest; rectW(c.chest.sx / 2 + 0.05, c.chest.sy / 2 + 0.1, c.chest.sx / 2 + 0.45, c.chest.sy / 2 + 0.4); }
+            if (c.vessel) dot(c.vessel.sx / 2 + 0.25, c.vessel.sy / 2 + 0.25, s * 0.15, C.vessel);
+            for (const h of c.hall) { ctx.fillStyle = C.hall; rectW(h.x0, h.y0, h.x1, h.y1); }
+            ctx.fillStyle = C.sconce;
+            for (const sc of c.sconces) {
+              const d = DE.DIRS[sc.facing];
+              const x = sc.cell.x + 0.5 + d.x * 0.42, y = sc.cell.y + 0.5 + d.y * 0.42;
+              rectW(x - 0.08, y - 0.08, x + 0.08, y + 0.08);
+            }
+          }
+        }
+        if (show.locks) {
+          for (const e of c.locks) {
+            const d = DE.DIRS[e.facing];
+            const x = X(e.cell.x + 0.5 + d.x * 0.5), y = Y(e.cell.y + 0.5 + d.y * 0.5), r = Math.max(minR * 1.2, s * 0.2);
+            ctx.fillStyle = C.lock; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+          }
+        }
+        if (show.creatures) {
+          if (c.ghost) creatures.push(['ghost', c.ghost]);
+          if (c.pixie) creatures.push(['pixie', c.pixie]);
+          if (c.creeper) creatures.push(['creeper', c.creeper]);
+        }
+      }
+      // Creatures last, on top of everything, each where it starts.
+      const label = s >= 16;
+      if (label) {
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = `bold ${Math.round(s * 0.32)}px ui-monospace, Menlo, monospace`;
+      }
+      for (const [kind, cell] of creatures) {
+        dot(cell.x + 0.5, cell.y + 0.5, big, C[kind]);
+        if (label) { ctx.fillStyle = kind === 'pixie' ? '#3a3000' : '#fff'; ctx.fillText(kind[0].toUpperCase(), X(cell.x + 0.5), Y(cell.y + 0.52)); }
+      }
+    }
+
     function centerOn(x, y) { view.x = x; view.y = y; }
 
     /** Zoom by `factor`, keeping the world point under (sx, sy) fixed. */
     function zoomAt(sx, sy, factor) {
       const before = screenToWorld(sx, sy);
-      view.scale = Math.min(6, Math.max(0.08, view.scale * factor));
+      view.scale = Math.min(6, Math.max(MIN_SCALE, view.scale * factor));
       const after = screenToWorld(sx, sy);
       view.x += before.x - after.x;
       view.y += before.y - after.y;
@@ -238,10 +389,11 @@
       }
       if (!isFinite(minX)) return;
       const r = canvas.getBoundingClientRect();
+      if (!r.width || !r.height) return; // not laid out yet (a hidden pane)
       view.x = (minX + maxX) / 2;
       view.y = (minY + maxY) / 2;
       const sx = r.width / ((maxX - minX + 4) * CELL), sy = r.height / ((maxY - minY + 4) * CELL);
-      view.scale = Math.min(2, Math.max(0.08, Math.min(sx, sy)));
+      view.scale = Math.min(2, Math.max(MIN_SCALE, Math.min(sx, sy)));
     }
 
     return { view, resize, draw, hitTest, screenToWorld, centerOn, zoomAt, panBy, fit, readColors };
@@ -249,4 +401,6 @@
 
   global.DungeonApp = global.DungeonApp || {};
   global.DungeonApp.createRenderer = createRenderer;
+  global.DungeonApp.roomContents = roomContents;
+  global.DungeonApp.contentCounts = contentCounts;
 })(window);

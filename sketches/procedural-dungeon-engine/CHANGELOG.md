@@ -154,6 +154,33 @@ All notable changes to this sketch are logged here, per
   stamped with. A record or save from another build is refused with a
   message saying which build made it; to look at it, check out that
   build's commit (NOTES.md, "Versioning").
+- 2026-11-05: **Grow a whole dungeon at once, to see its shape.**
+  - Engine: `DE.grow(exp, { rooms, order, from, seed })` in the new
+    `engine/grow.js`. It opens doors with the ordinary expand + commit and
+    keeps every room (no rerolls, reverts or faints), so a grown dungeon
+    saves, replays and exports like any other.
+  - `order` is which door opens next: `random` (any), `breadth` (shallowest
+    first: bushy, fills in near the start) or `depth` (deepest first: long
+    winding branches). At 1,000 rooms, random reaches depth ~32, breadth
+    ~20 and depth-first ~400.
+  - `from` grows only one room's branch. Door picks and entropy come from
+    `seed` (by default the root seed and the history), so the same seed,
+    count and order always grow the same dungeon.
+  - Map view: a **Grow** section with a room count and the order, plus
+    **New dungeon** (a fresh seed, grown in one click), **Grow** (add to
+    this map) and **Grow from selected**. Caps still apply. 1,000 rooms
+    takes about 0.2 s.
+  - It also shows a rooms-per-depth bar chart and the room mix (corridors,
+    chambers, halls, dead ends, regions). The map zooms out further, to
+    fit a thousand rooms.
+- 2026-11-05: **Room contents on the map.** The map view has a **Room
+  contents** overlay, with toggles for creatures, push blocks, features
+  (sigils, wells, chests, vessels, sconces, hall waystones), locked doors,
+  items, and props and crates, plus totals across the map.
+  - Creatures show where they start: their start cell was already a seeded
+    choice, so the map and walk mode agree.
+  - Zoomed far out, only creatures, locks, push blocks, sigils and wells
+    show, as dots, so you can see how they spread through the dungeon.
 
 ### Changed
 
@@ -1146,6 +1173,12 @@ All notable changes to this sketch are logged here, per
     hourglass. Taking the pack back puts everything back in its cell.
   - Run save v10 (`run.inv`, `run.dropped`). Older runs migrate: their
     stacks find cells from what they carry.
+- 2026-11-05: **`app/play-rules.js` moved to `engine/contents.js`.** Room
+  contents are part of the engine project now, read by both clients (walk
+  mode and the map view), not walk mode's alone. It's still its own layer
+  on top of the engine, on its own seed streams, so tuning contents never
+  changes a room's shape. The global is still `DungeonPlay`, so nothing
+  that uses it changed.
 
 ### Removed
 
