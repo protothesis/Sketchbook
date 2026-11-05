@@ -8,27 +8,26 @@
     geo, doorMat, passable } = W;
 
   // ---------------------------------------------------------------------------
-  // Inventory: the hotbar, chalk marks, jars and sigils
+  // What's in your hand, chalk marks, jars and sigils
   //
   // E interacts with the world (doors, lifting a jar, wiping a
   // chalk mark you face): one focused thing (actionNear in actions.js).
-  // F (RT on a pad) uses what's in your hand, the item selected on the
-  // hotbar: swipe the duster, draw a chalk mark, set a jar down, press a
-  // doorstone to a wall. With nothing in hand that wants it, F at a dormant
-  // waystone wakes it from your lamp (the lamp itself is R, never a hotbar
-  // slot). 1-9 or the wheel select; the selected slot's number (or a tap on
-  // it) again puts it away, for empty hands. B on a pad puts it away or takes
-  // it out again. You start with empty hands, and lifting or grabbing a
-  // block puts what you're holding away (restore.js). A slot can hold a group of variants (chalk colours):
-  // click it again, or press and hold, to open its picker; its number key
-  // again cycles. F with an empty jar near a pixie catches it (pixies.js);
-  // a pixie jar set down draws ghosts to it, and on a sigil tile it powers
-  // the sigil: +1 entropy max per pixie jar on it.
+  // F (RT on a pad) uses what's in your hand, the stop the carousel is on:
+  // swipe the duster, draw a chalk mark, swipe a jar, press a doorstone to
+  // a wall. With nothing in hand that wants it, F at a dormant waystone
+  // wakes it from your lamp (the lamp itself is R, never in the carousel).
+  // The carousel (where the hotbar was) steps through everything in your
+  // items grid (inventory.js), in its order, with empty hands as one stop:
+  // LB / RB, 1 / 2 or the wheel. B on a pad puts it away or takes it out
+  // again. You start with empty hands, and lifting or grabbing a block puts
+  // what you're holding away (restore.js). Each chalk colour and each jar
+  // fill is its own stop. F with an empty jar near a pixie catches it
+  // (pixies.js); a pixie jar set down draws ghosts to it, and on a sigil
+  // tile it powers the sigil: +1 entropy max per pixie jar on it.
   //
-  // Equipment worn rather than held (`equip: true`) gets its own slot at the
-  // hotbar's left end, out of the 1-9 cycle, and its own button, Q, whatever's
-  // in hand. Nothing is worn right now (the duster tried it, 2026-10-27, and
-  // went back to the hotbar); the slot is kept for later.
+  // Equipment worn rather than held (`equip: true`) gets its own slot by
+  // the carousel and its own button, Q, whatever's in hand. Nothing is worn
+  // right now (the duster tried it, 2026-10-27); the slot is kept for later.
 
   const JAR_H = 0.38; // cells
   const STROKES = 3;  // chalk marks per stick
@@ -160,62 +159,84 @@
     }
   }
 
-  /** Walking into a pickup or over a tool collects it. */
+  /** Walking into a pickup or over a tool collects it, if there's room for it (inventory.js). */
+  let fullAt = null; // the thing you were last told there's no room for
   function collectPickups(p) {
     if (p.z > 0.05) return;
     for (const [k, it] of state.items) {
       if (ITEMS[it.item.kind].cls === 'object') continue;
       const dx = p.x - (it.item.cell.x + 0.5), dy = p.y - (it.item.cell.y + 0.5);
-      if (dx * dx + dy * dy <= PLAYER.pickupRange * PLAYER.pickupRange) takeItem(k, it);
+      const d2 = dx * dx + dy * dy;
+      if (it.fresh) { if (d2 > PLAYER.pickupRange * PLAYER.pickupRange * 2) it.fresh = false; continue; } // just dropped: step off it first
+      if (d2 > PLAYER.pickupRange * PLAYER.pickupRange) { if (fullAt === k) fullAt = null; continue; }
+      const cls = ITEMS[it.item.kind].cls;
+      if ((cls === 'tool' || cls === 'collectable') &&
+          !W.fits(state.run, { kind: it.item.kind, color: it.item.color || (it.item.kind === 'chalk' ? 'silver' : undefined),
+            holds: it.item.holds, type: it.item.type, n: 1 })) {
+        if (fullAt !== k) { fullAt = k; W.showCaption(`no room for ${cls === 'tool' ? 'it in your pack' : 'it with your collectables'} · drop something (Tab, then X)`); shakeHotbar(); }
+        continue;
+      }
+      takeItem(k, it);
     }
   }
 
   function takeItem(k, it) {
-    state.run.collected.push(k);
     it.mesh.parent.remove(it.mesh);
     state.items.delete(k);
-    W.showCaption(ITEMS[it.item.kind].take(state.run, it.item));
+    if (it.item.drop) W.showCaption('you pick up ' + W.takeDrop(it.item));
+    else { state.run.collected.push(k); W.showCaption(ITEMS[it.item.kind].take(state.run, it.item)); }
     savePlayer();
     W.refreshHud();
   }
 
   /**
-   * The hotbar's slots, built from the run's tools and objects (pickups are
-   * counters on the HUD). A slot with `variants` is a group (one slot,
-   * several kinds); `cur` is the variant in use, remembered per group in
-   * state.variant.
+   * What you can have in hand, in carousel order: the menu's own order
+   * (inventory.js), cell by cell. Every stack in your items grid (the
+   * backpack's after it; each chalk colour and each jar fill its own), then
+   * the equipment with a use in its grid's order (the duster, the
+   * hourglass), then a collectable you took in hand from the menu. Empty
+   * hands are the stop before the first. A slot's `cur` is its one variant
+   * (a chalk colour, a jar fill), for the code that asks it.
    */
   function slots() {
-    const run = state.run, out = [];
-    const kindSlot = (k) => !ITEMS[k].equip && ITEMS[k].slot && ITEMS[k].slot(run);
-    for (const k in ITEMS) if (ITEMS[k].first && kindSlot(k)) out.push(kindSlot(k)); // a kind that keeps slot 1 (the duster)
-    if (run.jars.length) {
-      // One slot for every jar, grouped by what it holds: empty, a pixie, a
-      // charge of entropy. The group you pick is the jar in your hands.
-      const variants = [];
-      for (const holds of JAR_HOLDS) {
-        const count = run.jars.filter((j) => (j.holds || null) === holds).length;
-        if (count) variants.push({ id: holds || 'empty', holds, count });
-      }
-      const cur = variants.find((v) => v.id === state.variant.jar) || variants[0];
-      out.push({ key: 'jar', kind: 'jar', variants, cur, count: run.jars.length });
+    const run = state.run, out = [], seen = new Set();
+    const kindSlot = (k) => ITEMS[k] && !ITEMS[k].equip && ITEMS[k].slot && ITEMS[k].slot(run);
+    for (const id of W.layoutItems(run)) if (W.isTool(id)) out.push(itemSlot(run, id)); // (a collectable in the backpack isn't a stop)
+    for (const k of W.layoutEquip(run)) {
+      const slot = k && kindSlot(k);
+      if (slot) { out.push(slot); seen.add(k); }
     }
-    const colors = Object.keys(CHALK).filter((c) => run.chalks[c] > 0);
-    if (colors.length) {
-      const variants = colors.map((c) => ({ id: c, color: c, strokes: run.chalks[c] }));
-      const cur = variants.find((v) => v.id === state.variant.chalk) || variants[0];
-      state.variant.chalk = cur.id;
-      out.push({ key: 'chalk', kind: 'chalk', variants, cur });
-    }
-    if (run.doorstones > 0) out.push({ key: 'doorstone', kind: 'doorstone', count: run.doorstones });
-    if (run.keys > 0) out.push({ key: 'key', kind: 'key', count: run.keys });
     for (const k in ITEMS) {
-      const slot = !ITEMS[k].first && kindSlot(k);
+      const slot = !seen.has(k) && kindSlot(k);
       if (slot) out.push(slot);
     }
+    const hc = handCell();
+    if (hc) out.push({ key: 'hand-coll', kind: hc.kind, sig: hc.type, item: Object.assign({}, hc), coll: true });
     return out;
   }
-  /** The worn equipment's slot (the duster), or null: { key, kind, ... } from its `slot(run)`. */
+  /** An item stack's slot, by its id ('key', 'chalk:gold', 'jar:pixie'). `cell` stands in for the run's (a chest's). */
+  function itemSlot(run, id, cell) {
+    const c = cell || W.itemStacks(run).get(id) || Object.assign(W.cellOfId(id), { n: 0 });
+    if (c.kind === 'chalk') {
+      const v = { id: c.color, color: c.color, strokes: c.n };
+      return { key: id, kind: 'chalk', variants: [v], cur: v };
+    }
+    if (c.kind === 'jar') {
+      const v = { id: c.holds || 'empty', holds: c.holds || null, count: c.n };
+      return { key: id, kind: 'jar', variants: [v], cur: v, count: c.n };
+    }
+    return { key: id, kind: c.kind, count: c.n };
+  }
+  /** The collectable in your hand (taken from the menu), or null. state.handColl: { grid: 'coll' | 'purse' | 'items' (the backpack's), i }. */
+  function handCell() {
+    const h = state.handColl;
+    if (!h) return null;
+    const a = h.grid === 'purse' ? W.purseCells(state.run) : h.grid === 'items' ? W.inv(state.run).items : W.inv(state.run).coll;
+    const c = a && a[h.i];
+    if (!c || W.isTool(c)) { state.handColl = null; if (state.sel === 'hand-coll') state.sel = 'hands'; return null; }
+    return c;
+  }
+  /** The worn equipment's slot, or null: { key, kind, ... } from its `slot(run)`. None right now. */
   function equipSlot() {
     for (const k in ITEMS) if (ITEMS[k].equip && ITEMS[k].slot) { const s = ITEMS[k].slot(state.run); if (s) return s; }
     return null;
@@ -239,10 +260,10 @@
   function putAway() {
     if (state.sel === 'hands') return;
     state.sel = 'hands';
-    state.expanded = null;
+    state.handColl = null;
     refreshHotbar();
   }
-  /** B: put away what's in your hand, or take out the last thing you held (else slot 1). */
+  /** B: put away what's in your hand, or take out the last thing you held (else the first stop). */
   function toggleHands() {
     if (state.carry) { shakeHotbar(); return; } // set the block down first
     if (selectedSlot()) { putAway(); return; }
@@ -251,24 +272,23 @@
     state.sel = (s.find((x) => x.key === state.lastSel) || s[0]).key;
     refreshHotbar();
   }
-  /** Select slot i. `again`: picking the slot already in hand (a number key) cycles a
-   *  group's variants, or puts anything else away. */
-  function select(i, again) {
-    const s = slots();
-    if (!s.length) return;
-    if (state.carry) { shakeHotbar(); return; } // set the block down first
-    const slot = s[((i % s.length) + s.length) % s.length];
-    if (slot.key === state.sel && slot.variants && slot.variants.length > 1) { cycleVariant(slot, 1); return; }
-    if (again && slot.key === state.sel) { state.sel = 'hands'; state.expanded = null; refreshHotbar(); return; }
-    state.sel = slot.key;
-    state.expanded = null;
+  /** Take this slot in hand (the menu). False if your hands are full of a block. */
+  function hold(key) {
+    if (state.carry) { shakeHotbar(); return false; } // set the block down first
+    if (key !== 'hand-coll') state.handColl = null;
+    state.sel = key;
     refreshHotbar();
+    return true;
   }
-  function cycleVariant(slot, dir) {
-    const i = slot.variants.findIndex((v) => v.id === slot.cur.id);
-    const v = slot.variants[(i + dir + slot.variants.length) % slot.variants.length];
-    state.variant[slot.kind] = v.id;
-    W.showCaption(slot.kind === 'jar' ? `jars · ${jarVariantName(v)}` : `${v.color} chalk · ${CHALK[v.color].name}`);
+  /** LB / RB, 1 / 2, the wheel: the carousel one stop along (empty hands is a stop). */
+  function cycle(dir) {
+    if (state.carry) { shakeHotbar(); return; } // set the block down first
+    const stops = ['hands'].concat(slots().map((x) => x.key));
+    const cur = selectedSlot();
+    const i = cur ? stops.indexOf(cur.key) : 0;
+    const next = stops[((i + dir) % stops.length + stops.length) % stops.length];
+    if (cur && cur.key === 'hand-coll' && next !== 'hand-coll') state.handColl = null; // it goes back to its cell
+    state.sel = next;
     refreshHotbar();
   }
 
@@ -277,12 +297,10 @@
     doorstone: 'doorstone: F at a bare wall opens a door',
     key: 'key: F at a locked door unlocks it',
   };
-  const JAR_HOLDS = [null, 'pixie', 'entropy'];
   /** "empty jar", "pixie jar", "jar of entropy". */
   const jarName = (j) => (j.holds === 'pixie' ? 'pixie jar' : j.holds === 'entropy' ? 'jar of entropy' : 'empty jar');
-  const jarVariantName = (v) => `${jarName(v)} · ${v.count} jar${v.count === 1 ? '' : 's'}`;
 
-  /** A jar group's icon: what it holds and how many. */
+  /** A jar stack's icon: what it holds and how many. */
   function jarIcon(v) {
     const w = el('span', 'jaric');
     w.append(el('span', 'ic', ICON.jar));
@@ -292,7 +310,6 @@
     if (v.count > 1) w.append(el('span', 'ct', '×' + v.count));
     return w;
   }
-  const variantIcon = (kind, v) => (kind === 'jar' ? jarIcon(v) : chalkIcon(v));
   function shakeHotbar() {
     const bar = $('hotbar');
     if (!bar) return;
@@ -319,7 +336,41 @@
     return w;
   }
 
-  let holdTimer = null, heldOpen = false;
+  /** A slot's icon (a span), for the carousel and the menu. */
+  function slotIcon(slot) {
+    if (slot.coll) return W.cellIcon(slot.item);
+    if (slot.kind === 'chalk') return chalkIcon(slot.cur);
+    if (slot.kind === 'jar') return jarIcon(slot.cur);
+    if (ITEMS[slot.kind] && ITEMS[slot.kind].icon) return ITEMS[slot.kind].icon(slot);
+    const w = el('span', 'toolic');
+    w.append(el('span', 'ic', ICON[slot.kind] || '?'));
+    if (slot.count > 1) w.append(el('span', 'ct', '×' + slot.count));
+    return w;
+  }
+  /** A slot in a few words, under the carousel. */
+  function slotLabel(slot) {
+    if (!slot) return 'empty hands';
+    if (slot.coll) return W.cellName(slot.item);
+    if (slot.kind === 'chalk') return `${slot.cur.color} chalk · ${CHALK[slot.cur.color].name}`;
+    if (slot.kind === 'jar') return jarName(slot.cur) + (slot.count > 1 ? ` ×${slot.count}` : '');
+    if (slot.kind === 'key' || slot.kind === 'doorstone') return slot.kind + (slot.count > 1 ? ` ×${slot.count}` : '');
+    if (slot.kind === 'duster') return 'feather duster';
+    if (slot.kind === 'hourglass') return 'hourglass · ' + (slot.item.holds ? 'charged' : 'empty');
+    return slot.kind;
+  }
+  function slotTitle(slot) {
+    if (slot.coll) return W.cellName(slot.item) + ': no use; it goes back to its cell when you scroll off it';
+    if (slot.kind === 'chalk') return `${slot.cur.color} chalk: F draws a mark, E on one wipes it`;
+    if (slot.kind === 'jar') return `${jarName(slot.cur)} (${slot.count}): F swipes it (a pixie, a full well) or pours it`;
+    if (ITEMS[slot.kind] && ITEMS[slot.kind].title) return ITEMS[slot.kind].title(slot);
+    return NAME[slot.kind] || slot.kind;
+  }
+
+  /**
+   * The carousel, where the hotbar was: what's in your hand, big, with the
+   * stop before and after it to either side (LB / RB, 1 / 2, the wheel, or
+   * a tap on them). A tap on the middle opens your inventory.
+   */
   function refreshHotbar() {
     const bar = $('hotbar');
     if (!bar) return;
@@ -327,78 +378,67 @@
     const cur = selectedSlot();
     if (cur) state.sel = state.lastSel = cur.key;
     bar.innerHTML = '';
-    const eq = equipSlot();
-    bar.hidden = !s.length && !eq;
+    bar.hidden = false;
     updateHeld(cur);
-    if (eq) { // the worn equipment: its own slot, its own key
+    const stops = [null].concat(s), i = cur ? stops.findIndex((x) => x && x.key === cur.key) : 0;
+    const at = (d) => stops[((i + d) % stops.length + stops.length) % stops.length];
+    const g = (k) => (W.glyph ? W.glyph(k) : k);
+    const pad = W.padMode && W.padMode();
+    const side = (d) => {
+      const b = el('button', 'slot side ' + (d < 0 ? 'prev' : 'next'));
+      b.type = 'button';
+      b.append(el('span', 'n', d < 0 ? (pad ? g('bumpers').split('/')[0] : '1') : (pad ? g('bumpers').split('/')[1] : '2')));
+      if (stops.length > 1) {
+        const slot = at(d);
+        b.append(slot ? slotIcon(slot) : el('span', 'ic hands', '✋'));
+        b.title = slotLabel(slot);
+      }
+      b.disabled = stops.length < 2;
+      b.addEventListener('click', (e) => { e.preventDefault(); cycle(d); b.blur(); });
+      return b;
+    };
+    const mid = el('button', 'slot on mid ' + (cur ? cur.kind : 'hands'));
+    mid.type = 'button';
+    mid.append(cur ? slotIcon(cur) : el('span', 'ic hands', '✋'));
+    mid.title = (cur ? slotTitle(cur) : 'empty hands') + ` · tap for your inventory (${g('Tab')})`;
+    mid.addEventListener('click', (e) => { e.preventDefault(); mid.blur(); if (W.openMenu) W.openMenu('inv'); });
+    bar.append(side(-1), mid, side(1), el('span', 'carousel-label', slotLabel(cur)));
+    const eq = equipSlot();
+    if (eq) { // worn equipment: its own slot, its own key (none right now)
       const b = el('button', 'slot equip ' + eq.kind);
       b.type = 'button';
-      b.append(el('span', 'n', W.glyph ? W.glyph('Q') : 'Q'));
+      b.append(el('span', 'n', g('Q')));
       b.title = ITEMS[eq.kind].title(eq);
       b.append(ITEMS[eq.kind].icon(eq));
       b.addEventListener('click', (e) => { e.preventDefault(); useEquip(); b.blur(); });
-      bar.append(b);
-      if (s.length) bar.append(el('span', 'equip-gap'));
+      bar.prepend(b);
     }
-    s.forEach((slot, i) => {
-      const b = el('button', 'slot' + (cur && slot.key === cur.key ? ' on' : '') + ' ' + slot.kind);
-      b.type = 'button';
-      b.append(el('span', 'n', String(i + 1)));
-      if (slot.kind === 'chalk') {
-        b.title = `chalk (${slot.variants.length} colour${slot.variants.length === 1 ? '' : 's'}): F draws a mark, E on one wipes it; click again or hold to pick a colour`;
-      } else if (slot.kind === 'jar') {
-        b.title = `jars (${slot.count}): E sets the one in your hands down, F swipes it (a pixie, a full well) or pours it; ${jarVariantName(slot.cur)}` +
-          (slot.variants.length > 1 ? '; click again or hold to choose' : '');
-      } else if (ITEMS[slot.kind] && ITEMS[slot.kind].icon) {
-        b.title = ITEMS[slot.kind].title(slot);
-        b.append(ITEMS[slot.kind].icon(slot));
-      } else {
-        b.title = NAME[slot.kind];
-        b.append(el('span', 'ic', ICON[slot.kind]));
-        b.append(el('span', 'ct', String(slot.count)));
-      }
-      if (slot.variants) {
-        b.append(variantIcon(slot.kind, slot.cur));
-        if (slot.variants.length > 1) b.append(el('span', 'more', '▴'));
-      }
-      // Click selects; clicking the selected group (or holding it) opens its picker.
-      b.addEventListener('pointerdown', () => {
-        if (!slot.variants) return;
-        clearTimeout(holdTimer);
-        holdTimer = setTimeout(() => { state.sel = slot.key; state.expanded = slot.key; heldOpen = true; refreshHotbar(); }, 350);
-      });
-      b.addEventListener('pointerup', () => clearTimeout(holdTimer));
-      b.addEventListener('pointerleave', () => clearTimeout(holdTimer));
-      b.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (heldOpen) { heldOpen = false; return; }
-        if (state.carry) { shakeHotbar(); return; } // set the block down first
-        if (slot.variants && state.sel === slot.key) state.expanded = state.expanded === slot.key ? null : slot.key;
-        else if (state.sel === slot.key) { state.sel = 'hands'; state.expanded = null; } // put it away
-        else { state.sel = slot.key; state.expanded = null; }
-        refreshHotbar();
-      });
-      if (slot.variants && state.expanded === slot.key) {
-        const pop = el('div', 'picker');
-        for (const v of slot.variants) {
-          const vb = el('button', 'pick' + (v.id === slot.cur.id ? ' on' : ''));
-          vb.type = 'button';
-          vb.title = slot.kind === 'jar' ? jarVariantName(v)
-            : `${v.color} chalk · ${CHALK[v.color].name} · ${v.strokes} stroke${v.strokes === 1 ? '' : 's'}`;
-          vb.append(variantIcon(slot.kind, v));
-          vb.addEventListener('click', (e) => {
-            e.stopPropagation();
-            state.variant[slot.kind] = v.id;
-            state.expanded = null;
-            refreshHotbar();
-          });
-          pop.append(vb);
-        }
-        b.append(pop);
-      }
-      bar.append(b);
-    });
+    placeHotbar();
   }
+
+  /**
+   * The carousel sits just right of the lamp, level with it. Where that
+   * doesn't fit (a narrow window; on touch, the jump and use buttons keep
+   * the bottom right), it goes under the lamp instead and the lamp rises
+   * over it (the hud-stacked class, play.css).
+   */
+  function placeHotbar() {
+    const bar = $('hotbar'), lamp = $('lamp');
+    if (!bar || !lamp || bar.hidden) return;
+    const root = document.documentElement, gap = 10;
+    const help = document.querySelector('.help'); // the lamp and the carousel sit over it, however many lines it wraps to
+    if (help && help.offsetParent) root.style.setProperty('--hud-bottom', Math.round(global.innerHeight - help.getBoundingClientRect().top + 8) + 'px');
+    else root.style.setProperty('--hud-bottom', 'max(12px, env(safe-area-inset-bottom))');
+    const touch = !global.matchMedia('(hover: hover)').matches;
+    const lw = lamp.offsetWidth, bw = bar.offsetWidth;
+    const left = lamp.offsetLeft;
+    const fits = left + lw + gap + bw + (touch ? 160 : 12) <= global.innerWidth;
+    document.body.classList.toggle('hud-stacked', !fits);
+    root.style.setProperty('--bar-left', (fits ? left + lw + gap : left) + 'px');
+    root.style.setProperty('--bar-h', bar.offsetHeight + 'px');
+  }
+  global.addEventListener('resize', placeHotbar);
+  if (global.ResizeObserver && $('lamp')) new ResizeObserver(placeHotbar).observe($('lamp'));
 
   // --- chalk marks: drawn on a quarter-tile (floor, or the top of a one-unit
   // block); they show on the maps too. Persist with the run.
@@ -676,7 +716,7 @@
     if (u.action === 'power') {
       swipeAt = state.time;
       W.powerStone(u.stone, u.jar);
-      state.variant.jar = 'empty';
+      state.sel = 'jar:empty';
       W.refreshHotbar();
       return;
     }
@@ -699,7 +739,7 @@
       else if (u.action === 'withdraw') withdraw(u.jar, u.vessel);
       else if (u.action === 'vesselno') W.showCaption(u.vessel.n >= RULES.vesselCapacity ? 'the vessel is full'
         : `the vessel holds ${u.vessel.holds === 'pixie' ? 'pixies' : 'entropy'}, not ${u.jar.holds === 'pixie' ? 'a pixie' : 'entropy'}`);
-      state.variant.jar = u.jar.holds || 'empty'; // the same jar stays in your hands
+      state.sel = 'jar:' + (u.jar.holds || 'empty'); // the same jar stays in your hands
       savePlayer();
       W.refreshHud();
       return;
@@ -1241,7 +1281,7 @@ void main() {
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, toggleHands, cycleVariant, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, select, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, toggleHands, hold, cycle, itemSlot, slotIcon, slotLabel, shakeHotbar, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });

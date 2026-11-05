@@ -1,7 +1,7 @@
 // Walk mode: dusting (notes/dusting-2026-10-27.md). Rooms gather dust by
 // their mood (DP.dust, play-rules.js): a thin light-grey plane a little
 // above the floor or a low block's top, in a scaled-up pixel dither whose
-// density is how many layers are left. The feather duster, hotbar slot 1,
+// density is how many layers are left. The feather duster, a carousel stop,
 // swipes it (F or RT; one press, one swing): each swing takes a layer off
 // every dusted half-cell in an arc in front of you, kicks up chunky dust
 // clouds that break down into motes catching the light, and now and then
@@ -798,7 +798,7 @@ void main() {
   }
 
   // ---------------------------------------------------------------------------
-  // The feather duster: in your bag from the start (for now), hotbar slot 1,
+  // The feather duster: in your bag from the start (for now), a carousel stop,
   // a tool in your left hand, swiped with F or RT (the slash: items.js). A
   // short wooden handle and a head of pale feathers.
 
@@ -833,7 +833,6 @@ void main() {
   let readyEl = null;
   ITEMS.duster = {
     cls: 'equipment',
-    first: true, // keeps hotbar slot 1 (items.js slots)
     mesh: makeDuster,
     slot: () => ({ key: 'duster', kind: 'duster', sig: 'duster', item: { kind: 'duster' } }),
     title: () => 'feather duster: F swipes it · dust comes off a layer a swipe, and now and then a chit of entropy with it',

@@ -1036,6 +1036,80 @@ All notable changes to this sketch are logged here, per
       you wake, fading in with the last static dying away. Timings are in
       `PSYCHE` in the dev panel.
 
+- 2026-11-05: **The inventory, second playtest.**
+  - At a chest, A (Space) takes one from a chest cell, or gives one from
+    yours; X (or E) takes or gives the whole stack. "Take everything" is
+    gone.
+  - Hold (F / Y) puts it in your hand and leaves the menu open.
+  - Equipment rearranges like everything else (pick up, place, swap),
+    within the equipment grid.
+  - Bags can be dropped (X): the purse or the backpack lies where you
+    stood, with what's in it, and picking it up puts it all back where it
+    was. The duster and the hourglass can't be dropped yet.
+  - The backpack holds tools and collectables both, and shows on the
+    Collectables tab too. A tool in it is a carousel stop as before. You can
+    hold a collectable in it from the menu. Faints carry them in the pack.
+  - The menu's buttons are contextual: only the ones that do something on
+    the cell under the cursor (on a bag: Open, Move, Drop).
+  - The info line under the grids names the cell, or what you're moving
+    and what it would do there (swap with ..., place it here, put it
+    back). The line that showed above the grids while moving (it pushed
+    them down), the filler ("yours to use", "no use; it's yours") and the
+    controls hint over the buttons are gone.
+
+- 2026-11-02: **The inventory, stitched up after a first playtest.**
+  - The carousel's side icons are now always the stops just before and
+    after the one in hand. They were stuck: the carousel looked its stop
+    up by object, and the list is rebuilt each time, so it never matched.
+  - The carousel follows the menu's order, cell by cell: items, the
+    backpack's, then the duster and the hourglass in the equipment grid's
+    order (the duster isn't first any more).
+  - The carousel sits just right of the lamp, so they no longer overlap
+    when the window narrows; where it won't fit (a phone), under the lamp.
+    Both sit clear of the help line however many lines it wraps to.
+  - Everything bigger and heavier: the carousel (an 88px middle), slot
+    borders and the menu's borders 2px, the menu's tabs and text, prompts,
+    captions and the lamp's line. The menu's grids fill the screen (cells
+    up to 140px), icons scale with their cell, and a stack's count is a
+    dark tab in the corner, clear of the icon.
+  - Bags (the coin purse, the backpack) are one cell that opens to its own
+    screen: Space (A) on it opens its grid, Esc (B) comes back. Their grids
+    aren't on show any more. The Collectables tab, and a chest, have a
+    Bags cell for them.
+
+- 2026-11-01: **An inventory, a menu with tabs, and chests**
+  (GAME-DESIGN §20; `app/walk/inventory.js`, `app/walk/menu.js`).
+  - Tab (View on a pad, or a tap on the minimap or the carousel) opens a
+    menu with **Map**, **Inventory** and **Collectables** tabs, switched
+    with 1 / 2 (LB / RB). Map is the big map as before.
+  - **Grids**: items 4×4 (tools: one stack per kind, each chalk colour and
+    jar fill its own), equipment 2×4, collectables 4×4. All sizes and full
+    stacks are in `INV` (dev panel). WASD or the d-pad move the cursor;
+    Space (A) picks up and places (swapping), F (Y) takes it in hand, X
+    drops one where you stand, Esc (B) puts back or closes. Touch: tap
+    cells, or use the buttons.
+  - **The hotbar became a carousel**: the thing in hand, with one stop to
+    either side. 1 / 2, LB / RB or the wheel step through the duster, the
+    items grid in its order, the hourglass and empty hands. 3-9 no longer
+    select, and group pickers are gone.
+  - **Coins and curios** (a new collectable class): coins lie in 22% of
+    rooms; curios come from chests. **Coin purse** (equipment, its own 2×4
+    grid for coins) and **backpack** (equipment, +4×4 items) are rare
+    finds. Seeded on a new `'finds'` stream, on cells nothing else uses.
+    Every room you've already seen keeps its props, vessels and sigils.
+  - **A full grid** leaves a new find on the floor, with a caption.
+    **Dropped things** lie where you stood, in that room, and save with the
+    run (`run.dropped`).
+  - **Chests**: a crate with a lid in 1 room in 6 (not halls), 1-4 cells of
+    seeded coins, curios, chalk, jars or doorstones. Tap E to open (hold
+    grabs it). The chest's grid is on top, yours below; Space (A) takes or
+    gives a stack, X or E takes everything.
+  - **Faints: everything falls** with your pack (collectables, equipment
+    and what's in it) except protected equipment: the duster and the
+    hourglass. Taking the pack back puts everything back in its cell.
+  - Run save v10 (`run.inv`, `run.dropped`). Older runs migrate: their
+    stacks find cells from what they carry.
+
 ### Removed
 
 - 2026-10-26: Vaulting. Pushing into a block, or pressing E facing it, no

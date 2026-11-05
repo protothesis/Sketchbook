@@ -3,8 +3,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { $, canvas, state, toggleCrouch, slots, select, refreshHotbar, useSelected, actionNear,
-    act } = W;
+  const { $, canvas, state, toggleCrouch, useSelected } = W;
 
   // ---------------------------------------------------------------------------
   // Input
@@ -20,9 +19,8 @@
       else if (k === 'escape' && state.recordMode === 'checkpoint') W.hideRecord();
       return;
     }
-    if (state.bigmap) {
-      if ((k === 'tab' && !e.repeat) || k === 'escape') W.closeBigMap();
-      if (k === 'tab') e.preventDefault();
+    if (state.bigmap) { // the menu (menu.js): the map, your inventory, a chest
+      W.menuKey(k, e);
       return;
     }
     // A choice is up (choice.js): A / D pick, E held confirms, Esc, W or S back out.
@@ -34,7 +32,6 @@
       if (k === 'e' || k.startsWith('arrow')) e.preventDefault();
       return;
     }
-    if (k === 'escape' && state.expanded) { state.expanded = null; refreshHotbar(); return; }
     if (k === 'escape') { W.openPause(); return; }
     keys.add(k);
     if (k === 'e') {
@@ -46,15 +43,15 @@
       if (!e.repeat) W.useEquip();
     } else if (k === 'r') { // the lamp: cover it, or relight it
       if (!e.repeat) W.toggleLamp();
-    } else if (k >= '1' && k <= '9' && k.length === 1) {
-      select(+k - 1, true);
+    } else if (k === '1' || k === '2') { // the carousel, under the left hand (LB / RB)
+      W.cycle(k === '1' ? -1 : 1);
     } else if (k === ' ') {
       if (!e.repeat) W.pressJump();
       e.preventDefault(); // don't also "click" a focused button or scroll
     } else if (k === 'c') {
       if (!e.repeat) toggleCrouch();
-    } else if (k === 'tab') { // the map, under the left hand with WASD
-      if (!e.repeat) W.openBigMap();
+    } else if (k === 'tab') { // the menu (the map, your inventory), under the left hand with WASD
+      if (!e.repeat) W.openMenu();
       e.preventDefault(); // not a focus change
     }
     if (k.startsWith('arrow')) e.preventDefault();
@@ -76,8 +73,7 @@
   if (promptF) promptF.addEventListener('click', (e) => { useSelected(); promptF.blur(); e.preventDefault(); });
   canvas.addEventListener('wheel', (e) => {
     if (state.bigmap || state.paused) return;
-    const s = slots(), i = s.findIndex((x) => x.key === state.sel);
-    select(i + (e.deltaY > 0 ? 1 : -1));
+    W.cycle(e.deltaY > 0 ? 1 : -1);
   }, { passive: true });
 
 

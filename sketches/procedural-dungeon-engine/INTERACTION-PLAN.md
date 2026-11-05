@@ -33,7 +33,8 @@ built; this file is the plan until it's all in.
 - A tool collected with empty hands goes into them; otherwise into the bag.
 - **Keys are a tool** on the hotbar; the key count by the lamp goes.
 - The hotbar stays uncapped until there's an inventory menu (later; its
-  size may become an ability).
+  size may become an ability). (Built 2026-11-01: the menu's Inventory tab,
+  and the hotbar became a carousel over the items grid. GAME-DESIGN §20.)
 
 ## Carrying
 
@@ -75,8 +76,8 @@ built; this file is the plan until it's all in.
 
 ## Parked
 
-- More movable things (reshaping a room's blocks, thinning walls), the
-  inventory menu, hotbar size as an ability.
+- More movable things (reshaping a room's blocks, thinning walls). (The
+  inventory menu is built, 2026-11-01: GAME-DESIGN §20.)
 
 ## Build order
 

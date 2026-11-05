@@ -1,6 +1,8 @@
-// Walk mode: your pack (GAME-DESIGN.md, section 17). When you faint, what
-// you carried stays where you fell: your tools, your jars and your lamp's
-// entropy, in a bundle with a little lantern glowing at the fuel it holds.
+// Walk mode: your pack (GAME-DESIGN.md, sections 17 and 20). When you
+// faint, everything you carried stays where you fell: your tools, your
+// jars, your collectables, your equipment and what's in it (all but the
+// protected kinds, inventory.js), and your lamp's entropy, in a bundle with
+// a little lantern glowing at the fuel it holds.
 // Walk over it to take it all back. A pack follows its room: on a lost path
 // it waits, out of reach, until you retrace the path; it dims with the path
 // and goes when the path fades, or when you let the path go or reroll its
@@ -15,7 +17,8 @@
 
   /**
    * Pack up what you carry, where you stand: { id, spaceId, seed, x, y, fuel,
-   * keys, doorstones, jars, chalks, dust (chits in the pre-pool, dust.js) }. It all leaves the run. Null if you
+   * keys, doorstones, jars, chalks, dust (chits in the pre-pool, dust.js),
+   * coll, equip, layout (inventory.js) }. It all leaves the run. Null if you
    * carried nothing.
    */
   function packUp() {
@@ -30,7 +33,10 @@
       fuel: Math.max(0, run.fuel), keys: run.keys, doorstones: run.doorstones, jars: run.jars.slice(), chalks,
       dust: run.dustPool || 0, at: Math.round(run.walked),
     };
-    if (pk.fuel < 0.01 && !pk.keys && !pk.doorstones && !pk.jars.length && !Object.keys(chalks).length && !pk.dust) return null;
+    const inv = W.packInventory(run); // collectables and unprotected equipment leave the run here
+    Object.assign(pk, inv);
+    if (pk.fuel < 0.01 && !pk.keys && !pk.doorstones && !pk.jars.length && !Object.keys(chalks).length && !pk.dust &&
+      !W.packHasInventory(pk)) return null;
     run.fuel = 0;
     run.keys = 0;
     run.doorstones = 0;
@@ -38,6 +44,7 @@
     run.chalks = {};
     run.dustPool = 0;
     state.sel = 'hands';
+    state.handColl = null;
     run.packs.push(pk);
     return pk;
   }
@@ -189,6 +196,7 @@
     run.jars = run.jars.concat(pk.jars);
     for (const c in pk.chalks) run.chalks[c] = (run.chalks[c] || 0) + pk.chalks[c];
     W.addToPool(pk.dust || 0);
+    W.unpackInventory(run, pk); // equipment, collectables and your stacks' cells
     const got = W.gainFuel(pk.fuel);
     const left = pk.fuel - got;
     Object.assign(pk, { keys: 0, doorstones: 0, jars: [], chalks: {}, dust: 0, fuel: left });

@@ -157,7 +157,7 @@ html, body {
   bottom: max(12px, env(safe-area-inset-bottom));
   left: max(12px, env(safe-area-inset-left));
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   max-width: calc(100vw - 24px);
 }
@@ -176,7 +176,7 @@ kbd {
   bottom: 18%;
   transform: translateX(-50%);
   margin: 0;
-  font: 15px/1.4 "Courier New", Courier, ui-monospace, monospace;
+  font: 700 19px/1.4 "Courier New", Courier, ui-monospace, monospace;
   letter-spacing: 0.06em;
   text-align: center;
   white-space: nowrap;
@@ -197,15 +197,16 @@ kbd {
   padding: 6px 14px;
   border-radius: 999px;
   background: var(--panel);
-  border: 1px solid rgba(232, 147, 95, 0.5);
+  border: 2px solid rgba(232, 147, 95, 0.6);
   color: var(--accent);
   font: inherit;
-  font-size: 12px;
+  font-size: 15px;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
 .prompt[hidden] { display: none; }
-.prompt.f { top: calc(60% + 34px); }
+.prompt.f { top: calc(60% + 42px); }
 .prompt.f.alone { top: 60%; }
 .prompt .key {
   display: inline-block;
@@ -215,7 +216,7 @@ kbd {
   border: 1px solid currentColor;
   border-radius: 4px;
   font: inherit;
-  font-size: 11px;
+  font-size: 13px;
   text-align: center;
   opacity: 0.85;
 }
@@ -366,12 +367,14 @@ kbd {
   background: var(--panel);
   border: 1px solid var(--border);
 }
+/* Over the help line on a desktop. The carousel sits just right of it
+   (items.js placeHotbar); where that won't fit, under it, and the lamp rises. */
+:root { --hud-bottom: max(12px, env(safe-area-inset-bottom)); }
 @media (hover: hover) and (min-width: 561px) {
-  .lamp-hud { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 40px); }
+  :root { --hud-bottom: calc(max(12px, env(safe-area-inset-bottom)) + 40px); }
 }
-@media (max-width: 560px) {
-  .lamp-hud { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 66px); }
-}
+.lamp-hud { bottom: var(--hud-bottom); border-width: 2px; }
+.hud-stacked .lamp-hud { bottom: calc(var(--hud-bottom) + var(--bar-h, 90px) + 8px); }
 .lamp-icon {
   width: 92px;
   height: 92px;
@@ -466,7 +469,7 @@ kbd {
   .lamp-meter .sec { width: 20px; height: 14px; }
   .stamina { height: 7px; }
 }
-.lamp-row { display: flex; gap: 10px; font-size: 13px; color: var(--muted); min-height: 14px; }
+.lamp-row { display: flex; gap: 10px; font-size: 15px; font-weight: 600; color: var(--muted); min-height: 14px; }
 .lamp-row .keys { color: var(--key); }
 
 /* +◆ over the figure's head when entropy comes in. */
@@ -618,42 +621,49 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hotbar {
   position: fixed;
   z-index: 3;
-  left: 50%;
-  bottom: max(12px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
+  left: var(--bar-left, max(12px, env(safe-area-inset-left)));
+  bottom: var(--hud-bottom);
   display: flex;
   gap: 6px;
   padding: 6px;
   border-radius: 10px;
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
 }
 .hotbar[hidden] { display: none; }
 .slot {
+  --s: 46px;
   position: relative;
-  width: 46px;
-  height: 46px;
-  border-radius: 7px;
-  border: 1px solid var(--border);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 8px;
+  border: 2px solid var(--border);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   font: inherit;
+  font-size: max(11px, calc(var(--s) * 0.2));
   cursor: pointer;
   padding: 0;
 }
 .slot.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: rgba(232, 147, 95, 0.12); }
-.slot .n { position: absolute; left: 4px; top: 2px; font-size: 9px; color: var(--muted); }
-.slot .ic { font-size: 20px; line-height: 46px; }
+.slot .n { position: absolute; left: 0.3em; top: 0.15em; font-size: 0.75em; font-weight: 700; color: var(--muted); }
+.slot .ic { font-size: 2.1em; line-height: calc(var(--s) - 4px); }
+.slot .ic svg { width: auto; height: 1em; vertical-align: middle; }
 /* Worn equipment (unused for now): its own slot at the left end, its key in the corner. */
 .slot.equip { border-style: dashed; background: rgba(196, 193, 186, 0.06); }
 .slot.equip .n { color: #c4c1ba; }
 .slot.duster.ready { border-style: solid; border-color: rgba(201, 168, 255, 0.75); box-shadow: 0 0 8px rgba(185, 140, 255, 0.35); }
 .equip-gap { width: 1px; margin: 4px 2px; background: var(--border); }
-.slot .ct { position: absolute; right: 4px; bottom: 2px; font-size: 10px; color: var(--muted); }
-.slot .fill { position: absolute; left: 0; right: 0; bottom: 4px; display: flex; justify-content: center; gap: 3px; }
-.slot .fill i { width: 5px; height: 5px; border-radius: 50%; border: 1px solid rgba(210, 168, 255, 0.6); }
+/* A stack's count: a dark tab in the bottom right corner, clear of the icon. */
+.slot .ct {
+  position: absolute; right: 0.2em; bottom: 0.15em;
+  font-size: 0.85em; font-weight: 700; line-height: 1.25; color: var(--text);
+  padding: 0 0.3em; border-radius: 0.35em; background: rgba(0, 0, 0, 0.6);
+}
+.slot .fill { position: absolute; left: 0; right: 0; bottom: 0.3em; display: flex; justify-content: center; gap: 0.2em; }
+.slot .fill i { width: 0.4em; height: 0.4em; border-radius: 50%; border: 1px solid rgba(210, 168, 255, 0.6); }
 .slot .fill i.on { background: #d2a8ff; }
-.slot .fill i.ent { border-radius: 1px; width: 8px; background: #9a63ff; border-color: #9a63ff; } /* a jar of entropy */
+.slot .fill i.ent { border-radius: 1px; width: 0.65em; background: #9a63ff; border-color: #9a63ff; } /* a jar of entropy */
 .slot.jar .ic { color: #a9c3d6; }
 .slot.chalk .ic { color: #f2efe6; }
 .slot.echo .ic { color: #d678ff; }
@@ -680,12 +690,7 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (hover: hover) {
   .use-btn { display: none; }
 }
-@media (max-width: 560px) {
-  .hotbar { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 4px); left: 12px; transform: none; }
-}
-@media (hover: hover) and (min-width: 561px) {
-  .hotbar { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 40px); }
-}
+
 /* "That didn't work": a quick shake of the hotbar. */
 .hotbar.shake { animation: hotbar-shake 0.32s ease; }
 @keyframes hotbar-shake {
@@ -711,19 +716,17 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Chalk in the hotbar: the colour's symbol over a three-segment stick
    (strokes left in it); a group slot opens a picker above itself. */
-.slot .chalkic { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
-.chalkic .sym { font-size: 17px; line-height: 1; font-weight: 700; }
-.chalkic .segs { display: flex; gap: 2px; }
-.chalkic .segs i { width: 8px; height: 5px; border-radius: 1px; border: 1px solid rgba(233, 227, 214, 0.35); }
+.slot .chalkic { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25em; padding-bottom: 0.4em; }
+.chalkic .sym { font-size: 1.7em; line-height: 1; font-weight: 700; }
+.chalkic .segs { display: flex; gap: 0.15em; }
+.chalkic .segs i { width: 0.65em; height: 0.4em; border-radius: 1px; border: 1px solid rgba(233, 227, 214, 0.35); }
 .chalkic .segs i.on { border-color: transparent; }
-.chalkic .ct { position: absolute; right: 3px; bottom: 1px; font-size: 9px; color: var(--muted); }
-.slot .more { position: absolute; right: 3px; top: 1px; font-size: 8px; color: var(--muted); }
+.slot .more { position: absolute; right: 0.25em; top: 0.1em; font-size: 0.7em; color: var(--muted); }
 .slot.doorstone .ic { color: #f2efe6; }
-.jaric { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.jaric { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-bottom: 0.4em; }
 .jaric .ic { color: #a9c3d6; line-height: 1; }
-.jaric .fill, .jaric .auto { position: static; margin-top: 3px; }
-.jaric .auto { font-size: 8px; letter-spacing: 0.04em; color: var(--muted); }
-.jaric .ct { position: absolute; right: 3px; bottom: 1px; font-size: 9px; color: var(--muted); }
+.jaric .fill, .jaric .auto { position: static; margin-top: 0.2em; }
+.jaric .auto { font-size: 0.65em; letter-spacing: 0.04em; color: var(--muted); }
 .picker {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -749,3 +752,78 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 .pick.on { border-color: var(--accent); }
 .pick .chalkic { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+
+/* The carousel (items.js), where the hotbar was: the item in hand big in
+   the middle, the stops before and after it small to either side. */
+.hotbar.carousel { align-items: center; gap: 6px; padding: 8px 8px 28px; }
+.carousel .slot.side { --s: 62px; opacity: 0.75; }
+.carousel .slot.side:disabled { opacity: 0.25; cursor: default; }
+.carousel .slot.mid { --s: 88px; }
+.carousel .ic.hands { color: var(--muted); }
+.carousel-label {
+  position: absolute; left: 0; right: 0; bottom: 5px;
+  text-align: center; font-size: 14px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px;
+}
+@media (max-width: 560px) {
+  .carousel .slot.side { --s: 50px; }
+  .carousel .slot.mid { --s: 70px; }
+}
+.slot .toolic, .slot .coinic, .slot .curioic { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-bottom: 0.3em; }
+.slot .toolic .ic, .slot .curioic .ic { line-height: 1; }
+.coinic .disc {
+  width: 1.8em; height: 1.8em; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1em; font-weight: 700; color: rgba(40, 24, 8, 0.8); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* The menu (menu.js): tabs over the big map, the inventory's grids, a chest. */
+.bigmap .off { display: none !important; }
+.bigmap { border-width: 2px; }
+.menu-tabs {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-bottom: 2px solid var(--border);
+}
+.menu-tabs[hidden] { display: none; }
+.menu-tabs .tab {
+  padding: 8px 18px; border-radius: 8px; border: 2px solid transparent;
+  background: transparent; color: var(--muted); font: inherit; font-size: 18px; font-weight: 600; cursor: pointer;
+}
+.menu-tabs .tab.on { color: var(--text); border-color: var(--accent); background: rgba(232, 147, 95, 0.12); }
+.menu-tabs .tab.close { margin-left: auto; }
+.menu-tabs .tab-key { font-size: 14px; font-weight: 700; color: var(--muted); padding: 3px 8px; border: 2px solid var(--border); border-radius: 6px; }
+/* The grids fill the screen: a cell is as big as the screen's width and
+   height allow (the Inventory tab's 7 columns by 4 rows; a chest's 9 by 7),
+   up to 140px. */
+.inv {
+  flex: 1; min-height: 0; overflow: auto; padding: 16px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+  --cell: clamp(56px, min(calc((100vw - 180px) / 7), calc((100vh - 330px) / 4.6)), 140px);
+}
+.inv.chest { --cell: clamp(44px, min(calc((100vw - 200px) / 9), calc((100vh - 360px) / 7.4)), 110px); }
+.inv[hidden] { display: none; }
+.inv-body { flex: 1; display: flex; flex-direction: column; gap: 20px; align-items: center; justify-content: center; }
+.inv-row { display: flex; flex-wrap: wrap; gap: 24px calc(var(--cell) * 0.6); justify-content: center; align-items: flex-start; }
+.inv-sec { display: flex; flex-direction: column; gap: 16px; }
+.inv-grid-wrap h3 { margin: 0 0 10px; font-size: max(18px, calc(var(--cell) * 0.17)); font-weight: 700; letter-spacing: 0.04em; color: var(--text); }
+.inv-grid-wrap h3 .ct { position: static; font-size: inherit; font-weight: 500; color: var(--muted); background: none; padding: 0; }
+.inv-grid { display: grid; gap: max(6px, calc(var(--cell) * 0.08)); }
+.inv .slot.cell { --s: var(--cell); border-radius: 10px; }
+.inv .slot.cell.empty { background: rgba(255, 255, 255, 0.015); }
+.inv .slot.cell.cur { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent) inset; }
+.inv .slot.cell.picked { background: rgba(232, 147, 95, 0.22); outline: 2px dashed var(--accent); outline-offset: 3px; }
+.inv .slot.cell.hand::after { content: '✋'; position: absolute; left: 0.3em; top: 0.15em; font-size: 0.8em; color: var(--muted); }
+.inv .slot.cell.over { border-color: rgba(255, 120, 120, 0.7); background: rgba(255, 90, 90, 0.08); }
+/* A bag (the purse, the backpack): it opens to its own grid. */
+.inv .slot.cell.bag::before { content: '▸'; position: absolute; right: 0.35em; top: 0.1em; font-size: 0.9em; font-weight: 700; color: var(--accent); }
+.inv-info { margin: 0; height: 2.8em; line-height: 1.4em; overflow: hidden; text-align: center; font-size: max(18px, calc(var(--cell) * 0.16)); color: var(--text); }
+.inv-info .dim, .inv-info .note { color: var(--muted); }
+.inv-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; min-height: 44px; }
+.inv-actions .btn { font-size: 16px; font-weight: 600; padding: 8px 16px; border-width: 2px; }
+@media (max-width: 560px) {
+  .inv { --cell: clamp(48px, calc((100vw - 90px) / 4.4), 90px); padding: 12px 10px; }
+  .inv.chest { --cell: clamp(40px, calc((100vw - 90px) / 4.6), 80px); }
+  .menu-tabs { gap: 4px; padding: 8px; }
+  .menu-tabs .tab { padding: 6px 10px; font-size: 15px; }
+  .menu-tabs .tab-key { display: none; }
+}

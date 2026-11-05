@@ -221,6 +221,11 @@
       const blk = best.block;
       best.onTap = () => W.travelFrom(W.stoneOf(blk));
     }
+    // A chest: a tap opens it, E held grabs it.
+    if (best && best.action === 'lift' && best.block.chest) {
+      const blk = best.block;
+      best.onTap = () => W.openMenu('chest', blk.key);
+    }
     return best;
   }
 

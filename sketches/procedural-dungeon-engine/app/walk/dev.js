@@ -27,7 +27,7 @@
 
   const DEV_KEY = 'dungeon-engine:dev';
   // Shown in this order; a table that isn't exported is skipped.
-  const TABLES = ['PLAYER', 'RULES', 'POOL', 'LIGHT', 'HALO', 'UNREST', 'EMBER', 'STREAM', 'DRIP', 'FEED_GLOW', 'CREEPER', 'GHOST', 'PIXIE', 'CREATURE',
+  const TABLES = ['PLAYER', 'RULES', 'INV', 'POOL', 'LIGHT', 'HALO', 'UNREST', 'EMBER', 'STREAM', 'DRIP', 'FEED_GLOW', 'CREEPER', 'GHOST', 'PIXIE', 'CREATURE',
     'ECOLOGY', 'WELL', 'DUST', 'SLASH', 'GLOW', 'SCONCE_LIGHT', 'SAVE_LANTERN', 'PACK_LIGHT', 'JUMP', 'CAMERA', 'SHADOW', 'SETDOWN', 'SHADOW_FADE', 'PSYCHE'];
   const META = W.DEV_META || { TABS: [], DOCS: {} };
   // Numbers that size arrays or pools when the game starts: changing them live breaks things.
@@ -115,6 +115,10 @@
       state.run.chalks[c] = (state.run.chalks[c] || 0) + W.STROKES;
       after('a stick of ' + c + ' chalk');
     }]),
+    ['coin', () => { W.receive(state.run, { kind: 'coin', type: RULES.coinMetals[seq % RULES.coinMetals.length] + '-' + RULES.coinMarks[seq++ % RULES.coinMarks.length], n: 1 }, { force: true }); after('a coin'); }],
+    ['curio', () => { W.receive(state.run, { kind: 'curio', type: RULES.curios[seq++ % RULES.curios.length], n: 1 }, { force: true }); after('a curio'); }],
+    ['coin purse', () => { if (!state.run.equipment.purse) W.ITEMS.purse.take(state.run); after('a coin purse'); }],
+    ['backpack', () => { state.run.equipment.backpack = {}; after('a backpack'); }],
   ];
 
   function teleport(x, y, z = 0) {
@@ -157,6 +161,8 @@
     });
     return mesh;
   }
+  /** A test chest's cells: a little of each kind. */
+  const TEST_CHEST = () => [{ kind: 'coin', type: 'gold-sun', n: 3 }, { kind: 'curio', type: 'teacup', n: 1 }, { kind: 'chalk', color: 'teal', n: 3 }, null, null, { kind: 'jar', holds: null, n: 2 }, null, null];
   const nextColor = () => RULES.pushColors[seq % RULES.pushColors.length];
   const objectLook = (kind, extra) => () => ({ mesh: W.devPreviewMesh(Object.assign({ kind, sx: 0, sy: 0 }, extra())), lift: 0, onGrid: true });
   /** A creature's look: made the usual way, then taken straight back out of the game's list (so it never acts). */
@@ -172,6 +178,7 @@
   const PALETTE = {
     blocks: [
       ['crate', (at) => placeObject('crate', {}, at), objectLook('crate', () => ({}))],
+      ['chest', (at) => placeObject('chest', { cells: TEST_CHEST() }, at), objectLook('chest', () => ({ cells: [] }))],
       ['block', (at) => placeObject('block', { color: nextColor() }, at), objectLook('block', () => ({ color: nextColor() }))],
       ['vessel', (at) => placeObject('vessel', { holds: null, n: 0 }, at), objectLook('vessel', () => ({ holds: null, n: 0 }))],
       ['waystone', (at) => placeObject('waystone', { holds: null }, at), objectLook('waystone', () => ({ holds: null }))],

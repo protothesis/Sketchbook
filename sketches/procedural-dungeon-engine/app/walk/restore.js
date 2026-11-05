@@ -14,9 +14,9 @@
     inDoorMouth } = W;
 
   // Seconds for the arc up over your head, or back down: stone is heavier.
-  const LIFT_TIME = { crate: 0.38, vessel: 0.32, block: 0.6, waystone: 0.6 };
+  const LIFT_TIME = { crate: 0.38, chest: 0.45, vessel: 0.32, block: 0.6, waystone: 0.6 };
   // How fast you walk with it over your head (no running with anything).
-  const CARRY_PACE = { crate: 0.85, vessel: 1, block: 0.7, waystone: 0.7 };
+  const CARRY_PACE = { crate: 0.85, chest: 0.8, vessel: 1, block: 0.7, waystone: 0.7 };
   // What each kind of loose object allows. bearsStack: something can be set
   // on top of it (it then rests a whole unit up, however tall the thing
   // is). covers: what's inside is hidden while something rests on top of
@@ -25,6 +25,7 @@
   // nothing.
   const KINDS = {
     crate: { bearsStack: true },
+    chest: { bearsStack: true }, // a crate with a lid: E tapped opens it (inventory.js, menu.js), held grabs it
     block: { bearsStack: true },
     waystone: { bearsStack: true, covers: true },
     vessel: { bearsStack: true, covers: true },
@@ -72,6 +73,29 @@
     g.lineWidth = 1.5;
     g.strokeRect(0.75, 0.75, n - 1.5, n - 1.5);
     g.strokeRect(f, f, n - 2 * f, n - 2 * f);
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshLambertMaterial({ map: t });
+  })();
+
+  // A chest's faces: dark boards, two iron bands, a brass latch (programmer art).
+  const chestMat = (() => {
+    const n = 64, cv = document.createElement('canvas');
+    cv.width = cv.height = n;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#6a4424';
+    g.fillRect(0, 0, n, n);
+    g.strokeStyle = '#4a2c14';
+    g.lineWidth = 2;
+    for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(i * n / 4, 0); g.lineTo(i * n / 4, n); g.stroke(); }
+    g.fillStyle = '#3b3a3c';
+    g.fillRect(0, n * 0.3, n, n * 0.09);
+    g.fillRect(0, n * 0.72, n, n * 0.09);
+    g.fillStyle = '#d2a84f';
+    g.fillRect(n * 0.42, n * 0.26, n * 0.16, n * 0.2);
+    g.strokeStyle = '#2e1a0a';
+    g.lineWidth = 1.5;
+    g.strokeRect(0.75, 0.75, n - 1.5, n - 1.5);
     const t = new THREE.CanvasTexture(cv);
     t.colorSpace = THREE.SRGBColorSpace;
     return new THREE.MeshLambertMaterial({ map: t });
@@ -140,6 +164,8 @@
     for (const pr of DP.props(space).blocks) if (pr.crate) out.push({ key: id(pr.crate.id), kind: 'crate', from: pr.crate });
     const v = DP.vessel(space);
     if (v) out.push({ key: id('vessel'), kind: 'vessel', from: v });
+    const ch = DP.chest(space);
+    if (ch) out.push({ key: id('chest'), kind: 'chest', from: ch, space });
     if (DP.hallKeepsStone(space)) out.push({ key: id('waystone'), kind: 'waystone', from: DP.hallStone(space) });
     return out;
   }
@@ -173,6 +199,7 @@
       const rec = o || { sx: d.from.sx, sy: d.from.sy };
       rec.kind = d.kind;
       if (d.kind === 'vessel') { rec.holds = rec.holds || null; rec.n = rec.n || 0; }
+      if (d.kind === 'chest' && !rec.cells) rec.cells = DP.chestLoot(d.space, W.invSize('chest')); // what's in it, rolled once
       // A hall's own stone: the starter's comes powered, and so does one whose old fixed stone you woke.
       if (d.kind === 'waystone' && !o) rec.holds = !space.parentId || run.waystones[space.id + ':' + space.seed] ? 'entropy' : null;
       if (d.kind === 'block') {
@@ -268,7 +295,7 @@
     }
     const mesh = new THREE.Group();
     let body, bodyMat = null, col = null;
-    if (o.kind === 'crate') body = new THREE.Mesh(pushGeo.block, crateMat);
+    if (o.kind === 'crate' || o.kind === 'chest') body = new THREE.Mesh(pushGeo.block, o.kind === 'chest' ? chestMat : crateMat);
     else {
       // The whole block takes its colour (programmer art for now).
       col = new THREE.Color(o.color);
@@ -282,7 +309,7 @@
     // hold. Moving it off its mark takes that back; home again pays the rest.
     const base = (o.lv || 0) * UNIT;
     const b = {
-      key, push: true, crate: o.kind === 'crate', units: 1, base, top: base + UNIT, color: col, bodyMat,
+      key, push: true, crate: o.kind === 'crate' || o.kind === 'chest', chest: o.kind === 'chest', units: 1, base, top: base + UNIT, color: col, bodyMat,
       to: o.to || null, done: !!o.done, paid: o.paid || 0, mesh,
     };
     placeSaved(b, o);
@@ -368,12 +395,12 @@
     g.letGo = true; // it slows to a stop (grabInput), then maybe settles
   }
 
-  const kindOf = (b) => b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block';
+  const kindOf = (b) => b.chest ? 'chest' : b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block';
   // Dragging speed, cells a second: lighter things move quicker; pulling is slower.
-  const DRAG = { crate: 0.55, vessel: 0.6, block: 0.35, waystone: 0.35 }; // × PLAYER.speed
+  const DRAG = { crate: 0.55, chest: 0.5, vessel: 0.6, block: 0.35, waystone: 0.35 }; // × PLAYER.speed
   const PULL = 0.7;
   // Heft: how fast it gets going (cells/s²); it stops HEFT_STOP times as fast.
-  const HEFT = { crate: 8, vessel: 9, block: 3, waystone: 3 };
+  const HEFT = { crate: 8, chest: 7, vessel: 9, block: 3, waystone: 3 };
   const HEFT_STOP = 1.5;
   const SOCKET = 0.1; // cells: stopped this close to a notch (both ways), it settles in
 
@@ -640,7 +667,7 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
     const p = state.player;
     b.liftedFrom = { sx: b.sx, sy: b.sy, base: b.base || 0, px: p.x, py: p.y, pz: p.z };
     hold(b);
-    W.showCaption(b.crate ? 'you lift the crate' : b.vessel ? 'you lift the vessel'
+    W.showCaption(b.chest ? 'you lift the chest' : b.crate ? 'you lift the crate' : b.vessel ? 'you lift the vessel'
       : b.waystone ? (b.holds ? 'you lift the waystone · it leaves your ley lines until you set it down' : 'you lift the waystone') : 'you lift the block');
     savePlayer();
   }
