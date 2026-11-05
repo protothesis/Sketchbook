@@ -805,8 +805,6 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .inv-body { flex: 1; display: flex; flex-direction: column; gap: 20px; align-items: center; justify-content: center; }
 .inv-row { display: flex; flex-wrap: wrap; gap: 24px calc(var(--cell) * 0.6); justify-content: center; align-items: flex-start; }
 .inv-sec { display: flex; flex-direction: column; gap: 16px; }
-.inv-crumb { margin: 0; font-size: max(18px, calc(var(--cell) * 0.16)); font-weight: 600; color: var(--muted); }
-.inv-crumb b { color: var(--text); }
 .inv-grid-wrap h3 { margin: 0 0 10px; font-size: max(18px, calc(var(--cell) * 0.17)); font-weight: 700; letter-spacing: 0.04em; color: var(--text); }
 .inv-grid-wrap h3 .ct { position: static; font-size: inherit; font-weight: 500; color: var(--muted); background: none; padding: 0; }
 .inv-grid { display: grid; gap: max(6px, calc(var(--cell) * 0.08)); }
@@ -818,10 +816,9 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .inv .slot.cell.over { border-color: rgba(255, 120, 120, 0.7); background: rgba(255, 90, 90, 0.08); }
 /* A bag (the purse, the backpack): it opens to its own grid. */
 .inv .slot.cell.bag::before { content: '▸'; position: absolute; right: 0.35em; top: 0.1em; font-size: 0.9em; font-weight: 700; color: var(--accent); }
-.inv-info { margin: 0; min-height: 1.4em; text-align: center; font-size: max(18px, calc(var(--cell) * 0.16)); color: var(--text); }
+.inv-info { margin: 0; height: 2.8em; line-height: 1.4em; overflow: hidden; text-align: center; font-size: max(18px, calc(var(--cell) * 0.16)); color: var(--text); }
 .inv-info .dim, .inv-info .note { color: var(--muted); }
-.inv-hint { margin: 0; text-align: center; font-size: 15px; color: var(--muted); }
-.inv-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.inv-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; min-height: 44px; }
 .inv-actions .btn { font-size: 16px; font-weight: 600; padding: 8px 16px; border-width: 2px; }
 @media (max-width: 560px) {
   .inv { --cell: clamp(48px, calc((100vw - 90px) / 4.4), 90px); padding: 12px 10px; }

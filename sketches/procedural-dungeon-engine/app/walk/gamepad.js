@@ -13,8 +13,9 @@
 //
 // In the menu (menu.js), LB / RB switch tabs and B closes it. On the map
 // the stick pans and LT / RT zoom; in a grid the d-pad or stick moves the
-// cursor, A picks up and places (at a chest: takes or gives), X drops (at
-// a chest: takes everything) and Y puts the thing in your hand.
+// cursor, A picks up and places, or opens a bag (at a chest: takes or gives
+// one), X drops (at a chest: takes or gives the stack) and Y puts the thing
+// in your hand (on a bag: picks it up to move it).
 // In a choice, a dialog or the waystone travel map, the d-pad (and in a
 // choice or dialog, the stick) moves between options and A (or, in a
 // choice, X) confirms.

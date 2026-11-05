@@ -1036,6 +1036,27 @@ All notable changes to this sketch are logged here, per
       you wake, fading in with the last static dying away. Timings are in
       `PSYCHE` in the dev panel.
 
+- 2026-11-05: **The inventory, second playtest.**
+  - At a chest, A (Space) takes one from a chest cell, or gives one from
+    yours; X (or E) takes or gives the whole stack. "Take everything" is
+    gone.
+  - Hold (F / Y) puts it in your hand and leaves the menu open.
+  - Equipment rearranges like everything else (pick up, place, swap),
+    within the equipment grid.
+  - Bags can be dropped (X): the purse or the backpack lies where you
+    stood, with what's in it, and picking it up puts it all back where it
+    was. The duster and the hourglass can't be dropped yet.
+  - The backpack holds tools and collectables both, and shows on the
+    Collectables tab too. A tool in it is a carousel stop as before. You can
+    hold a collectable in it from the menu. Faints carry them in the pack.
+  - The menu's buttons are contextual: only the ones that do something on
+    the cell under the cursor (on a bag: Open, Move, Drop).
+  - The info line under the grids names the cell, or what you're moving
+    and what it would do there (swap with ..., place it here, put it
+    back). The line that showed above the grids while moving (it pushed
+    them down), the filler ("yours to use", "no use; it's yours") and the
+    controls hint over the buttons are gone.
+
 - 2026-11-02: **The inventory, stitched up after a first playtest.**
   - The carousel's side icons are now always the stops just before and
     after the one in hand. They were stuck: the carousel looked its stop

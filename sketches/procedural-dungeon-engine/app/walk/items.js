@@ -201,7 +201,7 @@
   function slots() {
     const run = state.run, out = [], seen = new Set();
     const kindSlot = (k) => ITEMS[k] && !ITEMS[k].equip && ITEMS[k].slot && ITEMS[k].slot(run);
-    for (const id of W.layoutItems(run)) if (id) out.push(itemSlot(run, id));
+    for (const id of W.layoutItems(run)) if (W.isTool(id)) out.push(itemSlot(run, id)); // (a collectable in the backpack isn't a stop)
     for (const k of W.layoutEquip(run)) {
       const slot = k && kindSlot(k);
       if (slot) { out.push(slot); seen.add(k); }
@@ -227,13 +227,13 @@
     }
     return { key: id, kind: c.kind, count: c.n };
   }
-  /** The collectable in your hand (taken from the menu), or null. state.handColl: { grid: 'coll' | 'purse', i }. */
+  /** The collectable in your hand (taken from the menu), or null. state.handColl: { grid: 'coll' | 'purse' | 'items' (the backpack's), i }. */
   function handCell() {
     const h = state.handColl;
     if (!h) return null;
-    const a = h.grid === 'purse' ? W.purseCells(state.run) : W.inv(state.run).coll;
+    const a = h.grid === 'purse' ? W.purseCells(state.run) : h.grid === 'items' ? W.inv(state.run).items : W.inv(state.run).coll;
     const c = a && a[h.i];
-    if (!c) { state.handColl = null; if (state.sel === 'hand-coll') state.sel = 'hands'; return null; }
+    if (!c || W.isTool(c)) { state.handColl = null; if (state.sel === 'hand-coll') state.sel = 'hands'; return null; }
     return c;
   }
   /** The worn equipment's slot, or null: { key, kind, ... } from its `slot(run)`. None right now. */

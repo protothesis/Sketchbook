@@ -130,7 +130,7 @@
     buffReady: false,    // false until the first sigil pass (no caption on load)
     sel: 'hands',        // the carousel stop in your hand (items.js slots); 'hands' for empty hands (how you start)
     lastSel: null,       // the last slot you had in hand (B takes it out again)
-    handColl: null,      // a collectable taken in hand from the menu: { grid: 'coll' | 'purse', i } (items.js)
+    handColl: null,      // a collectable taken in hand from the menu: { grid: 'coll' | 'purse' | 'items', i } (items.js)
     marks: [],           // chalk marks drawn in the world
     fx: { wobble: 0, glitch: 0, flash: 0, touching: false, heldNear: -9, heldTouch: -9, // screen effects, 0..1
       levels: {},        // per effect profile (FX_PROFILES in fx.js): how strong it is right now

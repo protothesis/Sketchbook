@@ -984,12 +984,29 @@ equipped, the lantern and its fuel) was left for later.
   is where each stack sits.
 - **Equipment** (2×4): the duster, the hourglass, the coin purse, the
   backpack. Capacity grows through equipment: the **backpack** adds another
-  4×4 of items. The **coin purse** has its own 2×4 grid, coins only.
+  4×4, for tools or collectables. The **coin purse** has its own 2×4
+  grid, coins only. Equipment rearranges like anything else, within its
+  grid (user, 2026-11-05).
+- **Bags can be set down** (user, 2026-11-05: "a player might want to put
+  down a backpack / coinpurse full of items in a particular place"). X on
+  one drops it where you stand, with what's in it; picking it up puts it
+  all back. The duster and the hourglass can't be dropped for now: they're
+  odd ones out (the hourglass may become a skill).
 - **Bags open to their own screen** (user, 2026-11-02): the purse's and
   the backpack's grids aren't on show. A bag is one cell (in the equipment
   grid; the purse also beside the collectables, and both at a chest); A on
   it opens its grid on a sub-screen, and B goes back up a level. A stack
   you picked up comes with you, which is how things move between bags.
+  A is "open" on a bag, so moving a bag is Y ("Move"): the menu's buttons
+  are contextual, showing only what does something on that cell.
+- **Open: sorting by kind, and getting things into your hand** (flagged
+  2026-11-05). The backpack holds tools and collectables both, so the
+  split between the Items and Collectables tabs isn't a clean one any
+  more. For now the lowest-friction rule: the backpack shows on both tabs
+  (as a bag cell), tools in it are carousel stops like any, and a
+  collectable in it can be held from the menu like one in Collectables.
+  Revisit when there's somewhere other than chests to put collectables in
+  or on (shelves, display furniture).
 - **Collectables** (4×4), its own tab: things with no use. Coins (a metal
   and a marking) and curios (dishware, odds and ends, bug specimens) for
   now.
@@ -1026,7 +1043,9 @@ skill system to discuss.
 **Containers use the same grids.** A normal chest is 2×4 (4 wide, 2 deep):
 a crate with a lid, 1 room in 6. A tap of E opens it; holding E grabs it
 like any crate. Its grid is on top, yours below, condensed. A on a chest
-cell takes that stack, on one of yours gives it; X takes everything.
+cell takes one, on one of yours gives one; X takes or gives the whole
+stack (user, 2026-11-05: once stacks have caps, moving them a few at a
+time is the inventory management).
 Containers take anything.
 
 **Display furniture is direct, no menu** (decided, not built). Library

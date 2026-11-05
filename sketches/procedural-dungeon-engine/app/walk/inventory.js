@@ -5,9 +5,13 @@
 //               hold. One stack per kind a cell. The truth stays in the run's
 //               counters (run.keys, run.chalks, run.jars ...); run.inv.items
 //               is only where each stack sits, kept in step by layoutItems().
-//               A backpack adds a second grid of them.
+//               A backpack adds a second grid after it (cells INV.items on),
+//               which takes collectables too: a collectable cell there is
+//               the cell itself, like one in coll.
 //   equip       gear: the duster, the hourglass, the coin purse, the backpack.
-//               The kinds are the truth (run.equipment); run.inv.equip is the order.
+//               The kinds are the truth (run.equipment); run.inv.equip is the
+//               order. A bag (the purse, the backpack) can be dropped, with
+//               what's in it.
 //   coll        collectables, things with no use: coins, curios. The cells
 //               are the truth: [{ kind, type, n }].
 //   purse       the coin purse's own grid (run.equipment.purse.cells), coins only.
@@ -75,12 +79,14 @@
   }
   const capOf = (kind) => INV.stack[kind] || 1;
 
-  /** Pack the cells past `cap` into holes below it, and drop trailing empties past it. */
-  function settle(a, cap) {
+  const isTool = (x) => typeof x === 'string'; // an items layout entry: a stack id, or a collectable cell (the backpack's)
+  /** Pack the cells past `cap` into holes below it (from `from`, for what can't go lower), and drop trailing empties past it. */
+  function settle(a, cap, from = () => 0) {
     for (let i = cap; i < a.length; i++) {
       if (a[i] == null) continue;
-      const hole = a.findIndex((x, j) => j < cap && x == null);
-      if (hole < 0 || hole >= cap) break;
+      const f = from(a[i]);
+      const hole = a.findIndex((x, j) => j >= f && j < cap && x == null);
+      if (hole < 0) continue;
       a[hole] = a[i];
       a[i] = null;
     }
@@ -91,14 +97,19 @@
   /** Where each item stack sits: run.inv.items, brought in step with what you carry. */
   function layoutItems(run) {
     const st = itemStacks(run), a = inv(run).items, cap = itemCap(run);
-    for (let i = 0; i < a.length; i++) if (a[i] && !st.has(a[i])) a[i] = null;
+    for (let i = 0; i < a.length; i++) if (isTool(a[i]) && !st.has(a[i])) a[i] = null;
     for (const id of st.keys()) {
       if (a.includes(id)) continue;
       let i = a.findIndex((x, j) => j < cap && x == null);
       if (i < 0) i = a.length < cap ? a.length : Math.max(a.length, cap);
       a[i] = id;
     }
-    return settle(a, cap);
+    return settle(a, cap, (x) => (isTool(x) ? 0 : size('items'))); // collectables only in the backpack's cells
+  }
+  /** The first empty cell of a in [from, to), or -1. */
+  function hole(a, from, to) {
+    for (let i = from; i < to; i++) if (a[i] == null) return i;
+    return -1;
   }
   /** The equipment you have, duster first: kinds in run.inv.equip order. */
   function layoutEquip(run) {
@@ -127,7 +138,7 @@
     if (TOOLS.has(cell.kind)) {
       const stacks = itemStacks(run), st = stacks.get(idOf(cell));
       const full = capOf(cell.kind) * (cell.kind === 'chalk' ? STROKES : 1); // chalk: in strokes
-      const room = force ? Infinity : st ? full - st.n : stacks.size < itemCap(run) ? full : 0;
+      const room = force ? Infinity : st ? full - st.n : hole(layoutItems(run), 0, itemCap(run)) >= 0 ? full : 0;
       const take = Math.min(n, Math.max(0, room));
       if (!dry && take > 0) {
         if (cell.kind === 'key') run.keys += take;
@@ -138,22 +149,23 @@
       return n - take;
     }
     if (!COLLECTABLE.has(cell.kind)) return n;
-    const grids = [];
-    if (cell.kind === 'coin' && purseCells(run)) grids.push([purseCells(run), size('purse')]);
-    grids.push([inv(run).coll, size('coll')]);
-    const same = (c) => c && c.kind === cell.kind && c.type === cell.type;
-    for (const [a, cap] of grids) { // first onto stacks of the same, then into empty cells
-      for (let i = 0; i < a.length && n > 0; i++) {
+    const grids = []; // [cells, from, to]: the purse (coins), your collectables, then the backpack
+    if (cell.kind === 'coin' && purseCells(run)) grids.push([purseCells(run), 0, size('purse')]);
+    grids.push([inv(run).coll, 0, size('coll')]);
+    if (has(run, 'backpack')) grids.push([layoutItems(run), size('items'), itemCap(run)]);
+    const same = (c) => c && !isTool(c) && c.kind === cell.kind && c.type === cell.type;
+    for (const [a, from, to] of grids) { // first onto stacks of the same, then into empty cells
+      for (let i = from; i < (a === inv(run).items ? to : a.length) && n > 0; i++) {
         if (!same(a[i])) continue;
         const t = Math.min(n, capOf(cell.kind) - a[i].n);
         if (t > 0) { if (!dry) a[i].n += t; n -= t; }
       }
     }
-    for (const [a, cap] of grids) {
-      for (let i = 0; i < cap && n > 0; i++) {
+    for (const [a, from, to] of grids) {
+      for (let i = from; i < to && n > 0; i++) {
         if (a[i]) continue;
         const t = Math.min(n, capOf(cell.kind));
-        if (!dry) a[i] = { kind: cell.kind, type: cell.type, n: t };
+        if (!dry) { while (a.length < i) a.push(null); a[i] = { kind: cell.kind, type: cell.type, n: t }; }
         n -= t;
       }
     }
@@ -169,13 +181,14 @@
 
   /**
    * Take `count` (default: all) out of a grid cell, and return it as a cell
-   * (or null). `where`: 'items' (index into the layout), 'coll', 'purse'.
+   * (or null). `where`: 'items' (index into the layout: a stack, or a collectable in the backpack), 'coll', 'purse'.
    * `one`: just one (a jar, a key, a stick of chalk: the one already broken).
    */
   function takeOut(run, where, i, one) {
     if (where === 'items') {
       const id = layoutItems(run)[i];
       if (!id) return null;
+      if (!isTool(id)) return takeCell(inv(run).items, i, one);
       const st = itemStacks(run).get(id);
       const n = !one ? st.n : st.kind === 'chalk' ? ((st.n - 1) % STROKES) + 1 : 1;
       if (st.kind === 'key') run.keys -= n;
@@ -187,13 +200,54 @@
       layoutItems(run);
       return Object.assign({}, st, { n });
     }
-    const a = where === 'purse' ? purseCells(run) : inv(run).coll;
+    return takeCell(where === 'purse' ? purseCells(run) : inv(run).coll, i, one);
+  }
+  function takeCell(a, i, one) {
     const c = a && a[i];
     if (!c) return null;
     const n = one ? 1 : c.n;
     c.n -= n;
     if (c.n <= 0) a[i] = null;
     return Object.assign({}, c, { n });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bags: the purse and the backpack, set down with what's in them
+
+  const BAGS = new Set(['purse', 'backpack']);
+  /** Take a bag off, with what's in it: a cell { kind, n: 1, cells } (the purse's coins; the backpack's cells, in order). */
+  function takeBag(run, kind) {
+    let cells = [];
+    if (kind === 'purse') cells = (purseCells(run) || []).slice();
+    else {
+      const main = size('items'), cap = itemCap(run);
+      for (let i = main; i < cap; i++) cells.push(layoutItems(run)[i] ? takeOut(run, 'items', i) : null);
+    }
+    delete run.equipment[kind];
+    while (cells.length && !cells[cells.length - 1]) cells.pop();
+    return { kind, n: 1, cells };
+  }
+  /** Put a bag back on, what's in it back in its cells. One of it already on you: its contents come into your grids instead. */
+  function giveBag(run, kind, cells) {
+    cells = cells || [];
+    if (has(run, kind)) { for (const c of cells) if (c) receive(run, c, { force: true }); return; }
+    if (kind === 'purse') { run.equipment.purse = { cells: cells.map((c) => (c ? Object.assign({}, c) : null)) }; return; }
+    run.equipment.backpack = {};
+    const main = size('items');
+    cells.forEach((c, j) => {
+      if (!c) return;
+      const at = main + j;
+      if (TOOLS.has(c.kind)) {
+        const had = itemStacks(run).has(idOf(c));
+        receive(run, c, { force: true });
+        const lay = layoutItems(run), from = lay.indexOf(idOf(c));
+        if (!had && from >= 0 && from !== at && lay[at] == null) { while (lay.length <= at) lay.push(null); lay[at] = lay[from]; lay[from] = null; }
+        return;
+      }
+      const lay = layoutItems(run);
+      if (lay[at] == null) { while (lay.length <= at) lay.push(null); lay[at] = Object.assign({}, c); } else receive(run, c, { force: true });
+    });
+    layoutItems(run);
   }
 
   // ---------------------------------------------------------------------------
@@ -224,7 +278,7 @@
       case 'jar': { const j = JAR_NAME[c.holds || null]; return n === 1 ? (c.holds ? 'a ' : 'an ') + j : `${n} ${j.replace('jar', 'jars')}`; }
       case 'coin': return n === 1 ? 'a ' + coinName(c.type) : `${n} ${coinName(c.type).replace('coin', 'coins')}`;
       case 'curio': return (CURIO[c.type] || CURIO.button).name + (n > 1 ? ` ×${n}` : '');
-      default: return ITEMS[c.kind] && ITEMS[c.kind].label ? ITEMS[c.kind].label : c.kind;
+      default: return ITEMS[c.kind] && ITEMS[c.kind].label ? (BAGS.has(c.kind) ? 'your ' : '') + ITEMS[c.kind].label : c.kind;
     }
   }
 
@@ -326,7 +380,7 @@
     label: 'backpack',
     take() {
       state.run.equipment.backpack = {};
-      return `a backpack · room for ${size('backpack')} more stacks of tools`;
+      return `a backpack · room for ${size('backpack')} more stacks, tools or collectables`;
     },
     mesh() {
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.2 * S, 0.24 * S, 0.12 * S), leatherMat);
@@ -334,7 +388,7 @@
       return m;
     },
     icon: () => svgIcon(PACK_SVG),
-    title: () => `backpack: ${size('backpack')} more cells for tools`,
+    title: () => `backpack: ${size('backpack')} more cells, for tools or collectables`,
   };
   /** An equipment kind's icon (its slot's, for the ones with a use). */
   function equipIcon(k) {
@@ -378,6 +432,11 @@
   function takeDrop(item) {
     const run = state.run;
     run.dropped = (run.dropped || []).filter((d) => d.id !== item.id);
+    if (BAGS.has(item.kind)) {
+      const full = (item.cells || []).some(Boolean);
+      giveBag(run, item.kind, item.cells);
+      return `your ${ITEMS[item.kind].label}` + (full ? ' · and what\'s in it' : '');
+    }
     const c = { kind: item.kind, n: item.n || 1, color: item.color, holds: item.holds, type: item.type };
     receive(run, c, { force: true });
     return cellName(c);
@@ -391,9 +450,12 @@
     const out = { coll: inv(run).coll.slice(), equip: {}, layout: layoutItems(run).slice() };
     for (const k in run.equipment) if (run.equipment[k] && !PROTECTED.has(k)) { out.equip[k] = run.equipment[k]; delete run.equipment[k]; }
     inv(run).coll = [];
+    const a = inv(run).items;
+    for (let i = 0; i < a.length; i++) if (a[i] && !isTool(a[i])) a[i] = null; // the backpack's collectables
     return out;
   }
-  const packHasInventory = (pk) => !!(pk.coll && pk.coll.some(Boolean)) || !!(pk.equip && Object.keys(pk.equip).length);
+  const packHasInventory = (pk) => !!(pk.coll && pk.coll.some(Boolean)) || !!(pk.equip && Object.keys(pk.equip).length) ||
+    !!(pk.layout && pk.layout.some((x) => x && !isTool(x)));
   /** Taking a pack back: equipment to where it was, collectables to their cells, and the stacks' order. */
   function unpackInventory(run, pk) {
     for (const k in pk.equip || {}) {
@@ -405,12 +467,17 @@
     (pk.coll || []).forEach((c, i) => { if (!c) return; if (!a[i]) a[i] = c; else receive(run, c, { force: true }); });
     const lay = layoutItems(run);
     (pk.layout || []).forEach((id, i) => { // stacks back in their cells (whatever's there moves to make room)
-      const at = id ? lay.indexOf(id) : -1;
-      if (at < 0 || at === i) return;
+      const at = isTool(id) ? lay.indexOf(id) : -1;
+      if (at < 0 || at === i || (lay[i] && !isTool(lay[i]))) return;
       while (lay.length <= i) lay.push(null);
       [lay[at], lay[i]] = [lay[i], lay[at]];
     });
     layoutItems(run);
+    (pk.layout || []).forEach((c, i) => { // the backpack's collectables back in theirs
+      if (!c || isTool(c)) return;
+      const a = layoutItems(run);
+      if (i >= size('items') && i < itemCap(run) && a[i] == null) { while (a.length <= i) a.push(null); a[i] = c; } else receive(run, c, { force: true });
+    });
     pk.coll = []; pk.equip = {}; pk.layout = [];
   }
 
@@ -429,7 +496,7 @@
     return n;
   }
 
-  Object.assign(W, { INV, PROTECTED, TOOLS, COLLECTABLE, invSize: size, inv, itemCap, purseCells, idOf, cellOfId, itemStacks,
+  Object.assign(W, { INV, PROTECTED, TOOLS, COLLECTABLE, BAGS, takeBag, giveBag, isTool, invSize: size, inv, itemCap, purseCells, idOf, cellOfId, itemStacks,
     layoutItems, layoutEquip, collCells, receive, fits, takeOut, cellName, cellIcon, equipIcon, equipName, coinName, CURIO,
     dropCell, addDrops, takeDrop, packInventory, packHasInventory, unpackInventory, chestCells, giveToChest });
 })(window);

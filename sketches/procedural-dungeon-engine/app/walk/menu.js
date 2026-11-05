@@ -3,21 +3,26 @@
 //
 //   Map           the big map (hud.js)
 //   Inventory     your items grid and your equipment (the bags in it)
-//   Collectables  coins and curios, and the coin purse
+//   Collectables  coins and curios, and your bags
 //
 // 1 / 2 (LB / RB) switch tabs. In a grid, WASD or the arrows (the d-pad or
-// the stick) move the cursor, and:
+// the stick) move the cursor. The buttons depend on what's under it (the
+// row along the bottom shows the ones that do something there):
 //
 //   Space (A)   pick up what's under it, then put it down on another cell
 //               (swapping); on a bag (the purse, the backpack), open its
 //               grid on a screen of its own, where Esc (B) comes back
-//   F (Y)       take it in your hand and close the menu
-//   X (X)       drop one where you stand
-//   Esc (B)     put back what you picked up, else close
+//   F (Y)       take it in your hand (the menu stays open); on a bag in
+//               the equipment grid, pick it up to move it
+//   X (X)       drop one where you stand; a bag, with what's in it
+//   Esc (B)     out of a bag, else put back what you picked up, else close
+//
+// The backpack takes tools and collectables both; the items grid only
+// tools, the collectables grid only collectables, the purse only coins.
 //
 // A chest (E tapped at one) opens its own screen: its grid on top, yours
-// below. Space (A) on one of its cells takes that stack, on one of yours
-// gives it; X or E (X) takes everything. state.bigmap holds the menu's
+// below. Space (A) on one of its cells takes one, on one of yours gives
+// one; X or E (X) the whole stack. state.bigmap holds the menu's
 // state while it's open: tab, cur and pick ({ g, i }: a grid and a cell),
 // chest (its object's key), sub (the bag open, if one is) and back (its cell).
 (function (global) {
@@ -53,7 +58,7 @@
   function cellAt(g, i) {
     const x = cells(g)[i];
     if (!x) return null;
-    if (g === 'items') return W.itemStacks(run()).get(x) || null;
+    if (g === 'items') return W.isTool(x) ? W.itemStacks(run()).get(x) || null : x; // a stack, or a collectable in the backpack
     if (worn(g)) return { kind: x, equip: true };
     return x;
   }
@@ -88,14 +93,15 @@
     } else if (v.tab === 'coll') { coll(); bags(); }
     return out;
   }
-  /** The bags you have that open from here: the purse beside the collectables; at a chest, both. */
+  /** The bags you have, beside the collectables (and at a chest): they open from here too. */
   function bagCells() {
     const eq = run().equipment || {};
-    return (state.bigmap && state.bigmap.chest ? ['backpack', 'purse'] : ['purse']).filter((k) => eq[k]);
+    return ['backpack', 'purse'].filter((k) => eq[k]);
   }
-  const BAGS = new Set(['purse', 'backpack']);
   /** Is this cell a bag (it opens to its own grid)? */
-  const isBag = (g, c) => !!c && (g === 'equip' || g === 'bags') && BAGS.has(c.kind);
+  const isBag = (g, c) => !!c && worn(g) && W.BAGS.has(c.kind);
+  /** Can you take this cell in hand? Tools and collectables; equipment with a use (the duster, the hourglass). */
+  const holdable = (g, c) => !!c && (!worn(g) || !!(ITEMS[c.kind].slot && ITEMS[c.kind].slot(run())));
   const worn = (g) => g === 'equip' || g === 'bags';
 
   function cellIconOf(g, c) {
@@ -110,7 +116,7 @@
   function inHand(g, i) {
     const x = cells(g)[i];
     if (!x) return false;
-    if (g === 'items' || worn(g)) return state.sel === x;
+    if ((g === 'items' && W.isTool(x)) || worn(g)) return state.sel === x;
     const h = state.handColl;
     return state.sel === 'hand-coll' && !!h && h.grid === g && h.i === i;
   }
@@ -161,17 +167,6 @@
     invEl.innerHTML = '';
     invEl.classList.toggle('chest', !!v.chest);
     const body = el('div', 'inv-body');
-    if (v.sub || v.pick) { // where you are, and what you're moving
-      const crumb = el('p', 'inv-crumb');
-      if (v.sub) {
-        crumb.append(document.createTextNode((v.chest ? 'Chest' : TABS.find(([id]) => id === v.tab)[1]) + ' › '));
-        crumb.append(el('b', '', v.sub === 'purse' ? 'Coin purse' : 'Backpack'));
-        crumb.append(document.createTextNode(` · ${K().b}: back`));
-      }
-      const pc = v.pick && cellAt(v.pick.g, v.pick.i);
-      if (pc) crumb.append(document.createTextNode((v.sub ? ' · ' : '') + 'moving ' + cellNameOf(v.pick.g, pc)));
-      body.append(crumb);
-    }
     let row = null;
     for (const s of secs) {
       if (s.top) { body.append(section(s)); continue; }
@@ -180,15 +175,22 @@
     }
     invEl.append(body);
     const c = v.cur && cellAt(v.cur.g, v.cur.i), k = K();
+    const g = v.cur && v.cur.g;
+    const pc = v.pick && cellAt(v.pick.g, v.pick.i);
+    const here = pc && v.pick.g === g && v.pick.i === v.cur.i;
     const info = el('p', 'inv-info');
-    if (note) { info.append(el('span', 'note', note)); }
-    else if (c) {
-      info.append(el('b', '', cellNameOf(v.cur.g, c)));
-      const extra = cellExtra(v.cur.g, c);
-      if (extra) info.append(document.createTextNode(' · ' + extra));
-    } else info.append(el('span', 'dim', v.pick ? 'an empty cell · put it here' : 'an empty cell'));
+    const text = (t) => info.append(document.createTextNode(t));
+    if (note) info.append(el('span', 'note', note));
+    else if (pc) { // moving something: what, and what it would do here
+      text('moving ');
+      info.append(el('b', '', cellNameOf(v.pick.g, pc)));
+      if (here) text(' · put it back');
+      else if (c && isBag(g, c) && !worn(v.pick.g)) { text(' · open '); info.append(el('b', '', cellNameOf(g, c))); }
+      else if (c) { text(' · swap with '); info.append(el('b', '', cellNameOf(g, c))); }
+      else text(' · place it here');
+    } else if (c) info.append(el('b', '', cellNameOf(g, c)));
+    else info.append(el('span', 'dim', 'an empty cell'));
     invEl.append(info);
-    const hint = el('p', 'inv-hint');
     const acts = el('div', 'inv-actions');
     const act = (label, key, fn) => {
       const b = el('button', 'btn', `${label} (${key})`);
@@ -196,27 +198,21 @@
       b.addEventListener('click', (e) => { e.preventDefault(); b.blur(); fn(); });
       acts.append(b);
     };
+    // Only the buttons that do something here.
     if (v.chest) {
-      hint.textContent = `${k.a}: take from the chest, or give to it · ${k.x}: take everything · ${k.b}: ${v.sub ? 'back' : 'close'}`;
-      act(isBag(v.cur && v.cur.g, c) ? 'Open' : v.cur && v.cur.g === 'chest' ? 'Take' : 'Give', k.a, primary);
-      act('Take all', k.x, takeAll);
-    } else {
-      hint.textContent = `${k.a}: ${v.pick ? 'put it here' : 'pick up'} · ${k.y}: hold in hand · ${k.x}: drop one · ${k.tabs}: tabs · ${k.b}: ${v.sub ? 'back' : v.pick ? 'put back' : 'close'}`;
-      act(isBag(v.cur && v.cur.g, c) ? 'Open' : v.pick ? 'Place' : 'Pick up', k.a, primary);
-      act('Hold', k.y, holdCur);
-      act('Drop', k.x, dropCur);
+      if (isBag(g, c)) act('Open', k.a, primary);
+      else if (c && g === 'chest') { act('Take one', k.a, primary); act('Take stack', k.x, dropCur); }
+      else if (c) { act('Give one', k.a, primary); act('Give stack', k.x, dropCur); }
+    } else if (pc) {
+      act(here ? 'Put back' : c && isBag(g, c) && !worn(v.pick.g) ? 'Open' : c ? 'Swap' : 'Place', k.a, primary);
+    } else if (c) {
+      act(isBag(g, c) ? 'Open' : 'Pick up', k.a, primary);
+      if (isBag(g, c) && g === 'equip') act('Move', k.y, yAct);
+      else if (holdable(g, c)) act(inHand(g, v.cur.i) ? 'In hand' : 'Hold', k.y, yAct);
+      if (!worn(g) || isBag(g, c)) act('Drop', k.x, dropCur);
     }
-    act(v.sub ? 'Back' : 'Close', k.b, back);
-    invEl.append(hint, acts);
-  }
-  function cellExtra(g, c) {
-    if (worn(g)) {
-      if (c.kind === 'purse') return `${K().a} to open it · its own ${W.invSize('purse')} cells, for coins`;
-      if (c.kind === 'backpack') return `${K().a} to open it · ${W.invSize('backpack')} more cells for tools`;
-      return ITEMS[c.kind].slot ? 'take it in hand to use it' : '';
-    }
-    if (g === 'items') return 'yours to use · in the carousel';
-    return c.kind === 'coin' || c.kind === 'curio' ? 'no use; it\'s yours' : '';
+    act(v.sub ? 'Back' : pc ? 'Cancel' : 'Close', k.b, back);
+    invEl.append(acts);
   }
 
   function section(s) {
@@ -295,44 +291,23 @@
   }
   function say(text) { note = text; renderMenu(); }
 
-  /** Space / A: pick up or put down; at a chest, take or give; on the purse or backpack, go to its grid. */
+  /** Space / A: pick up or put down (equipment in its own grid); on a bag, open it; at a chest, take or give one. */
   function primary() {
     const v = state.bigmap;
     if (!v || !v.cur) return;
     const { g, i } = v.cur, c = cellAt(g, i);
     note = null;
-    if (isBag(g, c)) { openBag(c.kind); return; }
-    if (v.chest) {
-      if (!c) { renderMenu(); return; }
-      if (g === 'chest') {
-        const left = W.receive(run(), c);
-        const a = W.chestCells(v.chest);
-        if (left === (c.n || 1)) { say(`no room for ${W.cellName(c)}`); return; }
-        a[i] = left ? Object.assign({}, c, { n: left }) : null;
-        if (left) note = 'you take what fits';
-      } else {
-        const out = W.takeOut(run(), g, i);
-        if (!out) return;
-        const left = W.giveToChest(v.chest, out);
-        if (left) W.receive(run(), Object.assign({}, out, { n: left }), { force: true }); // what didn't fit comes back
-        if (left === out.n) { say('the chest is full'); return; }
-      }
-      changed();
-      return;
-    }
-    if (worn(g)) {
-      say(c ? 'equipment stays where it is' : 'an empty equipment cell');
-      return;
-    }
+    if (isBag(g, c) && !(v.pick && worn(v.pick.g))) { openBag(c.kind); return; } // moving a bag onto one swaps them
+    if (v.chest) { if (c) { if (g === 'chest') chestTake(i, true); else chestGive(g, i, true); } else renderMenu(); return; }
     if (!v.pick) {
-      if (c) v.pick = { g, i };
+      if (c && g !== 'bags') v.pick = { g, i };
       renderMenu();
       return;
     }
     const p = v.pick;
     v.pick = null;
     if (p.g === g && p.i === i) { renderMenu(); return; }
-    if (!place(p, v.cur)) return;
+    if (!place(p, v.cur)) { v.pick = p; return; }
     changed();
   }
   /** Open a bag's own screen (what you picked up comes with you). Esc / B comes back to the bag. */
@@ -343,69 +318,129 @@
     v.cur = kind === 'purse' ? { g: 'purse', i: 0 } : { g: 'items', i: W.invSize('items') };
     renderMenu();
   }
-  /** Move the stack at `p` onto cell `q`: swap them, or stack them up if they're the same. False if it can't go there. */
+
+  /** The array behind grid g, to move cells in. */
+  function raw(g) {
+    if (g === 'items') return W.inv(run()).items;
+    if (g === 'equip') return W.inv(run()).equip;
+    if (g === 'coll') return W.inv(run()).coll;
+    if (g === 'purse') return W.purseCells(run());
+    return null;
+  }
+  /** Why `x` (a layout entry or a cell) can't go in cell i of grid g, or null if it can. */
+  function refuse(g, i, x) {
+    if (x == null) return null;
+    const tool = W.isTool(x);
+    if (g === 'items' && !tool && i < W.invSize('items')) return 'only tools go in your items grid · collectables can go in the backpack';
+    if (g === 'coll' && tool) return 'only collectables go here · tools can go in the backpack';
+    if (g === 'purse' && (tool || x.kind !== 'coin')) return 'only coins go in the purse';
+    return null;
+  }
+  /** Move what's at `p` onto cell `q`: swap them, or stack them up if they're the same. False if it can't go there. */
   function place(p, q) {
-    if (p.g === 'items' || q.g === 'items') {
-      if (p.g !== q.g) { say('tools go in the items grid'); return false; }
-      const a = W.inv(run()).items;
+    if (worn(p.g) || worn(q.g)) {
+      if (p.g !== 'equip' || q.g !== 'equip') { say(worn(q.g) ? 'only equipment goes there' : 'equipment stays in the equipment grid'); return false; }
+      const a = W.inv(run()).equip;
       while (a.length <= Math.max(p.i, q.i)) a.push(null);
       [a[p.i], a[q.i]] = [a[q.i], a[p.i]];
       return true;
     }
-    const A = cells(p.g), B = cells(q.g), x = A[p.i], y = B[q.i];
-    if ((q.g === 'purse' && x && x.kind !== 'coin') || (p.g === 'purse' && y && y.kind !== 'coin')) { say('only coins go in the purse'); return false; }
+    const A = raw(p.g), B = raw(q.g);
+    if (!A || !B) return false;
+    while (A.length <= p.i) A.push(null);
+    while (B.length <= q.i) B.push(null);
+    const x = A[p.i], y = B[q.i];
+    const why = refuse(q.g, q.i, x) || refuse(p.g, p.i, y);
+    if (why) { say(why); return false; }
     if (state.handColl) { state.handColl = null; if (state.sel === 'hand-coll') state.sel = 'hands'; } // it's put away as it moves
-    if (y && x && y.kind === x.kind && y.type === x.type) {
+    if (y && x && !W.isTool(x) && !W.isTool(y) && y.kind === x.kind && y.type === x.type) {
       const t = Math.min(x.n, (INV.stack[x.kind] || 1) - y.n);
       y.n += t; x.n -= t;
       if (x.n <= 0) A[p.i] = null;
       return true;
     }
-    while (B.length <= q.i) B.push(null);
     A[p.i] = y || null;
     B[q.i] = x;
     return true;
   }
 
-  /** F / Y: take it in your hand, and close the menu. */
-  function holdCur() {
-    const v = state.bigmap;
-    if (!v || !v.cur || v.chest) return;
-    const { g, i } = v.cur, x = cells(g)[i];
-    if (!x) { say('nothing there to hold'); return; }
-    if (worn(g) && !(ITEMS[x].slot && ITEMS[x].slot(run()))) { say(`${W.equipName(x)} · nothing to hold; it's worn`); return; }
-    if (g === 'coll' || g === 'purse') state.handColl = { grid: g, i };
-    if (!W.hold(g === 'coll' || g === 'purse' ? 'hand-coll' : x)) { state.handColl = null; say('your hands are full · set it down first'); return; }
-    W.closeBigMap();
-    W.showCaption('in hand: ' + W.slotLabel(W.selectedSlot()));
+  /** At a chest: take one from its cell i (a stick of chalk), or the whole stack. */
+  function chestTake(i, one) {
+    const a = W.chestCells(state.bigmap.chest), c = a[i];
+    if (!c) return;
+    const n = one ? (c.kind === 'chalk' ? ((c.n - 1) % W.STROKES) + 1 : 1) : c.n;
+    const got = n - W.receive(run(), Object.assign({}, c, { n }));
+    if (!got) { say(`no room for ${W.cellName(c)}`); return; }
+    c.n -= got;
+    if (c.n <= 0) a[i] = null;
+    note = got < n ? 'you take what fits' : null;
+    changed();
+  }
+  /** At a chest: give it one from your cell, or the whole stack. What doesn't fit comes back. */
+  function chestGive(g, i, one) {
+    const out = W.takeOut(run(), g, i, one);
+    if (!out) return;
+    const left = W.giveToChest(state.bigmap.chest, out);
+    if (left) W.receive(run(), Object.assign({}, out, { n: left }), { force: true });
+    if (left === out.n) { say('the chest is full'); return; }
+    changed();
   }
 
-  /** X / X: drop one where you stand (it lies there, as it did before you took it). At a chest: take everything. */
+  /** F / Y: take it in your hand (the menu stays open); a bag in the equipment grid, pick it up to move it. */
+  function yAct() {
+    const v = state.bigmap;
+    if (!v || !v.cur || v.chest) return;
+    const { g, i } = v.cur, c = cellAt(g, i);
+    if (isBag(g, c) && g === 'equip' && !v.pick) { v.pick = { g, i }; note = null; renderMenu(); return; }
+    holdCur();
+  }
+  function holdCur() {
+    const v = state.bigmap, { g, i } = v.cur, x = cells(g)[i], c = cellAt(g, i);
+    if (!x) { say('nothing there to hold'); return; }
+    if (!holdable(g, c)) { say(`${cellNameOf(g, c)} · nothing to hold`); return; }
+    const coll = g === 'coll' || g === 'purse' || (g === 'items' && !W.isTool(x));
+    if (coll) state.handColl = { grid: g, i };
+    if (!W.hold(coll ? 'hand-coll' : x)) { state.handColl = null; say('your hands are full · set it down first'); return; }
+    note = 'in hand: ' + W.slotLabel(W.selectedSlot());
+    changed();
+  }
+
+  /** X / X: drop one where you stand (it lies there, as it did before you took it); a bag, with what's in it. At a chest: the whole stack. */
   function dropCur() {
     const v = state.bigmap;
     if (!v || !v.cur) return;
-    if (v.chest) { takeAll(); return; }
-    const { g, i } = v.cur;
-    if (worn(g)) { say(cells(g)[i] ? 'equipment stays on you' : 'nothing there to drop'); return; }
-    const c = W.takeOut(run(), g, i, true);
-    if (!c) { say('nothing there to drop'); return; }
-    if (!W.dropCell(c)) { W.receive(run(), c, { force: true }); say('nowhere to drop it here'); return; }
+    const { g, i } = v.cur, c = cellAt(g, i);
+    if (v.chest) {
+      if (!c || isBag(g, c)) return;
+      if (g === 'chest') chestTake(i, false); else chestGive(g, i, false);
+      return;
+    }
+    if (worn(g)) {
+      if (!c) { say('nothing there to drop'); return; }
+      if (!isBag(g, c)) { say(`your ${cellNameOf(g, c).split(' · ')[0]} stays with you`); return; }
+      dropBag(c.kind);
+      return;
+    }
+    const out = W.takeOut(run(), g, i, true);
+    if (!out) { say('nothing there to drop'); return; }
+    if (!W.dropCell(out)) { W.receive(run(), out, { force: true }); say('nowhere to drop it here'); return; }
     v.pick = null;
-    note = 'you drop ' + W.cellName(c);
+    note = 'you drop ' + W.cellName(out);
     changed();
   }
-  /** At a chest: everything in it that fits. */
-  function takeAll() {
-    const v = state.bigmap, a = W.chestCells(v.chest);
-    let got = 0, left = 0;
-    for (let i = 0; i < a.length; i++) {
-      const c = a[i];
-      if (!c) continue;
-      const l = W.receive(run(), c);
-      if (l < (c.n || 1)) got++;
-      if (l) { a[i] = Object.assign({}, c, { n: l }); left++; } else a[i] = null;
+  /** Set a bag down where you stand, with what's in it. */
+  function dropBag(kind) {
+    const v = state.bigmap, r = run();
+    const h = state.handColl, main = W.invSize('items');
+    if (h && (kind === 'purse' ? h.grid === 'purse' : h.grid === 'items' && h.i >= main)) { // what's in your hand goes in the bag
+      state.handColl = null;
+      if (state.sel === 'hand-coll') state.sel = 'hands';
     }
-    note = !got && !left ? 'the chest is empty' : left ? 'you take what fits · the rest stays' : null;
+    const bag = W.takeBag(r, kind);
+    if (!W.dropCell(bag)) { W.giveBag(r, kind, bag.cells); say('nowhere to drop it here'); return; }
+    v.pick = null;
+    v.sub = null;
+    note = `you set down your ${ITEMS[kind].label}` + (bag.cells.some(Boolean) ? ', with what\'s in it' : '');
     changed();
   }
 
@@ -436,9 +471,8 @@
     const dir = { w: [0, -1], arrowup: [0, -1], s: [0, 1], arrowdown: [0, 1], a: [-1, 0], arrowleft: [-1, 0], d: [1, 0], arrowright: [1, 0] }[k];
     if (dir) { menuMove(dir[0], dir[1]); e.preventDefault(); return; }
     if (e.repeat) return;
-    if (k === ' ') { primary(); e.preventDefault(); } else if (k === 'f') holdCur();
-    else if (k === 'x') dropCur();
-    else if (k === 'e' && v.chest) takeAll();
+    if (k === ' ') { primary(); e.preventDefault(); } else if (k === 'f') yAct();
+    else if (k === 'x' || (k === 'e' && v.chest)) dropCur();
   }
 
   Object.assign(W, { openMenu, renderMenu, menuMove, menuKey });

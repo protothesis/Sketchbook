@@ -530,26 +530,35 @@ Determinism).
   - **Map** is the big map: it opens zoomed in on you (two wheel steps
     back from the closest zoom); drag to pan, wheel or pinch to zoom.
   - **Inventory**: the items grid (4×4) and the equipment grid (2×4).
-    **Collectables**: coins and curios (4×4), and a Bags cell for the coin
-    purse. The grids fill the screen: a cell is as big as the screen
+    **Collectables**: coins and curios (4×4), and your bags. The grids fill the screen: a cell is as big as the screen
     allows, up to 140px.
   - **Bags** (the coin purse, the backpack; marked ▸) show as one cell.
     Space (A) on one opens its grid on a screen of its own (the backpack's
-    4×4 of items, the purse's 2×4 of coins); Esc (B) comes back to it.
-    Something you picked up comes along, so that's how a stack moves in
-    or out of a bag.
-  - In a grid, WASD or the arrows (d-pad or stick) move the cursor.
+    4×4, the purse's 2×4 of coins); Esc (B) comes back to it. Something
+    you picked up comes along, so that's how a stack moves in or out of a
+    bag. The backpack takes tools and collectables both (the items grid
+    only tools, the collectables grid only collectables). X (X) on a bag
+    sets it down where you stand, with what's in it; walk over it to take
+    it back, everything where it was.
+  - In a grid, WASD or the arrows (d-pad or stick) move the cursor. The
+    buttons along the bottom are the ones that do something on the cell
+    under it, and the line above them names it (or, while you're moving
+    something, says what it would do: swap, place, put back).
     **Space** (A) picks up a stack and puts it down on another cell,
-    swapping (the order is the carousel's); on a bag it opens it. **F** (Y) takes it in your hand and closes the
-    menu (a collectable too: it rides the carousel until you scroll off
-    it). **X** (X) drops one where you stand, lying as it did before you
-    took it (step off it before it can be picked up again). **Esc** (B)
-    leaves a bag, else puts back what you picked up, else closes. On touch, tap a cell, or
-    use the buttons along the bottom.
+    swapping (the order is the carousel's); equipment moves the same way,
+    within the equipment grid; on a bag it opens it. **F** (Y) takes it in
+    your hand, and the menu stays open (a collectable too: it rides the
+    carousel until you scroll off it); on a bag in the equipment grid it
+    picks the bag up to move it. **X** (X) drops one where you stand, lying
+    as it did before you took it (step off it before it can be picked up
+    again); the duster and the hourglass can't be dropped for now.
+    **Esc** (B) leaves a bag, else puts back what you picked up, else
+    closes. On touch, tap a cell, or use the buttons.
   - **Chests** (`app/walk/restore.js`): a crate with a lid. Tap E to open
     it (hold E grabs it, like any crate). The chest's grid (4×2) is on
-    top, yours below. Space (A, or a tap) on a chest cell takes that
-    stack; on one of yours, gives it. X or E (X) takes everything that fits.
+    top, yours below. Space (A, or a tap) on a chest cell takes one (a
+    stick of chalk); on one of yours, gives one. X or E (X) takes or gives
+    the whole stack.
 
 There's no passive regen, only wells. Entropy buys rerolls, waking
 waystones, travel and lighting sconces, and the lamp burns it. Running out
