@@ -81,11 +81,18 @@
           </label>
         </div>
         <div class="row">
-          <button id="grow-new-btn" class="primary" title="A new random seed, grown to this many rooms">New dungeon</button>
-          <button id="grow-btn" title="Add this many rooms, from any open door">Grow</button>
-          <button id="grow-here-btn" title="Add this many rooms, only in the selected room's branch">Grow from selected</button>
+          <label class="grow">Route <input type="text" id="grow-route" spellcheck="false" placeholder="default" /></label>
+          <button id="grow-route-btn" title="A new route: other doors picked, other rooms behind them">New route</button>
         </div>
-        <p class="muted small">Opens doors in bulk and keeps every room: no rerolls, faints or waypoints. Caps above still apply. The same seed, count and order always grow the same dungeon.</p>
+        <div class="row">
+          <button id="grow-new-btn" class="primary" title="A new random root seed, grown to this many rooms">New dungeon</button>
+          <button id="grow-seed-btn" title="Start again from the Root seed above, grown to this many rooms">Grow this seed</button>
+        </div>
+        <div class="row">
+          <button id="grow-btn" title="Add this many rooms to this map, from any open door">Grow</button>
+          <button id="grow-here-btn" title="Add this many rooms to the selected room's branch: it and every room opened beyond it">Grow from selected</button>
+        </div>
+        <p class="muted small">Opens doors in bulk and keeps every room: no rerolls, faints or waypoints. Caps above still apply. The <b>route</b> seeds which doors open and what lies behind them: the same root seed, size, order and route always grow the same dungeon. On a map that's only a grow, changing the order, size or route grows the seed again, so you can flip between orders to compare. <b>Grow from selected</b> adds rooms anywhere in the room's branch (it and every room opened beyond it), keeping your view; new rooms are outlined.</p>
         <div id="depth-chart" class="depth-chart" aria-label="Rooms at each depth"></div>
         <p id="shape-stats" class="muted small"></p>
       </section>

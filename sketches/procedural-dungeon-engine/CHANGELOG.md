@@ -173,6 +173,23 @@ All notable changes to this sketch are logged here, per
   - It also shows a rooms-per-depth bar chart and the room mix (corridors,
     chambers, halls, dead ends, regions). The map zooms out further, to
     fit a thousand rooms.
+- 2026-11-05: **Comparing growth orders on one seed, and a clearer selection.**
+  - **Grow this seed** grows the Root seed box's seed from scratch. A
+    **Route** (blank = default) seeds which doors open and what lies behind
+    them, and **New route** rolls a fresh one. The same root seed, size,
+    order and route always grow the same dungeon.
+  - While the map is nothing but a grow, changing the order, size or route
+    grows that seed again, so you can flip between random, breadth and
+    depth on one seed.
+  - **Grow** and **Grow from selected** keep your view (only fresh grows
+    fit the map). The rooms they add are outlined in teal until the next
+    grow.
+  - The status line says where a branch grow came from: the room's branch
+    is the room and every room opened beyond it, so a room with no doors
+    of its own can still grow from rooms past it.
+  - The selected room has a heavy outline, a dashed box round it and its
+    id on the box's corner (with archetype and depth when zoomed in), all
+    sized to stay visible zoomed out.
 - 2026-11-05: **Room contents on the map.** The map view has a **Room
   contents** overlay, with toggles for creatures, push blocks, features
   (sigils, wells, chests, vessels, sconces, hall waystones), locked doors,

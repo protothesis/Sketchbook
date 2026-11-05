@@ -23,6 +23,12 @@
     regions: { show: false, by: 'type', selected: null, pinned: [] },
     // The region under the pointer on the map (regions layer on), or null.
     mapRegion: null,
+    // Rooms the last grow added (outlined on the map until the next one).
+    grown: null,
+    // What a dungeon was grown from, if the map is nothing but that grow
+    // ({ seed, rooms, order, route, n }): changing the order or route then
+    // grows it again from scratch, so orders can be compared on one seed.
+    grownFrom: null,
     // What the pointer is over in the panel, previewed or highlighted on the
     // map: { content: kind } | { region: id } | { type } | { mood } | null.
     hover: null,
@@ -258,6 +264,8 @@
     state.regions.pinned = [];
     state.mapRegion = null;
     state.hover = null;
+    state.grown = null;
+    state.grownFrom = null;
     $('seed-input').value = exp.rootSeed;
     loadCapsInputs();
     renderer.fit(exp);
@@ -300,30 +308,60 @@
 
   function growOpts() {
     const n = parseInt($('grow-rooms').value, 10);
-    return { rooms: n > 0 ? Math.min(n, 5000) : 400, order: $('grow-order').value };
+    const route = $('grow-route').value.trim();
+    const o = { rooms: n > 0 ? Math.min(n, 5000) : 400, order: $('grow-order').value };
+    if (route) o.seed = route;
+    return o;
   }
 
-  /** Grow the current expedition (from `from`'s branch, or anywhere). */
-  function growMap(from) {
+  /**
+   * Grow the current expedition (from `from`'s branch, or anywhere). The
+   * view stays where it is unless `fit`: you zoom out from where you were.
+   * The rooms it adds are outlined until the next grow.
+   */
+  function growMap(from, fit) {
     if (state.candidate) state.candidate = null;
     const o = growOpts();
     o.from = from || null;
+    const before = new Set(Object.keys(state.exp.spaces));
+    const branch = from ? DE.subtree(state.exp, from).size : 0;
     const t = performance.now();
     const r = DE.grow(state.exp, o);
     const ms = Math.round(performance.now() - t);
-    renderer.fit(state.exp);
+    state.grown = new Set(Object.keys(state.exp.spaces).filter((id) => !before.has(id)));
+    if (fit) renderer.fit(state.exp);
     const saved = save();
     refreshPanels();
-    setStatus(`Grew ${r.rooms} room${r.rooms === 1 ? '' : 's'}${from ? ' from ' + from : ''} (${o.order}), ${r.loops} loops, in ${ms} ms.` +
+    const where = from ? ` from ${from}'s branch (${branch} room${branch === 1 ? '' : 's'}: ${from} and every room opened beyond it)` : '';
+    setStatus(`Grew ${r.rooms} room${r.rooms === 1 ? '' : 's'}${where}, ${o.order}, ${r.loops} loops, in ${ms} ms. New rooms are outlined.` +
       (r.rooms < o.rooms ? (from ? ` No unopened doors left in ${from}'s branch.` : ' No unopened doors left.') : '') +
       (saved ? '' : ' Too big to autosave: use Export JSON to keep it.'));
+    return r;
+  }
+
+  /**
+   * A dungeon grown from scratch: this root seed (default: the Root seed
+   * box), at the chosen size, order and route. Remembered, so changing the
+   * order or route grows the same seed again for comparison.
+   */
+  function growFresh(seed) {
+    const root = seed || $('seed-input').value.trim() || DE.randomRootSeed();
+    setExpedition(DE.createExpedition(root, readCaps()), '');
+    const r = growMap(null, true);
+    state.grown = null; // the whole map is new: nothing to pick out
+    const o = growOpts();
+    setStatus(`Grew ${root} to ${r.rooms} rooms, ${o.order}${o.seed ? ', route ' + o.seed : ''}, ${r.loops} loops.` +
+      ' Change the order, size or route to grow it again.');
+    state.grownFrom = { seed: root, rooms: o.rooms, order: o.order, route: o.seed || '', n: state.exp.history.length };
+    refreshPanels();
   }
 
   /** One click: a fresh seed, grown to the chosen size. */
-  function newDungeon() {
-    const seed = DE.randomRootSeed();
-    setExpedition(DE.createExpedition(seed, readCaps()), '');
-    growMap(null);
+  function newDungeon() { growFresh(DE.randomRootSeed()); }
+
+  /** Is the map still exactly a fresh grow (nothing opened, grown or reverted since)? */
+  function onlyGrown() {
+    return state.grownFrom && state.grownFrom.seed === state.exp.rootSeed && state.grownFrom.n === state.exp.history.length;
   }
 
   function revertSelected() {
@@ -494,8 +532,18 @@
   };
 
   $('grow-new-btn').onclick = newDungeon;
+  $('grow-seed-btn').onclick = () => growFresh(null);
   $('grow-btn').onclick = () => growMap(null);
   $('grow-here-btn').onclick = () => { if (state.selectedId) growMap(state.selectedId); };
+  $('grow-route-btn').onclick = () => {
+    $('grow-route').value = DE.randomRootSeed();
+    growFresh(onlyGrown() ? state.exp.rootSeed : null);
+  };
+  // On a map that's nothing but a grow, changing the order, size or route
+  // grows the same seed again: flip between orders to compare them.
+  for (const id of ['grow-order', 'grow-rooms', 'grow-route']) {
+    $(id).addEventListener('change', () => { if (onlyGrown()) growFresh(state.exp.rootSeed); });
+  }
 
   for (const t in state.show) {
     const el = $('c-' + t);

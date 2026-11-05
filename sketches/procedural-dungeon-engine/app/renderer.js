@@ -6,6 +6,7 @@
   const DE = global.DungeonEngine;
   const CELL = 24; // px per cell at scale 1
   const MIN_SCALE = 0.03; // far enough out to see a thousand rooms at once
+  const GROWN_COLOR = '#4fd1c1'; // outline of the rooms the last grow added
 
   // ---------------------------------------------------------------------------
   // Room contents (engine/contents.js), for the map's overlay and counts.
@@ -257,12 +258,61 @@
         ctx.setLineDash([]);
       }
 
+      const dpr = global.devicePixelRatio || 1;
+      // The outline of a set of rooms' cells, edge by edge.
+      const outline = (ids, color, width, dash) => {
+        ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'square';
+        ctx.setLineDash(dash || []);
+        ctx.beginPath();
+        for (const id of ids) {
+          const sp = exp.spaces[id];
+          if (!sp) continue;
+          const set = new Set(sp.cells);
+          for (const k of sp.cells) {
+            const c = DE.parseKey(k);
+            if (!set.has(DE.key(c.x, c.y - 1))) { ctx.moveTo(X(c.x), Y(c.y)); ctx.lineTo(X(c.x + 1), Y(c.y)); }
+            if (!set.has(DE.key(c.x, c.y + 1))) { ctx.moveTo(X(c.x), Y(c.y + 1)); ctx.lineTo(X(c.x + 1), Y(c.y + 1)); }
+            if (!set.has(DE.key(c.x - 1, c.y))) { ctx.moveTo(X(c.x), Y(c.y)); ctx.lineTo(X(c.x), Y(c.y + 1)); }
+            if (!set.has(DE.key(c.x + 1, c.y))) { ctx.moveTo(X(c.x + 1), Y(c.y)); ctx.lineTo(X(c.x + 1), Y(c.y + 1)); }
+          }
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      };
+
+      // Rooms the last grow added, outlined, so you can see where it grew.
+      if (state.grown && state.grown.size) {
+        ctx.globalAlpha = 0.9;
+        outline(state.grown, GROWN_COLOR, Math.max(1.5 * dpr, s * 0.07), [Math.max(3 * dpr, s * 0.25), Math.max(2 * dpr, s * 0.15)]);
+        ctx.globalAlpha = 1;
+      }
+
+      // The selected room: a wash, a heavy outline, a dashed box round it and
+      // its id on the box's corner, all sized to stay visible zoomed out.
       if (selectedId && exp.spaces[selectedId]) {
         const sp = exp.spaces[selectedId];
         ctx.fillStyle = colors.select;
-        ctx.globalAlpha = 0.18;
+        ctx.globalAlpha = 0.25;
         for (const k of sp.cells) { const c = DE.parseKey(k); ctx.fillRect(X(c.x), Y(c.y), s, s); }
         ctx.globalAlpha = 1;
+        outline([selectedId], colors.select, Math.max(3 * dpr, s * 0.2));
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const k of sp.cells) { const c = DE.parseKey(k); x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x + 1); y1 = Math.max(y1, c.y + 1); }
+        const pad = Math.max(6 * dpr, s * 0.35);
+        const bx = X(x0) - pad, by = Y(y0) - pad, bw = X(x1) - X(x0) + pad * 2, bh = Y(y1) - Y(y0) + pad * 2;
+        ctx.strokeStyle = colors.select; ctx.lineWidth = Math.max(1.5 * dpr, s * 0.06);
+        ctx.setLineDash([Math.max(4 * dpr, s * 0.3), Math.max(3 * dpr, s * 0.2)]);
+        ctx.strokeRect(bx, by, bw, bh);
+        ctx.setLineDash([]);
+        const size = Math.round(Math.max(10 * dpr, Math.min(13 * dpr, s * 0.45)));
+        ctx.font = `600 ${size}px ui-monospace, Menlo, monospace`;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        const text = s >= 14 ? `${sp.id} · ${sp.archetype}${sp.deadEnd ? ' (dead end)' : ''} · depth ${sp.depth}` : sp.id;
+        const w = ctx.measureText(text).width + size * 0.9, h = size * 1.5;
+        ctx.fillStyle = colors.select;
+        ctx.fillRect(bx, by - h, w, h);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(text, bx + size * 0.45, by - h / 2);
       }
 
       if (candidate) {
