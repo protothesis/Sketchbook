@@ -189,8 +189,21 @@ All notable changes to this sketch are logged here, per
   - **Show regions** draws each region's ground under the rooms: its rooms'
     cells plus a one-cell margin, so it shows in the gaps, with an outline
     just inside its edge. Ground a cloister has claimed and not built yet
-    is hatched. Zoomed in, each region is labelled
-    (`g3 catacomb · damp · 7/12`).
+    is hatched.
+  - **Labels only when asked for**, so a big map stays readable. Pointing
+    at a region on the map shows its label. Clicking it (a room, or its
+    margin) pins it, and clicking empty ground clears the pins. A label
+    sits just above the top-left of its region's ground and says more the
+    closer you zoom: `g3`, then `g3 catacomb · damp`, then
+    `g3 catacomb · damp · 7/12 rooms` (7 rooms spent of a 12-room budget).
+    Labels that would overlap are left out, the one you're pointing at
+    first.
+  - Hovering a structure type always highlights in type colours, and a mood
+    in mood colours, whatever the layer is coloured by.
+  - In the inspector, a room's **region**, **structure** and **mood** rows
+    highlight on hover even with the layer off (that region, every region
+    of that type, every region of that mood). Clicking the region row pins
+    it. The Region block shows the selected room's region.
   - **Colour by** structure type, mood, or each region's own hue, so
     structure and mood can be read apart. Size shows as the region's
     extent.

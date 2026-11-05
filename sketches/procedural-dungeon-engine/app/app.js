@@ -19,7 +19,10 @@
     show: { creatures: false, push: false, features: false, locks: false, items: false, crates: false, blocks: false },
     // Region layer (regions-view.js): shown or not, coloured by 'type' |
     // 'mood' | 'region', and the selected region (highlighted on the map).
-    regions: { show: false, by: 'type', selected: null },
+    // `pinned`: regions whose highlight and label stay up (click to pin).
+    regions: { show: false, by: 'type', selected: null, pinned: [] },
+    // The region under the pointer on the map (regions layer on), or null.
+    mapRegion: null,
     // What the pointer is over in the panel, previewed or highlighted on the
     // map: { content: kind } | { region: id } | { type } | { mood } | null.
     hover: null,
@@ -61,14 +64,11 @@
       ['archetype', sp.archetype + (sp.deadEnd ? ' (dead end)' : '')],
       ['cells', sp.cells.length],
       ['exits', sp.exits.map((e) => `${e.id}${e.facing}${e.connectionId ? '·' + e.connectionId : '·open'}`).join(' ')],
-      ['mood', `${sp.meta.mood}, hue ${sp.meta.hue}`],
-      ['region', regionText(exp, sp)],
+      ['region', regionText(exp, sp), sp.regionId && { region: sp.regionId }],
+      ['structure', exp.regions[sp.regionId] ? `${exp.regions[sp.regionId].type} · ${sp.role}` : '—', exp.regions[sp.regionId] && { type: exp.regions[sp.regionId].type }],
+      ['mood', `${sp.meta.mood}, hue ${sp.meta.hue}`, { mood: sp.meta.mood }],
     ] : [['', 'Tap a space to inspect it.']];
-    for (const [k, v] of rows) {
-      const dt = document.createElement('dt'); dt.textContent = k;
-      const dd = document.createElement('dd'); dd.textContent = String(v);
-      dl.append(dt, dd);
-    }
+    fillRows(dl, rows);
     regionInspector(exp);
     regionsPanel(exp);
     $('revert-btn').disabled = !sp || !DE.canRevert(exp, sp.id) || !!state.candidate;
@@ -168,23 +168,24 @@
     for (const id of ids) {
       const r = regions[id];
       const li = listRow(RV.colorOf(r.g, by), `${id} ${r.g.type} · ${r.g.mood}`, `${r.spent}/${r.g.size} · ${plural(r.rooms, 'room')}`, { region: id });
-      if (id === state.regions.selected) li.classList.add('selected');
+      if (id === state.regions.selected || state.regions.pinned.includes(id)) li.classList.add('selected');
       list.append(li);
     }
   }
 
   /** The selected region's details, under the room's. */
   function regionInspector(exp) {
-    const id = state.regions.selected;
+    const room = exp.spaces[state.selectedId];
+    const id = state.regions.selected || (room && room.regionId);
     const g = id && exp.regions[id];
     $('region-inspector-wrap').hidden = !g;
     if (!g) return;
     const r = RV.layout(exp).regions[id];
     const roles = r ? Object.entries(r.roles).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${v} ${k}`).join(', ') : '—';
     const rows = [
-      ['id', g.id],
-      ['type', g.type],
-      ['mood', `${g.mood}, hue ${g.hue}`],
+      ['id', g.id + (state.regions.pinned.includes(g.id) ? ' · pinned' : ''), { region: g.id }],
+      ['type', g.type, { type: g.type }],
+      ['mood', `${g.mood}, hue ${g.hue}`, { mood: g.mood }],
       ['budget', `${r ? r.spent : 0} of ${g.size} rooms spent${r && r.spent >= g.size ? ' (spent: its doors lead out)' : ''}`],
       ['rooms', r ? `${r.rooms}: ${roles}` : '0'],
       ['cells', r ? r.cells : 0],
@@ -193,30 +194,43 @@
       ['first room', g.originId || '—'],
       ['seed', g.seed],
     ];
-    const dl = $('region-inspector');
+    fillRows($('region-inspector'), rows);
+  }
+
+  /** "g3 · 4/12 rooms spent" for the inspector. */
+  function regionText(exp, sp) {
+    const g = exp.regions[sp.regionId];
+    if (!g) return '—';
+    const pin = state.regions.pinned.includes(g.id) ? ' · pinned' : '';
+    return `${g.id} · ${DE.regionSpent(exp, g.id)}/${g.size} rooms spent${pin}`;
+  }
+
+  /**
+   * Fill an inspector list from [label, value, data?] rows. A row with data
+   * (region, type or mood) highlights those regions on the map while the
+   * pointer is over it; a region row pins its region on a click.
+   */
+  function fillRows(dl, rows) {
     dl.innerHTML = '';
-    for (const [k, v] of rows) {
+    for (const [k, v, data] of rows) {
       const dt = document.createElement('dt'); dt.textContent = k;
       const dd = document.createElement('dd'); dd.textContent = String(v);
+      if (data) {
+        for (const key in data) dd.dataset[key] = data[key];
+        dd.classList.add('hot');
+        dd.title = data.region ? 'Hover to see this region on the map; click to pin it'
+          : data.type ? `Hover to see every ${data.type} region` : `Hover to see every ${data.mood} region`;
+      }
       dl.append(dt, dd);
     }
   }
 
-  /** Select a region (null to clear); `center` pans the map to it. */
-  function selectRegion(id, center) {
-    state.regions.selected = id || null;
-    if (id && center) {
-      const r = RV.layout(state.exp).regions[id];
-      if (r) renderer.centerOn(r.label.x, r.label.y);
-    }
+  /** Pin a region, or unpin it if it's pinned. */
+  function togglePin(id) {
+    const pins = state.regions.pinned;
+    const i = pins.indexOf(id);
+    if (i >= 0) pins.splice(i, 1); else pins.push(id);
     refreshPanels();
-  }
-
-  /** "g3 catacomb · damp · 4/12 rooms · gallery" for the inspector. */
-  function regionText(exp, sp) {
-    const g = exp.regions[sp.regionId];
-    if (!g) return '—';
-    return `${g.id} ${g.type} · ${g.mood} · ${DE.regionSpent(exp, g.id)}/${g.size} rooms · ${sp.role}`;
   }
 
   /** Autosave. Returns false if it didn't fit (a few thousand rooms can outgrow localStorage). */
@@ -241,6 +255,8 @@
     state.candidate = null;
     state.selectedId = 's0';
     state.regions.selected = null;
+    state.regions.pinned = [];
+    state.mapRegion = null;
     state.hover = null;
     $('seed-input').value = exp.rootSeed;
     loadCapsInputs();
@@ -349,6 +365,13 @@
     if (!pointers.has(e.pointerId)) {
       const hit = state.exp && renderer.hitTest(state.exp, p.x, p.y);
       canvas.classList.toggle('over-exit', !!hit && hit.type === 'exit');
+      // With the regions layer on, the region under the pointer lights up.
+      let rid = null;
+      if (state.exp && state.regions.show) {
+        const w = renderer.screenToWorld(p.x, p.y);
+        rid = RV.regionAt(state.exp, Math.floor(w.x), Math.floor(w.y));
+      }
+      if (rid !== state.mapRegion) { state.mapRegion = rid; redraw(); }
       return;
     }
     const prev = pointers.get(e.pointerId);
@@ -376,6 +399,7 @@
     if (pointers.size < 2) pinchDist = 0;
   }
   canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointerleave', () => { if (state.mapRegion) { state.mapRegion = null; redraw(); } });
   canvas.addEventListener('pointercancel', endPointer);
 
   canvas.addEventListener('wheel', (e) => {
@@ -391,16 +415,21 @@
       openDoor(hit.spaceId, hit.exitId);
     } else if (hit && hit.type === 'space') {
       state.selectedId = hit.spaceId;
-      // With the regions layer on, a room picks out its region too.
-      state.regions.selected = state.regions.show ? state.exp.spaces[hit.spaceId].regionId || null : null;
+      state.regions.selected = null;
+      // With the regions layer on, clicking a room pins its region too.
+      const rid = state.exp.spaces[hit.spaceId].regionId;
+      if (state.regions.show && rid && !state.regions.pinned.includes(rid)) state.regions.pinned.push(rid);
       refreshPanels();
     } else if (hit && hit.type === 'region') {
+      // A region's margin: select it, and pin or unpin it.
       state.selectedId = null;
       state.regions.selected = hit.regionId;
-      refreshPanels();
+      togglePin(hit.regionId);
     } else {
+      // Empty ground: clear the selection and every pin.
       state.selectedId = null;
       state.regions.selected = null;
+      state.regions.pinned = [];
       refreshPanels();
     }
   }
@@ -497,13 +526,31 @@
   }
   $('region-list').addEventListener('click', (e) => {
     const li = e.target.closest('li[data-region]');
-    if (li) selectRegion(li.dataset.region === state.regions.selected ? null : li.dataset.region, true);
+    if (!li) return;
+    const id = li.dataset.region;
+    const pinned = state.regions.pinned.includes(id);
+    state.regions.selected = pinned ? null : id;
+    if (!pinned) { const r = RV.layout(state.exp).regions[id]; if (r) renderer.centerOn((r.box.x0 + r.box.x1) / 2, (r.box.y0 + r.box.y1) / 2); }
+    togglePin(id);
   });
+  for (const id of ['inspector', 'region-inspector']) {
+    const dl = $(id);
+    dl.addEventListener('mouseover', (e) => {
+      const dd = e.target.closest('dd.hot');
+      if (!dd) return setHover(null);
+      const d = dd.dataset;
+      setHover(d.region ? { region: d.region } : d.type ? { type: d.type } : d.mood ? { mood: d.mood } : null);
+    });
+    dl.addEventListener('mouseleave', () => setHover(null));
+    dl.addEventListener('click', (e) => {
+      const dd = e.target.closest('dd.hot[data-region]');
+      if (dd) togglePin(dd.dataset.region);
+    });
+  }
   $('r-show').checked = state.regions.show;
   $('r-show').onchange = () => {
     state.regions.show = $('r-show').checked;
-    const sp = state.exp.spaces[state.selectedId];
-    if (state.regions.show && sp && !state.regions.selected) state.regions.selected = sp.regionId || null;
+    if (!state.regions.show) state.mapRegion = null;
     refreshPanels();
   };
   $('r-by').value = state.regions.by;

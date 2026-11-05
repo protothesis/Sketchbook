@@ -234,10 +234,11 @@
         ctx.stroke();
       }
 
-      // Region outlines over the rooms; the hovered or selected regions on top.
-      const hot = RV ? hotRegions(exp, state) : null;
+      // Region outlines over the rooms; highlighted regions on top (pinned
+      // first, what the pointer is over last).
+      const groups = RV ? regionHighlights(exp, state) : [];
       if (RV && reg.show) RV.drawOutlines(ctx, exp, reg.by, s, X, Y, null);
-      if (RV && hot && hot.size) RV.drawOutlines(ctx, exp, reg.by, s, X, Y, hot);
+      for (const g of groups) RV.drawOutlines(ctx, exp, g.by, s, X, Y, g.ids);
 
       // Room contents. Hovering a kind's label previews it (if it's off) or
       // emphasises it (if it's on).
@@ -289,28 +290,39 @@
         }
       }
 
-      // Region labels: all of them when zoomed in enough, else the hot ones.
-      const dpr = global.devicePixelRatio || 1;
-      if (RV && reg.show && s >= 9) RV.drawLabels(ctx, exp, reg.by, s, X, Y, null, true, dpr);
-      if (RV && hot && hot.size) RV.drawLabels(ctx, exp, reg.by, s, X, Y, hot, false, dpr);
+      // Region labels, only for highlighted regions: what the pointer is
+      // over first, so it wins where labels would overlap.
+      if (RV && groups.length) {
+        const list = [];
+        for (const g of groups.slice().reverse()) for (const id of g.ids) list.push({ id, by: g.by });
+        RV.drawLabels(ctx, exp, list, s, X, Y, global.devicePixelRatio || 1);
+      }
     }
 
     /**
-     * Regions to highlight: the ones hovered in the panel (a region, or every
-     * region of a type or mood), else the selected region.
+     * Regions to highlight, as groups drawn in order ([{ ids: Set, by }]):
+     * pinned regions and the selected one, then the region under the
+     * pointer on the map, then whatever is hovered in the panel. A structure
+     * type always lights up in type colours and a mood in mood colours,
+     * whatever the layer is coloured by.
      */
-    function hotRegions(exp, state) {
-      const h = state.hover, reg = state.regions || {};
-      const out = new Set();
+    function regionHighlights(exp, state) {
+      const reg = state.regions || {}, h = state.hover;
+      const by = reg.by || 'type';
+      const groups = [];
+      const keep = (ids) => new Set(ids.filter((id) => exp.regions[id]));
+      const pinned = keep((reg.pinned || []).concat(reg.selected ? [reg.selected] : []));
+      if (pinned.size) groups.push({ ids: pinned, by });
+      if (state.mapRegion && exp.regions[state.mapRegion]) groups.push({ ids: new Set([state.mapRegion]), by });
       if (h && (h.region || h.type || h.mood)) {
+        const ids = new Set();
         for (const id in exp.regions) {
           const g = exp.regions[id];
-          if (h.region === id || (h.type && g.type === h.type) || (h.mood && g.mood === h.mood)) out.add(id);
+          if (h.region === id || (h.type && g.type === h.type) || (h.mood && g.mood === h.mood)) ids.add(id);
         }
-        return out;
+        groups.push({ ids, by: h.type ? 'type' : h.mood ? 'mood' : by });
       }
-      if (reg.selected && exp.regions[reg.selected]) out.add(reg.selected);
-      return out;
+      return groups.filter((g) => g.ids.size);
     }
 
     /**

@@ -182,27 +182,45 @@
     ctx.globalAlpha = 1;
   }
 
-  /** Labels: every region's when zoomed in enough, else only the highlighted ones. */
-  function drawLabels(ctx, exp, by, s, X, Y, only, all, dpr) {
+  /**
+   * A region's label at a level of detail: far out just its id, then its
+   * structure and mood, and close in its budget too.
+   */
+  function labelText(r, s) {
+    if (s < 10) return r.g.id;
+    if (s < 20) return `${r.g.id} ${r.g.type} · ${r.g.mood}`;
+    return `${labelOf(r)} rooms`;
+  }
+
+  /**
+   * Labels for the regions in `list` ([{ id, by }], most important first),
+   * each pinned just above the top-left corner of its region's ground. A
+   * label that would overlap one already drawn is left out, so a crowd of
+   * highlighted regions stays readable: zoom in and more of them fit.
+   */
+  function drawLabels(ctx, exp, list, s, X, Y, dpr) {
     const { regions } = layout(exp);
     const size = Math.round(Math.max(10 * dpr, Math.min(13 * dpr, s * 0.45)));
     ctx.font = `600 ${size}px ui-monospace, Menlo, monospace`;
-    ctx.textAlign = 'center';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    for (const id in regions) {
-      if (only ? !only.has(id) : !all) continue;
+    const placed = [];
+    const seen = new Set();
+    for (const { id, by } of list) {
       const r = regions[id];
-      const text = labelOf(r);
-      const w = ctx.measureText(text).width + size * 0.8, h = size * 1.5;
-      const x = X(r.label.x), y = Y(r.label.y);
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = 'rgba(20, 18, 15, 0.82)';
-      ctx.fillRect(x - w / 2, y - h / 2, w, h);
-      ctx.globalAlpha = 1;
+      if (!r || seen.has(id)) continue;
+      seen.add(id);
+      const text = labelText(r, s);
+      const w = ctx.measureText(text).width + size * 1.1, h = size * 1.5;
+      const x = X(r.box.x0), y = Y(r.box.y0) - h - 2 * dpr;
+      if (placed.some((q) => x < q.x + q.w && x + w > q.x && y < q.y + q.h && y + h > q.y)) continue;
+      placed.push({ x, y, w, h });
+      ctx.fillStyle = 'rgba(20, 18, 15, 0.86)';
+      ctx.fillRect(x, y, w, h);
       ctx.fillStyle = colorOf(r.g, by);
-      ctx.fillRect(x - w / 2, y - h / 2, size * 0.3, h);
+      ctx.fillRect(x, y, size * 0.3, h);
       ctx.fillStyle = '#f2ede2';
-      ctx.fillText(text, x + size * 0.15, y);
+      ctx.fillText(text, x + size * 0.6, y + h / 2);
     }
   }
 
@@ -225,5 +243,5 @@
   }
 
   global.DungeonApp = global.DungeonApp || {};
-  global.DungeonApp.regions = { TYPE_COLORS, MOOD_COLORS, colorOf, layout, regionAt, labelOf, drawUnder, drawOutlines, drawLabels, summary };
+  global.DungeonApp.regions = { TYPE_COLORS, MOOD_COLORS, colorOf, layout, regionAt, labelOf, labelText, drawUnder, drawOutlines, drawLabels, summary };
 })(window);
