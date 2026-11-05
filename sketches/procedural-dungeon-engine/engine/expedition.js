@@ -18,9 +18,11 @@
 //                restored room finds its region again)
 //   Connection { id, a:{spaceId,exitId}, b:{spaceId,exitId}, loop }
 //   Trace      { id, seed, parentId, viaExitId, entropy, archetype, cells,
-//                depth, deadEnd, meta, revertedAt, cause?, quiet?, reserveId? }
+//                depth, deadEnd, meta, revertedAt, cause?, quiet?, reserveId?,
+//                exits, nextExitIndex }
 //                (a reverted space; cause is the application's tag, and a
-//                quiet trace leaves no imprint)
+//                quiet trace leaves no imprint; exits are its own doors, as
+//                they stood, so a restored room comes back with them)
 //   Reserve    { id, seed, kind, cells: "x,y"[], spaceId|null, ...data }
 //                (cells claimed ahead of time for a space that isn't there
 //                yet; extra fields are the application's, kept as-is.
@@ -80,7 +82,7 @@
    * walk-mode save. Bump it (and BUILD_DATE) whenever a change alters what
    * a history builds. See the versioning note at the top of this file.
    */
-  const BUILD = 2;
+  const BUILD = 3;
   const BUILD_DATE = '2026-11-05';
 
   /** Global generation parameters, set by the root seed (caps by the user). */
@@ -167,6 +169,7 @@
     if (ownSet.has(bk) || bk === forbidKey) return false;
     const claim = claimAt(exp, o, bk);
     if (claim) return claim.kind !== 'void'; // a way into a reserved footprint (never into a courtyard)
+    if (heldVoidAt(exp, bk)) return false; // nor into a lost cloister's courtyard, held while it's gone
     // Facing into an existing space, or ground a lost path holds: keep it
     // only sometimes, as a loop door. (A room coming back is built as it
     // first was, when that ground was free: held ground doesn't count.)
@@ -329,21 +332,36 @@
    * The lost path's trace holding this cell, or null. A room lost to a
    * faint (a trace tagged 'lost' or 'lost-dim', not standing again) keeps
    * its ground while it waits: nothing else is built there, so it can come
-   * back. Only once `params.holdLost` is on (a 'hold' event in the history,
-   * so older records replay as they were). Cached by history length.
+   * back. That ground includes what the room claimed ahead (a cloister
+   * walk's ring and courtyard, dormant while it's gone), since it needs
+   * those to come back as it was. Only once `params.holdLost` is on (a
+   * 'hold' event in the history, so older records replay as they were).
+   * Cached by history length.
    */
   function heldAt(exp, cellKey) {
     if (!exp.params.holdLost) return null;
     const n = exp.history.length;
     if (!exp._held || exp._held.n !== n) {
-      const idx = {};
+      const idx = {}, voids = new Set();
+      const lost = (t) => t && (t.cause === 'lost' || t.cause === 'lost-dim') && !exp.spaces[t.id];
+      // Claims first, so a room's own cells win where the two meet.
+      for (const id in exp.reserves || {}) {
+        const r = exp.reserves[id];
+        const owner = r.dormant && r.ownerId && exp.traces && exp.traces[r.ownerId];
+        if (lost(owner)) for (const k of r.cells) { idx[k] = owner; if (r.kind === 'void') voids.add(k); }
+      }
       for (const id in exp.traces || {}) {
         const t = exp.traces[id];
-        if ((t.cause === 'lost' || t.cause === 'lost-dim') && !exp.spaces[t.id]) for (const k of t.cells) idx[k] = t;
+        if (lost(t)) for (const k of t.cells) idx[k] = t;
       }
-      Object.defineProperty(exp, '_held', { value: { n, idx }, writable: true, configurable: true, enumerable: false });
+      Object.defineProperty(exp, '_held', { value: { n, idx, voids }, writable: true, configurable: true, enumerable: false });
     }
     return exp._held.idx[cellKey] || null;
+  }
+
+  /** Is this cell a held courtyard (open air a lost cloister walk claimed)? No door may face it. */
+  function heldVoidAt(exp, cellKey) {
+    return !!heldAt(exp, cellKey) && exp._held.voids.has(cellKey);
   }
 
   /** From now on, lost paths hold their ground (see heldAt). Recorded in history. */
@@ -471,6 +489,23 @@
    * Returns { type:'space', ... } or, when the exit opens straight onto an
    * existing space, { type:'loop', ... }.
    */
+  /**
+   * A room coming back gets the doors it had (its trace's `exits`), not
+   * doors drawn again: what's built around it since can shift those draws,
+   * and a door in another place would no longer lead to its children's
+   * ground. Every door comes back unopened.
+   */
+  function withTraceExits(space, restore) {
+    if (!restore || !restore.exits) return space;
+    space.exits = restore.exits.map((e) => {
+      const ex = { id: e.id, index: e.index, cell: { x: e.cell.x, y: e.cell.y }, facing: e.facing, kind: e.kind, connectionId: null };
+      if (e.tags) ex.tags = e.tags.slice();
+      return ex;
+    });
+    space.nextExitIndex = restore.nextExitIndex;
+    return space;
+  }
+
   function expand(exp, spaceId, exitId, entropy, restore) {
     const parent = exp.spaces[spaceId];
     if (!parent) throw new Error('No space ' + spaceId);
@@ -482,6 +517,12 @@
     const beyond = step(exit.cell, exit.facing);
     const bk = key(beyond.x, beyond.y);
     const facingBack = OPPOSITE[exit.facing];
+
+    // Ground a lost path holds: only that room itself, coming back. Checked
+    // before reserves: a lost room may have stood on one (a cloister walk),
+    // and its reserve, waiting again, mustn't be built by another door.
+    const held = heldAt(exp, bk);
+    if (held && !(restore && restore.id === held.id)) throw new Error('A lost path holds that ground');
 
     // Into a reserved footprint: the reserved space itself, from its own seed
     // (restoring one built there: the same space, under its old id).
@@ -500,14 +541,11 @@
         entry: { cell: beyond, facing: facingBack },
         region, role: res.role || (res.kind === 'hall' ? 'hall' : 'room'), ownMeta: !res.regionId,
       });
+      withTraceExits(space, restore);
       const rc = { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: null, space, reserveId: res.id };
       if (restore) rc.restore = restore.id;
       return rc;
     }
-
-    // Ground a lost path holds: only that room itself, coming back.
-    const held = heldAt(exp, bk);
-    if (held && !(restore && restore.id === held.id)) throw new Error('A lost path holds that ground');
 
     const occupant = exp.registry[bk];
     if (occupant !== undefined) {
@@ -646,6 +684,7 @@
       entry: { cell: beyond, facing: facingBack },
       region, role, askedRole: ctx.role, pending, minExits, heading: role === 'gallery' || role === 'threshold' ? exit.facing : null,
     });
+    withTraceExits(space, restore);
     const cand = { type: 'space', parentId: spaceId, viaExitId: exitId, entropy: ent, space };
     if (ctx.isNew) cand.region = region;
     if (plan) cand.plan = plan;
@@ -790,6 +829,13 @@
       entropy: space.entropy, archetype: space.archetype, cells: space.cells.slice(),
       depth: space.depth, deadEnd: space.deadEnd, meta: space.meta, revertedAt: exp.history.length - 1,
       regionId: space.regionId, role: space.askedRole || space.role,
+      // Its own doors (not ones a loop from elsewhere made, which go with it).
+      exits: space.exits.filter((e) => !e.loopMade).map((e) => {
+        const ex = { id: e.id, index: e.index, cell: { x: e.cell.x, y: e.cell.y }, facing: e.facing, kind: e.kind };
+        if (e.tags) ex.tags = e.tags.slice();
+        return ex;
+      }),
+      nextExitIndex: space.nextExitIndex,
     };
     if (cause) trace.cause = cause;
     if (quiet) trace.quiet = true;

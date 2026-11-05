@@ -351,8 +351,11 @@ Determinism).
   - **Tools** (chalk, doorstones, keys, jars) lie flat on the floor. Walk
     over one to collect it. They live in your **items grid** and work only
     in your hand, with F. Collected, a tool goes in the grid; what's in
-    your hands never changes by itself. With no room for it (a new stack
-    and the grid full), it stays on the floor and a caption says so.
+    your hands never changes by itself. A full stack (6 jars, say) spills
+    into a new cell, so one kind can fill several cells; the carousel
+    still shows it as one stop with the total. With no room for it (every
+    cell of that kind full, and no empty cell), it stays on the floor and a
+    caption says so.
   - **Collectables** (coins, curios; since 2026-11-01) have no use. Walk
     over one to collect it: coins go in the coin purse if you have one,
     else with curios in the **collectables grid**.
