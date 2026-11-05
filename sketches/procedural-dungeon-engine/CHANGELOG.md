@@ -176,11 +176,33 @@ All notable changes to this sketch are logged here, per
 - 2026-11-05: **Room contents on the map.** The map view has a **Room
   contents** overlay, with toggles for creatures, push blocks, features
   (sigils, wells, chests, vessels, sconces, hall waystones), locked doors,
-  items, and props and crates, plus totals across the map.
+  items, crates (movable) and static blocks, plus totals across the map.
   - Creatures show where they start: their start cell was already a seeded
     choice, so the map and walk mode agree.
   - Zoomed far out, only creatures, locks, push blocks, sigils and wells
     show, as dots, so you can see how they spread through the dungeon.
+  - Hovering a kind's name previews it on the map if it's off. If it's on,
+    hovering picks it out with bigger, outlined pins, shown even zoomed far
+    out.
+- 2026-11-05: **Regions on the map** (the overlay planned in
+  `notes/structure-types.md`), in `app/regions-view.js`.
+  - **Show regions** draws each region's ground under the rooms: its rooms'
+    cells plus a one-cell margin, so it shows in the gaps, with an outline
+    just inside its edge. Ground a cloister has claimed and not built yet
+    is hatched. Zoomed in, each region is labelled
+    (`g3 catacomb · damp · 7/12`).
+  - **Colour by** structure type, mood, or each region's own hue, so
+    structure and mood can be read apart. Size shows as the region's
+    extent.
+  - Clicking a room (with regions on) also selects its region, and clicking
+    a region's margin selects the region alone. The inspector, now at the
+    top of the panel, has a Region block: type, mood, budget spent, rooms
+    by role, cells, unbuilt claims, the region it was entered from and its
+    first room.
+  - The Regions section lists the stats (count, mean and largest), every
+    structure type and mood (with region and room counts) and every
+    region. Hovering any line highlights the matching regions on the map,
+    and clicking a region selects it and centres the map on it.
 
 ### Changed
 

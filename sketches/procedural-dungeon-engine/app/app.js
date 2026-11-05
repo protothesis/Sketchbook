@@ -16,8 +16,15 @@
     selectedId: null,
     toggles: { grid: true, labels: false, occupancy: false, path: true },
     // Room contents overlay (renderer.drawContents), by kind.
-    show: { creatures: false, push: false, features: false, locks: false, items: false, props: false },
+    show: { creatures: false, push: false, features: false, locks: false, items: false, crates: false, blocks: false },
+    // Region layer (regions-view.js): shown or not, coloured by 'type' |
+    // 'mood' | 'region', and the selected region (highlighted on the map).
+    regions: { show: false, by: 'type', selected: null },
+    // What the pointer is over in the panel, previewed or highlighted on the
+    // map: { content: kind } | { region: id } | { type } | { mood } | null.
+    hover: null,
   };
+  const RV = global.DungeonApp.regions;
 
   // ---------------------------------------------------------------------------
   // Rendering + panels
@@ -62,6 +69,8 @@
       const dd = document.createElement('dd'); dd.textContent = String(v);
       dl.append(dt, dd);
     }
+    regionInspector(exp);
+    regionsPanel(exp);
     $('revert-btn').disabled = !sp || !DE.canRevert(exp, sp.id) || !!state.candidate;
     $('grow-here-btn').disabled = !sp || !!state.candidate;
 
@@ -118,7 +127,89 @@
     const n = on && global.DungeonApp.contentCounts(exp);
     $('contents-stats').textContent = !n ? '' :
       `${n.ghost} ghosts, ${n.pixie} pixies, ${n.creeper} creepers · ${n.push} push blocks · ${n.lock} locked doors · ` +
-      `${n.sigil} sigils, ${n.well} wells, ${n.chest} chests, ${n.vessel} vessels, ${n.sconce} sconces · ${n.items} items · ${n.props} props, ${n.crates} crates`;
+      `${n.sigil} sigils, ${n.well} wells, ${n.chest} chests, ${n.vessel} vessels, ${n.sconce} sconces · ${n.items} items · ${n.crates} crates, ${n.blocks} static blocks`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Regions: the panel's lists and the inspector's region block.
+
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+  /** A list row: a colour swatch, a label and a count, with data for hovering. */
+  function listRow(color, label, count, data) {
+    const li = document.createElement('li');
+    const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = color;
+    const t = document.createElement('span'); t.textContent = label;
+    const n = document.createElement('span'); n.className = 'n'; n.textContent = count;
+    li.append(sw, t, n);
+    for (const k in data) li.dataset[k] = data[k];
+    return li;
+  }
+
+  /** Region stats, and the lists of types, moods and regions (hover to highlight). */
+  function regionsPanel(exp) {
+    const sum = RV.summary(exp);
+    const { regions } = RV.layout(exp);
+    $('region-stats').textContent = sum.count
+      ? `${plural(sum.count, 'region')} · ${sum.mean.toFixed(1)} rooms each on average · largest ${sum.max} (${sum.maxId})`
+      : '';
+    const by = state.regions.by;
+    const types = $('region-types'), moods = $('region-moods'), list = $('region-list');
+    types.innerHTML = ''; moods.innerHTML = ''; list.innerHTML = '';
+    for (const t of Object.keys(sum.types).sort((a, b) => sum.types[b].rooms - sum.types[a].rooms)) {
+      const v = sum.types[t];
+      types.append(listRow(RV.TYPE_COLORS[t] || '#999', t, `${plural(v.regions, 'region')} · ${plural(v.rooms, 'room')}`, { type: t }));
+    }
+    for (const m of Object.keys(sum.moods).sort((a, b) => sum.moods[b].rooms - sum.moods[a].rooms)) {
+      const v = sum.moods[m];
+      moods.append(listRow(RV.MOOD_COLORS[m] || '#999', m, `${plural(v.regions, 'region')} · ${plural(v.rooms, 'room')}`, { mood: m }));
+    }
+    const ids = Object.keys(regions).sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10));
+    for (const id of ids) {
+      const r = regions[id];
+      const li = listRow(RV.colorOf(r.g, by), `${id} ${r.g.type} · ${r.g.mood}`, `${r.spent}/${r.g.size} · ${plural(r.rooms, 'room')}`, { region: id });
+      if (id === state.regions.selected) li.classList.add('selected');
+      list.append(li);
+    }
+  }
+
+  /** The selected region's details, under the room's. */
+  function regionInspector(exp) {
+    const id = state.regions.selected;
+    const g = id && exp.regions[id];
+    $('region-inspector-wrap').hidden = !g;
+    if (!g) return;
+    const r = RV.layout(exp).regions[id];
+    const roles = r ? Object.entries(r.roles).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${v} ${k}`).join(', ') : '—';
+    const rows = [
+      ['id', g.id],
+      ['type', g.type],
+      ['mood', `${g.mood}, hue ${g.hue}`],
+      ['budget', `${r ? r.spent : 0} of ${g.size} rooms spent${r && r.spent >= g.size ? ' (spent: its doors lead out)' : ''}`],
+      ['rooms', r ? `${r.rooms}: ${roles}` : '0'],
+      ['cells', r ? r.cells : 0],
+      ['claims', r && r.claims ? `${r.claims} unbuilt (hatched)` : '—'],
+      ['entered from', g.parentId || '— (the first)'],
+      ['first room', g.originId || '—'],
+      ['seed', g.seed],
+    ];
+    const dl = $('region-inspector');
+    dl.innerHTML = '';
+    for (const [k, v] of rows) {
+      const dt = document.createElement('dt'); dt.textContent = k;
+      const dd = document.createElement('dd'); dd.textContent = String(v);
+      dl.append(dt, dd);
+    }
+  }
+
+  /** Select a region (null to clear); `center` pans the map to it. */
+  function selectRegion(id, center) {
+    state.regions.selected = id || null;
+    if (id && center) {
+      const r = RV.layout(state.exp).regions[id];
+      if (r) renderer.centerOn(r.label.x, r.label.y);
+    }
+    refreshPanels();
   }
 
   /** "g3 catacomb · damp · 4/12 rooms · gallery" for the inspector. */
@@ -149,6 +240,8 @@
     state.exp = exp;
     state.candidate = null;
     state.selectedId = 's0';
+    state.regions.selected = null;
+    state.hover = null;
     $('seed-input').value = exp.rootSeed;
     loadCapsInputs();
     renderer.fit(exp);
@@ -298,9 +391,16 @@
       openDoor(hit.spaceId, hit.exitId);
     } else if (hit && hit.type === 'space') {
       state.selectedId = hit.spaceId;
+      // With the regions layer on, a room picks out its region too.
+      state.regions.selected = state.regions.show ? state.exp.spaces[hit.spaceId].regionId || null : null;
+      refreshPanels();
+    } else if (hit && hit.type === 'region') {
+      state.selectedId = null;
+      state.regions.selected = hit.regionId;
       refreshPanels();
     } else {
       state.selectedId = null;
+      state.regions.selected = null;
       refreshPanels();
     }
   }
@@ -373,6 +473,41 @@
     el.checked = state.show[t];
     el.onchange = () => { state.show[t] = el.checked; refreshPanels(); };
   }
+
+  // Hovering in the panel previews or highlights on the map.
+  const setHover = (h) => {
+    const same = JSON.stringify(h) === JSON.stringify(state.hover);
+    state.hover = h;
+    if (!same) redraw();
+  };
+  $('content-toggles').addEventListener('mouseover', (e) => {
+    const el = e.target.closest('[data-kind]');
+    setHover(el ? { content: el.dataset.kind } : null);
+  });
+  $('content-toggles').addEventListener('mouseleave', () => setHover(null));
+  for (const id of ['region-types', 'region-moods', 'region-list']) {
+    const ul = $(id);
+    ul.addEventListener('mouseover', (e) => {
+      const li = e.target.closest('li');
+      if (!li) return setHover(null);
+      const d = li.dataset;
+      setHover(d.region ? { region: d.region } : d.type ? { type: d.type } : d.mood ? { mood: d.mood } : null);
+    });
+    ul.addEventListener('mouseleave', () => setHover(null));
+  }
+  $('region-list').addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-region]');
+    if (li) selectRegion(li.dataset.region === state.regions.selected ? null : li.dataset.region, true);
+  });
+  $('r-show').checked = state.regions.show;
+  $('r-show').onchange = () => {
+    state.regions.show = $('r-show').checked;
+    const sp = state.exp.spaces[state.selectedId];
+    if (state.regions.show && sp && !state.regions.selected) state.regions.selected = sp.regionId || null;
+    refreshPanels();
+  };
+  $('r-by').value = state.regions.by;
+  $('r-by').onchange = () => { state.regions.by = $('r-by').value; refreshPanels(); };
 
   for (const t of ['grid', 'labels', 'occupancy', 'path']) {
     const el = $('t-' + t);

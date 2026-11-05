@@ -12,7 +12,7 @@
 
   // Colours for the overlay: the same in light and dark (mid tones read on both).
   const CONTENT_COLORS = {
-    prop: null, crate: '#a0703c',
+    block: '#8d8577', crate: '#a0703c',
     shard: '#3fb6c9', key: '#d9a52f', doorstone: '#8d8577', jar: '#7fb0d8', chalk: '#e6e0d2',
     hourglass: '#c9a36a', coin: '#d9a52f', purse: '#b07a46', backpack: '#8b6b4a',
     sigil: '#8f5bd6', well: '#2f7fd1', chest: '#9b6a2f', vessel: '#5fa082', sconce: '#e07a2a', hall: '#efe3c0',
@@ -52,11 +52,11 @@
 
   /** Totals across the map: { props, crates, push, items, sigil, ... }. */
   function contentCounts(exp) {
-    const n = { props: 0, crates: 0, push: 0, items: 0, chest: 0, vessel: 0, sigil: 0, well: 0, sconce: 0, lock: 0, ghost: 0, pixie: 0, creeper: 0 };
+    const n = { blocks: 0, crates: 0, push: 0, items: 0, chest: 0, vessel: 0, sigil: 0, well: 0, sconce: 0, lock: 0, ghost: 0, pixie: 0, creeper: 0 };
     for (const id in exp.spaces) {
       const c = roomContents(exp, exp.spaces[id]);
       if (!c) return null;
-      for (const b of c.props) { if (b.crate) n.crates++; else n.props++; }
+      for (const b of c.props) { if (b.crate) n.crates++; else n.blocks++; }
       n.push += c.push.length; n.items += c.items.length; n.sconce += c.sconces.length; n.lock += c.locks.length;
       for (const f of ['chest', 'vessel', 'sigil', 'well', 'ghost', 'pixie', 'creeper']) if (c[f]) n[f]++;
     }
@@ -101,6 +101,7 @@
     }
 
     /** What's under a CSS-pixel point: an open exit, else a space, else null. */
+    let regionsOn = false; // set by draw(), so hit-testing matches what's shown
     function hitTest(exp, sx, sy) {
       const w = screenToWorld(sx, sy);
       const radius = Math.max(0.45, 14 / (CELL * view.scale)); // stay tappable when zoomed out
@@ -115,7 +116,11 @@
       }
       if (best) return best;
       const owner = exp.registry[DE.key(Math.floor(w.x), Math.floor(w.y))];
-      return owner !== undefined ? { type: 'space', spaceId: owner } : null;
+      if (owner !== undefined) return { type: 'space', spaceId: owner };
+      // With the regions layer on, a region's margin or claimed ground picks the region.
+      const RV = global.DungeonApp.regions;
+      const regionId = RV && regionsOn && RV.regionAt(exp, Math.floor(w.x), Math.floor(w.y));
+      return regionId ? { type: 'region', regionId } : null;
     }
 
     function centroid(space) {
@@ -127,6 +132,7 @@
     function draw(state) {
       if (!colors) readColors();
       const { exp, candidate, selectedId, toggles } = state;
+      regionsOn = !!(state.regions && state.regions.show);
       const s = px();
       const W = canvas.width, H = canvas.height;
       const ox = W / 2 - view.x * s, oy = H / 2 - view.y * s;
@@ -196,6 +202,11 @@
         ctx.globalAlpha = 1;
       };
 
+      // Regions (regions-view.js): their ground under everything live.
+      const RV = global.DungeonApp.regions;
+      const reg = state.regions || {};
+      if (RV && reg.show) RV.drawUnder(ctx, exp, reg.by, s, X, Y);
+
       // Traces of reverted spaces: greyed and dashed, under everything live.
       const traces = Object.values(exp.traces || {}).filter((t) => t.cause !== 'faded');
       if (traces.length) {
@@ -223,7 +234,16 @@
         ctx.stroke();
       }
 
-      if (state.show && Object.values(state.show).some(Boolean)) drawContents(exp, state.show, s, X, Y, W, H);
+      // Region outlines over the rooms; the hovered or selected regions on top.
+      const hot = RV ? hotRegions(exp, state) : null;
+      if (RV && reg.show) RV.drawOutlines(ctx, exp, reg.by, s, X, Y, null);
+      if (RV && hot && hot.size) RV.drawOutlines(ctx, exp, reg.by, s, X, Y, hot);
+
+      // Room contents. Hovering a kind's label previews it (if it's off) or
+      // emphasises it (if it's on).
+      const hov = state.hover && state.hover.content;
+      const show = hov ? Object.assign({}, state.show, { [hov]: true }) : state.show;
+      if (show && Object.values(show).some(Boolean)) drawContents(exp, show, s, X, Y, W, H, hov);
 
       if (toggles.path && selectedId && exp.spaces[selectedId]) {
         const path = DE.pathToRoot(exp, selectedId).map((id) => centroid(exp.spaces[id]));
@@ -268,20 +288,58 @@
           ctx.fillText(sp.seed.slice(0, 6), X(p.x), Y(p.y) + s * 0.25);
         }
       }
+
+      // Region labels: all of them when zoomed in enough, else the hot ones.
+      const dpr = global.devicePixelRatio || 1;
+      if (RV && reg.show && s >= 9) RV.drawLabels(ctx, exp, reg.by, s, X, Y, null, true, dpr);
+      if (RV && hot && hot.size) RV.drawLabels(ctx, exp, reg.by, s, X, Y, hot, false, dpr);
+    }
+
+    /**
+     * Regions to highlight: the ones hovered in the panel (a region, or every
+     * region of a type or mood), else the selected region.
+     */
+    function hotRegions(exp, state) {
+      const h = state.hover, reg = state.regions || {};
+      const out = new Set();
+      if (h && (h.region || h.type || h.mood)) {
+        for (const id in exp.regions) {
+          const g = exp.regions[id];
+          if (h.region === id || (h.type && g.type === h.type) || (h.mood && g.mood === h.mood)) out.add(id);
+        }
+        return out;
+      }
+      if (reg.selected && exp.regions[reg.selected]) out.add(reg.selected);
+      return out;
     }
 
     /**
      * The contents overlay. Up close, everything where it stands; far out
      * (a few px per cell), only what tells you about the dungeon as a whole
      * (creatures, locks, push blocks, wells, sigils) as dots big enough to see.
+     * `em` is a kind to emphasise (hovering its label): bigger, outlined,
+     * and shown as dots even when zoomed far out.
      */
-    function drawContents(exp, show, s, X, Y, W, H) {
+    function drawContents(exp, show, s, X, Y, W, H, em) {
       const C = CONTENT_COLORS;
       const near = s >= 7;
-      const dot = (x, y, r, color) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(X(x), Y(y), r, 0, Math.PI * 2); ctx.fill(); };
-      const rectW = (x0, y0, x1, y1) => ctx.fillRect(X(x0), Y(y0), (x1 - x0) * s, (y1 - y0) * s);
-      const minR = 2.2 * (global.devicePixelRatio || 1);
+      const dpr = global.devicePixelRatio || 1;
+      const minR = 2.2 * dpr;
       const big = Math.max(minR, s * 0.28), mid = Math.max(minR * 0.8, s * 0.16), small = Math.max(1, s * 0.1);
+      const ring = colors.ink;
+      // A round pin; emphasised: bigger, with a ring around it.
+      const dot = (x, y, r, color, on) => {
+        const rr = on ? Math.max(r * 1.7, 4 * dpr) : r;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.arc(X(x), Y(y), rr, 0, Math.PI * 2); ctx.fill();
+        if (on) { ctx.strokeStyle = ring; ctx.lineWidth = Math.max(1.5, rr * 0.3); ctx.stroke(); }
+      };
+      const rectW = (x0, y0, x1, y1, color, on, alpha) => {
+        ctx.globalAlpha = alpha == null ? 1 : alpha;
+        ctx.fillStyle = color;
+        ctx.fillRect(X(x0), Y(y0), (x1 - x0) * s, (y1 - y0) * s);
+        ctx.globalAlpha = 1;
+        if (on) { ctx.strokeStyle = ring; ctx.lineWidth = Math.max(1.5, s * 0.06); ctx.strokeRect(X(x0), Y(y0), (x1 - x0) * s, (y1 - y0) * s); }
+      };
       const creatures = [];
       for (const id in exp.spaces) {
         const sp = exp.spaces[id];
@@ -290,58 +348,69 @@
         const b = c.box; // off screen: skip
         if (X(b.x1) < 0 || X(b.x0) > W || Y(b.y1) < 0 || Y(b.y0) > H) continue;
 
-        if (show.props && near) {
+        for (const kind of ['blocks', 'crates']) {
+          if (!show[kind]) continue;
+          const on = em === kind;
           for (const p of c.props) {
-            ctx.fillStyle = p.crate ? C.crate : colors.ink;
-            ctx.globalAlpha = p.crate ? 0.85 : 0.18 + 0.12 * p.units;
-            rectW(p.x0, p.y0, p.x1, p.y1);
+            if (!!p.crate !== (kind === 'crates')) continue;
+            if (!near) { if (on) dot((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2, small, p.crate ? C.crate : C.block, true); continue; }
+            if (p.crate) rectW(p.x0, p.y0, p.x1, p.y1, C.crate, on, 0.9);
+            else rectW(p.x0, p.y0, p.x1, p.y1, on ? C.block : colors.ink, on, on ? 0.9 : 0.18 + 0.12 * p.units);
           }
-          ctx.globalAlpha = 1;
         }
         if (show.push) {
+          const on = em === 'push';
           for (const pb of c.push) {
             const fx = pb.from.sx / 2, fy = pb.from.sy / 2, tx = pb.to.sx / 2, ty = pb.to.sy / 2;
-            if (!near) { dot(fx + 0.25, fy + 0.25, mid, pb.color); continue; }
-            ctx.strokeStyle = pb.color; ctx.lineWidth = Math.max(1, s * 0.05);
+            if (!near) { dot(fx + 0.25, fy + 0.25, mid, pb.color, on); continue; }
+            ctx.strokeStyle = pb.color; ctx.lineWidth = Math.max(1, s * (on ? 0.09 : 0.05));
             ctx.setLineDash([s * 0.08, s * 0.08]);
             ctx.beginPath(); ctx.moveTo(X(fx + 0.25), Y(fy + 0.25)); ctx.lineTo(X(tx + 0.25), Y(ty + 0.25)); ctx.stroke();
             ctx.setLineDash([]);
             ctx.strokeRect(X(tx + 0.04), Y(ty + 0.04), s * 0.42, s * 0.42); // its home mark
-            ctx.fillStyle = pb.color; rectW(fx + 0.04, fy + 0.04, fx + 0.46, fy + 0.46);
+            rectW(fx + 0.04, fy + 0.04, fx + 0.46, fy + 0.46, pb.color, on);
           }
         }
-        if (show.items && near) {
+        if (show.items && (near || em === 'items')) {
+          const on = em === 'items';
           c.items.forEach((it, i) => {
             const col = it.kind === 'chalk' && it.color && C[it.color] ? C[it.color] : C[it.kind] || colors.ink;
-            dot(it.cell.x + 0.3 + (i % 3) * 0.2, it.cell.y + 0.35 + Math.floor(i / 3) * 0.3, small * 1.3, col);
+            dot(it.cell.x + 0.3 + (i % 3) * 0.2, it.cell.y + 0.35 + Math.floor(i / 3) * 0.3, small * 1.3, col, on);
           });
         }
         if (show.features) {
+          const on = em === 'features';
           if (c.sigil) { // a diamond
-            const x = X(c.sigil.cell.x + 0.5), y = Y(c.sigil.cell.y + 0.5), r = near ? s * 0.32 : mid * 1.2;
-            ctx.fillStyle = C.sigil; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.fill();
+            const x = X(c.sigil.cell.x + 0.5), y = Y(c.sigil.cell.y + 0.5), r = (near ? s * 0.32 : mid * 1.2) * (on ? 1.6 : 1);
+            ctx.fillStyle = C.sigil; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill();
+            if (on) { ctx.strokeStyle = ring; ctx.lineWidth = Math.max(1.5, r * 0.2); ctx.stroke(); }
           }
           if (c.well) { // a ring
-            ctx.strokeStyle = C.well; ctx.lineWidth = Math.max(1.5, s * 0.08);
-            ctx.beginPath(); ctx.arc(X(c.well.cell.x + 0.5), Y(c.well.cell.y + 0.5), near ? s * 0.3 : mid, 0, Math.PI * 2); ctx.stroke();
+            const r = (near ? s * 0.3 : mid) * (on ? 1.6 : 1);
+            ctx.strokeStyle = C.well; ctx.lineWidth = Math.max(1.5, s * 0.08) * (on ? 1.8 : 1);
+            ctx.beginPath(); ctx.arc(X(c.well.cell.x + 0.5), Y(c.well.cell.y + 0.5), r, 0, Math.PI * 2); ctx.stroke();
           }
           if (near) {
-            if (c.chest) { ctx.fillStyle = C.chest; rectW(c.chest.sx / 2 + 0.05, c.chest.sy / 2 + 0.1, c.chest.sx / 2 + 0.45, c.chest.sy / 2 + 0.4); }
-            if (c.vessel) dot(c.vessel.sx / 2 + 0.25, c.vessel.sy / 2 + 0.25, s * 0.15, C.vessel);
-            for (const h of c.hall) { ctx.fillStyle = C.hall; rectW(h.x0, h.y0, h.x1, h.y1); }
-            ctx.fillStyle = C.sconce;
+            if (c.chest) rectW(c.chest.sx / 2 + 0.05, c.chest.sy / 2 + 0.1, c.chest.sx / 2 + 0.45, c.chest.sy / 2 + 0.4, C.chest, on);
+            if (c.vessel) dot(c.vessel.sx / 2 + 0.25, c.vessel.sy / 2 + 0.25, s * 0.15, C.vessel, on);
+            for (const h of c.hall) rectW(h.x0, h.y0, h.x1, h.y1, C.hall, on);
             for (const sc of c.sconces) {
               const d = DE.DIRS[sc.facing];
               const x = sc.cell.x + 0.5 + d.x * 0.42, y = sc.cell.y + 0.5 + d.y * 0.42;
-              rectW(x - 0.08, y - 0.08, x + 0.08, y + 0.08);
+              rectW(x - 0.08, y - 0.08, x + 0.08, y + 0.08, C.sconce, on);
             }
+          } else if (on) {
+            if (c.chest) dot(c.chest.sx / 2 + 0.25, c.chest.sy / 2 + 0.25, small, C.chest, true);
+            if (c.vessel) dot(c.vessel.sx / 2 + 0.25, c.vessel.sy / 2 + 0.25, small, C.vessel, true);
           }
         }
         if (show.locks) {
+          const on = em === 'locks';
           for (const e of c.locks) {
             const d = DE.DIRS[e.facing];
-            const x = X(e.cell.x + 0.5 + d.x * 0.5), y = Y(e.cell.y + 0.5 + d.y * 0.5), r = Math.max(minR * 1.2, s * 0.2);
+            const x = X(e.cell.x + 0.5 + d.x * 0.5), y = Y(e.cell.y + 0.5 + d.y * 0.5), r = Math.max(minR * 1.2, s * 0.2) * (on ? 1.7 : 1);
             ctx.fillStyle = C.lock; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+            if (on) { ctx.strokeStyle = ring; ctx.lineWidth = Math.max(1.5, r * 0.3); ctx.strokeRect(x - r, y - r, r * 2, r * 2); }
           }
         }
         if (show.creatures) {
@@ -351,13 +420,14 @@
         }
       }
       // Creatures last, on top of everything, each where it starts.
+      const on = em === 'creatures';
       const label = s >= 16;
       if (label) {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.font = `bold ${Math.round(s * 0.32)}px ui-monospace, Menlo, monospace`;
+        ctx.font = `bold ${Math.round(s * (on ? 0.5 : 0.32))}px ui-monospace, Menlo, monospace`;
       }
       for (const [kind, cell] of creatures) {
-        dot(cell.x + 0.5, cell.y + 0.5, big, C[kind]);
+        dot(cell.x + 0.5, cell.y + 0.5, big, C[kind], on);
         if (label) { ctx.fillStyle = kind === 'pixie' ? '#3a3000' : '#fff'; ctx.fillText(kind[0].toUpperCase(), X(cell.x + 0.5), Y(cell.y + 0.52)); }
       }
     }

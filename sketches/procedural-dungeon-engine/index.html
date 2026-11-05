@@ -35,6 +35,18 @@
       </header>
 
       <section>
+        <h2>Inspector</h2>
+        <dl id="inspector" class="inspector"></dl>
+        <div class="row">
+          <button id="revert-btn">Revert space</button>
+        </div>
+        <div id="region-inspector-wrap" hidden>
+          <h3 class="sub">Region</h3>
+          <dl id="region-inspector" class="inspector"></dl>
+        </div>
+      </section>
+
+      <section>
         <h2>Expedition</h2>
         <div class="row">
           <label class="grow">Root seed <input type="text" id="seed-input" spellcheck="false" /></label>
@@ -79,25 +91,40 @@
       </section>
 
       <section>
-        <h2>Room contents</h2>
-        <div class="toggles">
-          <label><input type="checkbox" id="c-creatures" /> <span class="sw" style="background:#8e2fa8"></span>Creatures</label>
-          <label><input type="checkbox" id="c-push" /> <span class="sw" style="background:#e0a94a"></span>Push blocks</label>
-          <label><input type="checkbox" id="c-features" /> <span class="sw" style="background:#2f7fd1"></span>Features</label>
-          <label><input type="checkbox" id="c-locks" /> <span class="sw" style="background:#d0392b"></span>Locked doors</label>
-          <label><input type="checkbox" id="c-items" /> <span class="sw" style="background:#3fb6c9"></span>Items</label>
-          <label><input type="checkbox" id="c-props" /> <span class="sw" style="background:#a0703c"></span>Props, crates</label>
+        <h2>Regions</h2>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="r-show" /> Show regions</label>
+          <label class="grow">Colour by
+            <select id="r-by">
+              <option value="type">Structure type</option>
+              <option value="mood">Mood</option>
+              <option value="region">Each region</option>
+            </select>
+          </label>
         </div>
-        <p class="muted small">Where things start, as each room's seed places them (engine/contents.js). Creatures: <b style="color:#9fb4cc">ghost</b> · <b style="color:#c9a800">pixie</b> · <b style="color:#8e2fa8">creeper</b>. Features: sigil ◆, well ○, chests, vessels, sconces, hall waystones. Zoomed far out, only creatures, locks, push blocks, sigils and wells show.</p>
-        <p id="contents-stats" class="muted small"></p>
+        <p id="region-stats" class="muted small"></p>
+        <h3 class="sub">Structure types</h3>
+        <ul id="region-types" class="hover-list"></ul>
+        <h3 class="sub">Moods</h3>
+        <ul id="region-moods" class="hover-list"></ul>
+        <h3 class="sub">All regions</h3>
+        <ul id="region-list" class="hover-list scroll"></ul>
+        <p class="muted small">Drawn under the rooms: each region's ground reaches a cell past its rooms, outlined just inside its edge. Hatched: ground a cloister has claimed and not built yet. Hover any line to highlight it on the map; click a region (here, or its margin on the map) to inspect it.</p>
       </section>
 
       <section>
-        <h2>Inspector</h2>
-        <dl id="inspector" class="inspector"></dl>
-        <div class="row">
-          <button id="revert-btn">Revert space</button>
+        <h2>Room contents</h2>
+        <div class="toggles" id="content-toggles">
+          <label data-kind="creatures"><input type="checkbox" id="c-creatures" /> <span class="sw" style="background:#8e2fa8"></span>Creatures</label>
+          <label data-kind="push"><input type="checkbox" id="c-push" /> <span class="sw" style="background:#e0a94a"></span>Push blocks</label>
+          <label data-kind="features"><input type="checkbox" id="c-features" /> <span class="sw" style="background:#2f7fd1"></span>Features</label>
+          <label data-kind="locks"><input type="checkbox" id="c-locks" /> <span class="sw" style="background:#d0392b"></span>Locked doors</label>
+          <label data-kind="items"><input type="checkbox" id="c-items" /> <span class="sw" style="background:#3fb6c9"></span>Items</label>
+          <label data-kind="crates"><input type="checkbox" id="c-crates" /> <span class="sw" style="background:#a0703c"></span>Crates</label>
+          <label data-kind="blocks"><input type="checkbox" id="c-blocks" /> <span class="sw" style="background:#8d8577"></span>Static blocks</label>
         </div>
+        <p class="muted small">Where things start, as each room's seed places them (engine/contents.js). Hover a name to preview it on the map, or to pick it out if it's on. Creatures: <b style="color:#9fb4cc">ghost</b> · <b style="color:#c9a800">pixie</b> · <b style="color:#8e2fa8">creeper</b>. Features: sigil ◆, well ○, chests, vessels, sconces, hall waystones. Crates move; static blocks (darker = taller) don't. Zoomed far out, only creatures, locks, push blocks, sigils and wells show.</p>
+        <p id="contents-stats" class="muted small"></p>
       </section>
 
       <section>
@@ -105,7 +132,7 @@
         <div class="toggles">
           <label><input type="checkbox" id="t-grid" checked /> Grid</label>
           <label><input type="checkbox" id="t-labels" /> Seed labels</label>
-          <label><input type="checkbox" id="t-occupancy" /> Registry occupancy</label>
+          <label title="Tints each cell by the room the engine's registry says owns it: a check that the cell lookup matches the rooms"><input type="checkbox" id="t-occupancy" /> Registry occupancy</label>
           <label><input type="checkbox" id="t-path" checked /> Path to root</label>
         </div>
         <p class="muted small">Keys: <kbd>Enter</kbd> accept · <kbd>R</kbd> reroll · <kbd>Esc</kbd> cancel · <kbd>Del</kbd> revert · <kbd>F</kbd> fit</p>
@@ -119,6 +146,7 @@
   <script src="engine/expedition.js"></script>
   <script src="engine/grow.js"></script>
   <script src="engine/contents.js"></script>
+  <script src="app/regions-view.js"></script>
   <script src="app/renderer.js"></script>
   <script src="app/app.js"></script>
 </body>
