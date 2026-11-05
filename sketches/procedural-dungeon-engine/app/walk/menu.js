@@ -58,7 +58,7 @@
   function cellAt(g, i) {
     const x = cells(g)[i];
     if (!x) return null;
-    if (g === 'items') return W.isTool(x) ? W.itemStacks(run()).get(x) || null : x; // a stack, or a collectable in the backpack
+    if (g === 'items') return W.itemCell(run(), i); // a stack (this cell's count), or a collectable in the backpack
     if (worn(g)) return { kind: x, equip: true };
     return x;
   }
@@ -357,6 +357,10 @@
       const t = Math.min(x.n, (INV.stack[x.kind] || 1) - y.n);
       y.n += t; x.n -= t;
       if (x.n <= 0) A[p.i] = null;
+      return true;
+    }
+    if (p.g === 'items' && q.g === 'items') { // a tool's cell moves with its count; onto a cell of the same, it tops that up
+      if (x && x === y && W.isTool(x)) W.mergeItems(run(), p.i, q.i); else W.swapItems(run(), p.i, q.i);
       return true;
     }
     A[p.i] = y || null;
