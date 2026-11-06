@@ -1166,6 +1166,17 @@ All notable changes to this sketch are logged here, per
       you wake, fading in with the last static dying away. Timings are in
       `PSYCHE` in the dev panel.
 
+- 2026-11-05: **The HUD moves to the top left.**
+  - The lamp (and its entropy) sits in the top left, the item carousel
+    right under it; both are left-aligned a little in from the edge and
+    share one height (`--hud-h`: 128px, 110px on a phone).
+  - The touch-only buttons (☰ pause, now bottom left; crouch, jump, use)
+    show on a phone or tablet browser alone, told by the browser
+    (`W.mobile` in core.js: client hints, else the user agent; an iPad
+    asking for the desktop site counts), not by window width. Crouch no
+    longer shows as a small button on a desktop.
+  - The controls line along the bottom is gone: the Controls page in the
+    menu has all of it.
 - 2026-11-05: **A title screen that's also the pause menu, and a
   controls page.**
   - Walk mode opens on "Seeds of the Labyrinth": a big lamp, then

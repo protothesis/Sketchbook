@@ -416,32 +416,8 @@
       b.addEventListener('click', (e) => { e.preventDefault(); useEquip(); b.blur(); });
       bar.prepend(b);
     }
-    placeHotbar();
   }
 
-  /**
-   * The carousel sits just right of the lamp, level with it. Where that
-   * doesn't fit (a narrow window; on touch, the jump and use buttons keep
-   * the bottom right), it goes under the lamp instead and the lamp rises
-   * over it (the hud-stacked class, play.css).
-   */
-  function placeHotbar() {
-    const bar = $('hotbar'), lamp = $('lamp');
-    if (!bar || !lamp || bar.hidden) return;
-    const root = document.documentElement, gap = 10;
-    const help = document.querySelector('.help'); // the lamp and the carousel sit over it, however many lines it wraps to
-    if (help && help.offsetParent) root.style.setProperty('--hud-bottom', Math.round(global.innerHeight - help.getBoundingClientRect().top + 8) + 'px');
-    else root.style.setProperty('--hud-bottom', 'max(12px, env(safe-area-inset-bottom))');
-    const touch = !global.matchMedia('(hover: hover)').matches;
-    const lw = lamp.offsetWidth, bw = bar.offsetWidth;
-    const left = lamp.offsetLeft;
-    const fits = left + lw + gap + bw + (touch ? 160 : 12) <= global.innerWidth;
-    document.body.classList.toggle('hud-stacked', !fits);
-    root.style.setProperty('--bar-left', (fits ? left + lw + gap : left) + 'px');
-    root.style.setProperty('--bar-h', bar.offsetHeight + 'px');
-  }
-  global.addEventListener('resize', placeHotbar);
-  if (global.ResizeObserver && $('lamp')) new ResizeObserver(placeHotbar).observe($('lamp'));
 
   // --- chalk marks: drawn on a quarter-tile (floor, or the top of a one-unit
   // block); they show on the maps too. Persist with the run.
