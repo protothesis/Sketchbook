@@ -340,8 +340,9 @@ designed for. The hands and items rework in progress is planned in
 - **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
   sconce on a wall, chambers sometimes two. Never on a south wall: the
   camera looks north and would only see its back. E, facing one in your
-  room (within 0.65 cells, up to about 72° off, or right under it facing
-  anything but away; `SCONCE_REACH`, `SCONCE_FACING`, `SCONCE_UNDER`),
+  room (within 0.65 cells, up to about 72° off, or within 0.5 cells,
+  right under it, facing any way; `SCONCE_REACH`, `SCONCE_FACING`,
+  `SCONCE_UNDER`; something else you face still wins the focus),
   held for half a second, lights it from your lantern, which **costs
   1 shard**. Hold E at a lit one to snuff it: the shard goes back into
   your lamp and it comes off the restored tally, so lighting and snuffing
@@ -414,7 +415,9 @@ designed for. The hands and items rework in progress is planned in
   while you hold, and turns muted where it can't be done (a locked door,
   no room to set a block down). As it comes into reach, the thing itself
   **flashes** once in a chunky warm dither and fades in 0.45 s
-  (`FOCUS_FLASH`), so you see which thing the button is for. E has no prompt line (on
+  (`FOCUS_FLASH`), so you see which thing the button is for. A door
+  flashes through whatever is in front of it (a side wall seen edge on),
+  with its seam and arrows, from either side. E has no prompt line (on
   a keyboard), and a tap at something you can't do says why in a
   caption. F keeps a prompt line below the figure for what the item in
   hand would do (open a door with a doorstone, catch a pixie, pour into a

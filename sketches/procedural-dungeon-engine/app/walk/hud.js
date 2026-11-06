@@ -229,51 +229,70 @@
   // flashes once in a chunky warm dither (like the figure's flash, laid over
   // its own surfaces) and fades fast, so you see which thing the button is
   // for. A copy of each of its meshes rides along as a child, drawn on top.
+  // A door flashes through anything in front of it (a side wall seen edge
+  // on), like the figure's silhouette, and its arrows flash with it.
   const FLASH = { peak: 0.8, dur: 0.45, color: 0xffc27a };
-  const flashMat = new THREE.MeshBasicMaterial({
-    color: FLASH.color, transparent: true, opacity: 0, depthWrite: false, depthFunc: THREE.LessEqualDepth,
-    blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
-  });
-  flashMat.onBeforeCompile = (sh) => {
-    sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
-      '#include <clipping_planes_fragment>\nif (mod(floor(gl_FragCoord.x / 2.0) + floor(gl_FragCoord.y / 2.0), 2.0) < 0.5) discard;');
-  };
-  flashMat.customProgramCacheKey = () => 'focus-flash';
+  function ditherFlash(key, through) {
+    const m = new THREE.MeshBasicMaterial({
+      color: FLASH.color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
+      depthTest: !through, depthFunc: THREE.LessEqualDepth, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
+      side: through ? THREE.DoubleSide : THREE.FrontSide,
+    });
+    m.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
+        '#include <clipping_planes_fragment>\nif (mod(floor(gl_FragCoord.x / 2.0) + floor(gl_FragCoord.y / 2.0), 2.0) < 0.5) discard;');
+    };
+    m.customProgramCacheKey = () => key;
+    return m;
+  }
+  const flashMat = ditherFlash('focus-flash', false);
+  const flashThroughMat = ditherFlash('focus-flash-through', true);
   let flashOf = null, flashCopies = [], flashT = 0;
-  /** The thing in the world the focused action is about (an Object3D), or null. */
-  function objectOf(near) {
+  /** The door (world.js's record) a focused door action is about, from either side. */
+  function doorOf(near) {
+    const d = state.doors.get(near.space.id + '/' + near.exit.id);
+    if (d) return d;
+    // Built from the room on the other side: the door whose seam (it stays
+    // in the doorway while the panel swings) is here.
+    const b = near.box, mx = (b.x0 + b.x1) / 2 * S, my = (b.y0 + b.y1) / 2 * S, v = new THREE.Vector3();
+    for (const o of state.doors.values()) {
+      o.seam.getWorldPosition(v);
+      if (Math.hypot(v.x - mx, v.z - my) < 0.3 * S) return o;
+    }
+    return null;
+  }
+  /** What the focused action is about, in the world: { key, objs: [Object3D], through }, or null. */
+  function flashTarget(near) {
+    const one = (o) => (o ? { key: o, objs: [o], through: false } : null);
     switch (near.action) {
-      case 'lift': return near.block.mesh || null;
-      case 'light': case 'snuff': return near.sconce.flame.parent;
-      case 'save': return near.lantern.group || null;
-      case 'erase': return near.mark.mesh || null;
+      case 'lift': return one(near.block.mesh);
+      case 'light': case 'snuff': return one(near.sconce.flame.parent);
+      case 'save': return one(near.lantern.group);
+      case 'erase': return one(near.mark.mesh);
       case 'grabbed': case 'setblock': case 'choose': return null;
     }
     if (!near.exit) return null;
-    const d = state.doors.get(near.space.id + '/' + near.exit.id);
-    if (d) return d.panel;
-    // Built from the room on the other side: the door whose panel is here.
-    const b = near.box, mx = (b.x0 + b.x1) / 2 * S, my = (b.y0 + b.y1) / 2 * S, v = new THREE.Vector3();
-    for (const o of state.doors.values()) {
-      o.panel.getWorldPosition(v);
-      if (Math.hypot(v.x - mx, v.z - my) < 0.3 * S) return o.panel;
-    }
-    return null;
+    const d = doorOf(near);
+    if (!d) return null;
+    return { key: d, objs: [d.pivot, d.seam, d.arrow].filter((o) => o.visible), through: true };
   }
   function clearFlash() {
     for (const c of flashCopies) if (c.parent) c.parent.remove(c);
     flashCopies = [];
   }
   function updateFlash(near, dt) {
-    const obj = near && !state.choice ? objectOf(near) : null;
-    if (obj !== flashOf) {
-      flashOf = obj;
+    const t = near && !state.choice ? flashTarget(near) : null;
+    const key = t ? t.key : null;
+    if (key !== flashOf) {
+      flashOf = key;
       clearFlash();
-      if (obj) {
-        const meshes = [];
-        obj.traverse((m) => { if (m.isMesh && !m.isInstancedMesh && m.visible && m.material !== flashMat) meshes.push(m); });
+      if (t) {
+        const mat = t.through ? flashThroughMat : flashMat, meshes = [];
+        for (const o of t.objs) o.traverse((m) => {
+          if (m.isMesh && !m.isInstancedMesh && m.visible && m.material !== flashMat && m.material !== flashThroughMat) meshes.push(m);
+        });
         for (const m of meshes) {
-          const c = new THREE.Mesh(m.geometry, flashMat);
+          const c = new THREE.Mesh(m.geometry, mat);
           c.renderOrder = 12;
           c.raycast = () => {};
           m.add(c);
@@ -285,7 +304,7 @@
     if (!flashCopies.length) return;
     flashT += dt;
     const k = Math.min(1, flashT / FLASH.dur);
-    flashMat.opacity = FLASH.peak * (1 - k) * (1 - k);
+    flashMat.opacity = flashThroughMat.opacity = FLASH.peak * (1 - k) * (1 - k);
     if (k >= 1) clearFlash();
   }
 

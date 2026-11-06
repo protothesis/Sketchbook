@@ -259,10 +259,12 @@ All notable changes to this sketch are logged here, per
   reach (tracking the thing as it fades), gives way to the hold ring while
   you hold, and turns muted where the action can't be done. As something
   comes into reach it **flashes** once in a chunky warm dither that fades
-  in 0.45 s. Only ever the one focused thing.
-- 2026-11-05: Sconces work from right under them: within 0.45 cells, any
-  facing but turned away counts (it hangs on the wall over your head, so
-  it's nearly beside you). Its focus box is a little bigger.
+  in 0.45 s. A door flashes through the wall in front of it, with its seam
+  and arrows, from either side. Only ever the one focused thing.
+- 2026-11-05: Sconces work from right under them: within 0.5 cells, any
+  facing counts (it hangs on the wall over your head, so it's nearly
+  beside you); something else you're facing still wins the focus. Its
+  focus box is a little bigger.
 - 2026-11-05: **No more backward compatibility for old records.** The
   params that only kept old records replaying as they were (`starter`,
   `doorsteps`, the mood-region params) are gone, with the old code paths
