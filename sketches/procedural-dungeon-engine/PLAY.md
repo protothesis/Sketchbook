@@ -10,6 +10,11 @@ The engine stays free of game rules. Everything game-like lives in
 the world comes from a space's seed on its own named stream (see
 Determinism).
 
+**Controller first.** Feel is designed and judged on a gamepad. Keyboard
+and mouse keep working, and touch is legacy: kept while it's cheap, never
+designed for. The hands and items rework in progress is planned in
+[`HANDS-PLAN.md`](HANDS-PLAN.md).
+
 ## Pillars
 
 1. **The door is the moment.** Every unresolved exit is a closed door, and

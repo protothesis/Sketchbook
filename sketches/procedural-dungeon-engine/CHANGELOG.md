@@ -247,6 +247,13 @@ All notable changes to this sketch are logged here, per
     structure type and mood (with region and room counts) and every
     region. Hovering any line highlights the matching regions on the map,
     and clicking a region selects it and centres the map on it.
+- 2026-11-05: [`HANDS-PLAN.md`](HANDS-PLAN.md), the plan for reworking
+  hands, items and prompts for controller play: the duster on RT (first
+  press draws and swings), items and collectables on Y, tap B to put away
+  and hold B to drop in front, d-pad strips to pick what's on each slot,
+  jars that catch and release with things that accept what's released,
+  collectables placed with Y, and the X prompt floating over its target.
+  Walk mode is now designed controller first; touch is legacy.
 
 ### Changed
 
