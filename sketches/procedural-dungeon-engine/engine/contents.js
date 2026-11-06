@@ -123,22 +123,18 @@
     sconceMinDepth: 1,
     sconceSecond: 0.4,        // chambers: chance of a second sconce (halls: hallSconceSecond)
     sconceCost: 1,            // shards
-    // Dust (notes/dusting-2026-10-27.md): on a room's surfaces, by its
-    // mood, on the half-cell grid. `cover`: the share of free floor and
-    // low block tops dusted; `layers`: the thickest it gets (a swipe takes
-    // one off).
-    dustMood: {
-      dusty: { cover: 0.7, layers: 3 },
-      still: { cover: 0.35, layers: 2 },
-      hollow: { cover: 0.35, layers: 2 },
-      warm: { cover: 0.3, layers: 2 },
-      echoing: { cover: 0.15, layers: 1 },
-      tilted: { cover: 0.15, layers: 1 },
-      humming: { cover: 0.12, layers: 1 },
-      damp: { cover: 0, layers: 0 },
-      cold: { cover: 0, layers: 0 },
-      breathing: { cover: 0, layers: 0 },
-    },
+    // Dust (notes/dusting-2026-10-27.md): on a room's surfaces, from its
+    // conditions (DE.CONDITIONS): age sets how much and how thick, dry air
+    // keeps it, damp and wet wash it out, moving air thins it. `cover`: the
+    // share of free floor and low block tops dusted; `layers`: the thickest
+    // it gets (a swipe takes one off).
+    dustAge: { fresh: { cover: 0.06, layers: 1 }, old: { cover: 0.3, layers: 2 }, ancient: { cover: 0.65, layers: 3 } },
+    dustMoisture: { dry: 1.2, damp: 0.4, wet: 0 },
+    dustAir: { still: 1, draughty: 0.6, breathing: 0.5 },
+    dustMin: 0.05,            // below this cover, no dust at all
+    // Potency (DE.CONDITIONS) multiplies how often wells and sigils turn up.
+    potencyWells: { low: 0.3, mid: 1, high: 2.6 },
+    potencySigils: { low: 0.4, mid: 1, high: 2.2 },
     dustScale: 3,             // half-cells: how big the patches are
     dustTops: 0.15,           // block tops gather a little more
     dustCrust: 0.8,           // share of shards in a room with dust that lie crusted over (crystals)
@@ -418,7 +414,7 @@
   function sigil(space) {
     if (!space.parentId || space.depth < RULES.sigilMinDepth || space.cells.length < 4) return null;
     const r = DE.deriveRng(space.seed, 'sigil');
-    if (!r.chance(RULES.sigilChance)) return null;
+    if (!r.chance(RULES.sigilChance * RULES.potencySigils[DE.bandOf(space.meta && space.meta.cond, 'potency')])) return null;
     const doors = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
     const items = new Set(baseLoot(space).map((it) => DE.key(it.cell.x, it.cell.y)));
     const ws = waystone(space);
@@ -436,7 +432,7 @@
   function well(space) {
     if (!space.parentId || space.depth < RULES.wellMinDepth || space.cells.length < 4) return null;
     const r = DE.deriveRng(space.seed, 'well');
-    if (!r.chance(RULES.wellChance)) return null;
+    if (!r.chance(RULES.wellChance * RULES.potencyWells[DE.bandOf(space.meta && space.meta.cond, 'potency')])) return null;
     const kind = r.chance(RULES.wellSurge) ? 'surge' : 'trickle';
     const avoid = new Set(exitsMadeWith(space).map((e) => DE.key(e.cell.x, e.cell.y)));
     for (const it of baseLoot(space)) avoid.add(DE.key(it.cell.x, it.cell.y));
@@ -581,17 +577,26 @@
    * Dust in a space: { cells: [{ sx, sy, h, layers }], crust: [shard item
    * ids] }. A cell is a half-cell (sx, sy) on the floor (h 0) or on top of
    * an h-unit block (1 or 2). How much, and how thick, comes from the
-   * room's mood (RULES.dustMood); where, from smooth noise, so it lies in
+   * room's conditions (dustCover: age, moisture, air); where, from smooth noise, so it lies in
    * patches and drifts, thickest in their middles. Never on a cell with a
    * door-side feature (sigil, well, waystone, save lantern) or a tool lying
    * on it, nor under a loose object's start or mark. Most shards in a
    * dusty room lie crusted over (`crust`): crystals you dust awake, with
    * dust around them. Seeded on its own stream, so it shifts nothing else.
    */
+  /** How much dust a room's conditions leave: { cover, layers }, or null for none. */
+  function dustCover(space) {
+    const c = space.meta && space.meta.cond;
+    if (!c) return null;
+    const base = RULES.dustAge[DE.bandOf(c, 'age')];
+    const cover = Math.min(0.85, base.cover * RULES.dustMoisture[DE.bandOf(c, 'moisture')] * RULES.dustAir[DE.bandOf(c, 'air')]);
+    return cover >= RULES.dustMin ? { cover, layers: base.layers } : null;
+  }
+
   function dust(space) {
     const out = { cells: [], crust: [] };
-    const m = RULES.dustMood[space.meta && space.meta.mood];
-    if (!m || !(m.cover > 0) || !(m.layers > 0)) return out;
+    const m = dustCover(space);
+    if (!m) return out;
     const r = DE.deriveRng(space.seed, 'dust');
     const items = baseLoot(space);
     // The crusted shards first, one draw each, so the patches never shift them.

@@ -85,15 +85,12 @@
         showCaption(`${sp.id} · ${state.arrival.text}`);
         state.arrival = null;
       } else if (sp) {
-        const g = exp.regions && exp.regions[sp.regionId];
-        const kind = (sp.deadEnd ? 'dead end' : sp.archetype) + (g ? ` · ${g.type} ${sp.role}` : '');
-        const sealed = DP.pastLock(exp, sp) ? ' · beyond a lock' : '';
-        // A hall whose lantern isn't where you'd wake: passing through
-        // doesn't move it; saving at the lantern does.
+        // No caption for an ordinary room (its details are in the dev
+        // panel's room info, roominfo.js). Only a hall whose lantern isn't
+        // where you'd wake says so: passing through doesn't move it.
         const ln = state.lanterns.find((o) => o.spaceId === sp.id);
         const home = W.hearth();
-        const hint = ln && home && ln !== home ? ` · you'd still wake in ${home.spaceId} · save at the lantern to wake here` : '';
-        showCaption(`${sp.id} · ${kind}${sealed} · ${sp.meta.mood} · depth ${sp.depth}${hint}`);
+        if (ln && home && ln !== home) showCaption(`you'd still wake in ${home.spaceId} · save at the lantern to wake here`);
       }
     }
 
@@ -171,6 +168,7 @@
     state.dying = state.dying.filter((rec) => {
       if (!applyDissolve(rec)) return true;
       world.remove(rec.group);
+      W.disposeAtmos(rec);
       return false;
     });
     updateItems();
@@ -181,6 +179,9 @@
     W.updateLanterns(dt);
     W.updatePacks();
     W.lostFx.uTime.value = state.time; // lost-path doors shimmer
+    W.updateAtmos(dt); // the room's air: ambient light, motes, sparks, fog
+    W.updateWater(dt); // splashes, drips, ripples
+    W.updateRoomInfo(); // the dev room-info window, if it's on (roominfo.js)
     W.updateLamp(dt);
     W.updateLampLook(dt); // the lamp's colour, halo, sparks and light (after placeLamp)
   }

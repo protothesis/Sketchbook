@@ -28,7 +28,7 @@
   const DEV_KEY = 'dungeon-engine:dev';
   // Shown in this order; a table that isn't exported is skipped.
   const TABLES = ['PLAYER', 'RULES', 'INV', 'POOL', 'LIGHT', 'HALO', 'UNREST', 'EMBER', 'STREAM', 'DRIP', 'FEED_GLOW', 'CREEPER', 'GHOST', 'PIXIE', 'CREATURE',
-    'ECOLOGY', 'WELL', 'DUST', 'SLASH', 'GLOW', 'SCONCE_LIGHT', 'SAVE_LANTERN', 'PACK_LIGHT', 'JUMP', 'CAMERA', 'SHADOW', 'SETDOWN', 'SHADOW_FADE', 'PSYCHE'];
+    'ECOLOGY', 'WELL', 'DUST', 'SLASH', 'GLOW', 'SCONCE_LIGHT', 'SAVE_LANTERN', 'PACK_LIGHT', 'JUMP', 'CAMERA', 'SHADOW', 'SETDOWN', 'SHADOW_FADE', 'PSYCHE', 'ATMOS', 'WATER'];
   const META = W.DEV_META || { TABS: [], DOCS: {} };
   // Numbers that size arrays or pools when the game starts: changing them live breaks things.
   const FIXED = new Set(Object.keys(META.DOCS).filter((k) => Array.isArray(META.DOCS[k]) && META.DOCS[k][1].when === 'fixed'));

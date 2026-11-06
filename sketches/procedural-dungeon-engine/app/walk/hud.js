@@ -440,8 +440,11 @@
     drawLostPaths(ctx, ox, oy, px, visible, cell);
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
-      ctx.fillStyle = `hsla(${sp.meta.hue}, 18%, ${id === p.spaceId ? 46 : 30}%, 0.95)`;
-      for (const k of sp.cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
+      // Its material's colour, with its region's hue faint over it (materials.js).
+      for (const fill of W.chartFills(sp, id === p.spaceId)) {
+        ctx.fillStyle = fill;
+        for (const k of sp.cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
+      }
     }
     // Walls: every cell edge that doesn't lead into the same room, so rooms
     // built wall to wall still read as separate.
