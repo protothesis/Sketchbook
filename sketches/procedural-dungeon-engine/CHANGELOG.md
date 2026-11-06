@@ -318,9 +318,8 @@ All notable changes to this sketch are logged here, per
   colour each room by its material (`chart` in `materials.js`, picked to
   stay apart at a glance), with its region's own hue laid faintly over it;
   the walk view's surfaces lean 12% toward that hue too. The engine map
-  keeps the region's hue (now a little more saturated); the moods keep
-  swatch colours (`MOOD_TONES`) for the map's mood view.
-  Layouts and moods are unchanged.
+  keeps the region's hue (now a little more saturated). Layouts are
+  unchanged.
 - 2026-11-05: [`HANDS-PLAN.md`](HANDS-PLAN.md), the plan for reworking
   hands, items and prompts for controller play: the duster on RT (first
   press draws and swings), items and collectables on Y, tap B to put away
