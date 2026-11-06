@@ -13,7 +13,7 @@
 // Walk mode is split into classic scripts (no modules: the page has to open
 // from file://), which play.html loads in this order:
 //
-//   saves, core, world, materials, atmos, figure, light, items, hourglass, dust, restore, waystones, lanterns, packs, lamp, actions,
+//   saves, core, world, materials, atmos, water, figure, light, items, hourglass, dust, restore, waystones, lanterns, packs, lamp, actions,
 //   input, ecology, creatures, markers, wells, pixies, ghosts, creepers, fx, hud, choice, game, main, dev
 //
 // (saves.js is the odd one out: it knows nothing of W, and hangs its save

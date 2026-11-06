@@ -294,7 +294,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }
     W.addDrops(space, group, tileAt); // what you dropped here (inventory.js)
 
-    W.addAtmos(space, rec, group); // motes and sparks, from its conditions (atmos.js)
+    W.addWater(space, rec, tileAt); // puddles and drip spots, from its moisture (water.js)
+    W.addAtmos(space, rec, group); // motes, sparks and fog, from its conditions (atmos.js)
     world.add(group);
     state.spaces.set(space.id, rec);
     applyReveal(rec);

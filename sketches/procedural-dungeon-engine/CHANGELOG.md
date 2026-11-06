@@ -7,6 +7,22 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-11-06: **Water and fog.** Damp rooms have the odd puddle, wet rooms
+  plenty (`app/walk/water.js`, `DungeonPlay.walk.WATER`): dark glossy
+  pools flat on the floor, seeded per room, never on a door, block or
+  feature. Walking through one splashes: droplets and a ripple ring at
+  your feet. Water drips from fixed spots on the ceiling (most over a
+  puddle), each on its own beat, and rings where it lands. Fog lies low
+  in damp and wet rooms, thickest when cold (a thinner warm mist when
+  warm): big soft puffs that drift with the room's air, show brighter in
+  your lamp, and part around you as you walk through.
+- 2026-11-06: **Room info** (dev): Cheats > Debug views > `ATMOS.roomInfo`
+  turns on a window with everything about the room you're in: its kind,
+  region, material, mood, each condition's value and band, and what they
+  made (air, motes, sparks, fog, dust, puddles, drip spots, wells,
+  sigils). It stays open when the dev panel closes and drags anywhere by
+  its title. The air and water tables (`ATMOS`, `WATER`) are in the dev
+  panel's World tab.
 - 2026-10-04: Initial sketch created from the "Procedural Dungeon Engine —
   Prototype Design Doc" (copied to `DESIGN.md`).
 - Engine (`engine/`): hash-chained seeds with fresh entropy, seeded per-space
@@ -250,6 +266,10 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-11-06: Entering a room no longer shows a caption with its details
+  (they're in the room-info window now); only a save-lantern hall still
+  says you'd wake elsewhere. The temperature tint is much stronger (cold
+  ambient 0.42, warm 0.36).
 - 2026-11-05: **Conditions replace moods.** A region no longer rolls one of
   ten moods. It rolls five conditions, each a value 0..1 read in three
   bands (`DungeonEngine.CONDITIONS`): temperature (cold, mild, warm),

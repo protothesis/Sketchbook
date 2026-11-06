@@ -914,10 +914,12 @@ sigils; ambient light by temperature; motes (age, moisture) and firefly
 sparks (potency) moving with the air; damp and wet floors. "Mood" is a
 name read off the two strongest axes.
 
+Then water (2026-11-06): puddles that splash, drips with ripples, and low
+fog that drifts with the air and parts around you.
+
 Next: combinations make phenomena (cold+wet ice, warm+wet stagnant pools
-and mould, wet+draughty moving fog, cold+still low fog, potent+wet glowing
-pools), drips and puddles, the lamp flame leaning in a draught, and
-creatures get habitat tags in `ecology.js`. Echoing is derived from material and room size;
+and mould, potent+wet glowing pools), the lamp flame leaning in a draught,
+and creatures get habitat tags in `ecology.js`. Echoing is derived from material and room size;
 hollow and tilted are dropped (tilted may return as real geometry).
 Regions keep their own random hue for the map and minimap; how colour
 ties in beyond that is open.
