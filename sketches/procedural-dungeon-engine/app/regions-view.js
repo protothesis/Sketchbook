@@ -12,16 +12,12 @@
 
   // Colours, the same in light and dark (mid tones read on both).
   const TYPE_COLORS = { meander: '#d08a3c', catacomb: '#4f86d6', cloister: '#3fae7a' };
-  // Mood colours come from the engine's (DE.MOOD_TONES), the ones the rooms
-  // themselves wear, in a stronger mid tone.
-  const MOOD_COLORS = {};
-  for (const [mood, t] of Object.entries(DE.MOOD_TONES)) {
-    MOOD_COLORS[mood] = `hsl(${t.hue}, ${Math.min(90, 50 * t.sat)}%, ${52 + t.shade * 8}%)`;
-  }
+  /** A condition band's swatch: condColor('temperature', 'cold'). */
+  const condColor = (axis, band) => DE.CONDITIONS[axis].color[DE.CONDITIONS[axis].bands.indexOf(band)] || '#999';
 
-  /** A region's colour under a colouring ('type' | 'mood' | 'material' | 'region'). */
+  /** A region's colour under a colouring ('type' | 'material' | 'region' | a condition axis). */
   function colorOf(g, by) {
-    if (by === 'mood') return MOOD_COLORS[g.mood] || '#999';
+    if (DE.CONDITIONS[by]) return condColor(by, DE.bandOf(g.cond, by));
     if (by === 'region') return `hsl(${g.hue}, 55%, 55%)`;
     if (by === 'material') return (DE.MATERIALS[g.material] || {}).swatch || '#999';
     return TYPE_COLORS[g.type] || '#999';
@@ -129,11 +125,11 @@
    * hatched in its region's colour; a courtyard (open air, never built on)
    * is negative space: its region's colour with stripes cut out of it.
    * Structure is what claims belong to, so this shows when the layer is
-   * coloured by structure or by region, never by mood. `only` limits it to
+   * coloured by structure or by region, never by material or condition. `only` limits it to
    * those regions; `bg` is the map's background, for the cut.
    */
   function drawClaims(ctx, exp, by, s, X, Y, only, bg) {
-    if (by === 'mood' || s < 4) return;
+    if ((by !== 'type' && by !== 'region') || s < 4) return;
     const { ground } = layout(exp);
     const walks = [], voids = [];
     for (const [k, v] of ground) {
@@ -279,16 +275,17 @@
     }
   }
 
-  /** Numbers for the panel: { count, mean, max, maxId, types: {t: {regions, rooms}}, moods: {m: {regions, rooms}} }. */
+  /** Numbers for the panel: { count, mean, max, maxId, types: {t: {regions, rooms}}, conds: {'axis:band': {regions, rooms}} }. */
   function summary(exp) {
     const { regions } = layout(exp);
     const ids = Object.keys(regions);
-    const out = { count: ids.length, mean: 0, max: 0, maxId: null, types: {}, moods: {} };
+    const out = { count: ids.length, mean: 0, max: 0, maxId: null, types: {}, conds: {} };
     for (const id of ids) {
       const r = regions[id];
       out.mean += r.rooms;
       if (r.rooms > out.max) { out.max = r.rooms; out.maxId = id; }
-      for (const [bucket, k] of [[out.types, r.g.type], [out.moods, r.g.mood]]) {
+      const keys = [[out.types, r.g.type]].concat(DE.AXES.map((a) => [out.conds, a + ':' + DE.bandOf(r.g.cond, a)]));
+      for (const [bucket, k] of keys) {
         const b = bucket[k] || (bucket[k] = { regions: 0, rooms: 0 });
         b.regions++; b.rooms += r.rooms;
       }
@@ -298,5 +295,5 @@
   }
 
   global.DungeonApp = global.DungeonApp || {};
-  global.DungeonApp.regions = { TYPE_COLORS, MOOD_COLORS, colorOf, layout, regionAt, labelOf, labelText, drawUnder, drawOutlines, drawLabels, summary };
+  global.DungeonApp.regions = { TYPE_COLORS, condColor, colorOf, layout, regionAt, labelOf, labelText, drawUnder, drawOutlines, drawLabels, summary };
 })(window);

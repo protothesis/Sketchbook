@@ -353,7 +353,8 @@
      * Regions to highlight, as groups drawn in order ([{ ids: Set, by }]):
      * pinned regions and the selected one, then the region under the
      * pointer on the map, then whatever is hovered in the panel. A structure
-     * type always lights up in type colours and a mood in mood colours,
+     * type always lights up in type colours and a condition band in that
+     * axis's colours,
      * whatever the layer is coloured by.
      */
     function regionHighlights(exp, state) {
@@ -364,13 +365,14 @@
       const pinned = keep((reg.pinned || []).concat(reg.selected ? [reg.selected] : []));
       if (pinned.size) groups.push({ ids: pinned, by });
       if (state.mapRegion && exp.regions[state.mapRegion]) groups.push({ ids: new Set([state.mapRegion]), by });
-      if (h && (h.region || h.type || h.mood)) {
+      if (h && (h.region || h.type || h.cond)) {
+        const [axis, band] = h.cond ? h.cond.split(':') : [];
         const ids = new Set();
         for (const id in exp.regions) {
           const g = exp.regions[id];
-          if (h.region === id || (h.type && g.type === h.type) || (h.mood && g.mood === h.mood)) ids.add(id);
+          if (h.region === id || (h.type && g.type === h.type) || (h.cond && DE.bandOf(g.cond, axis) === band)) ids.add(id);
         }
-        groups.push({ ids, by: h.type ? 'type' : h.mood ? 'mood' : by });
+        groups.push({ ids, by: h.type ? 'type' : h.cond ? axis : by });
       }
       return groups.filter((g) => g.ids.size);
     }

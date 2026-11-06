@@ -22,8 +22,8 @@ Each one is a default that can change.
 - Root: space 0's seed is `H(rootSeed | "root")`. Global params come from
   `H(rootSeed | "params")`: chamber size range, corridor length range,
   corridor weight, exit bias, loop chance.
-- `meta` (hue, mood) comes from `H(seed | "meta")`, so it never shifts layouts.
-  The mood and material are the room's region's; the hue drifts a little
+- `meta` (hue, mood, material, cond) comes from `H(seed | "meta")`, so it never shifts layouts.
+  The conditions (and the mood read off them) and material are the room's region's; the hue drifts a little
   from the region's (see "Regions").
 
 ## Versioning
@@ -55,7 +55,7 @@ Each one is a default that can change.
 Added 2026-11-05 (`engine/regions.js`; the catalogue and reasoning are in
 `notes/structure-types.md`).
 
-- **Data.** `exp.regions[id]` = `{ id, seed, type, mood, hue, size,
+- **Data.** `exp.regions[id]` = `{ id, seed, type, cond, mood, material, hue, size,
   parentId, anchor, originId, plan? }`, ids `g0`, `g1`, ...
   (`counters.region`). Every space has `regionId` and `role`; a room that
   fell back from the role it was asked for (a gallery with no room becomes
@@ -65,7 +65,9 @@ Added 2026-11-05 (`engine/regions.js`; the catalogue and reasoning are in
   `region` stream whether the room stays in its parent's region (the role
   then comes from `childRole`, on the `role` stream) or starts a new one
   (`rollRegion(H(seed | "region"), parent, beyond)`). A new region draws
-  type, mood, hue and size each from its own stream of the region seed.
+  type, material (`material`), hue and size each from its own stream of
+  the region seed, and each condition axis from its own (`cond <axis>`),
+  leaning on the parent's (`rollConditions`); `mood` is `moodName(cond)`.
   The root region comes from `H(rootSeed | "region")`. Layout draws are on
   the room's own rng, as before.
 - **Budget.** `regionSpent` counts the region's rooms with a spending role

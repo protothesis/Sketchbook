@@ -294,6 +294,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }
     W.addDrops(space, group, tileAt); // what you dropped here (inventory.js)
 
+    W.addAtmos(space, rec, group); // motes and sparks, from its conditions (atmos.js)
     world.add(group);
     state.spaces.set(space.id, rec);
     applyReveal(rec);
@@ -457,6 +458,7 @@ void main() {
     const rec = state.spaces.get(id);
     if (!rec) return;
     world.remove(rec.group);
+    W.disposeAtmos(rec);
     forgetSpace(id);
   }
 
@@ -482,7 +484,7 @@ void main() {
     W.clearCreepers();
     W.clearMarks();
     for (const id of Array.from(state.spaces.keys())) disposeSpace(id);
-    for (const rec of state.dying) world.remove(rec.group);
+    for (const rec of state.dying) { world.remove(rec.group); W.disposeAtmos(rec); }
     state.dying = [];
     rebuildExitIndex();
     for (const id in state.exp.spaces) buildSpace(state.exp.spaces[id], false);

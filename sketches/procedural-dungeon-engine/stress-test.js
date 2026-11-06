@@ -117,15 +117,15 @@ for (let run = 0; run < RUNS; run++) {
 }
 assert(totalCycles > 0, 'no cycles in any run');
 
-// Regions: every space is in a region that exists; rooms take its mood
-// and material; every type and material turns up; type, mood, material and
-// size vary independently (each type is seen with more than one mood and
-// more than one material); a rerolled region-opening door leaves
+// Regions: every space is in a region that exists; rooms take its
+// conditions, mood and material; every type, material and condition band
+// turns up; type, conditions, material and size vary independently (each
+// type is seen with more than one mood and more than one material); a rerolled region-opening door leaves
 // no region or claim behind; nothing is built on a courtyard; cloisters'
 // claims go with the room that made them; and records from another build
 // are refused.
 {
-  const types = {}, moodsByType = {}, matsByType = {}, mats = {};
+  const types = {}, moodsByType = {}, matsByType = {}, mats = {}, bands = {};
   let regions = 0, rings = 0, rerolledAway = 0, maxSize = 0;
   for (let run = 0; run < 8; run++) {
     const exp = DE.createExpedition(DE.randomRootSeed());
@@ -153,9 +153,12 @@ assert(totalCycles > 0, 'no cycles in any run');
       assert(g, id + ' has no region');
       if (!s.reserveId || exp.reserves[s.reserveId].regionId) {
         assert(s.meta.mood === g.mood, id + ' mood differs from its region');
+        assert(s.meta.cond === g.cond, id + ' conditions differ from its region');
         assert(s.meta.material === g.material, id + ' material differs from its region');
       }
       assert(DE.MATERIALS[s.meta.material], id + ' has no material');
+      assert(s.meta.cond && DE.AXES.every((a) => s.meta.cond[a] >= 0 && s.meta.cond[a] <= 1), id + ' has bad conditions');
+      assert(s.meta.mood === DE.moodName(s.meta.cond), id + ' mood is not read off its conditions');
     }
     for (const r of Object.values(exp.reserves)) {
       if (r.dormant) { assert(!exp.spaces[r.ownerId], 'claim ' + r.id + ' dormant while its room stands'); continue; }
@@ -168,6 +171,7 @@ assert(totalCycles > 0, 'no cycles in any run');
       (moodsByType[g.type] = moodsByType[g.type] || new Set()).add(g.mood);
       (matsByType[g.type] = matsByType[g.type] || new Set()).add(g.material);
       mats[g.material] = (mats[g.material] || 0) + 1;
+      for (const a of DE.AXES) bands[a + ':' + DE.bandOf(g.cond, a)] = true;
       maxSize = Math.max(maxSize, g.size);
       if (g.plan) rings++;
     }
@@ -181,6 +185,7 @@ assert(totalCycles > 0, 'no cycles in any run');
     assert(matsByType[t].size > 1, t + ' only ever came in one material');
   }
   for (const m of Object.keys(DE.MATERIALS)) assert(mats[m], 'no ' + m + ' region in 8 runs');
+  for (const a of DE.AXES) for (const b of DE.CONDITIONS[a].bands) assert(bands[a + ':' + b], 'no ' + b + ' (' + a + ') region in 8 runs');
   const old = JSON.parse(DE.exportRecord(DE.createExpedition('x')));
   old.build = DE.BUILD - 1;
   let refused = false;

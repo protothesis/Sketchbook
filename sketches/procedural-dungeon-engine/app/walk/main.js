@@ -168,6 +168,7 @@
     state.dying = state.dying.filter((rec) => {
       if (!applyDissolve(rec)) return true;
       world.remove(rec.group);
+      W.disposeAtmos(rec);
       return false;
     });
     updateItems();
@@ -178,6 +179,7 @@
     W.updateLanterns(dt);
     W.updatePacks();
     W.lostFx.uTime.value = state.time; // lost-path doors shimmer
+    W.updateAtmos(dt); // the room's air: ambient light, motes, sparks
     W.updateLamp(dt);
     W.updateLampLook(dt); // the lamp's colour, halo, sparks and light (after placeLamp)
   }

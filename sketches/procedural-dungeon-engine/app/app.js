@@ -72,7 +72,8 @@
       ['exits', sp.exits.map((e) => `${e.id}${e.facing}${e.connectionId ? '·' + e.connectionId : '·open'}`).join(' ')],
       ['region', regionText(exp, sp), sp.regionId && { region: sp.regionId }],
       ['structure', exp.regions[sp.regionId] ? `${exp.regions[sp.regionId].type} · ${sp.role}` : '—', exp.regions[sp.regionId] && { type: exp.regions[sp.regionId].type }],
-      ['mood', sp.meta.mood, { mood: sp.meta.mood }],
+      ['mood', sp.meta.mood],
+      ['conditions', DE.AXES.map((a) => DE.bandOf(sp.meta.cond, a)).join(' · ')],
       ['material', sp.meta.material || '—'],
       ['hue', sp.meta.hue],
     ] : [['', 'Tap a space to inspect it.']];
@@ -89,7 +90,7 @@
       $('candidate-text').textContent = c.type === 'loop'
         ? `Opens into ${c.targetId} — a loop`
         : `${c.space.archetype}${c.space.deadEnd ? ' (dead end)' : ''}, ${c.space.cells.length} cells, ${c.space.exits.length - 1} new door${c.space.exits.length === 2 ? '' : 's'}` +
-          (c.region ? ` · a new region: ${c.region.type}, ${c.region.mood}, ${c.region.size} rooms` : ` · ${c.space.role}`);
+          (c.region ? ` · a new region: ${c.region.type}, ${c.region.material}, ${c.region.mood}, ${c.region.size} rooms` : ` · ${c.space.role}`);
       $('reroll-btn').disabled = c.type === 'loop';
     }
     redraw();
@@ -154,7 +155,7 @@
     return li;
   }
 
-  /** Region stats, and the lists of types, moods and regions (hover to highlight). */
+  /** Region stats, and the lists of types, condition bands and regions (hover to highlight). */
   function regionsPanel(exp) {
     const sum = RV.summary(exp);
     const { regions } = RV.layout(exp);
@@ -162,15 +163,20 @@
       ? `${plural(sum.count, 'region')} · ${sum.mean.toFixed(1)} rooms each on average · largest ${sum.max} (${sum.maxId})`
       : '';
     const by = state.regions.by;
-    const types = $('region-types'), moods = $('region-moods'), list = $('region-list');
-    types.innerHTML = ''; moods.innerHTML = ''; list.innerHTML = '';
+    const types = $('region-types'), conds = $('region-conds'), list = $('region-list');
+    types.innerHTML = ''; conds.innerHTML = ''; list.innerHTML = '';
     for (const t of Object.keys(sum.types).sort((a, b) => sum.types[b].rooms - sum.types[a].rooms)) {
       const v = sum.types[t];
       types.append(listRow(RV.TYPE_COLORS[t] || '#999', t, `${plural(v.regions, 'region')} · ${plural(v.rooms, 'room')}`, { type: t }));
     }
-    for (const m of Object.keys(sum.moods).sort((a, b) => sum.moods[b].rooms - sum.moods[a].rooms)) {
-      const v = sum.moods[m];
-      moods.append(listRow(RV.MOOD_COLORS[m] || '#999', m, `${plural(v.regions, 'region')} · ${plural(v.rooms, 'room')}`, { mood: m }));
+    // Every band of every condition axis, in order; empty ones dimmed.
+    for (const a of DE.AXES) {
+      for (const b of DE.CONDITIONS[a].bands) {
+        const v = sum.conds[a + ':' + b] || { regions: 0, rooms: 0 };
+        const li = listRow(RV.condColor(a, b), `${a}: ${b}`, `${plural(v.regions, 'region')} · ${plural(v.rooms, 'room')}`, { cond: a + ':' + b });
+        if (!v.regions) li.style.opacity = 0.45;
+        conds.append(li);
+      }
     }
     const ids = Object.keys(regions).sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10));
     for (const id of ids) {
@@ -193,7 +199,8 @@
     const rows = [
       ['id', g.id + (state.regions.pinned.includes(g.id) ? ' · pinned' : ''), { region: g.id }],
       ['type', g.type, { type: g.type }],
-      ['mood', g.mood, { mood: g.mood }],
+      ['mood', g.mood],
+      ...DE.AXES.map((a) => [a, `${DE.bandOf(g.cond, a)} (${g.cond[a].toFixed(2)})`, { cond: a + ':' + DE.bandOf(g.cond, a) }]),
       ['material', g.material],
       ['hue', g.hue],
       ['budget', `${r ? r.spent : 0} of ${g.size} rooms spent${r && r.spent >= g.size ? ' (spent: its doors lead out)' : ''}`],
@@ -217,7 +224,7 @@
 
   /**
    * Fill an inspector list from [label, value, data?] rows. A row with data
-   * (region, type or mood) highlights those regions on the map while the
+   * (region, type or condition band) highlights those regions on the map while the
    * pointer is over it; a region row pins its region on a click.
    */
   function fillRows(dl, rows) {
@@ -229,7 +236,7 @@
         for (const key in data) dd.dataset[key] = data[key];
         dd.classList.add('hot');
         dd.title = data.region ? 'Hover to see this region on the map; click to pin it'
-          : data.type ? `Hover to see every ${data.type} region` : `Hover to see every ${data.mood} region`;
+          : data.type ? `Hover to see every ${data.type} region` : `Hover to see every region that is ${data.cond.split(':')[1]}`;
       }
       dl.append(dt, dd);
     }
@@ -566,13 +573,13 @@
     setHover(el ? { content: el.dataset.kind } : null);
   });
   $('content-toggles').addEventListener('mouseleave', () => setHover(null));
-  for (const id of ['region-types', 'region-moods', 'region-list']) {
+  for (const id of ['region-types', 'region-conds', 'region-list']) {
     const ul = $(id);
     ul.addEventListener('mouseover', (e) => {
       const li = e.target.closest('li');
       if (!li) return setHover(null);
       const d = li.dataset;
-      setHover(d.region ? { region: d.region } : d.type ? { type: d.type } : d.mood ? { mood: d.mood } : null);
+      setHover(d.region ? { region: d.region } : d.type ? { type: d.type } : d.cond ? { cond: d.cond } : null);
     });
     ul.addEventListener('mouseleave', () => setHover(null));
   }
@@ -591,7 +598,7 @@
       const dd = e.target.closest('dd.hot');
       if (!dd) return setHover(null);
       const d = dd.dataset;
-      setHover(d.region ? { region: d.region } : d.type ? { type: d.type } : d.mood ? { mood: d.mood } : null);
+      setHover(d.region ? { region: d.region } : d.type ? { type: d.type } : d.cond ? { cond: d.cond } : null);
     });
     dl.addEventListener('mouseleave', () => setHover(null));
     dl.addEventListener('click', (e) => {

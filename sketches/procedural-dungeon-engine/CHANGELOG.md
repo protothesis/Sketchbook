@@ -250,6 +250,36 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
+- 2026-11-05: **Conditions replace moods.** A region no longer rolls one of
+  ten moods. It rolls five conditions, each a value 0..1 read in three
+  bands (`DungeonEngine.CONDITIONS`): temperature (cold, mild, warm),
+  moisture (dry, damp, wet), air (still, draughty, breathing), age (fresh,
+  old, ancient) and potency (low, mid, high). Each axis has its own stream;
+  a new region keeps near its parent's value half the time
+  (`REGION_TUNING.condKeep`, `condJitter`), else rolls fresh. Its `mood` is
+  now a name read off its two strongest conditions ("cold, ancient";
+  "mild" if none stands out), and rooms carry `meta.cond`. Waypoints roll
+  their own. What follows from them:
+  - **Dust** comes from age (how much, how thick), times moisture (wet
+    washes it out) and air (moving air thins it): `RULES.dustAge`,
+    `dustMoisture`, `dustAir`, `dustMin`, replacing `dustMood`.
+  - **Potency** multiplies how often wells and sigils turn up
+    (`RULES.potencyWells`, `potencySigils`): rare in an inert region,
+    two to three times as common in a potent one.
+  - **Walk mode** (`app/walk/atmos.js`): the ambient light eases toward
+    the room's temperature (blue-grey when cold, amber when warm); motes
+    hang in the air (more the older and drier the room) and show where
+    your lamp catches them; firefly sparks blink on and off by potency
+    (none when low, a swarm when high); air moves both (hanging still,
+    carried by a draught that wraps round the room, or drawn in and out
+    on a slow breath). Damp floors are darker, wet ones shine. Tuning is
+    `DungeonPlay.walk.ATMOS`.
+  - **The map** colours regions by any condition axis; the Moods list is
+    now Conditions, every band of every axis (hover to highlight); the
+    inspector shows each axis with its value.
+  Echoing, hollow, tilted and humming are gone as moods. Layouts are
+  unchanged; moods, dust, wells and sigils differ in existing saves.
+
 - 2026-11-05: **Materials.** Every region is built of something: stone,
   brick, timber, pearl, obsidian or earth (`DungeonEngine.MATERIALS`),
   rolled on its own stream and leaning toward the structures it suits

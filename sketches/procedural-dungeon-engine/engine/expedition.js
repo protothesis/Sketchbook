@@ -13,7 +13,7 @@
 //                nextExitIndex, regionId, role, heading?, reserveId? }
 //                (archetype is the room's shape; role is its part in its
 //                region's structure: see regions.js)
-//   Region     { id, seed, type, mood, hue, size, parentId, anchor:{x,y},
+//   Region     { id, seed, type, cond, mood, material, hue, size, parentId, anchor:{x,y},
 //                originId, plan? }   (regions.js; never removed, so a
 //                restored room finds its region again)
 //   Connection { id, a:{spaceId,exitId}, b:{spaceId,exitId}, loop }
@@ -296,20 +296,23 @@
     }
 
     // Seed-derived extras on their own stream, so they never shift layouts.
-    // A room takes its region's mood and material, and a hue near its
-    // region's (its tint on the map and minimap; its surfaces come from its
-    // material). A waypoint (`ownMeta`) keeps its own roll, so it's the same
-    // whichever door reaches it.
+    // A room takes its region's conditions (and the mood read off them) and
+    // material, and a hue near its region's (its tint on the map and
+    // minimap; its surfaces come from its material). A waypoint (`ownMeta`)
+    // rolls its own, so it's the same whichever door reaches it.
     const m = deriveRng(space.seed, 'meta');
-    space.meta = { hue: m.int(0, 359), mood: m.pick(DE.MOODS), material: null };
+    space.meta = { hue: m.int(0, 359), mood: null, material: null, cond: null };
+    m.next(); // was the room's own mood pick; still drawn so the hue drift stays put
     if (!o.ownMeta) {
       const d = DE.REGION_TUNING.hueDrift;
-      space.meta.mood = o.region.mood;
+      space.meta.cond = o.region.cond;
       space.meta.material = o.region.material;
       space.meta.hue = (((o.region.hue + m.int(-d, d)) % 360) + 360) % 360;
     } else {
+      space.meta.cond = DE.rollConditions(space.seed, null);
       space.meta.material = DE.pickMaterial(deriveRng(space.seed, 'material'), null);
     }
+    space.meta.mood = DE.moodName(space.meta.cond);
     return space;
   }
 

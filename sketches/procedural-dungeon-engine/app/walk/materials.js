@@ -291,10 +291,14 @@
   function spaceMaterials(space, sealed) {
     const look = lookOf(space), tex = textures(space.meta && space.meta.material);
     const hue = space.meta && space.meta.hue;
+    // Moisture wets the floor: darker, and a wet one shines under the lamp.
+    const wet = DE.bandOf(space.meta && space.meta.cond, 'moisture');
+    const wetL = wet === 'wet' ? -0.03 : wet === 'damp' ? -0.015 : 0;
+    const floorLook = wet === 'wet' && !look.gloss ? Object.assign({}, look, { gloss: { shininess: 70, specular: 0x3c4450 } }) : look;
     return {
       // Past a locked door the floor carries a faint gold warmth.
-      floor: [-0.02, 0, 0.02].map((dl, i) => surface(look, {
-        color: tinted(look.floor, hue, dl), map: tex.floors[i], emissive: sealed ? 0x1c1404 : 0x000000,
+      floor: [-0.02, 0, 0.02].map((dl, i) => surface(floorLook, {
+        color: tinted(look.floor, hue, dl + wetL), map: tex.floors[i], emissive: sealed ? 0x1c1404 : 0x000000,
       })),
       wall: W.withDither(surface(look, { color: tinted(look.wall, hue), map: tex.wall })),
       // Blocks never dissolve; the figure shows through them instead.
