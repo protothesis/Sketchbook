@@ -946,7 +946,8 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
 
   const SCONCE_Y = 0.78;     // cells above the floor
   const SCONCE_OUT = 0.12;   // cells from the wall's inner face to the flame
-  const SCONCE_REACH = 0.65; // cells, E reach to a sconce
+  const SCONCE_REACH = 0.95; // cells, E reach to a sconce (from a step back: it hangs high on the wall)
+  const SCONCE_FACING = 0.15; // cos: how far off facing it you can be (about 80°)
   const SCONCE_LIGHTS = 3;   // real lights, given to the lit sconces nearest you
   // A lit sconce's light, and its pool (light.js): where its light shows on the floor, in bands, and what creatures read as its light.
   const SCONCE_LIGHT = { color: 0xffa04f, intensity: 5, reach: 4, decay: 1.6, pool: 2 }; // reach, pool: cells
@@ -1004,7 +1005,7 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
     for (const sc of state.sconces) {
       if (sc.spaceId !== here) continue;
       const dx = sc.x - p.x, dy = sc.y - p.y, d = Math.hypot(dx, dy);
-      if (d >= bestD || (dx * fx + dy * fy) / (d || 1) < 0.3) continue;
+      if (d >= bestD || (dx * fx + dy * fy) / (d || 1) < SCONCE_FACING) continue;
       bestD = d;
       best = { action: sc.lit ? 'snuff' : 'light', sconce: sc };
     }

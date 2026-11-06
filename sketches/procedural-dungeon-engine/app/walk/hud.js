@@ -115,6 +115,7 @@
     updateFocus(nearE);
     W.updatePreview(nearE);
     updateRing(state.hold.ring);
+    updateMarker(nearE, nearE && eLine(nearE));
     W.updateChoice(focusRect);
     // What it costs, on the lamp's meter: E's action, else F's.
     const ce = nearE && costOf(nearE), cf = !ce && nearF && costOf(nearF);
@@ -163,9 +164,17 @@
   }
 
   // Where the focused thing is on screen (its box, projected each frame):
-  // the hold ring sits just above it. Nothing outlines it.
+  // the hold ring sits just above it, and the focus marker frames it.
   let focusRect = null;
+  const focusPts = []; // the box's 8 corners on screen, by bit: 1 x, 2 z, 4 y
   const corner = new THREE.Vector3();
+  const THIN = 0.16; // cells: a side thinner than this is framed as flat (a door in its wall)
+  /** Corner i of box b on screen ([x, y]), or null behind the camera. */
+  function onScreen(b, i, rect) {
+    corner.set((i & 1 ? b.x1 : b.x0) * S, (i & 2 ? b.z1 : b.z0) * S, (i & 4 ? b.y1 : b.y0) * S).project(W.camera);
+    return corner.z > 1 ? null : [rect.left + (corner.x + 1) / 2 * rect.width, rect.top + (1 - corner.y) / 2 * rect.height];
+  }
+  const flat = (a0, a1) => (a1 - a0 < THIN ? [(a0 + a1) / 2, (a0 + a1) / 2] : [a0, a1]);
   function updateFocus(near) {
     focusRect = null;
     const b = near && near.box;
@@ -173,12 +182,65 @@
     const rect = W.canvas.getBoundingClientRect();
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (let i = 0; i < 8; i++) {
-      corner.set((i & 1 ? b.x1 : b.x0) * S, (i & 2 ? b.z1 : b.z0) * S, (i & 4 ? b.y1 : b.y0) * S).project(W.camera);
-      if (corner.z > 1) return; // behind the camera
-      const sx = rect.left + (corner.x + 1) / 2 * rect.width, sy = rect.top + (1 - corner.y) / 2 * rect.height;
-      x0 = Math.min(x0, sx); y0 = Math.min(y0, sy); x1 = Math.max(x1, sx); y1 = Math.max(y1, sy);
+      const pt = onScreen(b, i, rect);
+      if (!pt) return; // behind the camera
+      x0 = Math.min(x0, pt[0]); y0 = Math.min(y0, pt[1]); x1 = Math.max(x1, pt[0]); y1 = Math.max(y1, pt[1]);
     }
     focusRect = { x0, y0: y0 - 6, x1, y1 };
+    const [fx0, fx1] = flat(b.x0, b.x1), [fy0, fy1] = flat(b.y0, b.y1), [fz0, fz1] = flat(b.z0, b.z1);
+    const fb = { x0: fx0, x1: fx1, y0: fy0, y1: fy1, z0: fz0, z1: fz1 };
+    for (let i = 0; i < 8; i++) focusPts[i] = onScreen(fb, i, rect);
+  }
+
+  // The focus marker (HANDS-PLAN.md): what X / E would act on, framed in
+  // the world by brackets at its box's corners, with the button over it.
+  // Only ever the one focused thing; it fades out when nothing is in reach
+  // (keeping its last place, so it doesn't jump while fading). The badge
+  // wears a faint ring when the action is a hold, and gives way to the
+  // hold ring while you hold.
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const markEl = document.createElementNS(SVGNS, 'svg');
+  markEl.setAttribute('class', 'focusmark');
+  const markShade = document.createElementNS(SVGNS, 'path'), markLine = document.createElementNS(SVGNS, 'path');
+  markShade.setAttribute('class', 'shade');
+  markLine.setAttribute('class', 'line');
+  markEl.append(markShade, markLine);
+  const badgeEl = el('div', 'focusbadge');
+  const badgeKey = el('kbd', '', '');
+  badgeEl.append(badgeKey);
+  document.body.append(markEl, badgeEl);
+  const BRACKET = 0.28; // of each edge, from each corner
+  let markSig = '';
+  function updateMarker(near, line) {
+    const on = !!(near && focusRect && !state.choice);
+    markEl.classList.toggle('on', on);
+    const ring = state.hold.ring, ringOn = !!(ring && ring.v > 0.02 && !ring.idle);
+    const glyph = touch() ? '' : W.glyph('E');
+    const badgeOn = on && !!glyph && !ringOn && near.action !== 'grabbed';
+    badgeEl.classList.toggle('on', badgeOn);
+    if (!on) return;
+    const blocked = !!(line && line.cls === 'blocked') || near.action === 'locked';
+    markEl.classList.toggle('blocked', blocked);
+    badgeEl.classList.toggle('blocked', blocked);
+    badgeEl.classList.toggle('hold', !blocked && !!W.holdTime(near) && !near.refuse);
+    if (badgeKey.textContent !== glyph) badgeKey.textContent = glyph;
+    let d = '';
+    for (let i = 0; i < 8; i++) {
+      const [ax, ay] = focusPts[i];
+      for (const bit of [1, 2, 4]) {
+        const [bx, by] = focusPts[i ^ bit];
+        const ex = (bx - ax) * BRACKET, ey = (by - ay) * BRACKET;
+        if (ex * ex + ey * ey < 1) continue; // a flat box (a chalk mark): no edge that way
+        d += `M${ax.toFixed(1)} ${ay.toFixed(1)}l${ex.toFixed(1)} ${ey.toFixed(1)}`;
+      }
+    }
+    if (d !== markSig) {
+      markSig = d;
+      markShade.setAttribute('d', d);
+      markLine.setAttribute('d', d);
+    }
+    badgeEl.style.left = ((focusRect.x0 + focusRect.x1) / 2).toFixed(1) + 'px';
+    badgeEl.style.top = focusRect.y0.toFixed(1) + 'px';
   }
 
   let captionTimer = null;

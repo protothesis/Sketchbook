@@ -174,7 +174,7 @@
         const z = near.spot.base || 0, h = near.block.top - (near.block.base || 0);
         return { x0: near.spot.sx / 2, y0: near.spot.sy / 2, x1: near.spot.sx / 2 + 0.5, y1: near.spot.sy / 2 + 0.5, z0: z, z1: z + h };
       }
-      case 'light': case 'snuff': return pad(near.sconce.x, near.sconce.y, 0.08, W.SCONCE_Y - 0.1, W.SCONCE_Y + 0.12);
+      case 'light': case 'snuff': return pad(near.sconce.x, near.sconce.y, 0.13, W.SCONCE_Y - 0.16, W.SCONCE_Y + 0.18);
       default: { // a door
         const [ax, ay, bx, by] = edgeEnds(near.exit.cell.x, near.exit.cell.y, near.exit.facing);
         const mx = (ax + bx) / 2, my = (ay + by) / 2, h = ax === bx ? 0 : DOOR_W / 2, v = ax === bx ? DOOR_W / 2 : 0;

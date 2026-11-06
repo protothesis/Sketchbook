@@ -158,7 +158,10 @@ entropy). No item-specific press.
 
 ## Build order
 
-1. [ ] **The prompt over the target**, and sconce reach and facing.
+1. [x] **The prompt over the target**, and sconce reach and facing.
+   (Brackets at the corners of the target's box, not a silhouette; sconce
+   reach 0.65 → 0.95 cells, facing ±72° → ±80°. The Y marker for the
+   item in hand comes with step 2.)
 2. [ ] **Hands:** RT draws and swings the duster; Y draws, then uses; tap
    B puts away, hold B drops in front; your hand comes back after a block;
    the waystone on X; the generic Y swing; the two-slot HUD; LB / RB in
