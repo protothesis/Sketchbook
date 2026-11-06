@@ -98,7 +98,29 @@ section { border-top: 1px solid var(--border); padding: 14px 0; }
 label { display: flex; flex-direction: column; gap: 3px; font-size: 0.8rem; color: var(--text-muted); }
 .caps label { flex: 1; min-width: 80px; }
 
-input[type="text"], input[type="number"] {
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: -2px; }
+
+h3.sub { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; margin: 10px 0 4px; }
+label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); padding-bottom: 7px; }
+.toggles label[data-kind] { cursor: default; border-radius: 4px; }
+.toggles label[data-kind]:hover { background: var(--bg); }
+
+.inspector dd.hot { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.inspector dd.hot:hover { color: var(--accent); }
+
+.hover-list { list-style: none; margin: 0; padding: 0; font-size: 0.8rem; }
+.hover-list.scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+.hover-list li { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; cursor: default; }
+.hover-list li:hover { background: var(--bg); }
+.hover-list li.selected { background: var(--bg); outline: 1px solid var(--accent); }
+.hover-list li[data-region] { cursor: pointer; font-family: ui-monospace, Menlo, monospace; font-size: 0.76rem; }
+.hover-list .n { margin-left: auto; color: var(--text-muted); white-space: nowrap; }
+
+.depth-chart { display: flex; align-items: flex-end; gap: 1px; height: 48px; margin: 4px 0 6px; }
+.depth-chart:empty { display: none; }
+.depth-chart div { flex: 1; min-width: 1px; background: var(--accent); opacity: 0.75; border-radius: 1px 1px 0 0; }
+
+input[type="text"], input[type="number"], select {
   width: 100%;
   font: inherit;
   font-family: ui-monospace, Menlo, monospace;

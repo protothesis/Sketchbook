@@ -1,11 +1,16 @@
-// Walk mode's game rules: loot, locked doors and the cost of collapsing a
-// branch. Pure data + engine calls, no DOM or three.js, so it also loads
-// under Node.
+// Room contents: what a room holds once it stands (props, push blocks,
+// sconces, items, vessels, chests, sigils, wells, a hall's waystone, locked
+// doors, where creatures start) and a few game rules on top (the cost of
+// collapsing a branch, waypoints). Pure data + engine calls, no DOM or
+// three.js, so it also loads under Node, and any client can show it: walk
+// mode builds it in 3D, the map view draws it from above.
 //
 // Everything placed in the world is derived from a space's seed on its own
 // named stream (like `meta`), so it never shifts layouts and a replayed
-// expedition holds exactly the same shards, keys and locks. The engine
-// itself stays rule-free; this layer only reads its data.
+// expedition holds exactly the same shards, keys and locks. It sits on top
+// of the engine, a separate layer: it only reads the engine's data, and
+// tuning it never changes a room's shape. (Its global is still
+// `DungeonPlay`, from when this was walk mode's play-rules.js.)
 (function (global) {
   'use strict';
 

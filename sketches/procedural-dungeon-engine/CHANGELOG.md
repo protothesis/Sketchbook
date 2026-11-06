@@ -154,6 +154,99 @@ All notable changes to this sketch are logged here, per
   stamped with. A record or save from another build is refused with a
   message saying which build made it; to look at it, check out that
   build's commit (NOTES.md, "Versioning").
+- 2026-11-05: **Grow a whole dungeon at once, to see its shape.**
+  - Engine: `DE.grow(exp, { rooms, order, from, seed })` in the new
+    `engine/grow.js`. It opens doors with the ordinary expand + commit and
+    keeps every room (no rerolls, reverts or faints), so a grown dungeon
+    saves, replays and exports like any other.
+  - `order` is which door opens next: `random` (any), `breadth` (shallowest
+    first: bushy, fills in near the start) or `depth` (deepest first: long
+    winding branches). At 400 rooms, random reaches depth ~44, breadth ~26
+    and depth-first ~240.
+  - Breadth and depth pick the shallowest or deepest room (the oldest or
+    newest of those), then one of its doors at random from the route. Taking
+    its first door, as at first, always took a corridor's far tip:
+    depth-first never turned off down a side door, and ran catacomb
+    galleries out in straight lines up to 54 long (now about 9, like the
+    other orders).
+  - That old behaviour is kept as its own order, **Depth, linear** (`linear`):
+    always the newest room's first door, so a corridor's far tip. It's a
+    player who only walks straight on, a test mode for how structures hold
+    up when walked in a line (catacomb galleries burn a region's budget on
+    their spine).
+  - `from` grows only one room's branch. Door picks and entropy come from
+    `seed` (by default the root seed and the history), so the same seed,
+    count and order always grow the same dungeon.
+  - Map view: a **Grow** section with a room count and the order, plus
+    **New dungeon** (a fresh seed, grown in one click), **Grow** (add to
+    this map) and **Grow from selected**. Caps still apply. 1,000 rooms
+    takes about 0.2 s.
+  - It also shows a rooms-per-depth bar chart and the room mix (corridors,
+    chambers, halls, dead ends, regions). The map zooms out further, to
+    fit a thousand rooms.
+- 2026-11-05: **Comparing growth orders on one seed, and a clearer selection.**
+  - **Grow this seed** grows the Root seed box's seed from scratch. A
+    **Route** (blank = default) seeds which doors open and what lies behind
+    them, and **New route** rolls a fresh one. The same root seed, size,
+    order and route always grow the same dungeon.
+  - While the map is nothing but a grow, changing the order, size or route
+    grows that seed again, so you can flip between random, breadth and
+    depth on one seed.
+  - **Grow** and **Grow from selected** keep your view (only fresh grows
+    fit the map). The rooms they add are outlined in teal until the next
+    grow.
+  - The status line says where a branch grow came from: the room's branch
+    is the room and every room opened beyond it, so a room with no doors
+    of its own can still grow from rooms past it.
+  - The selected room has a heavy outline, a dashed box round it and its
+    id on the box's corner (with archetype and depth when zoomed in), all
+    sized to stay visible zoomed out.
+- 2026-11-05: **Room contents on the map.** The map view has a **Room
+  contents** overlay, with toggles for creatures, push blocks, features
+  (sigils, wells, chests, vessels, sconces, hall waystones), locked doors,
+  items, crates (movable) and static blocks, plus totals across the map.
+  - Creatures show where they start: their start cell was already a seeded
+    choice, so the map and walk mode agree.
+  - Zoomed far out, only creatures, locks, push blocks, sigils and wells
+    show, as dots, so you can see how they spread through the dungeon.
+  - Hovering a kind's name previews it on the map if it's off. If it's on,
+    hovering picks it out with bigger, outlined pins, shown even zoomed far
+    out.
+- 2026-11-05: **Regions on the map** (the overlay planned in
+  `notes/structure-types.md`), in `app/regions-view.js`.
+  - **Show regions** draws each region's ground under the rooms: its rooms'
+    cells plus a one-cell margin, so it shows in the gaps, with an outline
+    just inside its edge. Ground a cloister has claimed and not built yet
+    is hatched: a walk to come with stripes, a courtyard (open air) as
+    negative space, its region's colour with stripes cut out. Claims show
+    whenever regions are seen by structure (the layer coloured by type or
+    region, or a highlighted cloister), never by mood.
+  - **Labels only when asked for**, so a big map stays readable. Pointing
+    at a region on the map shows its label. Clicking it (a room, or its
+    margin) pins it, and clicking empty ground clears the pins. A label
+    sits just above the top-left corner of its region's outline and says more the
+    closer you zoom: `g3`, then `g3 catacomb · damp`, then
+    `g3 catacomb · damp · 7/12 rooms` (7 rooms spent of a 12-room budget).
+    Labels that would overlap are left out, the one you're pointing at
+    first.
+  - Hovering a structure type always highlights in type colours, and a mood
+    in mood colours, whatever the layer is coloured by.
+  - In the inspector, a room's **region**, **structure** and **mood** rows
+    highlight on hover even with the layer off (that region, every region
+    of that type, every region of that mood). Clicking the region row pins
+    it. The Region block shows the selected room's region.
+  - **Colour by** structure type, mood, or each region's own hue, so
+    structure and mood can be read apart. Size shows as the region's
+    extent.
+  - Clicking a room (with regions on) also selects its region, and clicking
+    a region's margin selects the region alone. The inspector, now at the
+    top of the panel, has a Region block: type, mood, budget spent, rooms
+    by role, cells, unbuilt claims, the region it was entered from and its
+    first room.
+  - The Regions section lists the stats (count, mean and largest), every
+    structure type and mood (with region and room counts) and every
+    region. Hovering any line highlights the matching regions on the map,
+    and clicking a region selects it and centres the map on it.
 
 ### Changed
 
@@ -1146,6 +1239,12 @@ All notable changes to this sketch are logged here, per
     hourglass. Taking the pack back puts everything back in its cell.
   - Run save v10 (`run.inv`, `run.dropped`). Older runs migrate: their
     stacks find cells from what they carry.
+- 2026-11-05: **`app/play-rules.js` moved to `engine/contents.js`.** Room
+  contents are part of the engine project now, read by both clients (walk
+  mode and the map view), not walk mode's alone. It's still its own layer
+  on top of the engine, on its own seed streams, so tuning contents never
+  changes a room's shape. The global is still `DungeonPlay`, so nothing
+  that uses it changed.
 
 ### Removed
 

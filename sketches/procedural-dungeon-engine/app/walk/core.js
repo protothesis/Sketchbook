@@ -4,7 +4,7 @@
 // commit straight away, and the new space assembles itself outward from the
 // threshold. Standing at a door you opened, you can spend entropy charges to close
 // it and collapse everything beyond (engine reverts); reopening it rerolls.
-// Game rules (loot, locks, costs) live in play-rules.js.
+// Game rules (loot, locks, costs) live in engine/contents.js.
 //
 // Logic runs in grid units (1 = one cell, y = grid y); rendering scales by S
 // into three.js world space, with grid y mapped to world z. Shares the map
