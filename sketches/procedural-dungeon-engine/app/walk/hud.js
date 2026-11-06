@@ -101,7 +101,7 @@
     btn.className = 'prompt ' + (key === 'F' ? 'f ' : '') + (line.cls || '');
   }
 
-  function updatePrompt(nearE, nearF) {
+  function updatePrompt(nearE, nearF, dt = 0) {
     // E has no prompt on a keyboard (fewer callouts; the hold ring is its
     // feedback), except where holding it loses something: a lost path's
     // door, or a reroll that takes what's yours. On touch the E line stays:
@@ -115,6 +115,8 @@
     updateFocus(nearE);
     W.updatePreview(nearE);
     updateRing(state.hold.ring);
+    updateMarker(nearE, nearE && eLine(nearE));
+    updateFlash(nearE, dt);
     W.updateChoice(focusRect);
     // What it costs, on the lamp's meter: E's action, else F's.
     const ce = nearE && costOf(nearE), cf = !ce && nearF && costOf(nearF);
@@ -162,23 +164,148 @@
     ringEl.style.top = focusRect.y0 + 'px';
   }
 
-  // Where the focused thing is on screen (its box, projected each frame):
-  // the hold ring sits just above it. Nothing outlines it.
+  // Where the focused thing is on screen (its box, projected each frame,
+  // after the camera has moved): the hold ring sits just above it.
   let focusRect = null;
   const corner = new THREE.Vector3();
-  function updateFocus(near) {
-    focusRect = null;
-    const b = near && near.box;
-    if (!b) return;
+  /** Box b's bounds on screen, or null if any corner is behind the camera. */
+  function boxRect(b) {
     const rect = W.canvas.getBoundingClientRect();
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (let i = 0; i < 8; i++) {
       corner.set((i & 1 ? b.x1 : b.x0) * S, (i & 2 ? b.z1 : b.z0) * S, (i & 4 ? b.y1 : b.y0) * S).project(W.camera);
-      if (corner.z > 1) return; // behind the camera
+      if (corner.z > 1) return null;
       const sx = rect.left + (corner.x + 1) / 2 * rect.width, sy = rect.top + (1 - corner.y) / 2 * rect.height;
       x0 = Math.min(x0, sx); y0 = Math.min(y0, sy); x1 = Math.max(x1, sx); y1 = Math.max(y1, sy);
     }
-    focusRect = { x0, y0: y0 - 6, x1, y1 };
+    return { x0, y0: y0 - 6, x1, y1 };
+  }
+  /** The point just over the middle of box b's top, on screen ([x, y]), or null. */
+  function overTop(b) {
+    const rect = W.canvas.getBoundingClientRect();
+    corner.set((b.x0 + b.x1) / 2 * S, (b.z1 + 0.06) * S, (b.y0 + b.y1) / 2 * S).project(W.camera);
+    return corner.z > 1 ? null : [rect.left + (corner.x + 1) / 2 * rect.width, rect.top + (1 - corner.y) / 2 * rect.height];
+  }
+  function updateFocus(near) {
+    W.camera.updateMatrixWorld(); // this frame's camera, not the last render's
+    const b = near && near.box;
+    focusRect = b ? boxRect(b) : null;
+  }
+
+  // The focus marker (HANDS-PLAN.md): the button for what X / E would act
+  // on, floating just over it. Only ever the one focused thing. It fades out
+  // when nothing is in reach, still tracking where that thing is on screen
+  // as the camera moves. It wears a faint ring when the action is a hold,
+  // and gives way to the hold ring while you hold. (Brackets round the
+  // target's box were tried on 2026-11-05 and dropped: not the look.)
+  const badgeEl = el('div', 'focusbadge');
+  const badgeKey = el('kbd', '', '');
+  badgeEl.append(badgeKey);
+  document.body.append(badgeEl);
+  let markBox = null; // the last focused thing's box: the badge keeps to it while it fades
+  let markOff = 0;    // state.time it went out of reach
+  const MARK_FADE = 0.25; // s, a little over the CSS fade
+  function updateMarker(near, line) {
+    const ring = state.hold.ring, ringOn = !!(ring && ring.v > 0.02 && !ring.idle);
+    const glyph = touch() ? '' : W.glyph('E');
+    const on = !!(near && near.box && !state.choice && glyph && !ringOn && near.action !== 'grabbed' && near.action !== 'setblock'); // not while you hold or carry something
+    badgeEl.classList.toggle('on', on);
+    if (on) {
+      markBox = near.box;
+      const blocked = !!(line && line.cls === 'blocked') || near.action === 'locked';
+      badgeEl.classList.toggle('blocked', blocked);
+      badgeEl.classList.toggle('hold', !blocked && !!W.holdTime(near) && !near.refuse);
+      if (badgeKey.textContent !== glyph) badgeKey.textContent = glyph;
+    } else if (markBox && !markOff) markOff = state.time;
+    if (on) markOff = 0;
+    if (markBox && markOff && state.time - markOff > MARK_FADE) markBox = null;
+    const pt = markBox && overTop(markBox);
+    if (!pt) return;
+    badgeEl.style.left = pt[0].toFixed(1) + 'px';
+    badgeEl.style.top = pt[1].toFixed(1) + 'px';
+  }
+
+  // The focus flash: when something comes into reach, the thing itself
+  // flashes once in a chunky warm dither (like the figure's flash, laid over
+  // its own surfaces) and fades fast, so you see which thing the button is
+  // for. A copy of each of its meshes rides along as a child, drawn on top.
+  // A door flashes through anything in front of it (a side wall seen edge
+  // on), like the figure's silhouette, and its arrows flash with it.
+  const FLASH = { peak: 0.8, dur: 0.45, color: 0xffc27a };
+  function ditherFlash(key, through) {
+    const m = new THREE.MeshBasicMaterial({
+      color: FLASH.color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
+      depthTest: !through, depthFunc: THREE.LessEqualDepth, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
+      side: through ? THREE.DoubleSide : THREE.FrontSide,
+    });
+    m.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
+        '#include <clipping_planes_fragment>\nif (mod(floor(gl_FragCoord.x / 2.0) + floor(gl_FragCoord.y / 2.0), 2.0) < 0.5) discard;');
+    };
+    m.customProgramCacheKey = () => key;
+    return m;
+  }
+  const flashMat = ditherFlash('focus-flash', false);
+  const flashThroughMat = ditherFlash('focus-flash-through', true);
+  let flashOf = null, flashCopies = [], flashT = 0;
+  /** The door (world.js's record) a focused door action is about, from either side. */
+  function doorOf(near) {
+    const d = state.doors.get(near.space.id + '/' + near.exit.id);
+    if (d) return d;
+    // Built from the room on the other side: the door whose seam (it stays
+    // in the doorway while the panel swings) is here.
+    const b = near.box, mx = (b.x0 + b.x1) / 2 * S, my = (b.y0 + b.y1) / 2 * S, v = new THREE.Vector3();
+    for (const o of state.doors.values()) {
+      o.seam.getWorldPosition(v);
+      if (Math.hypot(v.x - mx, v.z - my) < 0.3 * S) return o;
+    }
+    return null;
+  }
+  /** What the focused action is about, in the world: { key, objs: [Object3D], through }, or null. */
+  function flashTarget(near) {
+    const one = (o) => (o ? { key: o, objs: [o], through: false } : null);
+    switch (near.action) {
+      case 'lift': return one(near.block.mesh);
+      case 'light': case 'snuff': return one(near.sconce.flame.parent);
+      case 'save': return one(near.lantern.group);
+      case 'erase': return one(near.mark.mesh);
+      case 'grabbed': case 'setblock': case 'choose': return null;
+    }
+    if (!near.exit) return null;
+    const d = doorOf(near);
+    if (!d) return null;
+    return { key: d, objs: [d.pivot, d.seam, d.arrow].filter((o) => o.visible), through: true };
+  }
+  function clearFlash() {
+    for (const c of flashCopies) if (c.parent) c.parent.remove(c);
+    flashCopies = [];
+  }
+  function updateFlash(near, dt) {
+    const t = near && !state.choice ? flashTarget(near) : null;
+    const key = t ? t.key : null;
+    if (key !== flashOf) {
+      flashOf = key;
+      clearFlash();
+      if (t) {
+        const mat = t.through ? flashThroughMat : flashMat, meshes = [];
+        for (const o of t.objs) o.traverse((m) => {
+          if (m.isMesh && !m.isInstancedMesh && m.visible && m.material !== flashMat && m.material !== flashThroughMat) meshes.push(m);
+        });
+        for (const m of meshes) {
+          const c = new THREE.Mesh(m.geometry, mat);
+          c.renderOrder = 12;
+          c.raycast = () => {};
+          m.add(c);
+          flashCopies.push(c);
+        }
+        flashT = 0;
+      }
+    }
+    if (!flashCopies.length) return;
+    flashT += dt;
+    const k = Math.min(1, flashT / FLASH.dur);
+    flashMat.opacity = flashThroughMat.opacity = FLASH.peak * (1 - k) * (1 - k);
+    if (k >= 1) clearFlash();
   }
 
   let captionTimer = null;
@@ -848,7 +975,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 
-  Object.assign(W, { updatePrompt, showCaption, stanceEl, refreshHud, notice,
+  Object.assign(W, { updatePrompt, FOCUS_FLASH: FLASH, showCaption, stanceEl, refreshHud, notice,
     REFRESH_HINT, drawMinimap, openBigMap, closeBigMap, menuTab, drawBigMap, zoomBigMap, showRecord,
     hideRecord, openDialog, closeDialog });
 })(window);

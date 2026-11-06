@@ -321,6 +321,25 @@ All notable changes to this sketch are logged here, per
   keeps the region's hue (now a little more saturated); the moods keep
   swatch colours (`MOOD_TONES`) for the map's mood view.
   Layouts and moods are unchanged.
+- 2026-11-05: [`HANDS-PLAN.md`](HANDS-PLAN.md), the plan for reworking
+  hands, items and prompts for controller play: the duster on RT (first
+  press draws and swings), items and collectables on Y, tap B to put away
+  and hold B to drop in front, d-pad strips to pick what's on each slot,
+  jars that catch and release with things that accept what's released,
+  collectables placed with Y, and the X prompt floating over its target.
+  Walk mode is now designed controller first; touch is legacy.
+- 2026-11-05: **Focus marker** (`hud.js`). The button for what X (E) would
+  act on floats just over it, faint-ringed when it's a hold. It fades with
+  reach (tracking the thing as it fades), gives way to the hold ring while
+  you hold, and turns muted where the action can't be done. As something
+  comes into reach it **flashes** once in a chunky warm dither that fades
+  in 0.45 s. A door flashes through the wall in front of it, with its seam
+  and arrows, from either side. Only ever the one focused thing, and no
+  button while you carry or hold on to an object.
+- 2026-11-05: Sconces work from right under them: within 0.5 cells, any
+  facing counts (it hangs on the wall over your head, so it's nearly
+  beside you); something else you're facing still wins the focus. Its
+  focus box is a little bigger.
 - 2026-11-05: **No more backward compatibility for old records.** The
   params that only kept old records replaying as they were (`starter`,
   `doorsteps`, the mood-region params) are gone, with the old code paths

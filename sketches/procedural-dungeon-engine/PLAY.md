@@ -10,6 +10,11 @@ The engine stays free of game rules. Everything game-like lives in
 the world comes from a space's seed on its own named stream (see
 Determinism).
 
+**Controller first.** Feel is designed and judged on a gamepad. Keyboard
+and mouse keep working, and touch is legacy: kept while it's cheap, never
+designed for. The hands and items rework in progress is planned in
+[`HANDS-PLAN.md`](HANDS-PLAN.md).
+
 ## Pillars
 
 1. **The door is the moment.** Every unresolved exit is a closed door, and
@@ -335,7 +340,10 @@ Determinism).
 - **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
   sconce on a wall, chambers sometimes two. Never on a south wall: the
   camera looks north and would only see its back. E, facing one in your
-  room, held for half a second, lights it from your lantern, which **costs
+  room (within 0.65 cells, up to about 72° off, or within 0.5 cells,
+  right under it, facing any way; `SCONCE_REACH`, `SCONCE_FACING`,
+  `SCONCE_UNDER`; something else you face still wins the focus),
+  held for half a second, lights it from your lantern, which **costs
   1 shard**. Hold E at a lit one to snuff it: the shard goes back into
   your lamp and it comes off the restored tally, so lighting and snuffing
   net to nothing. A lit sconce burns until you snuff it (saved with the
@@ -399,9 +407,19 @@ Determinism).
   stop.
 - **Focus and prompts.** E acts on one thing at a time: of everything in
   reach, the one you're most squarely facing (nearer breaks a tie; the
-  score is distance + 0.6 × (1 − cos of the angle to it)). Nothing on
-  screen marks it, and E has no prompt line (on a keyboard): the hold
-  ring is its feedback, and a tap at something you can't do says why in a
+  score is distance + 0.6 × (1 − cos of the angle to it)). **The focus
+  marker** (since 2026-11-05) shows it in the world: the button floats
+  just over it (X on a pad, E on a keyboard; none on touch, and none
+  while you carry or hold on to an object), with a faint
+  ring round it when it's a hold. It fades in and out with reach (still
+  following the thing on screen as it fades), gives way to the hold ring
+  while you hold, and turns muted where it can't be done (a locked door,
+  no room to set a block down). As it comes into reach, the thing itself
+  **flashes** once in a chunky warm dither and fades in 0.45 s
+  (`FOCUS_FLASH`), so you see which thing the button is for. A door
+  flashes through whatever is in front of it (a side wall seen edge on),
+  with its seam and arrows, from either side. E has no prompt line (on
+  a keyboard), and a tap at something you can't do says why in a
   caption. F keeps a prompt line below the figure for what the item in
   hand would do (open a door with a doorstone, catch a pixie, pour into a
   vessel), starting with its key; one that can't be done right now has no

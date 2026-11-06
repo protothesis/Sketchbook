@@ -97,7 +97,6 @@
     const idle = state.paused;
     const nearE = idle ? null : actionNear(p);
     W.tickHold(nearE, dt);
-    updatePrompt(nearE, idle ? null : useNear(p));
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;
@@ -132,6 +131,8 @@
     }
 
     W.updateCamera(dt);
+    // Prompts after the camera: what they mark is projected with this frame's view.
+    updatePrompt(nearE, idle ? null : useNear(p), dt);
 
     // Dither: centered on the figure on screen, for pixels nearer the camera.
     renderer.getDrawingBufferSize(tmpV2);
