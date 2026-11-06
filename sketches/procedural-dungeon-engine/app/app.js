@@ -72,7 +72,9 @@
       ['exits', sp.exits.map((e) => `${e.id}${e.facing}${e.connectionId ? '·' + e.connectionId : '·open'}`).join(' ')],
       ['region', regionText(exp, sp), sp.regionId && { region: sp.regionId }],
       ['structure', exp.regions[sp.regionId] ? `${exp.regions[sp.regionId].type} · ${sp.role}` : '—', exp.regions[sp.regionId] && { type: exp.regions[sp.regionId].type }],
-      ['mood', `${sp.meta.mood}, hue ${sp.meta.hue}`, { mood: sp.meta.mood }],
+      ['mood', sp.meta.mood, { mood: sp.meta.mood }],
+      ['material', sp.meta.material || '—'],
+      ['hue', sp.meta.hue],
     ] : [['', 'Tap a space to inspect it.']];
     fillRows(dl, rows);
     regionInspector(exp);
@@ -192,6 +194,8 @@
       ['id', g.id + (state.regions.pinned.includes(g.id) ? ' · pinned' : ''), { region: g.id }],
       ['type', g.type, { type: g.type }],
       ['mood', g.mood, { mood: g.mood }],
+      ['material', g.material],
+      ['hue', g.hue],
       ['budget', `${r ? r.spent : 0} of ${g.size} rooms spent${r && r.spent >= g.size ? ' (spent: its doors lead out)' : ''}`],
       ['rooms', r ? `${r.rooms}: ${roles}` : '0'],
       ['cells', r ? r.cells : 0],

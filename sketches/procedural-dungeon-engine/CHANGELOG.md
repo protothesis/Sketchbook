@@ -250,18 +250,24 @@ All notable changes to this sketch are logged here, per
 
 ### Changed
 
-- 2026-11-05: **A colour means a mood.** Each mood has its own colour
-  (`DungeonEngine.MOOD_TONES`: cold is ice blue, warm ember orange, damp
-  moss, humming electric yellow, echoing violet, breathing flesh pink,
-  tilted sickly chartreuse, dusty ochre, still a pale grey-teal, hollow a
-  dark slate), and a room's hue is its mood's, drifting a little
-  (`hueDrift`, now 6). Before, a region rolled a random hue apart from its
-  mood, so two cold regions could be any two colours. The map, the walk
-  view and the minimap all take the mood's hue, saturation and shade
-  (`DE.toneOf`) on top of their own base tones, which are a little more
-  saturated now so the moods read. The map's mood swatches come from the
-  same palette. A region's own hue is kept only for the map's "colour by
-  region". Layouts and moods are unchanged; saves replay with the new colours.
+- 2026-11-05: **Materials.** Every region is built of something: stone,
+  brick, timber, pearl, obsidian or earth (`DungeonEngine.MATERIALS`),
+  rolled on its own stream and leaning toward the structures it suits
+  (timber and earth toward meanders, brick toward cloisters, pearl and
+  obsidian toward catacombs), so any structure can come in any material.
+  Walk mode (`app/walk/materials.js`) gives each its own colours, a faint
+  canvas texture on walls and floor tiles (ashlar courses, running-bond
+  brick, planks, shell scallops, glassy fractures, mottled earth with
+  roots), glossy highlights for pearl and obsidian, and its own dressing:
+  the scattered floor details become rubble, loose bricks, boards, pearls,
+  shards or clods and roots, and now and then a wall carries a stone, a
+  patch of brick, a post or rail, pearls, a shard or hanging roots. Wall
+  pieces have world-scaled UVs so courses line up across segments. Rooms
+  carry `meta.material`; waypoints roll their own. The map can colour
+  regions by material and the inspector shows it. Rooms keep their
+  region's hue on the map and minimap (now a little more saturated); the
+  moods keep swatch colours (`MOOD_TONES`) for the map's mood view.
+  Layouts and moods are unchanged.
 - 2026-11-05: **No more backward compatibility for old records.** The
   params that only kept old records replaying as they were (`starter`,
   `doorsteps`, the mood-region params) are gone, with the old code paths

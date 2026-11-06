@@ -296,15 +296,20 @@
     }
 
     // Seed-derived extras on their own stream, so they never shift layouts.
-    // A room takes its region's mood; a waypoint (`ownMeta`) keeps its own
-    // roll, so it's the same whichever door reaches it. Either way the hue is
-    // the mood's (DE.MOOD_TONES), drifted a little, so a colour means a mood.
+    // A room takes its region's mood and material, and a hue near its
+    // region's (its tint on the map and minimap; its surfaces come from its
+    // material). A waypoint (`ownMeta`) keeps its own roll, so it's the same
+    // whichever door reaches it.
     const m = deriveRng(space.seed, 'meta');
-    m.int(0, 359); // was a free hue; still drawn so the mood roll below stays put
-    const ownMood = m.pick(DE.MOODS);
-    const mood = o.ownMeta ? ownMood : o.region.mood;
-    const d = DE.REGION_TUNING.hueDrift;
-    space.meta = { hue: (((DE.MOOD_TONES[mood].hue + m.int(-d, d)) % 360) + 360) % 360, mood };
+    space.meta = { hue: m.int(0, 359), mood: m.pick(DE.MOODS), material: null };
+    if (!o.ownMeta) {
+      const d = DE.REGION_TUNING.hueDrift;
+      space.meta.mood = o.region.mood;
+      space.meta.material = o.region.material;
+      space.meta.hue = (((o.region.hue + m.int(-d, d)) % 360) + 360) % 360;
+    } else {
+      space.meta.material = DE.pickMaterial(deriveRng(space.seed, 'material'), null);
+    }
     return space;
   }
 

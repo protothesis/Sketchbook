@@ -156,8 +156,7 @@
       const drawSpace = (space, ghost) => {
         const set = new Set(space.cells);
         ctx.globalAlpha = ghost ? 0.55 : 1;
-        const tone = DE.toneOf(space.meta);
-        ctx.fillStyle = ghost ? colors.ghost : `hsl(${tone.hue}, ${colors.floorS * tone.sat}%, ${colors.floorL + tone.shade * 5}%)`;
+        ctx.fillStyle = ghost ? colors.ghost : `hsl(${space.meta.hue}, ${colors.floorS}%, ${colors.floorL}%)`;
         for (const k of space.cells) {
           const c = DE.parseKey(k);
           ctx.fillRect(X(c.x), Y(c.y), s + 0.5, s + 0.5);

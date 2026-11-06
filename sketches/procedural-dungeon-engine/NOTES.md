@@ -23,8 +23,8 @@ Each one is a default that can change.
   `H(rootSeed | "params")`: chamber size range, corridor length range,
   corridor weight, exit bias, loop chance.
 - `meta` (hue, mood) comes from `H(seed | "meta")`, so it never shifts layouts.
-  The mood is the room's region's; the hue is the mood's
-  (`DE.MOOD_TONES`), drifting a little, so a colour always means a mood.
+  The mood and material are the room's region's; the hue drifts a little
+  from the region's (see "Regions").
 
 ## Versioning
 

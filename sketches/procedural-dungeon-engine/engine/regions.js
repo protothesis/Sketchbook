@@ -46,11 +46,10 @@
   };
 
   /**
-   * Each mood's colour, so a colour always means its mood: a cold room is
-   * icy blue wherever it is. `hue` in degrees; `sat` multiplies a view's own
-   * floor saturation (the greys are low); `shade` -1..1 nudges a view's own
-   * lightness darker or brighter. Every view (map, minimap, walk) applies
-   * these to its own base tones, so they stay readable in light and dark.
+   * Each mood's swatch colour, for the map's "colour by mood" (hue in
+   * degrees, `sat` a multiplier, `shade` -1..1 darker to lighter). Rooms
+   * don't wear these: their surfaces come from their material, and their
+   * map and minimap tint from their region's own hue.
    */
   const MOOD_TONES = {
     still:     { hue: 190, sat: 0.4,  shade: 0.5 },   // hushed, pale grey-teal
@@ -64,12 +63,30 @@
     warm:      { hue: 20,  sat: 1.35, shade: 0 },     // ember orange
     hollow:    { hue: 236, sat: 0.35, shade: -0.8 },  // dark slate
   };
-  const PLAIN_TONE = { hue: 0, sat: 0, shade: 0 };
 
-  /** A space's colour: its hue (its mood's, drifted a little) and its mood's sat and shade. */
-  function toneOf(meta) {
-    const t = (meta && MOOD_TONES[meta.mood]) || PLAIN_TONE;
-    return { hue: meta && meta.hue != null ? meta.hue : t.hue, sat: t.sat, shade: t.shade };
+  /**
+   * What a region is built of: the strongest "you've walked somewhere new"
+   * signal (walk mode gives each its own colours, surface texture and
+   * floor and wall dressing). Its own roll, so every structure can come in
+   * every material; `weight` is how often, and `leans` multiplies it for
+   * the structure types it suits. `swatch` is its colour on the map.
+   */
+  const MATERIALS = {
+    stone:    { weight: 1.4, leans: {}, swatch: '#8d8a84' },
+    brick:    { weight: 1, leans: { cloister: 2 }, swatch: '#b0583c' },
+    timber:   { weight: 0.9, leans: { meander: 2 }, swatch: '#a07646' },
+    pearl:    { weight: 0.6, leans: { cloister: 1.6, catacomb: 1.4 }, swatch: '#d8d4e4' },
+    obsidian: { weight: 0.5, leans: { catacomb: 1.5 }, swatch: '#3a3048' },
+    earth:    { weight: 0.8, leans: { meander: 1.6, catacomb: 1.3 }, swatch: '#7a6040' },
+  };
+
+  /** A material for a region of this type, from its own stream (`r`). */
+  function pickMaterial(r, type) {
+    const names = Object.keys(MATERIALS);
+    const w = names.map((n) => MATERIALS[n].weight * (MATERIALS[n].leans[type] || 1));
+    let x = r.next() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < names.length; i++) { x -= w[i]; if (x < 0) return names[i]; }
+    return names[names.length - 1];
   }
 
   /**
@@ -91,7 +108,7 @@
     leaveBase: 0.03,   // chance a door leads out of a region that has budget left...
     leaveRamp: 0.35,   // ...plus this times (spent / size)^2
     junction: 0.6,     // chance a new mood is one the old one leads into
-    hueDrift: 6,       // how far a room's hue wanders from its mood's (MOOD_TONES)
+    hueDrift: 14,      // how far a room's hue wanders from its region's
     maxSize: 120,
   };
 
@@ -114,6 +131,7 @@
     let mood = mr.pick(MOODS);
     if (parent && mr.chance(REGION_TUNING.junction) && MOOD_JUNCTIONS[parent.mood]) mood = mr.pick(MOOD_JUNCTIONS[parent.mood]);
     const hue = deriveRng(seed, 'hue').int(0, 359);
+    const material = pickMaterial(deriveRng(seed, 'material'), type);
 
     const sz = REGION_TYPES[type].size;
     const sr = deriveRng(seed, 'size');
@@ -121,7 +139,7 @@
     if (sr.chance(sz.huge)) size *= sz.hugeMul;
     size = Math.min(size, REGION_TUNING.maxSize);
 
-    return { seed, type, mood, hue, size, parentId: parent ? parent.id : null, anchor: { x: anchor.x, y: anchor.y } };
+    return { seed, type, mood, material, hue, size, parentId: parent ? parent.id : null, anchor: { x: anchor.x, y: anchor.y } };
   }
 
   /** Rooms of this region that spend its budget. */
@@ -279,7 +297,7 @@
   }
 
   Object.assign(DE, {
-    MOODS, MOOD_JUNCTIONS, MOOD_TONES, toneOf, REGION_TYPES, REGION_TUNING,
+    MOODS, MOOD_JUNCTIONS, MOOD_TONES, MATERIALS, pickMaterial, REGION_TYPES, REGION_TUNING,
     rollRegion, regionSpent, resolveRegion, childRole, roleTries, cloisterPlans, planClaims, onModule, loopChanceFor,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

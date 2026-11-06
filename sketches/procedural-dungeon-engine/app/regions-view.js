@@ -19,10 +19,11 @@
     MOOD_COLORS[mood] = `hsl(${t.hue}, ${Math.min(90, 50 * t.sat)}%, ${52 + t.shade * 8}%)`;
   }
 
-  /** A region's colour under a colouring ('type' | 'mood' | 'region'). */
+  /** A region's colour under a colouring ('type' | 'mood' | 'material' | 'region'). */
   function colorOf(g, by) {
     if (by === 'mood') return MOOD_COLORS[g.mood] || '#999';
     if (by === 'region') return `hsl(${g.hue}, 55%, 55%)`;
+    if (by === 'material') return (DE.MATERIALS[g.material] || {}).swatch || '#999';
     return TYPE_COLORS[g.type] || '#999';
   }
 
