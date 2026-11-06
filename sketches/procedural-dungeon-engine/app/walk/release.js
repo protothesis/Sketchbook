@@ -33,7 +33,7 @@
         const door = W.doorNear(p);
         if (!door || (door.action !== 'letgo' && door.action !== 'lostdoor')) return null;
         const n = door.path.traces.length, why = W.retraceBlocked(door);
-        return why ? { blocked: why, line: { cls: 'blocked', text: `retrace your lost path · ${why}` } }
+        return why ? { blocked: why, door, line: { cls: 'blocked', text: `retrace your lost path · ${why}` } }
           : { door, line: { cls: 'collapse', text: `retrace your lost path · ${n} room${n === 1 ? '' : 's'} · ${W.chargeText(door.price)} and the hourglass's pixie` } };
       },
       take(t) { W.retraceThrough(t.door, !t.door.own); },

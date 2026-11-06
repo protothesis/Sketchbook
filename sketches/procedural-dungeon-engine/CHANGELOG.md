@@ -254,6 +254,16 @@ All notable changes to this sketch are logged here, per
   jars that catch and release with things that accept what's released,
   collectables placed with Y, and the X prompt floating over its target.
   Walk mode is now designed controller first; touch is legacy.
+- 2026-11-05: **The Y button over its target.** Y's text line under the
+  figure is gone. Its button floats over a thing, X's way, only when what's
+  in your hand would act on that thing (a locked door, a bare wall, a pixie,
+  a vessel, a dormant waystone, a lost path's door), and the thing flashes
+  if X has nothing in focus. A swing at the air or a spill shows nothing.
+  With both on one thing, they sit side by side, and a muted X gives way.
+- 2026-11-05: **Strips like Breath of the Wild's.** The open row is a fixed
+  window seven cells wide, its middle framed, the row sliding behind the
+  frame and fading out to either side, however much you carry. A bag's icon
+  is big while its row is folded and tucks into the frame's corner when open.
 - 2026-11-05: **Release and accept** (step 4 of `HANDS-PLAN.md`;
   `release.js`). A full jar or the hourglass swung always releases what's in
   it, at a point in front of you, and whatever there accepts it takes it

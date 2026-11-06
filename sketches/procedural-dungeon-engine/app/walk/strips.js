@@ -5,7 +5,10 @@
 // moves along it; down and up move between its rows, one grid row each:
 // the main grid's, then each bag's (the backpack under items and
 // collectables, the purse under collectables only). Only the row you're on
-// is open; the others fold to one cell (a bag's own icon). Let go of the
+// is open: a fixed window, its middle cell framed, the row sliding behind
+// the frame as you move and fading out to either side, however much is in
+// it. The others fold to one cell (a bag's own icon, big; in its open row
+// the bag tucks into the window's corner). Let go of the
 // d-pad and the highlighted thing is taken in hand (just assigned, if your
 // hands are full of a block). B drops the highlighted one in front of you,
 // one a press. Nothing here moves or sorts things: that's the menu's job.
@@ -19,7 +22,6 @@
   const W = global.DungeonPlay.walk;
   const { state, el } = W;
 
-  const SHOW = 9; // cells shown at once, the highlighted one kept in the middle
 
   let strip = null; // { kind: 'items' | 'coll', row, i }
   const stripEl = el('div', 'strip');
@@ -145,6 +147,10 @@
   const isSlotKind = (kind) => kind !== 'coll';
   const iconOf = (kind, e) => (isSlotKind(kind) ? W.slotIcon(e.slot) : W.cellIcon(e.cell));
   const DIR = { tools: '◀', coll: '▼', items: '▶' };
+  const entrySig = (kind, e) => (isSlotKind(kind) ? e.key + ':' + (e.slot.count || '') + ':' + (e.slot.cur ? e.slot.cur.strokes || e.slot.cur.count || '' : '')
+    : e.grid + e.i + ':' + e.cell.kind + (e.cell.type || '') + ':' + e.cell.n);
+  const inHandOf = (kind, e) => (isSlotKind(kind) ? state.sel === e.key
+    : state.sel === 'hand-coll' && !!state.handColl && state.handColl.grid === e.grid && state.handColl.i === e.i);
 
   /** One cell, like the menu's: `e` an entry, or null for an empty one. */
   function cellEl(kind, e, cls) {
@@ -152,39 +158,53 @@
     if (e) c.append(iconOf(kind, e));
     return c;
   }
-  /** A row folded to one cell: a bag's own icon, or the main row's thing (its highlighted one, if any). */
-  function foldedEl(kind, r) {
-    if (r.bag) {
-      const c = el('span', 'slot cell bag fold');
-      c.append(W.equipIcon(r.bag));
-      return c;
-    }
-    return cellEl(kind, r.entries[0] || null, 'fold');
-  }
 
+  // The strip is rebuilt only when what's in it changes (or the row, or the
+  // kind); moving along a row just slides its track (--i), so it glides.
+  let built = null; // { sig, track, cells }
   function render() {
     if (!strip) return;
     const kind = strip.kind, rows = rowsFor(kind);
+    const sig = kind + '|' + strip.row + '|' + rows.map((r) => (r.bag || '') + ':' + r.entries.map((e) => entrySig(kind, e)).join(',')).join('/');
+    if (!built || built.sig !== sig || stripEl.hidden) build(kind, rows, sig);
+    const r = rows[strip.row];
+    built.track.style.setProperty('--i', String(r.entries.length ? strip.i : 0));
+    built.cells.forEach((c, k) => {
+      c.classList.toggle('cur', k === strip.i);
+      c.classList.toggle('hand', !!r.entries[k] && inHandOf(kind, r.entries[k]));
+    });
+  }
+  function build(kind, rows, sig) {
     stripEl.innerHTML = '';
     stripEl.hidden = false;
     stripEl.className = 'strip ' + kind;
-    const grid = el('div', 'strip-rows');
+    built = { sig, track: null, cells: [] };
+    const list = el('div', 'strip-rows');
     rows.forEach((r, ri) => {
-      const line = el('div', 'strip-row' + (ri === strip.row ? ' on' : ''));
-      if (ri !== strip.row) { line.append(foldedEl(kind, r)); grid.append(line); return; }
-      if (r.bag) { const b = el('span', 'slot cell bag head'); b.append(W.equipIcon(r.bag)); line.append(b); }
-      const n = r.entries.length;
-      if (!n) line.append(cellEl(kind, null, 'cur'));
-      const from = Math.max(0, Math.min(n - SHOW, strip.i - Math.floor(SHOW / 2)));
-      for (let k = from; k < Math.min(n, from + SHOW); k++) {
-        const e = r.entries[k];
-        const inHand = isSlotKind(kind) ? state.sel === e.key
-          : state.sel === 'hand-coll' && state.handColl && state.handColl.grid === e.grid && state.handColl.i === e.i;
-        line.append(cellEl(kind, e, (k === strip.i ? 'cur' : '') + (inHand ? ' hand' : '') + (kind === 'coll' ? ' coll' : '')));
+      const win = el('div', 'strip-win' + (ri === strip.row ? ' on' : ' fold'));
+      if (ri === strip.row) {
+        const track = el('div', 'strip-track');
+        track.classList.add('still'); // no slide on the first frame
+        if (!r.entries.length) track.append(cellEl(kind, null));
+        for (const e of r.entries) {
+          const c = cellEl(kind, e, kind === 'coll' ? 'coll' : '');
+          track.append(c);
+          built.cells.push(c);
+        }
+        win.append(track, el('div', 'strip-frame'));
+        if (r.bag) { const tag = el('span', 'strip-tag'); tag.append(W.equipIcon(r.bag)); win.append(tag); }
+        built.track = track;
+        global.requestAnimationFrame(() => track.classList.remove('still'));
+      } else if (r.bag) { // folded: the bag itself, big
+        const c = el('span', 'slot cell bag');
+        c.append(W.equipIcon(r.bag));
+        win.append(c);
+      } else { // folded main row: what's first in it
+        win.append(cellEl(kind, r.entries[0] || null, kind === 'coll' ? 'coll' : ''));
       }
-      grid.append(line);
+      list.append(win);
     });
-    stripEl.append(grid);
+    stripEl.append(list);
     const acts = el('div', 'strip-actions');
     acts.append(el('span', 'btn', `Equip (let go ${DIR[kind]})`));
     if (kind !== 'tools') acts.append(el('span', 'btn', `Drop (${W.glyph('G')})`));

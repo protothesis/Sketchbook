@@ -411,11 +411,14 @@ designed for. The hands and items rework in progress is planned in
   - **The d-pad strips** (`strips.js`): hold **◀** for your tools (the RT
     slot), **▼** for your collectables or **▶** for your items, and a strip
     of them opens in the middle of the screen, on what the slot holds now,
-    in cells as big as the menu's (an empty one if there's nothing). It's a
-    grid row a row: the main grid's, then a row per bag (the backpack under
-    items and collectables, the purse under collectables). Only the row
-    you're on is open; the others fold to one cell (a bag's own icon). The
-    right stick (or LB / RB) moves along a row, down and up between rows.
+    in cells as big as the menu's (an empty one if there's nothing). A row
+    for the main grid, then one per bag (the backpack under items and
+    collectables, the purse under collectables). The row you're on is a
+    fixed window seven cells wide: a frame holds still in its middle and
+    the row slides behind it, fading out to either side, however much you
+    carry. The others fold to one cell (a bag's own icon, big; in its open
+    row the bag tucks into the frame's corner). The right stick (or LB /
+    RB) moves along a row, down and up between rows.
     **Let go** and the highlighted thing is in your hand (with a block in
     your hands, just on its slot). **B** drops one of it in front of you,
     and the strip stays open; the buttons under it say so, and nothing
@@ -441,11 +444,14 @@ designed for. The hands and items rework in progress is planned in
   flashes through whatever is in front of it (a side wall seen edge on),
   with its seam and arrows, from either side. E has no prompt line (on
   a keyboard), and a tap at something you can't do says why in a
-  caption. F keeps a prompt line below the figure for what the item in
-  hand would do (open a door with a doorstone, catch a pixie, pour into a
-  vessel), starting with its key; one that can't be done right now has no
-  key and reads muted. On touch the E line stays too (it's the E button):
-  press a line to do it. Drawing a mark never prompts.
+  caption. **Y has no text line** (since 2026-11-05): its button floats over
+  a thing the same way, only when what's in your hand would act on that
+  particular thing (a key at a locked door, a doorstone at a bare wall, an
+  empty jar at a pixie or a vessel, a full one at something that accepts
+  it), and that thing flashes when nothing has X's focus. A swing at the
+  air, a spill, a mark on the floor show nothing. On one thing at once the
+  two buttons sit side by side, and a muted X gives way to Y. On touch the
+  E line stays (it's the E button).
 - **Hold to act.** Anything that changes the world takes E held (or the E
   prompt pressed and held on touch) while a ring fills over the target,
   with the action's icon in it (on touch, the E prompt's key fills too,

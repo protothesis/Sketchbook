@@ -180,7 +180,13 @@ entropy). No item-specific press.
    the thing in hand, not just onto the slot. Centred, cells the menu's
    size, a grid row per bag with only the current row open, no text but
    the Equip / Drop buttons. Keyboard: hold 3 / 4 / 5, 1 / 2, G; no bag
-   rows.)
+   rows. Then, like Breath of the Wild's: the open row a fixed window,
+   its middle framed, the row sliding behind the frame and fading out to
+   either side; a bag's icon big when its row is folded, tucked into the
+   frame's corner when it's open.)
+   **Y marker:** done with this step too. No text line for Y; its button
+   over the thing, only where the item acts on a particular thing (see
+   The prompt over the target).
 4. [x] **Release and accept:** jars and the hourglass fill and release;
    vessels, waystones, lost-path doors, locked doors and walls accept;
    entropy puddles your lamp soaks up. (`release.js`, `ACCEPTS`: the
