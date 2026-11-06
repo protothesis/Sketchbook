@@ -198,9 +198,9 @@
   function refreshHud() {
     const s = DE.stats(state.exp);
     const run = state.run;
-    // The top-left panel is information and settings only; game state lives
+    // The run's stats show on the pause screen (game.js); game state lives
     // in its own elements (the lamp, the hotbar).
-    setText('stats', `seed ${state.exp.rootSeed} · ${s.spaces} rooms · ${s.openExits} closed doors`);
+    setText('stats', `seed ${state.exp.rootSeed} · ${s.spaces} room${s.spaces === 1 ? '' : 's'} · ${s.openExits} closed door${s.openExits === 1 ? '' : 's'}`);
     W.updateLampHud(true);
     // Keys are a tool on the hotbar now, and the hourglass is on it too.
     const keyEl = $('keys');
@@ -825,7 +825,7 @@
   function closeDialog() {
     if (!state.dialog) return;
     state.dialog = false;
-    state.paused = state.menu === 'title'; // a dialog over the title screen leaves it up
+    state.paused = !!state.menu; // a dialog over the title screen leaves it up
     $('dialog').hidden = true;
   }
   $('done-leave').addEventListener('click', () => {

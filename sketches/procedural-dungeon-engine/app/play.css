@@ -42,15 +42,18 @@ html, body {
   backdrop-filter: blur(4px);
 }
 
-.top-left {
+.pause-btn {
   top: max(12px, env(safe-area-inset-top));
   left: max(12px, env(safe-area-inset-left));
-  padding: 8px 12px;
-  max-width: calc(100vw - 220px);
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
 }
-.top-left h1 { margin: 0; font-size: 15px; letter-spacing: 0.04em; }
-.top-left p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
-.hud-buttons { display: flex; gap: 6px; margin-top: 6px; }
+.pause-btn:hover { color: var(--text); }
 .btn {
   font: inherit;
   font-size: 12px;
@@ -342,10 +345,71 @@ kbd {
 .btn.primary { background: var(--accent); color: #140c06; }
 .btn.quiet { background: transparent; }
 .title { z-index: 12; background: rgba(4, 3, 6, 0.94); }
-.title-card { width: min(440px, 100%); text-align: center; }
-.title h2 { font-size: 34px; margin: 6px 0 12px; }
-.title .done-buttons { flex-direction: column; align-items: stretch; }
+.title-card { width: min(520px, 100%); padding: 28px 30px; }
+.title.wide .title-card { width: min(1180px, 100%); }
+.title h2 { font-size: 40px; margin: 6px 0 2px; line-height: 1.1; }
+.title-sub { margin: 0 0 18px; color: var(--muted); font: 13px "Courier New", ui-monospace, monospace; letter-spacing: 0.08em; }
+.title-paused { color: var(--accent); }
+.title-paused::before { content: "❚❚ "; letter-spacing: 0; }
+.title-body { display: flex; gap: 26px; align-items: flex-start; }
+.title-body[hidden], .controls[hidden] { display: none; }
+.title-lamp { flex: none; width: 120px; height: 160px; margin-top: 2px; }
+.title-lamp .flame { fill: #f0a35e; transform-origin: 12px 22px; animation: flame 1.6s ease-in-out infinite;
+  filter: drop-shadow(0 0 2px rgba(240, 163, 94, 0.9)); }
+.title.paused .title-lamp .flame { animation-play-state: paused; }
+.title-menu { flex: 1; min-width: 0; }
+.title .done-buttons { flex-direction: column; align-items: stretch; margin-top: 0; }
 .title .done-buttons .btn { text-align: center; padding: 10px 14px; font-size: 15px; }
+.title-save { display: flex; gap: 8px; align-items: center; }
+.title-save .btn { flex: 1; }
+.title-save-label { width: 3.5em; color: var(--muted); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.title-status { margin: 14px 0 4px; font-size: 13px; color: var(--muted); }
+.title-stats { margin: 0 0 8px; font: 12px ui-monospace, Consolas, monospace; color: var(--text); }
+.title-stats[hidden] { display: none; }
+.title-chart { display: inline-block; margin-top: 6px; }
+@media (max-width: 520px) {
+  .title-card { padding: 20px 18px; }
+  .title h2 { font-size: 30px; }
+  .title-lamp { width: 64px; height: 86px; }
+  .title-body { gap: 14px; }
+}
+
+/* The controls (controls.js): the page tabs side by side on top, the drawing
+   under them. Both pages share one frame (the SVGs' viewBox, and the notes'
+   height), so switching never moves anything. */
+.controls { display: flex; flex-direction: column; gap: 12px; }
+.controls-tabs { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.controls-tabs .btn { font-size: 16px; font-weight: 600; padding: 8px 18px; border-width: 2px; }
+.controls-hint { margin: 0 0 0 auto; color: var(--muted); font-size: 14px; }
+.controls-view { min-width: 0; }
+/* Its height is capped to fit the window (the drawing scales down inside, centred), the same on both pages. */
+.controls-svg { display: block; width: 100%; height: auto; aspect-ratio: 1600 / 830; max-height: calc(100vh - 400px); }
+.controls-svg .c-pad path, .controls-svg .c-pad circle, .controls-svg .c-pad rect {
+  fill: none; stroke: #cfc8ba; stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; }
+.controls-svg .c-pad .c-hi { stroke-width: 4; stroke: var(--text); }
+.controls-svg .c-pad .c-ridge { stroke-width: 6; stroke: var(--text); }
+.controls-svg .c-line { fill: none; stroke: #8f887b; stroke-width: 2; stroke-linejoin: round; }
+.controls-svg .c-tag { fill: #1a1620; stroke: rgba(232, 147, 95, 0.8); stroke-width: 2; }
+.controls-svg .c-glyph { fill: var(--accent); font: 700 22px system-ui, sans-serif; }
+.controls-svg .press { opacity: 0.6; }
+.controls-svg .c-click { fill: var(--muted); font: 17px system-ui, sans-serif; letter-spacing: 0.06em; }
+.controls-svg .c-btn { fill: #cfc8ba; font: 700 17px system-ui, sans-serif; }
+.controls-svg .c-act { fill: var(--text); font: 600 37px system-ui, sans-serif; }
+.controls-svg .c-sub { fill: var(--muted); font: 27px system-ui, sans-serif; }
+.controls-svg .k-cap { fill: rgba(233, 227, 214, 0.03); stroke: rgba(233, 227, 214, 0.22); stroke-width: 1.6; }
+.controls-svg .k-cap.on { fill: rgba(232, 147, 95, 0.1); stroke: rgba(232, 147, 95, 0.8); stroke-width: 2; }
+.controls-svg .k-cap.on.dim { stroke: rgba(233, 227, 214, 0.35); fill: none; }
+.controls-svg .k-cap.on.menu { stroke: rgba(181, 156, 255, 0.75); fill: rgba(181, 156, 255, 0.08); }
+.controls-svg .k-key { fill: var(--text); font: 600 26px system-ui, sans-serif; }
+.controls-svg .k-act { fill: var(--accent); font: 600 21px system-ui, sans-serif; }
+.controls-svg .k-act.dim { fill: var(--muted); }
+.controls-svg .k-act.menu { fill: var(--entropy); }
+.controls-notes { display: grid; grid-template-columns: max-content 1fr; align-content: start; gap: 6px 16px;
+  margin: 10px 0 0; min-height: 9.5em; font-size: 16px; line-height: 1.35; }
+.controls-notes dt { color: var(--muted); font-weight: 600; }
+.controls-notes dt::after { content: ":"; }
+.controls-notes dd { margin: 0; }
 .title-warn { color: #e8b35f; }
 .title-note { color: var(--muted); }
 .dialog { z-index: 13; } /* above the title screen (12): its confirm opens over it */
@@ -554,7 +618,6 @@ kbd {
 
 @media (max-width: 560px) {
   .minimap { width: 120px; height: 120px; }
-  .top-left { max-width: calc(100vw - 160px); }
   .help { display: none; }
 }
 @media (hover: none) {

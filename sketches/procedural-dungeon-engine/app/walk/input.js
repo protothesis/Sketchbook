@@ -15,6 +15,7 @@
     if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
     const k = e.key.toLowerCase();
     if (state.paused) {
+      if (state.menu && W.titleKey(k, e)) return; // the title / pause screen (game.js)
       if (k === 'escape' && state.dialog) W.closeDialog();
       else if (k === 'escape' && state.recordMode === 'checkpoint') W.hideRecord();
       return;
@@ -39,6 +40,8 @@
       e.preventDefault();
     } else if (k === 'f') {
       if (!e.repeat) useSelected();
+    } else if (k === 'g') { // put away what's in your hand, or take it back out (B on a pad)
+      if (!e.repeat) W.toggleHands();
     } else if (k === 'q') { // worn equipment (none right now: items.js equipSlot)
       if (!e.repeat) W.useEquip();
     } else if (k === 'r') { // the lamp: cover it, or relight it
