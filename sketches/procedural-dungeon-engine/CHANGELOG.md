@@ -264,9 +264,12 @@ All notable changes to this sketch are logged here, per
   patch of brick, a post or rail, pearls, a shard or hanging roots. Wall
   pieces have world-scaled UVs so courses line up across segments. Rooms
   carry `meta.material`; waypoints roll their own. The map can colour
-  regions by material and the inspector shows it. Rooms keep their
-  region's hue on the map and minimap (now a little more saturated); the
-  moods keep swatch colours (`MOOD_TONES`) for the map's mood view.
+  regions by material and the inspector shows it. The minimap and chart
+  colour each room by its material (`chart` in `materials.js`, picked to
+  stay apart at a glance), with its region's own hue laid faintly over it;
+  the walk view's surfaces lean 12% toward that hue too. The engine map
+  keeps the region's hue (now a little more saturated); the moods keep
+  swatch colours (`MOOD_TONES`) for the map's mood view.
   Layouts and moods are unchanged.
 - 2026-11-05: **No more backward compatibility for old records.** The
   params that only kept old records replaying as they were (`starter`,

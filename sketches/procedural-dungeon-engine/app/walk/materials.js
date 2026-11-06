@@ -17,14 +17,16 @@
    * `wallDecor`: the chance a plain wall segment carries a piece.
    */
   const LOOK = {
-    stone:    { wall: [0.08, 0.05, 0.30], floor: [0.08, 0.05, 0.17], block: [0.08, 0.05, 0.24], decor: [0.08, 0.06, 0.27], wallDecor: 0.22 },
-    brick:    { wall: [0.025, 0.42, 0.27], floor: [0.03, 0.28, 0.15], block: [0.03, 0.34, 0.2], decor: [0.025, 0.45, 0.3], wallDecor: 0.25 },
-    timber:   { wall: [0.075, 0.42, 0.23], floor: [0.075, 0.38, 0.15], block: [0.07, 0.38, 0.18], decor: [0.08, 0.4, 0.27], wallDecor: 0.35 },
-    pearl:    { wall: [0.72, 0.13, 0.6], floor: [0.68, 0.08, 0.33], block: [0.7, 0.1, 0.48], decor: [0.62, 0.16, 0.74], wallDecor: 0.25,
+    // `chart`: its colour on the minimap and chart, picked to stay apart
+    // from the others at a glance (the region's hue is laid over it, faint).
+    stone:    { chart: [0.6, 0.05, 0.4], wall: [0.08, 0.05, 0.30], floor: [0.08, 0.05, 0.17], block: [0.08, 0.05, 0.24], decor: [0.08, 0.06, 0.27], wallDecor: 0.22 },
+    brick:    { chart: [0.01, 0.6, 0.4], wall: [0.025, 0.42, 0.27], floor: [0.03, 0.28, 0.15], block: [0.03, 0.34, 0.2], decor: [0.025, 0.45, 0.3], wallDecor: 0.25 },
+    timber:   { chart: [0.09, 0.65, 0.42], wall: [0.075, 0.42, 0.23], floor: [0.075, 0.38, 0.15], block: [0.07, 0.38, 0.18], decor: [0.08, 0.4, 0.27], wallDecor: 0.35 },
+    pearl:    { chart: [0.72, 0.22, 0.7], wall: [0.72, 0.13, 0.6], floor: [0.68, 0.08, 0.33], block: [0.7, 0.1, 0.48], decor: [0.62, 0.16, 0.74], wallDecor: 0.25,
       gloss: { shininess: 40, specular: 0x6a6878 } },
-    obsidian: { wall: [0.76, 0.3, 0.045], floor: [0.76, 0.25, 0.04], block: [0.76, 0.28, 0.06], decor: [0.77, 0.35, 0.08], wallDecor: 0.2,
+    obsidian: { chart: [0.77, 0.38, 0.27], wall: [0.76, 0.3, 0.045], floor: [0.76, 0.25, 0.04], block: [0.76, 0.28, 0.06], decor: [0.77, 0.35, 0.08], wallDecor: 0.2,
       gloss: { shininess: 90, specular: 0xa498c8 } },
-    earth:    { wall: [0.08, 0.3, 0.19], floor: [0.08, 0.27, 0.13], block: [0.08, 0.28, 0.16], decor: [0.09, 0.25, 0.3], wallDecor: 0.3 },
+    earth:    { chart: [0.15, 0.42, 0.25], wall: [0.08, 0.3, 0.19], floor: [0.08, 0.27, 0.13], block: [0.08, 0.28, 0.16], decor: [0.09, 0.25, 0.3], wallDecor: 0.3 },
   };
   const lookOf = (space) => LOOK[space.meta && space.meta.material] || LOOK.stone;
 
@@ -273,6 +275,12 @@
   worldUV(W.geo.post, WALL_H * S / 2);
 
   const color = ([h, s, l], dl = 0) => new THREE.Color().setHSL(h, s, Math.max(0, l + dl));
+  // The region's own hue, laid faintly over a material colour (TINT of the way).
+  const TINT = 0.12;
+  const tinted = (hsl, hue, dl = 0) => {
+    const c = color(hsl, dl);
+    return hue == null ? c : c.lerp(new THREE.Color().setHSL(hue / 360, 0.6, Math.max(0, hsl[2] + dl)), TINT);
+  };
   function surface(look, opts) {
     return look.gloss
       ? new THREE.MeshPhongMaterial(Object.assign({ shininess: look.gloss.shininess, specular: look.gloss.specular }, opts))
@@ -282,14 +290,15 @@
   /** A space's materials (world.js caches them per space). */
   function spaceMaterials(space, sealed) {
     const look = lookOf(space), tex = textures(space.meta && space.meta.material);
+    const hue = space.meta && space.meta.hue;
     return {
       // Past a locked door the floor carries a faint gold warmth.
       floor: [-0.02, 0, 0.02].map((dl, i) => surface(look, {
-        color: color(look.floor, dl), map: tex.floors[i], emissive: sealed ? 0x1c1404 : 0x000000,
+        color: tinted(look.floor, hue, dl), map: tex.floors[i], emissive: sealed ? 0x1c1404 : 0x000000,
       })),
-      wall: W.withDither(surface(look, { color: color(look.wall), map: tex.wall })),
+      wall: W.withDither(surface(look, { color: tinted(look.wall, hue), map: tex.wall })),
       // Blocks never dissolve; the figure shows through them instead.
-      block: surface(look, { color: color(look.block) }),
+      block: surface(look, { color: tinted(look.block, hue) }),
     };
   }
 
@@ -503,5 +512,17 @@
     }
   }
 
-  Object.assign(W, { MATERIAL_LOOK: LOOK, spaceMaterials, floorDecor, addWallDecor });
+  /**
+   * A room's fills on the minimap and chart: its material's colour
+   * (brighter for the room you're in), then its region's hue over it, faint.
+   */
+  function chartFills(space, here) {
+    const [h, s, l] = lookOf(space).chart;
+    return [
+      `hsl(${h * 360}, ${s * 100}%, ${(l + (here ? 0.08 : 0)) * 100}%)`,
+      `hsla(${space.meta.hue}, 70%, 55%, 0.12)`,
+    ];
+  }
+
+  Object.assign(W, { MATERIAL_LOOK: LOOK, chartFills, spaceMaterials, floorDecor, addWallDecor });
 })(window);
