@@ -9,7 +9,7 @@
 //   X  E (tap to act, hold to fill the ring)     Y  on the map, recenter (free in the world)
 //   L3  crouch (C)    R3  the lamp (R)
 //   LB / RB  the carousel: the item in hand, back / on   LT  run    RT  F (use the item in hand)
-//   View  the menu (map, inventory)    Menu  pause
+//   View  the menu (map, inventory)    Menu  pause (the title screen; Menu or B again resumes)
 //
 // In the menu (menu.js), LB / RB switch tabs and B closes it. On the map
 // the stick pans and LT / RT zoom; in a grid the d-pad or stick moves the
@@ -108,6 +108,7 @@
   function navigate(x, y) {
     if (state.choice) { if (x) W.moveChoice(x); return; }
     const o = state.paused && overlay();
+    if (o && o.id === 'title' && W.controlsOpen()) { if (y) W.controlsSwitch(); return; } // up / down: pad or keyboard
     if (o) { focusStep(o, x || y); return; }
     if (state.bigmap) {
       if (state.bigmap.tab !== 'map') W.menuMove(x, y);

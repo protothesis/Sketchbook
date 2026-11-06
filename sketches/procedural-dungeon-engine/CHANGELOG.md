@@ -1166,6 +1166,23 @@ All notable changes to this sketch are logged here, per
       you wake, fading in with the last static dying away. Timings are in
       `PSYCHE` in the dev panel.
 
+- 2026-11-05: **A title screen that's also the pause menu, and a
+  controls page.**
+  - Walk mode opens on "Seeds of the Labyrinth": a big lamp, then
+    Continue, New run, Save (Import · Export on one line) and Controls.
+    Up / down (or W / S) step through it.
+  - Esc, Menu on a pad, or the new ☰ button (top left, for touch) opens
+    the same screen over your run, marked "paused" with the run's seed and
+    rooms. Continue, Esc, Menu or B go back to the run as it was. The
+    separate "Paused" dialog is gone.
+  - The top-left card (title, stats, Chart view, Menu) is gone. Its stats
+    are on the pause screen, Chart view is a link on the title.
+  - Controls (`app/walk/controls.js`): a line drawing of the pad with
+    every button called out, and a keyboard and mouse page. Up / down
+    switch between them, Esc (B) goes back.
+  - **G puts away / takes out the item in hand**, B's job on a pad, which
+    the keyboard had no key for. Peeking (the right stick) is still
+    pad-only.
 - 2026-11-05: **The inventory, second playtest.**
   - At a chest, A (Space) takes one from a chest cell, or gives one from
     yours; X (or E) takes or gives the whole stack. "Take everything" is

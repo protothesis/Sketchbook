@@ -178,7 +178,10 @@
   }
 
   // ---------------------------------------------------------------------------
-  // The title screen: Continue (the resume slot), New run, import / export
+  // The title screen: Continue (the resume slot), New run, import / export,
+  // Controls (controls.js). It's the pause menu too: Esc (Menu) in a run
+  // opens it as 'pause' (a "paused" tag and the run's stats), and Continue,
+  // Esc or Menu go back to the run as it was.
 
   const titleEl = $('title');
   const statusEl = $('title-status');
@@ -198,15 +201,23 @@
     return Math.round(s / 86400) + ' days ago';
   }
 
-  function showTitle(message) {
+  /** Put the title up: 'title' (no run going) or 'pause' (over a run). */
+  function showTitle(message, mode) {
     if (state.dialog) W.closeDialog();
-    state.menu = 'title';
+    if (W.controlsOpen()) W.closeControls();
+    state.menu = mode || (state.menu === 'pause' ? 'pause' : 'title');
     state.paused = true;
     W.keys.clear();
+    const paused = state.menu === 'pause';
+    $('title-paused').hidden = !paused;
+    $('stats').hidden = !paused;
+    titleEl.classList.toggle('paused', paused);
     const r = SAVES.read('resume');
     statusEl.innerHTML = '';
     if (message) statusEl.append(el('span', 'title-note', message), document.createElement('br'));
-    if (r.status === 'ok') {
+    if (paused) {
+      statusEl.append('Your run saves as you play. Save at a hall\u2019s lantern to choose where you wake.');
+    } else if (r.status === 'ok') {
       const s = r.snap;
       const rooms = Object.keys(s.record.spaces || {}).length;
       statusEl.append(`A run in progress: seed ${s.rootSeed} · ${rooms} room${rooms === 1 ? '' : 's'} charted · saved ${ago(s.savedAt)}.`);
@@ -219,16 +230,18 @@
     } else {
       statusEl.append('No run in progress.');
     }
-    continueBtn.hidden = r.status !== 'ok';
-    exportBtn.hidden = !r.snap;
+    continueBtn.hidden = !paused && r.status !== 'ok';
+    exportBtn.disabled = !r.snap;
     titleEl.hidden = false;
-    (r.status === 'ok' ? continueBtn : $('title-new')).focus();
+    (continueBtn.hidden ? $('title-new') : continueBtn).focus();
   }
 
   function hideTitle() {
+    if (W.controlsOpen()) W.closeControls();
     state.menu = null;
     state.paused = false;
     titleEl.hidden = true;
+    if (document.activeElement && titleEl.contains(document.activeElement)) document.activeElement.blur();
   }
 
   /** Load a snapshot into the game. False (and the title says why) if it won't rebuild. */
@@ -259,6 +272,7 @@
   }
 
   continueBtn.addEventListener('click', () => {
+    if (state.menu === 'pause') { hideTitle(); return; } // back to the run as it was
     const r = SAVES.read('resume');
     if (r.status === 'ok') loadSnapshot(r.snap);
     else showTitle();
@@ -278,6 +292,7 @@
     });
   });
   exportBtn.addEventListener('click', () => {
+    savePlayer(); // over a run: export it as it is now
     const r = SAVES.read('resume');
     const blob = new Blob([SAVES.exportFile()], { type: 'application/json' });
     const a = document.createElement('a');
@@ -289,6 +304,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
   $('title-import').addEventListener('click', () => fileEl.click());
+  $('title-controls').addEventListener('click', () => W.openControls());
   fileEl.addEventListener('change', () => {
     const f = fileEl.files && fileEl.files[0];
     fileEl.value = '';
@@ -312,27 +328,43 @@
   });
 
   // ---------------------------------------------------------------------------
-  // The pause menu (Esc, or the Menu button). Quitting writes the resume
-  // slot only: the checkpoint stays where your last save left it.
+  // Pausing: Esc, Menu on a pad, or the menu button opens the title as the
+  // pause menu. Quitting to the title writes the resume slot only: the
+  // checkpoint stays where your last save left it.
 
   function openPause() {
     if (state.paused || state.menu || !state.exp) return;
     savePlayer();
-    W.openDialog({
-      kicker: 'paused',
-      title: 'Paused',
-      text: `Seed ${state.exp.rootSeed}. Your run saves as you play. Save at a hall's lantern to choose where you wake. ` +
-        'Faint, and the rooms opened since your last save are lost until you retrace them, and your pack stays where you fell.',
-      buttons: [
-        { label: 'Resume', primary: true },
-        { label: 'Quit to main menu', onClick: quitToMenu },
-      ],
-    });
+    showTitle(null, 'pause');
   }
 
   function quitToMenu() {
     savePlayer();
-    showTitle();
+    showTitle(null, 'title');
+  }
+
+  /** Keys while the title is up (input.js). True if handled. */
+  function titleKey(k, e) {
+    if (state.dialog) return false;
+    const up = k === 'arrowup' || k === 'w', down = k === 'arrowdown' || k === 's';
+    if (W.controlsOpen()) {
+      if (up || down) { W.controlsSwitch(); e.preventDefault(); }
+      else if (k === 'escape' && !e.repeat) W.closeControls();
+      return true;
+    }
+    if (k === 'escape') {
+      if (state.menu === 'pause' && !e.repeat) hideTitle();
+      return true;
+    }
+    if (up || down) { // step through the buttons, as the d-pad does
+      const bs = Array.from(titleEl.querySelectorAll('#title-main button, #title-main a.btn'))
+        .filter((b) => !b.hidden && !b.disabled && b.offsetParent);
+      const i = bs.indexOf(document.activeElement);
+      if (bs.length) bs[i < 0 ? 0 : (i + (down ? 1 : -1) + bs.length) % bs.length].focus();
+      e.preventDefault();
+      return true;
+    }
+    return false;
   }
 
   $('menu-btn').addEventListener('click', (e) => { openPause(); e.currentTarget.blur(); });
@@ -342,5 +374,5 @@
     showTitle();
   }
 
-  Object.assign(W, { faint, lostPaths, lostPathAt, retracePrice, retrace, letGo, showTitle, hideTitle, loadSnapshot, newRun, openPause, quitToMenu, bootGame: boot });
+  Object.assign(W, { faint, lostPaths, lostPathAt, retracePrice, retrace, letGo, showTitle, hideTitle, loadSnapshot, newRun, openPause, quitToMenu, titleKey, bootGame: boot });
 })(window);

@@ -10,14 +10,9 @@
 <body>
   <canvas id="view" aria-label="3D dungeon view"></canvas>
 
-  <div class="hud top-left">
-    <h1>Dungeon Walk</h1>
-    <p id="stats"></p>
-    <div class="hud-buttons">
-      <a class="btn" href="index.html">Chart view</a>
-      <button class="btn" id="menu-btn" type="button" title="Pause (Esc)">Menu</button>
-    </div>
-  </div>
+  <button id="menu-btn" class="hud pause-btn" type="button" title="Pause (Esc)" aria-label="Pause">
+    <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+  </button>
 
   <canvas id="minimap" class="hud minimap" width="180" height="180" aria-label="Minimap (tap to enlarge)" title="Open the map (Tab)"></canvas>
 
@@ -65,7 +60,7 @@
   <p id="caption" class="caption"></p>
 
   <div class="hud bottom-left help">
-    <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>C</kbd> crouch · <kbd>E</kbd> interact · <kbd>F</kbd> use item · <kbd>R</kbd> lamp · <kbd>1</kbd> <kbd>2</kbd> item in hand ·
+    <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>C</kbd> crouch · <kbd>E</kbd> interact · <kbd>F</kbd> use item · <kbd>G</kbd> put away · <kbd>R</kbd> lamp · <kbd>1</kbd> <kbd>2</kbd> item in hand ·
     <kbd>Tab</kbd> map &amp; inventory · <kbd>Esc</kbd> pause
   </div>
 
@@ -83,17 +78,44 @@
     </div>
   </div>
 
+  <!-- The title screen, which is also the pause menu (game.js), and the controls (controls.js). -->
   <div id="title" class="done title" hidden>
     <div class="done-card title-card">
-      <p class="done-kicker">the procedural dungeon</p>
-      <h2>Dungeon Walk</h2>
-      <p class="done-lede" id="title-status"></p>
-      <div class="done-buttons">
-        <button class="btn primary" id="title-continue" type="button">Continue</button>
-        <button class="btn" id="title-new" type="button">New run</button>
-        <button class="btn" id="title-import" type="button">Import save</button>
-        <button class="btn" id="title-export" type="button">Export save</button>
-        <a class="btn quiet" href="index.html">Chart view</a>
+      <p class="done-kicker title-paused" id="title-paused" hidden>paused</p>
+      <h2>Seeds of the Labyrinth</h2>
+      <p class="title-sub">a procedural dungeon prototype</p>
+      <div class="title-body" id="title-main">
+        <svg class="title-lamp" viewBox="0 0 24 32" aria-hidden="true">
+          <path d="M8 6 a4 4 0 0 1 8 0" fill="none" stroke="#8d8578" stroke-width="1.2" />
+          <rect x="6" y="6" width="12" height="3" rx="1" fill="#8d8578" />
+          <rect x="7" y="9" width="10" height="16" rx="2" fill="none" stroke="#8d8578" stroke-width="1" />
+          <path class="flame" d="M12 12 C15 16 15 19 12 22 C9 19 9 16 12 12 Z" />
+          <rect x="6" y="25" width="12" height="3" rx="1" fill="#8d8578" />
+        </svg>
+        <div class="title-menu">
+          <div class="done-buttons title-buttons">
+            <button class="btn primary" id="title-continue" type="button">Continue</button>
+            <button class="btn" id="title-new" type="button">New run</button>
+            <div class="title-save">
+              <span class="title-save-label">Save</span>
+              <button class="btn" id="title-import" type="button">Import</button>
+              <button class="btn" id="title-export" type="button">Export</button>
+            </div>
+            <button class="btn" id="title-controls" type="button">Controls</button>
+          </div>
+          <p class="done-lede title-status" id="title-status"></p>
+          <p class="title-stats" id="stats"></p>
+          <a class="btn quiet title-chart" href="index.html">Chart view</a>
+        </div>
+      </div>
+      <div class="controls" id="controls" hidden>
+        <div class="controls-tabs" role="tablist">
+          <button class="btn" id="controls-pad" type="button" role="tab">Gamepad</button>
+          <button class="btn" id="controls-keys" type="button" role="tab">Keyboard &amp; mouse</button>
+          <button class="btn quiet" id="controls-back" type="button">Back</button>
+          <p class="controls-hint" id="controls-hint"></p>
+        </div>
+        <div class="controls-view" id="controls-view"></div>
       </div>
       <input type="file" id="title-file" accept=".json,application/json" hidden />
     </div>
@@ -154,6 +176,7 @@
   <script src="app/walk/hud.js"></script>
   <script src="app/walk/menu.js"></script>
   <script src="app/walk/choice.js"></script>
+  <script src="app/walk/controls.js"></script>
   <script src="app/walk/game.js"></script>
   <script src="app/walk/camera.js"></script>
   <script src="app/walk/main.js"></script>
