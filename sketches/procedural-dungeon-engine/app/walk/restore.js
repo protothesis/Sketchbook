@@ -14,9 +14,9 @@
     inDoorMouth } = W;
 
   // Seconds for the arc up over your head, or back down: stone is heavier.
-  const LIFT_TIME = { crate: 0.38, chest: 0.45, vessel: 0.32, block: 0.6, waystone: 0.6 };
+  const LIFT_TIME = { crate: 0.38, chest: 0.45, vessel: 0.32, block: 0.6, waystone: 0.6, table: 0.45 };
   // How fast you walk with it over your head (no running with anything).
-  const CARRY_PACE = { crate: 0.85, chest: 0.8, vessel: 1, block: 0.7, waystone: 0.7 };
+  const CARRY_PACE = { crate: 0.85, chest: 0.8, vessel: 1, block: 0.7, waystone: 0.7, table: 0.8 };
   // What each kind of loose object allows. bearsStack: something can be set
   // on top of it (it then rests a whole unit up, however tall the thing
   // is). covers: what's inside is hidden while something rests on top of
@@ -29,6 +29,7 @@
     block: { bearsStack: true },
     waystone: { bearsStack: true, covers: true },
     vessel: { bearsStack: true, covers: true },
+    table: {}, // what's set on it is its own (tables.js); nothing stacks on it
   };
 
   const pushGeo = {
@@ -166,6 +167,8 @@
     if (v) out.push({ key: id('vessel'), kind: 'vessel', from: v });
     const ch = DP.chest(space);
     if (ch) out.push({ key: id('chest'), kind: 'chest', from: ch, space });
+    const tb = DP.table(space);
+    if (tb) out.push({ key: id('table'), kind: tb.kind, from: tb, space });
     if (DP.hallKeepsStone(space)) out.push({ key: id('waystone'), kind: 'waystone', from: DP.hallStone(space) });
     return out;
   }
@@ -200,6 +203,7 @@
       rec.kind = d.kind;
       if (d.kind === 'vessel') { rec.holds = rec.holds || null; rec.n = rec.n || 0; }
       if (d.kind === 'chest' && !rec.cells) rec.cells = DP.chestLoot(d.space, W.invSize('chest')); // what's in it, rolled once
+      if ((d.kind === 'table' || d.kind === 'endtable') && !rec.cells) rec.cells = DP.tableDressing(d.space, d.kind); // what's set on it (tables.js)
       // A hall's own stone: the starter's comes powered, and so does one whose old fixed stone you woke.
       if (d.kind === 'waystone' && !o) rec.holds = !space.parentId || run.waystones[space.id + ':' + space.seed] ? 'entropy' : null;
       if (d.kind === 'block') {
@@ -230,7 +234,7 @@
     if (!o) return;
     o.sx = b.sx; o.sy = b.sy; o.lv = Math.round(b.base / UNIT);
     if (b.ox || b.oy) { o.ox = +b.ox.toFixed(4); o.oy = +b.oy.toFixed(4); } else { delete o.ox; delete o.oy; }
-    if (b.vessel) { o.holds = b.holds || null; o.n = b.n || 0; } else if (b.waystone) { o.holds = b.holds || null; }
+    if (b.vessel) { o.holds = b.holds || null; o.n = b.n || 0; } else if (b.waystone) { o.holds = b.holds || null; } else if (b.table) { /* its cells are kept on o itself */ }
     else if (!b.crate) { o.done = b.done; o.paid = +b.paid.toFixed(4); }
   }
 
@@ -282,6 +286,13 @@
       const base = (o.lv || 0) * UNIT;
       const b = { key, push: true, waystone: true, units: 1, base, top: base + UNIT, holds: o.holds || null, mesh: W.makeStoneMesh(key) };
       placeSaved(b, o);
+      return b;
+    }
+    if (o.kind === 'table' || o.kind === 'endtable') { // tables.js: too tall to stand on (jar), what's on it rides along
+      const base = (o.lv || 0) * UNIT;
+      const b = { key, push: true, table: o.kind, jar: true, units: 1, base, top: base + W.TABLE.height, mesh: W.makeTableMesh(o.kind) };
+      placeSaved(b, o);
+      W.dressTable(b, o.cells || []);
       return b;
     }
     if (o.kind === 'vessel') {
@@ -396,12 +407,12 @@
     g.letGo = true; // it slows to a stop (grabInput), then maybe settles
   }
 
-  const kindOf = (b) => b.chest ? 'chest' : b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block';
+  const kindOf = (b) => b.table ? 'table' : b.chest ? 'chest' : b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block';
   // Dragging speed, cells a second: lighter things move quicker; pulling is slower.
-  const DRAG = { crate: 0.55, chest: 0.5, vessel: 0.6, block: 0.35, waystone: 0.35 }; // × PLAYER.speed
+  const DRAG = { crate: 0.55, chest: 0.5, vessel: 0.6, block: 0.35, waystone: 0.35 , table: 0.5 }; // × PLAYER.speed
   const PULL = 0.7;
   // Heft: how fast it gets going (cells/s²); it stops HEFT_STOP times as fast.
-  const HEFT = { crate: 8, chest: 7, vessel: 9, block: 3, waystone: 3 };
+  const HEFT = { crate: 8, chest: 7, vessel: 9, block: 3, waystone: 3 , table: 6 };
   const HEFT_STOP = 1.5;
   const SOCKET = 0.1; // cells: stopped this close to a notch (both ways), it settles in
 
@@ -669,7 +680,7 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
     const p = state.player;
     b.liftedFrom = { sx: b.sx, sy: b.sy, base: b.base || 0, px: p.x, py: p.y, pz: p.z };
     hold(b);
-    W.showCaption(b.chest ? 'you lift the chest' : b.crate ? 'you lift the crate' : b.vessel ? 'you lift the vessel'
+    W.showCaption(b.table ? `you lift the ${b.table === 'endtable' ? 'end table' : 'table'}${W.topOf(b) ? ', and what\'s on it' : ''}` : b.chest ? 'you lift the chest' : b.crate ? 'you lift the crate' : b.vessel ? 'you lift the vessel'
       : b.waystone ? (b.holds ? 'you lift the waystone · it leaves your ley lines until you set it down' : 'you lift the waystone') : 'you lift the block');
     savePlayer();
   }

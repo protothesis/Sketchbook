@@ -254,6 +254,15 @@ All notable changes to this sketch are logged here, per
   jars that catch and release with things that accept what's released,
   collectables placed with Y, and the X prompt floating over its target.
   Walk mode is now designed controller first; touch is legacy.
+- 2026-11-06: **Tables** (step 5 of `HANDS-PLAN.md`; `tables.js`). About 1
+  room in 5 has one: a plain programmer-art table that takes any
+  collectable, or (70%) an end table with a drawer and a placemat that takes
+  only kitchenware and comes with one piece on it. Y with a collectable in
+  hand places it on the table in front (via `ACCEPTS`), or sets it down in
+  front of you; X tapped takes the last one back into your hand, X held
+  grabs the table with what's on it. An end table with a teacup, a saucer
+  and a spoon is set: +1 entropy max while it stays so. The dev panel can
+  place both kinds and give kitchenware.
 - 2026-11-05: **The Y button over its target.** Y's text line under the
   figure is gone. Its button floats over a thing, X's way, only when what's
   in your hand would act on that thing (a locked door, a bare wall, a pixie,

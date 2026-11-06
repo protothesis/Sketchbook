@@ -611,6 +611,23 @@ designed for. The hands and items rework in progress is planned in
     again); the duster and the hourglass can't be dropped for now.
     **Esc** (B) leaves a bag, else puts back what you picked up, else
     closes. On touch, tap a cell, or use the buttons.
+  - **Tables** (`app/walk/tables.js`, since 2026-11-05): surfaces you
+    place collectables on. About 1 room in 5 (depth 1+, not halls) has one,
+    seeded on its own stream (`tableChance`), where a vessel could stand. A
+    loose object like a chest, carried with what's on it, but too tall to
+    stand on, with nothing stacked on it. Four places each (`TABLE`).
+    - The **table** (30%, programmer art: plain wood) takes any collectable.
+    - The **end table** (70%: dark wood, a drawer, a red placemat) takes
+      only kitchenware: the teacup, the saucer, the spoon. One piece is on
+      it when you find it (`tableDressing`). With all three on it, it's
+      **set**: the placemat warms and it's **+1 entropy max** for as long
+      as it stays set and in the world (added to the sigils' buff).
+    - **Y** with a collectable in hand places one on the table in front of
+      you (it's in `ACCEPTS`, as a collectable); a full table, or an end
+      table and something that isn't kitchenware, refuses it (a muted Y,
+      and a caption). With no table there, Y sets it down in front of you,
+      like B held. **X** tapped at a table takes the last thing put on it
+      back into your hand; held, it grabs the table.
   - **Chests** (`app/walk/restore.js`): a crate with a lid. Tap E to open
     it (hold E grabs it, like any crate). The chest's grid (4×2) is on
     top, yours below. Space (A, or a tap) on a chest cell takes one (a

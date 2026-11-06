@@ -194,5 +194,9 @@ entropy). No item-specific press.
    hourglass's pixie retraces, to keep its role. Keys and doorstones still
    find their door and wall in the item code, as before; they could join
    `ACCEPTS` when there's a reason.)
-5. [ ] **Placing collectables**, and a prototype surface (a shelf or
-   table) that accepts them, with X to take back.
+5. [x] **Placing collectables**, and a prototype surface (a shelf or
+   table) that accepts them, with X to take back. (`tables.js`: a plain
+   dev-art table for any collectable, and an end table with a placemat
+   for kitchenware, set with a teacup, a saucer and a spoon for +1 entropy
+   max. Y places, or sets it down in front; X tapped takes back the last.
+   Footprints and piles beyond four places, shelves and cabinets: later.)

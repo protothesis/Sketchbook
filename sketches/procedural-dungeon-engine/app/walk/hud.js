@@ -21,7 +21,7 @@
   const promptF = $('prompt-f') || document.createElement('button');
 
   /** "crate", "block", "vessel" (with what's in it). */
-  const objName = (b) => (b.chest ? 'chest' : b.crate ? 'crate' : b.waystone ? (b.holds ? 'waystone' : 'dormant waystone') : !b.vessel ? 'block'
+  const objName = (b) => (b.table ? (b.table === 'endtable' ? 'end table' : 'table') : b.chest ? 'chest' : b.crate ? 'crate' : b.waystone ? (b.holds ? 'waystone' : 'dormant waystone') : !b.vessel ? 'block'
     : !b.n ? 'empty vessel' : `vessel (${b.n} ${b.holds === 'pixie' ? (b.n === 1 ? 'pixie' : 'pixies') : (b.n === 1 ? 'charge' : 'charges')})`);
 
   /** E's line for the focused thing: { text, cls }. */
@@ -42,6 +42,7 @@
       case 'lift': return near.block.waystone && near.block.holds ? { cls: 'collapse', text: 'tap: travel from the waystone · hold: grab it' }
         : near.block.waystone ? { cls: 'collapse', text: `tap: wake the waystone from your lamp · ${chargeText(RULES.waystoneCharges)} · hold: grab it` }
         : near.block.chest ? { cls: 'jar', text: 'tap: open the chest · hold: grab it' }
+        : near.block.table && W.topOf(near.block) ? { cls: 'jar', text: `tap: take back ${W.cellName(W.topOf(near.block))} · hold: grab the ${objName(near.block)}` }
         : { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
       case 'grabbed': return { cls: 'jar', text: state.grab && state.grab.moved
         ? `pushing or pulling the ${objName(near.block)} · let go of E to let go`
@@ -235,6 +236,8 @@
       case 'unlock': return { box: doorBox(u.door.exit.cell, u.door.exit.facing) };
       case 'carve': return { box: doorBox(u.cell, u.facing) };
       case 'withdraw': return { box: blockBox(u.vessel) };
+      case 'place': return { box: blockBox(u.table) };
+      case 'placeno': return { box: blockBox(u.table), blocked: true };
       case 'catch': {
         const h = W.PIXIE ? W.PIXIE.height : 0.62;
         return { box: { x0: u.pixie.x - 0.06, x1: u.pixie.x + 0.06, y0: u.pixie.y - 0.06, y1: u.pixie.y + 0.06, z0: h - 0.06, z1: h + 0.06 } };
@@ -254,6 +257,7 @@
     if (!u) return null;
     if (u.action === 'unlock') return u.door;
     if (u.action === 'withdraw') return { action: 'lift', block: u.vessel };
+    if (u.action === 'place' || u.action === 'placeno') return { action: 'lift', block: u.table };
     if (u.action === 'catch') return { action: 'pixie', pixie: u.pixie };
     if (u.action === 'release') {
       const hg = u.slot && u.slot.kind === 'hourglass', from = hg ? state.run.equipment.hourglass : u.jar;

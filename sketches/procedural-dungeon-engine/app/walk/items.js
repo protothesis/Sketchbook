@@ -775,6 +775,12 @@
     const slot = selectedSlot();
     if (state.paused || state.carry) return null; // a block fills your hands
     if (!slot) return null;
+    if (slot.coll) { // a collectable: placed, not used. A table in front takes it (tables.js); else it goes down in front of you
+      const t = W.acceptorAt(p, 'collectable', slot.item, 'hand');
+      if (t && t.blocked) return { action: 'placeno', slot, table: t.table, why: t.blocked };
+      if (t) return { action: 'place', slot, table: t.table, t };
+      return { action: 'placefloor', slot };
+    }
     if (slot.kind === 'key') {
       const door = W.doorNear(p);
       return door && door.action === 'locked' ? { action: 'unlock', slot, door } : null;
@@ -817,6 +823,12 @@
       return;
     }
     if (u.slot && u.slot.kind !== 'duster') swipeAt = state.time; // the one swing, whatever's in hand (the duster's own act swings it)
+    if (u.slot && u.slot.coll) {
+      if (u.action === 'place') u.t.accept.take(u.t, 'collectable', u.slot.item, 'hand');
+      else if (u.action === 'placeno') { W.showCaption(u.why); shakeHotbar(); }
+      else dropHeld();
+      return;
+    }
     if (u.action === 'unlock') { W.unlockDoor(u.door); return; }
     if (ITEMS[u.slot.kind] && ITEMS[u.slot.kind].act) { // its own file says what F does
       swipeAt = state.time;
@@ -1363,11 +1375,14 @@ void main() {
       const base = sg.stage === 3 ? 5 + 1.5 * Math.max(0, sg.fx.full - 1) : 0;
       l.intensity = (base * (0.9 + 0.1 * Math.sin(state.time * 6 + i))) + spike;
     });
-    if (powered !== state.buff) {
-      const up = powered > state.buff;
-      state.buff = powered;
+    const tables = W.tableBuff ? W.tableBuff() : 0; // set end tables (tables.js)
+    if (powered + tables !== state.buff) {
+      const up = powered + tables > state.buff, byTable = tables !== (state.tableBuff || 0);
+      state.buff = powered + tables;
+      state.tableBuff = tables;
       if (state.buffReady) {
-        W.showCaption(up ? `the sigil blazes · entropy max ${maxCharges()}` : `a sigil dims · entropy max ${maxCharges()}`);
+        W.showCaption(byTable ? (up ? `the table is set · entropy max ${maxCharges()}` : `the table is no longer set · entropy max ${maxCharges()}`)
+          : up ? `the sigil blazes · entropy max ${maxCharges()}` : `a sigil dims · entropy max ${maxCharges()}`);
       }
       W.refreshHud();
     }
@@ -1377,6 +1392,6 @@ void main() {
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
     takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, restoreHand, stowHand, pressTool, pressItem, pressHands, releaseHands, tickHands, dropHeld, dropSpot, hold, cycle, itemSlot, slotIcon, slotLabel, shakeHotbar, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
-    useNear, useSelected, noteUnmade, stoneAhead,
+    useNear, useSelected, noteUnmade, stoneAhead, objectAhead, collStops,
     updateJars, addSigil, updateSigils });
 })(window);

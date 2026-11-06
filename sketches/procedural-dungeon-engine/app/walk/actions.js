@@ -226,6 +226,11 @@
       const blk = best.block;
       best.onTap = () => W.powerStone(blk, null);
     }
+    // A table with something on it: a tap takes the last one back, E held grabs it.
+    if (best && best.action === 'lift' && best.block.table && W.topOf(best.block)) {
+      const blk = best.block;
+      best.onTap = () => W.takeBack(blk);
+    }
     // A chest: a tap opens it, E held grabs it.
     if (best && best.action === 'lift' && best.block.chest) {
       const blk = best.block;

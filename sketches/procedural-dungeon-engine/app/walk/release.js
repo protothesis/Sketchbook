@@ -41,6 +41,7 @@
     {
       name: 'waystone',
       find(p, what) {
+        if (what !== 'pixie' && what !== 'entropy') return null;
         const st = W.stoneAhead(p);
         return st ? { stone: st, line: { cls: 'jar', text: `release ${holdsName(what)} into the waystone · it wakes` } } : null;
       },
@@ -49,6 +50,7 @@
     {
       name: 'vessel',
       find(p, what) {
+        if (what !== 'pixie' && what !== 'entropy') return null;
         const v = W.vesselAhead(p);
         if (!v || (v.n && (v.holds !== what || v.n >= RULES.vesselCapacity))) return null;
         return { vessel: v, line: { cls: 'jar', text: `release ${holdsName(what)} into the vessel (${v.n || 0}/${RULES.vesselCapacity})` } };
