@@ -176,7 +176,9 @@ entropy). No item-specific press.
    menu (Y on it) until the strips; Y with one just swings until step 5;
    dropped things sharing a quarter take seven set spots, no capacity
    yet. The Y marker over a target is still to do.)
-3. [ ] **The d-pad strips**, with bag rows and B to drop.
+3. [x] **The d-pad strips**, with bag rows and B to drop. (Let go takes
+   the thing in hand, not just onto the slot. ▶ for the tool slot waits
+   for a second tool. Keyboard: hold 3 / 4, 1 / 2, G; no bag rows.)
 4. [ ] **Release and accept:** jars and the hourglass fill and release;
    vessels, waystones, lost-path doors, locked doors and walls accept;
    entropy puddles your lamp soaks up.

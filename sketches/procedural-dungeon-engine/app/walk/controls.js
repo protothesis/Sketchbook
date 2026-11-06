@@ -24,7 +24,7 @@
     lt: { g: 'LT', act: 'run', alt: 'map: zoom out' },
     lb: { g: 'LB', act: 'item ‹', alt: 'menu: tab ‹' },
     ls: { g: 'LS', act: 'move', click: ['L3', 'crouch'] },
-    dpad: { g: '✚', act: 'move in menus', alt: 'choices: pick' },
+    dpad: { g: '✚', act: 'hold ◀ ▼: strips', alt: 'menus, choices: move' },
     rt: { g: 'RT', act: 'duster', alt: 'map: zoom in' },
     rb: { g: 'RB', act: 'item ›', alt: 'menu: tab ›' },
     y: { g: 'Y', act: 'item: out, then use', alt: 'grid: take in hand · map: recenter' },
@@ -116,6 +116,7 @@
 
   const PAD_NOTES = [
     ['menu', 'LB / RB switch tabs · d-pad or stick moves the cursor · A picks up and puts down, or opens a bag · Y takes it in hand · X drops one · B backs out'],
+    ['strips', 'hold ◀ items or ▼ collectables · right stick moves (down: a bag) · B drops one · let go to take it in hand'],
     ['map', 'left stick pans · LT / RT zoom · Y recenters on you'],
     ['chest', 'A takes or gives one · X the whole stack'],
   ];
@@ -126,7 +127,7 @@
 
   const U = 110, GAP = 6, KX = 20, KY = 110;
   const ROWS = [
-    [['Esc', 1, 'pause'], [null, 0.5], ['`', 1, 'dev', 'dim'], ['1', 1, 'item ‹'], ['2', 1, 'item ›'], ['3', 1], ['4', 1], ['5', 1]],
+    [['Esc', 1, 'pause'], [null, 0.5], ['`', 1, 'dev', 'dim'], ['1', 1, 'item ‹'], ['2', 1, 'item ›'], ['3', 1, 'items'], ['4', 1, 'coll.'], ['5', 1]],
     [['Tab', 1.5, 'map & bag'], ['Q', 1, 'duster'], ['W', 1, 'move'], ['E', 1, 'interact'], ['R', 1, 'lamp'], ['T', 1]],
     [['Caps', 1.75], ['A', 1, 'move'], ['S', 1, 'move'], ['D', 1, 'move'], ['F', 1, 'item'], ['G', 1, 'put away']],
     [['Shift', 2.25, 'run'], ['Z', 1], ['X', 1, 'drop', 'menu'], ['C', 1, 'crouch'], ['V', 1], ['B', 1]],

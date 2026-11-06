@@ -38,6 +38,12 @@
     if (k === 'e') {
       if (!e.repeat) W.pressE();
       e.preventDefault();
+    } else if (W.stripOpen() && (k === '1' || k === '2')) { // along an open strip (strips.js)
+      W.moveStrip(k === '1' ? -1 : 1);
+    } else if (W.stripOpen() && k === 'g') {
+      if (!e.repeat) W.dropFromStrip();
+    } else if (k === '3' || k === '4') { // held: a strip (the d-pad's ◀ / ▼)
+      if (!e.repeat && !W.stripOpen()) W.openStrip(k === '3' ? 'items' : 'coll');
     } else if (k === 'f') { // the item slot (Y on a pad): take it out, then use it
       if (!e.repeat) W.pressItem();
     } else if (k === 'g') { // put away what's in your hand; held, drop it (B on a pad)
@@ -65,8 +71,9 @@
     if (k === 'e') W.releaseE();
     if (k === ' ') W.releaseJump();
     if (k === 'g') W.releaseHands();
+    if (k === '3' || k === '4') W.closeStrip(true);
   });
-  global.addEventListener('blur', () => { keys.clear(); W.releaseE(true); W.releaseJump(); W.releaseHands(true); });
+  global.addEventListener('blur', () => { keys.clear(); W.releaseE(true); W.releaseJump(); W.releaseHands(true); W.closeStrip(false); });
 
   const promptEl = $('prompt');
   // Pressing the E prompt is E: held down, it fills a hold action's ring.

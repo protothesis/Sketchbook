@@ -268,6 +268,12 @@ All notable changes to this sketch are logged here, per
   - A dormant waystone wakes from your lamp with a tap of X (held: grab it),
     no longer with F; a full jar in hand still wakes it with Y.
   - The hourglass is an item-slot stop.
+  - **The d-pad strips** (`strips.js`): hold ◀ (items) or ▼ (collectables)
+    and a strip of what you carry opens top centre, on what the item slot
+    holds. The right stick or LB / RB moves along it; down and up move into
+    and out of a bag's row (the backpack under both, the purse under
+    collectables). Let go and the highlighted thing is in hand; B drops one
+    of it in front of you. The world doesn't pause. Keyboard: hold 3 / 4.
 - 2026-11-05: **Focus marker** (`hud.js`). The button for what X (E) would
   act on floats just over it, faint-ringed when it's a hold. It fades with
   reach (tracking the thing as it fades), gives way to the hold ring while

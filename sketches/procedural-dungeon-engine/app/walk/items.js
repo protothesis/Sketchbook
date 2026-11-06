@@ -1398,7 +1398,7 @@ void main() {
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, restoreHand, stowHand, pressTool, pressItem, pressHands, releaseHands, tickHands, dropHeld, hold, cycle, itemSlot, slotIcon, slotLabel, shakeHotbar, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, restoreHand, stowHand, pressTool, pressItem, pressHands, releaseHands, tickHands, dropHeld, dropSpot, hold, cycle, itemSlot, slotIcon, slotLabel, shakeHotbar, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });
