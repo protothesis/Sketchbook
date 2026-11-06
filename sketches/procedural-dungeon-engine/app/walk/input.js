@@ -3,7 +3,7 @@
   'use strict';
 
   const W = global.DungeonPlay.walk;
-  const { $, canvas, state, toggleCrouch, useSelected } = W;
+  const { $, canvas, state, toggleCrouch } = W;
 
   // ---------------------------------------------------------------------------
   // Input
@@ -38,12 +38,12 @@
     if (k === 'e') {
       if (!e.repeat) W.pressE();
       e.preventDefault();
-    } else if (k === 'f') {
-      if (!e.repeat) useSelected();
-    } else if (k === 'g') { // put away what's in your hand, or take it back out (B on a pad)
-      if (!e.repeat) W.toggleHands();
-    } else if (k === 'q') { // worn equipment (none right now: items.js equipSlot)
-      if (!e.repeat) W.useEquip();
+    } else if (k === 'f') { // the item slot (Y on a pad): take it out, then use it
+      if (!e.repeat) W.pressItem();
+    } else if (k === 'g') { // put away what's in your hand; held, drop it (B on a pad)
+      if (!e.repeat) W.pressHands();
+    } else if (k === 'q') { // the tool slot, the duster (RT on a pad): draw and swing
+      if (!e.repeat) W.pressTool();
     } else if (k === 'r') { // the lamp: cover it, or relight it
       if (!e.repeat) W.toggleLamp();
     } else if (k === '1' || k === '2') { // the carousel, under the left hand (LB / RB)
@@ -64,8 +64,9 @@
     keys.delete(k);
     if (k === 'e') W.releaseE();
     if (k === ' ') W.releaseJump();
+    if (k === 'g') W.releaseHands();
   });
-  global.addEventListener('blur', () => { keys.clear(); W.releaseE(true); W.releaseJump(); });
+  global.addEventListener('blur', () => { keys.clear(); W.releaseE(true); W.releaseJump(); W.releaseHands(true); });
 
   const promptEl = $('prompt');
   // Pressing the E prompt is E: held down, it fills a hold action's ring.
@@ -73,7 +74,7 @@
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) promptEl.addEventListener(ev, () => W.releaseE());
   promptEl.addEventListener('click', (e) => { promptEl.blur(); e.preventDefault(); });
   const promptF = $('prompt-f');
-  if (promptF) promptF.addEventListener('click', (e) => { useSelected(); promptF.blur(); e.preventDefault(); });
+  if (promptF) promptF.addEventListener('click', (e) => { W.pressItem(); promptF.blur(); e.preventDefault(); });
   canvas.addEventListener('wheel', (e) => {
     if (state.bigmap || state.paused) return;
     W.cycle(e.deltaY > 0 ? 1 : -1);
@@ -120,7 +121,7 @@
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) jumpBtn.addEventListener(ev, () => W.releaseJump());
   }
   const useBtn = $('use-btn');
-  if (useBtn) useBtn.addEventListener('click', (e) => { useSelected(); e.currentTarget.blur(); });
+  if (useBtn) useBtn.addEventListener('click', (e) => { W.pressItem(); e.currentTarget.blur(); });
 
   function readInput() {
     if (state.paused || state.bigmap || state.choice) return { x: 0, y: 0, mag: 0 };

@@ -390,6 +390,7 @@
       state.grab = null;
       showNotch(null);
       if (!cancel) liftBlock(g.block);
+      else W.restoreHand();
       return;
     }
     g.letGo = true; // it slows to a stop (grabInput), then maybe settles
@@ -498,6 +499,7 @@
     const b = state.grab.block;
     state.grab = null;
     showNotch(null);
+    W.restoreHand();
     if (b.to) {
       if (!b.ox && !b.oy && b.sx === b.to.sx && b.sy === b.to.sy) { if (!b.done) settle(b, true); }
       else if (b.done) unsettle(b);
@@ -781,6 +783,7 @@ float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
     if (spot.nudge) state.nudge = { block: b, fx: state.player.x, fy: state.player.y, tx: spot.nudge.x, ty: spot.nudge.y, t: 0 };
     if (b.to && spot.sx === b.to.sx && spot.sy === b.to.sy) settle(b, true);
     saveObject(b);
+    W.restoreHand(); // what you had out before you lifted it
     W.refreshHotbar();
     savePlayer();
   }

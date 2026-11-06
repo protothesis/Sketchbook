@@ -40,6 +40,7 @@
         : { cls: near.opt.lose ? 'lose' : 'collapse', text: `${near.opt.label} · ${near.opt.detail || ''}` };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
       case 'lift': return near.block.waystone && near.block.holds ? { cls: 'collapse', text: 'tap: travel from the waystone · hold: grab it' }
+        : near.block.waystone ? { cls: 'collapse', text: `tap: wake the waystone from your lamp · ${chargeText(RULES.waystoneCharges)} · hold: grab it` }
         : near.block.chest ? { cls: 'jar', text: 'tap: open the chest · hold: grab it' }
         : { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
       case 'grabbed': return { cls: 'jar', text: state.grab && state.grab.moved
@@ -81,7 +82,6 @@
     if (near.action === 'withdraw') return { cls: 'jar', text: `take ${near.vessel.holds === 'pixie' ? 'a pixie' : 'a charge'} out of the vessel into the jar` };
     if (near.action === 'vesselno') return { cls: 'blocked', text: near.vessel.n >= RULES.vesselCapacity ? 'the vessel is full' : 'the vessel holds something else' };
     if (near.action === 'pour') return { cls: 'collapse', text: `pour the jar into your lamp · 1 charge${W.lampRoom() < 0.99 ? ' (your lamp takes only ' + chargeText(W.lampRoom()) + ')' : ''}` };
-    if (near.action === 'powerlamp') return { cls: 'collapse', text: `wake the waystone from your lamp · ${chargeText(RULES.waystoneCharges)}` };
     if (near.action === 'power') return { cls: 'jar', text: `pour the jar into the waystone · its ${near.jar.holds === 'pixie' ? 'pixie' : 'entropy'} wakes it` };
     if (near.action === 'unlock') return { cls: 'lock', text: `unlock the door · 1 of ${state.run.keys} key${state.run.keys === 1 ? '' : 's'}` };
     return null;
@@ -131,7 +131,7 @@
       case 'snuff': return -RULES.sconceCost * shard;
       case 'reroll': return near.price ? near.price.charges : 0;
       case 'choose': return near.opt.cost || 0;
-      case 'powerlamp': return RULES.waystoneCharges;
+      case 'lift': return near.block.waystone && !near.block.holds ? RULES.waystoneCharges : 0;
       default: return 0;
     }
   }

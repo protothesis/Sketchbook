@@ -254,6 +254,20 @@ All notable changes to this sketch are logged here, per
   jars that catch and release with things that accept what's released,
   collectables placed with Y, and the X prompt floating over its target.
   Walk mode is now designed controller first; touch is legacy.
+- 2026-11-05: **Two slots, one hand** (step 2 of `HANDS-PLAN.md`;
+  `items.js`, `input.js`, `gamepad.js`, `controls.js`). The carousel is
+  replaced by a tool slot and an item slot.
+  - RT (Q) draws the duster and swings it in one press.
+  - Y (F) takes out the item slot's thing on the first press and uses it on
+    the next; every use swings, even at nothing. LB / RB step the item slot
+    through its category (items, or collectables).
+  - B (G): a tap puts away; held 0.45 s (a ring over the figure), it drops
+    one in front of you, on the floor or a block's top. Things dropped on a
+    block's top are picked up by standing on it.
+  - Setting a block down, or letting go of one, gives back what you had out.
+  - A dormant waystone wakes from your lamp with a tap of X (held: grab it),
+    no longer with F; a full jar in hand still wakes it with Y.
+  - The hourglass is an item-slot stop.
 - 2026-11-05: **Focus marker** (`hud.js`). The button for what X (E) would
   act on floats just over it, faint-ringed when it's a hold. It fades with
   reach (tracking the thing as it fades), gives way to the hold ring while

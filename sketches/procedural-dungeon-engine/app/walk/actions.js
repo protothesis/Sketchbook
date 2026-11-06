@@ -221,6 +221,11 @@
       const blk = best.block;
       best.onTap = () => W.travelFrom(W.stoneOf(blk));
     }
+    // A dormant waystone: a tap wakes it from your lamp, E held grabs it.
+    if (best && best.action === 'lift' && best.block.waystone && !best.block.holds) {
+      const blk = best.block;
+      best.onTap = () => W.powerStone(blk, null);
+    }
     // A chest: a tap opens it, E held grabs it.
     if (best && best.action === 'lift' && best.block.chest) {
       const blk = best.block;

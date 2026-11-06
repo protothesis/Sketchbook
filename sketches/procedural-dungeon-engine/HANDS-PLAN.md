@@ -166,10 +166,16 @@ entropy). No item-specific press.
    **Not wanted:** brackets or a box drawn round the target's bounds
    (tried first, 2026-11-05). If a highlight is ever needed beyond the
    flash, it's a trace of the object's own outline, not its box.
-2. [ ] **Hands:** RT draws and swings the duster; Y draws, then uses; tap
+2. [x] **Hands:** RT draws and swings the duster; Y draws, then uses; tap
    B puts away, hold B drops in front; your hand comes back after a block;
    the waystone on X; the generic Y swing; the two-slot HUD; LB / RB in
    the item slot's category; the hourglass becomes an item.
+   (Keyboard: Q the duster, F the item slot, G put away / hold to drop.
+   For now: the hourglass is an item-slot stop but still lives in the
+   equipment grid; a collectable reaches the item slot only from the
+   menu (Y on it) until the strips; Y with one just swings until step 5;
+   dropped things sharing a quarter take seven set spots, no capacity
+   yet. The Y marker over a target is still to do.)
 3. [ ] **The d-pad strips**, with bag rows and B to drop.
 4. [ ] **Release and accept:** jars and the hourglass fill and release;
    vessels, waystones, lost-path doors, locked doors and walls accept;

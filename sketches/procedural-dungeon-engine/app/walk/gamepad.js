@@ -5,10 +5,10 @@
 // LT held runs. The right stick peeks: it slides the view that
 // way, and it springs back when you let go (camera.js).
 //
-//   A  jump (Space; held for full height)       B  back out of anything; in the world, put away / take out the item in hand
-//   X  E (tap to act, hold to fill the ring)     Y  on the map, recenter (free in the world)
+//   A  jump (Space; held for full height)       B  back out of anything; in the world, G: put away what's in hand (held: drop it)
+//   X  E (tap to act, hold to fill the ring)     Y  F: the item slot (take it out, then use it); on the map, recenter
 //   L3  crouch (C)    R3  the lamp (R)
-//   LB / RB  the carousel: the item in hand, back / on   LT  run    RT  F (use the item in hand)
+//   LB / RB  the item slot: back / on in its category   LT  run    RT  Q: the duster (draw and swing)
 //   View  the menu (map, inventory)    Menu  pause (the title screen; Menu or B again resumes)
 //
 // In the menu (menu.js), LB / RB switch tabs and B closes it. On the map
@@ -36,8 +36,8 @@
 
   const B = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, menu: 9, l3: 10, r3: 11, up: 12, down: 13, left: 14, right: 15 };
   const GLYPH = {
-    xbox: { E: 'X', F: 'RT', Q: 'RT', R: 'R3', Space: 'A', C: 'L3', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT', bumpers: 'LB/RB' },
-    ps: { E: '□', F: 'R2', Q: 'R2', R: 'R3', Space: '✕', C: 'L3', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2', bumpers: 'L1/R1' },
+    xbox: { E: 'X', F: 'Y', Q: 'RT', G: 'B', R: 'R3', Space: 'A', C: 'L3', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT', bumpers: 'LB/RB' },
+    ps: { E: '□', F: '△', Q: 'R2', G: '○', R: 'R3', Space: '✕', C: 'L3', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2', bumpers: 'L1/R1' },
   };
 
   let pad = false;       // the last input was the pad: prompts show its glyphs
@@ -125,14 +125,14 @@
         }
         return;
       }
-      case B.b: if (busy) key('keydown', 'escape'); else W.toggleHands(); return;
+      case B.b: if (busy) key('keydown', 'escape'); else key('keydown', 'g'); return; // put away; held, drop
       case B.x: key('keydown', state.bigmap ? 'x' : 'e'); return;
-      case B.y:
+      case B.y: // the item slot (F); in a grid, take it in hand; on the map, recenter
         if (state.bigmap && state.bigmap.tab === 'map') { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; }
-        else if (state.bigmap) key('keydown', 'f');
+        else if (!state.paused && !state.choice) key('keydown', 'f');
         return;
       case B.l3: key('keydown', 'c'); return;
-      case B.rt: if (!state.bigmap) key('keydown', 'f'); return; // on the map it zooms (poll)
+      case B.rt: if (!busy) key('keydown', 'q'); return; // the duster; on the map it zooms (poll)
       case B.r3: key('keydown', 'r'); return;
       case B.lb: case B.rb:
         if (state.bigmap) key('keydown', i === B.rb ? '2' : '1'); // the menu's tabs
@@ -145,6 +145,7 @@
   }
   function release(i) {
     if (i === B.x) key('keyup', 'e');
+    if (i === B.b) key('keyup', 'g');
     if (i === B.a && aKey) { key('keyup', aKey); aKey = null; }
   }
 

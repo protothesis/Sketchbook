@@ -162,9 +162,9 @@
   /** Walking into a pickup or over a tool collects it, if there's room for it (inventory.js). */
   let fullAt = null; // the thing you were last told there's no room for
   function collectPickups(p) {
-    if (p.z > 0.05) return;
     for (const [k, it] of state.items) {
       if (ITEMS[it.item.kind].cls === 'object') continue;
+      if (Math.abs(p.z - (it.item.base || 0)) > 0.12) continue; // on the floor, or a block's top: stand where it rests
       const dx = p.x - (it.item.cell.x + 0.5), dy = p.y - (it.item.cell.y + 0.5);
       const d2 = dx * dx + dy * dy;
       if (it.fresh) { if (d2 > PLAYER.pickupRange * PLAYER.pickupRange * 2) it.fresh = false; continue; } // just dropped: step off it first
@@ -244,7 +244,7 @@
     for (const k in ITEMS) if (ITEMS[k].equip && ITEMS[k].slot) { const s = ITEMS[k].slot(state.run); if (s) return s; }
     return null;
   }
-  /** Q, RT, or a tap on its slot: use the worn equipment. */
+  /** Use the worn equipment (none right now). */
   function useEquip() {
     const slot = equipSlot();
     if (!slot || state.paused) return;
@@ -253,45 +253,200 @@
     savePlayer();
     W.refreshHud();
   }
-  /** The slot in your hand: state.sel's, or the first; null with empty hands (state.sel 'hands'). */
+
+  // ---------------------------------------------------------------------------
+  // Hands (HANDS-PLAN.md): two slots, one thing in hand at a time.
+  //   The tool slot, RT (Q): the duster. Its first press draws it and swings.
+  //   The item slot, Y (F): an item stack or the hourglass (state.itemSel),
+  //     or a collectable (state.handColl, with state.itemCat 'coll'). Its
+  //     first press draws it; the next uses it. LB / RB step through the
+  //     item slot's category.
+  //   B (G): a tap puts away what's in hand; held, it drops it in front of
+  //     you (dropHeld).
+  // state.sel is what's in hand ('hands' for nothing). Lifting or grabbing a
+  // block empties your hands and remembers what you had out (putAway);
+  // setting it down gives it back (restoreHand).
+  const TOOL = 'duster';
+  /** The item slot's choices in the items category: every stop but the tool, and not a collectable. */
+  const itemStops = () => slots().filter((s) => s.kind !== TOOL && !s.coll);
+  /** Every collectable you carry, as { grid, i } (the collectables grid, the purse, the backpack's). */
+  function collStops(run) {
+    const out = [];
+    const add = (grid, a) => { if (a) a.forEach((c, i) => { if (c && !W.isTool(c)) out.push({ grid, i }); }); };
+    add('coll', W.inv(run).coll);
+    add('purse', W.purseCells(run));
+    W.layoutItems(run).forEach((x, i) => { if (x && !W.isTool(x)) out.push({ grid: 'items', i }); });
+    return out;
+  }
+  /** What the item slot holds now (in hand or not), or null. */
+  function itemSlotNow() {
+    if (state.itemCat === 'coll') {
+      const s = handCell() && slots().find((x) => x.key === 'hand-coll');
+      if (s) return s;
+      state.itemCat = 'items';
+    }
+    const s = itemStops();
+    return s.find((x) => x.key === state.itemSel) || s[0] || null;
+  }
+  /** The slot in your hand, or null with empty hands (state.sel 'hands'). */
   function selectedSlot() {
     if (state.sel === 'hands') return null;
-    const s = slots();
-    return s.find((x) => x.key === state.sel) || s[0] || null;
+    const s = slots().find((x) => x.key === state.sel);
+    if (!s) { state.sel = 'hands'; return null; } // used up, or dropped
+    if (s.kind !== TOOL) {
+      if (s.coll) state.itemCat = 'coll';
+      else { state.itemCat = 'items'; state.itemSel = s.key; }
+    }
+    return s;
   }
-  /** Empty your hands (lifting or grabbing a block, restore.js). */
+  const handsFull = () => {
+    if (!state.carry && !state.grab) return false;
+    W.showCaption(`your hands are full · ${W.glyph('E')} to set it down`);
+    shakeHotbar();
+    return true;
+  };
+  /** RT / Q: the duster. Drawn if it isn't, and swung, in the one press. */
+  function pressTool() {
+    if (state.paused || handsFull()) return;
+    const t = slots().find((s) => s.kind === TOOL);
+    if (!t) { shakeHotbar(); return; }
+    if (state.sel !== t.key) { state.sel = t.key; state.handBefore = null; refreshHotbar(); }
+    useSelected();
+  }
+  /** Y / F: the item slot. The first press takes it in hand; the next uses it. */
+  function pressItem() {
+    if (state.paused || handsFull()) return;
+    const s = itemSlotNow();
+    if (!s) { W.showCaption('nothing in your pack to take out'); shakeHotbar(); return; }
+    if (state.sel !== s.key) { hold(s.key); return; }
+    useSelected();
+  }
+  /** A block fills both hands: what you had out goes away, and comes back when you set it down. */
   function putAway() {
     if (state.sel === 'hands') return;
+    state.handBefore = state.sel;
     state.sel = 'hands';
-    state.handColl = null;
     refreshHotbar();
   }
-  /** B: put away what's in your hand, or take out the last thing you held (else the first stop). */
-  function toggleHands() {
+  /** The block is down (set down, or let go of): your hand comes back. */
+  function restoreHand() {
+    const k = state.handBefore;
+    state.handBefore = null;
+    if (!k || state.carry || state.grab || state.sel !== 'hands') return;
+    if (slots().some((s) => s.key === k)) { state.sel = k; refreshHotbar(); }
+  }
+  /** B tapped: put away what's in your hand. */
+  function stowHand() {
     if (state.carry) { shakeHotbar(); return; } // set the block down first
-    if (selectedSlot()) { putAway(); return; }
-    const s = slots();
-    if (!s.length) { shakeHotbar(); return; }
-    state.sel = (s.find((x) => x.key === state.lastSel) || s[0]).key;
+    state.handBefore = null;
+    if (state.sel === 'hands') return;
+    state.sel = 'hands';
     refreshHotbar();
   }
-  /** Take this slot in hand (the menu). False if your hands are full of a block. */
+  /** Take this slot in hand (the item slot's press, the menu). False if your hands are full of a block. */
   function hold(key) {
     if (state.carry) { shakeHotbar(); return false; } // set the block down first
-    if (key !== 'hand-coll') state.handColl = null;
     state.sel = key;
+    state.handBefore = null;
+    if (key === 'hand-coll') state.itemCat = 'coll';
+    else if (key !== TOOL) { state.itemCat = 'items'; state.itemSel = key; }
     refreshHotbar();
     return true;
   }
-  /** LB / RB, 1 / 2, the wheel: the carousel one stop along (empty hands is a stop). */
+  /** LB / RB, 1 / 2, the wheel: the item slot one along its category. If it's in your hand, the new one is. */
   function cycle(dir) {
     if (state.carry) { shakeHotbar(); return; } // set the block down first
-    const stops = ['hands'].concat(slots().map((x) => x.key));
-    const cur = selectedSlot();
-    const i = cur ? stops.indexOf(cur.key) : 0;
-    const next = stops[((i + dir) % stops.length + stops.length) % stops.length];
-    if (cur && cur.key === 'hand-coll' && next !== 'hand-coll') state.handColl = null; // it goes back to its cell
-    state.sel = next;
+    const inHand = state.sel !== 'hands' && state.sel !== TOOL;
+    const step = (n, i) => ((i + dir) % n + n) % n;
+    if (state.itemCat === 'coll') {
+      const cs = collStops(state.run), h = state.handColl;
+      if (!cs.length) { shakeHotbar(); return; }
+      const i = h ? cs.findIndex((c) => c.grid === h.grid && c.i === h.i) : -1;
+      state.handColl = cs[i < 0 ? 0 : step(cs.length, i)];
+      if (inHand) state.sel = 'hand-coll';
+    } else {
+      const s = itemStops();
+      if (!s.length) { shakeHotbar(); return; }
+      const cur = itemSlotNow(), i = cur ? s.findIndex((x) => x.key === cur.key) : -1;
+      const next = s[i < 0 ? 0 : step(s.length, i)];
+      state.itemSel = next.key;
+      if (inHand) state.sel = next.key;
+    }
+    refreshHotbar();
+  }
+
+  // --- B held: drop what's in your hand where a carried block would go:
+  // the quarter in front of you (the floor, or the top of the block in
+  // front), else at your feet. Things in one quarter sit apart (DROP_LAY).
+  const DROP_HOLD = 0.45; // s
+  const DROP_SHOW = 0.12; // s before the ring shows (a tap is just a tap)
+  const DROP_LAY = [[0, 0], [0.11, 0.07], [-0.1, 0.09], [0.07, -0.11], [-0.09, -0.08], [0.13, -0.02], [-0.02, 0.13]]; // cells, from the quarter's middle
+  let handsDown = null; // B held: { t, done }
+  function pressHands() { if (!state.paused) handsDown = { t: state.time, done: false }; }
+  function releaseHands(cancel) {
+    const h = handsDown;
+    handsDown = null;
+    dropRing.hidden = true;
+    if (!h || h.done || cancel) return;
+    stowHand();
+  }
+  function tickHands() {
+    const h = handsDown;
+    const slot = h && !h.done && !state.carry && !state.paused && selectedSlot();
+    if (!slot) { dropRing.hidden = true; return; }
+    const held = state.time - h.t;
+    if (held >= DROP_HOLD) { h.done = true; dropRing.hidden = true; dropHeld(); return; }
+    if (held < DROP_SHOW) return;
+    const v = (held - DROP_SHOW) / (DROP_HOLD - DROP_SHOW), p = state.player;
+    const at = new THREE.Vector3(p.x * S, (p.z + 1.05) * S, p.y * S).project(W.camera);
+    const r = W.canvas.getBoundingClientRect();
+    dropRing.hidden = at.z > 1;
+    dropRing.style.left = (r.left + (at.x + 1) / 2 * r.width).toFixed(1) + 'px';
+    dropRing.style.top = (r.top + (1 - at.y) / 2 * r.height).toFixed(1) + 'px';
+    dropFg.setAttribute('stroke-dashoffset', (DROP_C * (1 - v)).toFixed(2));
+  }
+  const DROP_C = 2 * Math.PI * 15;
+  const dropRing = el('div', 'holdring dropring');
+  dropRing.innerHTML = `<svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/>` +
+    `<circle class="fg" cx="18" cy="18" r="15" stroke-dasharray="${DROP_C}" stroke-dashoffset="${DROP_C}"/></svg><span>⤓</span>`;
+  dropRing.hidden = true;
+  document.body.append(dropRing);
+  const dropFg = dropRing.querySelector('.fg');
+
+  /** Where something dropped from your hand lands: { x, y, base }. */
+  function dropSpot(p) {
+    const q = quarterAhead(p, () => true);
+    if (!q) {
+      const base = quarterSurface(Math.floor(p.x * 2), Math.floor(p.y * 2));
+      return { x: p.x, y: p.y, base: base == null ? Math.max(0, p.z) : base };
+    }
+    const n = (state.run.dropped || []).filter((d) => Math.floor(d.x * 2) === q.sx && Math.floor(d.y * 2) === q.sy).length;
+    const [ox, oy] = DROP_LAY[n % DROP_LAY.length];
+    return { x: (q.sx + 0.5) / 2 + ox, y: (q.sy + 0.5) / 2 + oy, base: q.base };
+  }
+  /** Drop one of what's in your hand. The duster and the hourglass stay with you. */
+  function dropHeld() {
+    const run = state.run, slot = selectedSlot();
+    if (!slot) return;
+    if (slot.kind === TOOL || slot.kind === 'hourglass') {
+      W.showCaption(`your ${slotLabel(slot).split(' · ')[0]} stays with you`);
+      shakeHotbar();
+      return;
+    }
+    let out = null;
+    if (slot.coll) {
+      const h = state.handColl;
+      out = h && W.takeOut(run, h.grid, h.i, true);
+    } else {
+      const i = W.layoutItems(run).lastIndexOf(slot.key);
+      out = i >= 0 && W.takeOut(run, 'items', i, true);
+    }
+    if (!out) return;
+    if (!W.dropCell(out, dropSpot(state.player))) { W.receive(run, out, { force: true }); W.showCaption('nowhere to drop it here'); return; }
+    W.showCaption('you set down ' + W.cellName(out));
+    selectedSlot(); // the last one gone: empty hands
+    savePlayer();
+    W.refreshHud();
     refreshHotbar();
   }
 
@@ -370,52 +525,31 @@
   }
 
   /**
-   * The carousel, where the hotbar was: what's in your hand, big, with the
-   * stop before and after it to either side (LB / RB, 1 / 2, the wheel, or
-   * a tap on them). A tap on the middle opens your inventory.
+   * The two slots (HANDS-PLAN.md), where the carousel was: the tool slot
+   * (RT) and the item slot (Y), the one in your hand lit, with what's in
+   * your hand named under them. A tap on one is its button.
    */
   function refreshHotbar() {
     const bar = $('hotbar');
     if (!bar) return;
-    const s = slots();
     const cur = selectedSlot();
     if (cur) state.sel = state.lastSel = cur.key;
     bar.innerHTML = '';
     bar.hidden = false;
     updateHeld(cur);
-    const stops = [null].concat(s), i = cur ? stops.findIndex((x) => x && x.key === cur.key) : 0;
-    const at = (d) => stops[((i + d) % stops.length + stops.length) % stops.length];
     const g = (k) => (W.glyph ? W.glyph(k) : k);
-    const pad = W.padMode && W.padMode();
-    const side = (d) => {
-      const b = el('button', 'slot side ' + (d < 0 ? 'prev' : 'next'));
+    const tool = slots().find((s) => s.kind === TOOL) || null, item = itemSlotNow();
+    const slotBtn = (s, k, cls, press, none) => {
+      const b = el('button', `slot ${cls} ${s ? s.kind : 'none'}${s && s.coll ? ' coll' : ''}${s && cur && cur.key === s.key ? ' on' : ''}`);
       b.type = 'button';
-      b.append(el('span', 'n', d < 0 ? (pad ? g('bumpers').split('/')[0] : '1') : (pad ? g('bumpers').split('/')[1] : '2')));
-      if (stops.length > 1) {
-        const slot = at(d);
-        b.append(slot ? slotIcon(slot) : el('span', 'ic hands', '✋'));
-        b.title = slotLabel(slot);
-      }
-      b.disabled = stops.length < 2;
-      b.addEventListener('click', (e) => { e.preventDefault(); cycle(d); b.blur(); });
+      b.append(el('span', 'n', g(k)));
+      b.append(s ? slotIcon(s) : el('span', 'ic hands', '·'));
+      b.title = s ? slotTitle(s) : none;
+      b.addEventListener('click', (e) => { e.preventDefault(); b.blur(); press(); });
       return b;
     };
-    const mid = el('button', 'slot on mid ' + (cur ? cur.kind : 'hands'));
-    mid.type = 'button';
-    mid.append(cur ? slotIcon(cur) : el('span', 'ic hands', '✋'));
-    mid.title = (cur ? slotTitle(cur) : 'empty hands') + ` · tap for your inventory (${g('Tab')})`;
-    mid.addEventListener('click', (e) => { e.preventDefault(); mid.blur(); if (W.openMenu) W.openMenu('inv'); });
-    bar.append(side(-1), mid, side(1), el('span', 'carousel-label', slotLabel(cur)));
-    const eq = equipSlot();
-    if (eq) { // worn equipment: its own slot, its own key (none right now)
-      const b = el('button', 'slot equip ' + eq.kind);
-      b.type = 'button';
-      b.append(el('span', 'n', g('Q')));
-      b.title = ITEMS[eq.kind].title(eq);
-      b.append(ITEMS[eq.kind].icon(eq));
-      b.addEventListener('click', (e) => { e.preventDefault(); useEquip(); b.blur(); });
-      bar.prepend(b);
-    }
+    bar.append(slotBtn(tool, 'Q', 'tool', pressTool, 'no tool'), slotBtn(item, 'F', 'item', pressItem, 'nothing to take out'),
+      el('span', 'carousel-label', slotLabel(cur)));
   }
 
 
@@ -642,11 +776,11 @@
     if (state.paused || state.carry) return null; // a block fills your hands
     // An unpowered waystone right in front of you comes first: a full jar in
     // hand (its entropy or its pixie) wakes it, or else your lamp's flame (a charge).
-    const st = stoneAhead(p);
-    if (st) {
-      const jar = slot && slot.kind === 'jar' && heldJar();
-      return jar && jar.holds ? { action: 'power', slot, jar, stone: st } : { action: 'powerlamp', slot, stone: st };
-    }
+    // A dormant waystone right in front of you takes a full jar's entropy or
+    // pixie, and wakes. (From your lamp, it's X: actions.js.)
+    const st = slot && slot.kind === 'jar' && stoneAhead(p);
+    const sj = st && heldJar();
+    if (sj && sj.holds) return { action: 'power', slot, jar: sj, stone: st };
     if (!slot) return null;
     if (slot.kind === 'key') {
       const door = W.doorNear(p);
@@ -688,10 +822,14 @@
 
   function useSelected() {
     const run = state.run;
+    if (state.carry) { W.showCaption('your hands are full · E to set it down'); shakeHotbar(); return; }
     const u = useNear(state.player);
-    if (!u && state.carry) W.showCaption('your hands are full · E to set it down');
-    if (!u) { shakeHotbar(); return; } // "that didn't work"
-    if (u.action === 'powerlamp') { W.powerStone(u.stone, null); return; }
+    if (!u) { // nothing there for it: it still swings (every press does something)
+      if (selectedSlot()) swipeAt = state.time;
+      else shakeHotbar();
+      return;
+    }
+    if (u.slot && u.slot.kind !== 'duster') swipeAt = state.time; // the one swing, whatever's in hand (the duster's own act swings it)
     if (u.action === 'power') {
       swipeAt = state.time;
       W.powerStone(u.stone, u.jar);
@@ -1260,7 +1398,7 @@ void main() {
   }
 
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
-    takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, toggleHands, hold, cycle, itemSlot, slotIcon, slotLabel, shakeHotbar, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, refreshHotbar, addMarkToWorld,
+    takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, restoreHand, stowHand, pressTool, pressItem, pressHands, releaseHands, tickHands, dropHeld, hold, cycle, itemSlot, slotIcon, slotLabel, shakeHotbar, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
     useNear, useSelected, noteUnmade,
     updateJars, addSigil, updateSigils });

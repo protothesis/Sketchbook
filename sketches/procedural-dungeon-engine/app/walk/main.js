@@ -100,6 +100,7 @@
     const idle = state.paused;
     const nearE = idle ? null : actionNear(p);
     W.tickHold(nearE, dt);
+    W.tickHands();
 
     // Figure
     p.phase += moving ? dt * 11 * (inp.run ? 1.4 : 1) : 0;

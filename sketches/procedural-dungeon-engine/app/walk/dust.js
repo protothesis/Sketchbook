@@ -835,7 +835,7 @@ void main() {
     cls: 'equipment',
     mesh: makeDuster,
     slot: () => ({ key: 'duster', kind: 'duster', sig: 'duster', item: { kind: 'duster' } }),
-    title: () => 'feather duster: F swipes it · dust comes off a layer a swipe, and now and then a chit of entropy with it',
+    title: () => 'feather duster: RT (Q) draws it and swipes it · dust comes off a layer a swipe, and now and then a chit of entropy with it',
     icon() {
       const ic = el('span', 'ic');
       ic.innerHTML = DUSTER_SVG;
