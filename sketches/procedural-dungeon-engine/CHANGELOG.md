@@ -254,17 +254,15 @@ All notable changes to this sketch are logged here, per
   jars that catch and release with things that accept what's released,
   collectables placed with Y, and the X prompt floating over its target.
   Walk mode is now designed controller first; touch is legacy.
-- 2026-11-05: **Focus marker** (`hud.js`). Whatever X (E) would act on is
-  framed in the world by brackets at its corners, with the button floating
-  over it, faint-ringed when it's a hold. It fades with reach, gives way to
-  the hold ring while you hold, and turns muted where the action can't be
-  done. Only ever the one focused thing.
-
-### Changed
-
-- 2026-11-05: Sconces are easier to reach: E lights or snuffs one from
-  0.95 cells (was 0.65) and up to about 80° off facing it (was 72°), and its
-  focus box is bigger.
+- 2026-11-05: **Focus marker** (`hud.js`). The button for what X (E) would
+  act on floats just over it, faint-ringed when it's a hold. It fades with
+  reach (tracking the thing as it fades), gives way to the hold ring while
+  you hold, and turns muted where the action can't be done. As something
+  comes into reach it **flashes** once in a chunky warm dither that fades
+  in 0.45 s. Only ever the one focused thing.
+- 2026-11-05: Sconces work from right under them: within 0.45 cells, any
+  facing but turned away counts (it hangs on the wall over your head, so
+  it's nearly beside you). Its focus box is a little bigger.
 - 2026-11-05: **No more backward compatibility for old records.** The
   params that only kept old records replaying as they were (`starter`,
   `doorsteps`, the mood-region params) are gone, with the old code paths

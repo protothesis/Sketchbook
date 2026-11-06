@@ -101,7 +101,7 @@
     btn.className = 'prompt ' + (key === 'F' ? 'f ' : '') + (line.cls || '');
   }
 
-  function updatePrompt(nearE, nearF) {
+  function updatePrompt(nearE, nearF, dt = 0) {
     // E has no prompt on a keyboard (fewer callouts; the hold ring is its
     // feedback), except where holding it loses something: a lost path's
     // door, or a reroll that takes what's yours. On touch the E line stays:
@@ -116,6 +116,7 @@
     W.updatePreview(nearE);
     updateRing(state.hold.ring);
     updateMarker(nearE, nearE && eLine(nearE));
+    updateFlash(nearE, dt);
     W.updateChoice(focusRect);
     // What it costs, on the lamp's meter: E's action, else F's.
     const ce = nearE && costOf(nearE), cf = !ce && nearF && costOf(nearF);
@@ -163,84 +164,129 @@
     ringEl.style.top = focusRect.y0 + 'px';
   }
 
-  // Where the focused thing is on screen (its box, projected each frame):
-  // the hold ring sits just above it, and the focus marker frames it.
+  // Where the focused thing is on screen (its box, projected each frame,
+  // after the camera has moved): the hold ring sits just above it.
   let focusRect = null;
-  const focusPts = []; // the box's 8 corners on screen, by bit: 1 x, 2 z, 4 y
   const corner = new THREE.Vector3();
-  const THIN = 0.16; // cells: a side thinner than this is framed as flat (a door in its wall)
-  /** Corner i of box b on screen ([x, y]), or null behind the camera. */
-  function onScreen(b, i, rect) {
-    corner.set((i & 1 ? b.x1 : b.x0) * S, (i & 2 ? b.z1 : b.z0) * S, (i & 4 ? b.y1 : b.y0) * S).project(W.camera);
-    return corner.z > 1 ? null : [rect.left + (corner.x + 1) / 2 * rect.width, rect.top + (1 - corner.y) / 2 * rect.height];
-  }
-  const flat = (a0, a1) => (a1 - a0 < THIN ? [(a0 + a1) / 2, (a0 + a1) / 2] : [a0, a1]);
-  function updateFocus(near) {
-    focusRect = null;
-    const b = near && near.box;
-    if (!b) return;
+  /** Box b's bounds on screen, or null if any corner is behind the camera. */
+  function boxRect(b) {
     const rect = W.canvas.getBoundingClientRect();
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (let i = 0; i < 8; i++) {
-      const pt = onScreen(b, i, rect);
-      if (!pt) return; // behind the camera
-      x0 = Math.min(x0, pt[0]); y0 = Math.min(y0, pt[1]); x1 = Math.max(x1, pt[0]); y1 = Math.max(y1, pt[1]);
+      corner.set((i & 1 ? b.x1 : b.x0) * S, (i & 2 ? b.z1 : b.z0) * S, (i & 4 ? b.y1 : b.y0) * S).project(W.camera);
+      if (corner.z > 1) return null;
+      const sx = rect.left + (corner.x + 1) / 2 * rect.width, sy = rect.top + (1 - corner.y) / 2 * rect.height;
+      x0 = Math.min(x0, sx); y0 = Math.min(y0, sy); x1 = Math.max(x1, sx); y1 = Math.max(y1, sy);
     }
-    focusRect = { x0, y0: y0 - 6, x1, y1 };
-    const [fx0, fx1] = flat(b.x0, b.x1), [fy0, fy1] = flat(b.y0, b.y1), [fz0, fz1] = flat(b.z0, b.z1);
-    const fb = { x0: fx0, x1: fx1, y0: fy0, y1: fy1, z0: fz0, z1: fz1 };
-    for (let i = 0; i < 8; i++) focusPts[i] = onScreen(fb, i, rect);
+    return { x0, y0: y0 - 6, x1, y1 };
+  }
+  /** The point just over the middle of box b's top, on screen ([x, y]), or null. */
+  function overTop(b) {
+    const rect = W.canvas.getBoundingClientRect();
+    corner.set((b.x0 + b.x1) / 2 * S, (b.z1 + 0.06) * S, (b.y0 + b.y1) / 2 * S).project(W.camera);
+    return corner.z > 1 ? null : [rect.left + (corner.x + 1) / 2 * rect.width, rect.top + (1 - corner.y) / 2 * rect.height];
+  }
+  function updateFocus(near) {
+    W.camera.updateMatrixWorld(); // this frame's camera, not the last render's
+    const b = near && near.box;
+    focusRect = b ? boxRect(b) : null;
   }
 
-  // The focus marker (HANDS-PLAN.md): what X / E would act on, framed in
-  // the world by brackets at its box's corners, with the button over it.
-  // Only ever the one focused thing; it fades out when nothing is in reach
-  // (keeping its last place, so it doesn't jump while fading). The badge
-  // wears a faint ring when the action is a hold, and gives way to the
-  // hold ring while you hold.
-  const SVGNS = 'http://www.w3.org/2000/svg';
-  const markEl = document.createElementNS(SVGNS, 'svg');
-  markEl.setAttribute('class', 'focusmark');
-  const markShade = document.createElementNS(SVGNS, 'path'), markLine = document.createElementNS(SVGNS, 'path');
-  markShade.setAttribute('class', 'shade');
-  markLine.setAttribute('class', 'line');
-  markEl.append(markShade, markLine);
+  // The focus marker (HANDS-PLAN.md): the button for what X / E would act
+  // on, floating just over it. Only ever the one focused thing. It fades out
+  // when nothing is in reach, still tracking where that thing is on screen
+  // as the camera moves. It wears a faint ring when the action is a hold,
+  // and gives way to the hold ring while you hold. (Brackets round the
+  // target's box were tried on 2026-11-05 and dropped: not the look.)
   const badgeEl = el('div', 'focusbadge');
   const badgeKey = el('kbd', '', '');
   badgeEl.append(badgeKey);
-  document.body.append(markEl, badgeEl);
-  const BRACKET = 0.28; // of each edge, from each corner
-  let markSig = '';
+  document.body.append(badgeEl);
+  let markBox = null; // the last focused thing's box: the badge keeps to it while it fades
+  let markOff = 0;    // state.time it went out of reach
+  const MARK_FADE = 0.25; // s, a little over the CSS fade
   function updateMarker(near, line) {
-    const on = !!(near && focusRect && !state.choice);
-    markEl.classList.toggle('on', on);
     const ring = state.hold.ring, ringOn = !!(ring && ring.v > 0.02 && !ring.idle);
     const glyph = touch() ? '' : W.glyph('E');
-    const badgeOn = on && !!glyph && !ringOn && near.action !== 'grabbed';
-    badgeEl.classList.toggle('on', badgeOn);
-    if (!on) return;
-    const blocked = !!(line && line.cls === 'blocked') || near.action === 'locked';
-    markEl.classList.toggle('blocked', blocked);
-    badgeEl.classList.toggle('blocked', blocked);
-    badgeEl.classList.toggle('hold', !blocked && !!W.holdTime(near) && !near.refuse);
-    if (badgeKey.textContent !== glyph) badgeKey.textContent = glyph;
-    let d = '';
-    for (let i = 0; i < 8; i++) {
-      const [ax, ay] = focusPts[i];
-      for (const bit of [1, 2, 4]) {
-        const [bx, by] = focusPts[i ^ bit];
-        const ex = (bx - ax) * BRACKET, ey = (by - ay) * BRACKET;
-        if (ex * ex + ey * ey < 1) continue; // a flat box (a chalk mark): no edge that way
-        d += `M${ax.toFixed(1)} ${ay.toFixed(1)}l${ex.toFixed(1)} ${ey.toFixed(1)}`;
+    const on = !!(near && near.box && !state.choice && glyph && !ringOn && near.action !== 'grabbed');
+    badgeEl.classList.toggle('on', on);
+    if (on) {
+      markBox = near.box;
+      const blocked = !!(line && line.cls === 'blocked') || near.action === 'locked';
+      badgeEl.classList.toggle('blocked', blocked);
+      badgeEl.classList.toggle('hold', !blocked && !!W.holdTime(near) && !near.refuse);
+      if (badgeKey.textContent !== glyph) badgeKey.textContent = glyph;
+    } else if (markBox && !markOff) markOff = state.time;
+    if (on) markOff = 0;
+    if (markBox && markOff && state.time - markOff > MARK_FADE) markBox = null;
+    const pt = markBox && overTop(markBox);
+    if (!pt) return;
+    badgeEl.style.left = pt[0].toFixed(1) + 'px';
+    badgeEl.style.top = pt[1].toFixed(1) + 'px';
+  }
+
+  // The focus flash: when something comes into reach, the thing itself
+  // flashes once in a chunky warm dither (like the figure's flash, laid over
+  // its own surfaces) and fades fast, so you see which thing the button is
+  // for. A copy of each of its meshes rides along as a child, drawn on top.
+  const FLASH = { peak: 0.8, dur: 0.45, color: 0xffc27a };
+  const flashMat = new THREE.MeshBasicMaterial({
+    color: FLASH.color, transparent: true, opacity: 0, depthWrite: false, depthFunc: THREE.LessEqualDepth,
+    blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4,
+  });
+  flashMat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>',
+      '#include <clipping_planes_fragment>\nif (mod(floor(gl_FragCoord.x / 2.0) + floor(gl_FragCoord.y / 2.0), 2.0) < 0.5) discard;');
+  };
+  flashMat.customProgramCacheKey = () => 'focus-flash';
+  let flashOf = null, flashCopies = [], flashT = 0;
+  /** The thing in the world the focused action is about (an Object3D), or null. */
+  function objectOf(near) {
+    switch (near.action) {
+      case 'lift': return near.block.mesh || null;
+      case 'light': case 'snuff': return near.sconce.flame.parent;
+      case 'save': return near.lantern.group || null;
+      case 'erase': return near.mark.mesh || null;
+      case 'grabbed': case 'setblock': case 'choose': return null;
+    }
+    if (!near.exit) return null;
+    const d = state.doors.get(near.space.id + '/' + near.exit.id);
+    if (d) return d.panel;
+    // Built from the room on the other side: the door whose panel is here.
+    const b = near.box, mx = (b.x0 + b.x1) / 2 * S, my = (b.y0 + b.y1) / 2 * S, v = new THREE.Vector3();
+    for (const o of state.doors.values()) {
+      o.panel.getWorldPosition(v);
+      if (Math.hypot(v.x - mx, v.z - my) < 0.3 * S) return o.panel;
+    }
+    return null;
+  }
+  function clearFlash() {
+    for (const c of flashCopies) if (c.parent) c.parent.remove(c);
+    flashCopies = [];
+  }
+  function updateFlash(near, dt) {
+    const obj = near && !state.choice ? objectOf(near) : null;
+    if (obj !== flashOf) {
+      flashOf = obj;
+      clearFlash();
+      if (obj) {
+        const meshes = [];
+        obj.traverse((m) => { if (m.isMesh && !m.isInstancedMesh && m.visible && m.material !== flashMat) meshes.push(m); });
+        for (const m of meshes) {
+          const c = new THREE.Mesh(m.geometry, flashMat);
+          c.renderOrder = 12;
+          c.raycast = () => {};
+          m.add(c);
+          flashCopies.push(c);
+        }
+        flashT = 0;
       }
     }
-    if (d !== markSig) {
-      markSig = d;
-      markShade.setAttribute('d', d);
-      markLine.setAttribute('d', d);
-    }
-    badgeEl.style.left = ((focusRect.x0 + focusRect.x1) / 2).toFixed(1) + 'px';
-    badgeEl.style.top = focusRect.y0.toFixed(1) + 'px';
+    if (!flashCopies.length) return;
+    flashT += dt;
+    const k = Math.min(1, flashT / FLASH.dur);
+    flashMat.opacity = FLASH.peak * (1 - k) * (1 - k);
+    if (k >= 1) clearFlash();
   }
 
   let captionTimer = null;
@@ -907,7 +953,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 
-  Object.assign(W, { updatePrompt, showCaption, stanceEl, refreshHud, notice,
+  Object.assign(W, { updatePrompt, FOCUS_FLASH: FLASH, showCaption, stanceEl, refreshHud, notice,
     REFRESH_HINT, drawMinimap, openBigMap, closeBigMap, menuTab, drawBigMap, zoomBigMap, showRecord,
     hideRecord, openDialog, closeDialog });
 })(window);

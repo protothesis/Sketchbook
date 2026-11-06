@@ -133,8 +133,9 @@ The carousel becomes two slot icons, the tool slot (RT) and the item slot
 ## The prompt over the target
 
 X already acts on one focused target (the one you're most squarely
-facing). Show it: outline it, and float the button glyph **over the target
-itself**, fading in and out with range. Only ever that one target, so the
+facing). Show it: float the button glyph **over the target itself**,
+fading in and out with range, and flash the target once in a dither as it
+comes into reach. (No bounding-box frames: see the build order.) Only ever that one target, so the
 room never lights up. The same marker shows Y when what's in hand would
 do something there (a key at a locked door). Applies to sconces,
 waystones, save lanterns, doors, chests, vessels and blocks. (We removed
@@ -159,9 +160,12 @@ entropy). No item-specific press.
 ## Build order
 
 1. [x] **The prompt over the target**, and sconce reach and facing.
-   (Brackets at the corners of the target's box, not a silhouette; sconce
-   reach 0.65 → 0.95 cells, facing ±72° → ±80°. The Y marker for the
-   item in hand comes with step 2.)
+   (The button floats over the target, and the target flashes once in a
+   warm dither as it comes into reach. Sconces work from right under
+   them. The Y marker for the item in hand comes with step 2.)
+   **Not wanted:** brackets or a box drawn round the target's bounds
+   (tried first, 2026-11-05). If a highlight is ever needed beyond the
+   flash, it's a trace of the object's own outline, not its box.
 2. [ ] **Hands:** RT draws and swings the duster; Y draws, then uses; tap
    B puts away, hold B drops in front; your hand comes back after a block;
    the waystone on X; the generic Y swing; the two-slot HUD; LB / RB in

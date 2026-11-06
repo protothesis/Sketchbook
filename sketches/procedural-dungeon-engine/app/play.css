@@ -230,14 +230,7 @@ kbd {
   background: rgba(14, 10, 8, 0.7); color: #ffd9a8; box-sizing: border-box; }
 .things .thing svg { width: 100%; height: 100%; display: block; }
 .holdring.idle > svg, .holdring.idle > span { visibility: hidden; }
-/* The focus marker (hud.js): brackets at the corners of what X / E would act on, and its button over it. */
-.focusmark { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: visible;
-  opacity: 0; transition: opacity 0.18s ease-out; }
-.focusmark.on { opacity: 1; transition-duration: 0.1s; }
-.focusmark path { fill: none; stroke-linecap: round; }
-.focusmark .shade { stroke: rgba(10, 6, 4, 0.75); stroke-width: 4.5; }
-.focusmark .line { stroke: #ffd9a8; stroke-width: 2; }
-.focusmark.blocked .line { stroke: #b08a8a; }
+/* The focus marker (hud.js): the button for what X / E would act on, floating just over it. */
 .focusbadge { position: fixed; z-index: 3; width: 30px; height: 30px; margin-top: -4px; transform: translate(-50%, -100%) scale(0.8);
   display: grid; place-items: center; pointer-events: none; opacity: 0; transition: opacity 0.18s ease-out, transform 0.18s ease-out; }
 .focusbadge.on { opacity: 1; transform: translate(-50%, -100%) scale(1); transition-duration: 0.1s; }
