@@ -253,7 +253,8 @@
     drawLostPaths(ctx, ox, oy, px, visible, cell);
     for (const id in exp.spaces) {
       const sp = exp.spaces[id];
-      ctx.fillStyle = `hsla(${sp.meta.hue}, 18%, ${id === p.spaceId ? 46 : 30}%, 0.95)`;
+      const tone = DE.toneOf(sp.meta);
+      ctx.fillStyle = `hsla(${tone.hue}, ${28 * tone.sat}%, ${(id === p.spaceId ? 46 : 30) + tone.shade * 5}%, 0.95)`;
       for (const k of sp.cells) { const c = DE.parseKey(k); if (visible(c)) cell(c); }
     }
     // Walls: every cell edge that doesn't lead into the same room, so rooms

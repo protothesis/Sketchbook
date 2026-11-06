@@ -191,7 +191,7 @@
     const rows = [
       ['id', g.id + (state.regions.pinned.includes(g.id) ? ' · pinned' : ''), { region: g.id }],
       ['type', g.type, { type: g.type }],
-      ['mood', `${g.mood}, hue ${g.hue}`, { mood: g.mood }],
+      ['mood', g.mood, { mood: g.mood }],
       ['budget', `${r ? r.spent : 0} of ${g.size} rooms spent${r && r.spent >= g.size ? ' (spent: its doors lead out)' : ''}`],
       ['rooms', r ? `${r.rooms}: ${roles}` : '0'],
       ['cells', r ? r.cells : 0],

@@ -46,6 +46,33 @@
   };
 
   /**
+   * Each mood's colour, so a colour always means its mood: a cold room is
+   * icy blue wherever it is. `hue` in degrees; `sat` multiplies a view's own
+   * floor saturation (the greys are low); `shade` -1..1 nudges a view's own
+   * lightness darker or brighter. Every view (map, minimap, walk) applies
+   * these to its own base tones, so they stay readable in light and dark.
+   */
+  const MOOD_TONES = {
+    still:     { hue: 190, sat: 0.4,  shade: 0.5 },   // hushed, pale grey-teal
+    damp:      { hue: 162, sat: 1.0,  shade: -0.2 }, // moss and wet stone
+    humming:   { hue: 54,  sat: 1.3,  shade: 0.4 },   // electric yellow
+    cold:      { hue: 208, sat: 1.25, shade: 0.2 },   // ice blue
+    echoing:   { hue: 268, sat: 0.95, shade: 0 },     // violet
+    dusty:     { hue: 36,  sat: 0.6,  shade: 0.2 },   // ochre, sun-faded
+    breathing: { hue: 346, sat: 1.05, shade: 0 },     // flesh pink
+    tilted:    { hue: 86,  sat: 1.1,  shade: 0 },     // sickly chartreuse
+    warm:      { hue: 20,  sat: 1.35, shade: 0 },     // ember orange
+    hollow:    { hue: 236, sat: 0.35, shade: -0.8 },  // dark slate
+  };
+  const PLAIN_TONE = { hue: 0, sat: 0, shade: 0 };
+
+  /** A space's colour: its hue (its mood's, drifted a little) and its mood's sat and shade. */
+  function toneOf(meta) {
+    const t = (meta && MOOD_TONES[meta.mood]) || PLAIN_TONE;
+    return { hue: meta && meta.hue != null ? meta.hue : t.hue, sat: t.sat, shade: t.shade };
+  }
+
+  /**
    * Structure types. `weight`: how often a new region is this type.
    * `size`: the room budget, min + an exponential tail (`scale`), and a
    * `huge` chance of multiplying it by `hugeMul`. `entry`: the role of a
@@ -64,7 +91,7 @@
     leaveBase: 0.03,   // chance a door leads out of a region that has budget left...
     leaveRamp: 0.35,   // ...plus this times (spent / size)^2
     junction: 0.6,     // chance a new mood is one the old one leads into
-    hueDrift: 14,      // how far a room's hue wanders from its region's
+    hueDrift: 6,       // how far a room's hue wanders from its mood's (MOOD_TONES)
     maxSize: 120,
   };
 
@@ -252,7 +279,7 @@
   }
 
   Object.assign(DE, {
-    MOODS, MOOD_JUNCTIONS, REGION_TYPES, REGION_TUNING,
+    MOODS, MOOD_JUNCTIONS, MOOD_TONES, toneOf, REGION_TYPES, REGION_TUNING,
     rollRegion, regionSpent, resolveRegion, childRole, roleTries, cloisterPlans, planClaims, onModule, loopChanceFor,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -11,7 +11,7 @@
   --map-ink: #2a2620;
   --map-label: #3d362c;
   --floor-l: 92;
-  --floor-s: 22;
+  --floor-s: 40;
   --exit-open: #c4502a;
   --ghost: #b9b0a0;
   --select: #c4502a;
@@ -30,8 +30,8 @@
     --map-grid: rgba(236, 232, 222, 0.06);
     --map-ink: #e6e0d2;
     --map-label: #d8d1c2;
-    --floor-l: 20;
-    --floor-s: 14;
+    --floor-l: 22;
+    --floor-s: 30;
     --exit-open: #f0874f;
     --ghost: #5a554b;
     --select: #f0874f;

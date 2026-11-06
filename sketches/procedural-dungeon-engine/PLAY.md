@@ -573,7 +573,7 @@ you pass out and wake by your save lantern.
 | Parameter | Value | Notes |
 | --- | --- | --- |
 | Scale | 1 cell = 2 world units | the figure is about half a cell tall |
-| Walls | 1.3 cells tall, thin, flat-shaded | tinted by the space's seeded `meta.hue` |
+| Walls | 1.3 cells tall, thin, flat-shaded | tinted by the space's mood colour (`DE.toneOf`) |
 | Floor | one tile per cell, with a dark gap between tiles | the gaps make the grid you're walking on visible |
 | Doorways | 0.6 cells wide, 1.0 tall, with a lintel above (wall, dithering with it) | |
 | Lost-path door | violet seam and arrow; on the panel, both faces, an additive violet glow strongest at its edges, rippling, and 16 sparks drifting up its sides and top, twinkling (`lostFx` in `world.js`, all in shaders off one clock) | |
@@ -782,8 +782,9 @@ Whether a key-capable room actually shows its key depends on the run (were
 there locks waiting?), so it's run state (`run.keyRooms`), not seed state.
 Traces are engine state, rebuilt by replay from the history's reverts.
 
-A room's mood is its region's, and its hue drifts a little from the
-region's (drawn from `deriveRng(space.seed, 'meta')`). A waypoint hall
+A room's mood is its region's, and its colour is its mood's
+(`DE.MOOD_TONES`), its hue drifting a little (drawn from
+`deriveRng(space.seed, 'meta')`). A waypoint hall
 keeps its own roll. See NOTES.md, "Regions".
 
 Whether a room starts with a hash ghost is seeded (`'ghost'` stream, plus

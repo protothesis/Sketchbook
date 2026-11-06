@@ -134,14 +134,17 @@ if (vDitherEW > 0.7 && south > 0.2) {
   function spaceMats(space) {
     if (matCache[space.id] && matCache[space.id].seed === space.seed) return matCache[space.id];
     const sealed = DP.pastLock(state.exp, space);
-    const h = space.meta.hue / 360;
+    // The room's mood colour (DE.MOOD_TONES): its hue, its sat on top of
+    // these bases, and its shade nudging them lighter or darker.
+    const tone = DE.toneOf(space.meta);
+    const h = tone.hue / 360;
     const m = {
       seed: space.seed,
       // Past a locked door the floor carries a faint gold warmth.
       floor: [0.15, 0.17, 0.19].map((l) => new THREE.MeshLambertMaterial({
-        color: new THREE.Color().setHSL(h, 0.22, l), emissive: sealed ? 0x1c1404 : 0x000000,
+        color: new THREE.Color().setHSL(h, Math.min(1, 0.3 * tone.sat), l + tone.shade * 0.025), emissive: sealed ? 0x1c1404 : 0x000000,
       })),
-      wall: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.2, 0.32) })),
+      wall: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, Math.min(1, 0.28 * tone.sat), 0.32 + tone.shade * 0.04) })),
       // Blocks never dissolve; the figure shows through them instead.
       block: new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.16, 0.24) }),
       detail: [0.12, 0.21].map((l) => new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.18, l) })),

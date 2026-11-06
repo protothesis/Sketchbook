@@ -12,10 +12,12 @@
 
   // Colours, the same in light and dark (mid tones read on both).
   const TYPE_COLORS = { meander: '#d08a3c', catacomb: '#4f86d6', cloister: '#3fae7a' };
-  const MOOD_COLORS = {
-    still: '#9aa3ad', damp: '#3f9aa8', humming: '#c9a632', cold: '#6aa9e8', echoing: '#8a76d6',
-    dusty: '#b58a5e', breathing: '#d0689a', tilted: '#7fbf4a', warm: '#e0763a', hollow: '#6d7c8f',
-  };
+  // Mood colours come from the engine's (DE.MOOD_TONES), the ones the rooms
+  // themselves wear, in a stronger mid tone.
+  const MOOD_COLORS = {};
+  for (const [mood, t] of Object.entries(DE.MOOD_TONES)) {
+    MOOD_COLORS[mood] = `hsl(${t.hue}, ${Math.min(90, 50 * t.sat)}%, ${52 + t.shade * 8}%)`;
+  }
 
   /** A region's colour under a colouring ('type' | 'mood' | 'region'). */
   function colorOf(g, by) {
