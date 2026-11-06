@@ -409,7 +409,8 @@ designed for. The hands and items rework in progress is planned in
   reach, the one you're most squarely facing (nearer breaks a tie; the
   score is distance + 0.6 × (1 − cos of the angle to it)). **The focus
   marker** (since 2026-11-05) shows it in the world: the button floats
-  just over it (X on a pad, E on a keyboard; none on touch), with a faint
+  just over it (X on a pad, E on a keyboard; none on touch, and none
+  while you carry or hold on to an object), with a faint
   ring round it when it's a hold. It fades in and out with reach (still
   following the thing on screen as it fades), gives way to the hold ring
   while you hold, and turns muted where it can't be done (a locked door,

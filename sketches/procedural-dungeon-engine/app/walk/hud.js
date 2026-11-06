@@ -208,7 +208,7 @@
   function updateMarker(near, line) {
     const ring = state.hold.ring, ringOn = !!(ring && ring.v > 0.02 && !ring.idle);
     const glyph = touch() ? '' : W.glyph('E');
-    const on = !!(near && near.box && !state.choice && glyph && !ringOn && near.action !== 'grabbed');
+    const on = !!(near && near.box && !state.choice && glyph && !ringOn && near.action !== 'grabbed' && near.action !== 'setblock'); // not while you hold or carry something
     badgeEl.classList.toggle('on', on);
     if (on) {
       markBox = near.box;

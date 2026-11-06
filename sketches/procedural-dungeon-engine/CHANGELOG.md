@@ -260,7 +260,8 @@ All notable changes to this sketch are logged here, per
   you hold, and turns muted where the action can't be done. As something
   comes into reach it **flashes** once in a chunky warm dither that fades
   in 0.45 s. A door flashes through the wall in front of it, with its seam
-  and arrows, from either side. Only ever the one focused thing.
+  and arrows, from either side. Only ever the one focused thing, and no
+  button while you carry or hold on to an object.
 - 2026-11-05: Sconces work from right under them: within 0.5 cells, any
   facing counts (it hangs on the wall over your head, so it's nearly
   beside you); something else you're facing still wins the focus. Its
