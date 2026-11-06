@@ -455,13 +455,18 @@
   // ---------------------------------------------------------------------------
   // Things you drop: lying where you stood, as they were before you took them
 
-  /** Drop a cell where you stand. It shows in the room until you pick it up again. */
-  function dropCell(c) {
-    const run = state.run, p = state.player, exp = state.exp;
+  /**
+   * Drop a cell where you stand, or at `at` ({ x, y, base }: base, the
+   * height of what it rests on, a block's top). It shows in the room until
+   * you pick it up again.
+   */
+  function dropCell(c, at) {
+    const run = state.run, p = at || state.player, exp = state.exp;
     const sid = exp.registry[W.DE.key(Math.floor(p.x), Math.floor(p.y))];
     const sp = exp.spaces[sid];
     if (!sp) return false;
     const d = Object.assign({}, c, { id: 'd' + (++run.dropSeq), x: +p.x.toFixed(3), y: +p.y.toFixed(3), spaceId: sp.id, seed: sp.seed });
+    if (at && at.base) d.base = +at.base.toFixed(3);
     if (!run.dropped) run.dropped = [];
     run.dropped.push(d);
     const rec = state.spaces.get(sp.id);
@@ -474,7 +479,7 @@
     const key = 'drop:' + d.id;
     const mesh = W.itemMesh(item, key);
     const pickup = ITEMS[d.kind] && ITEMS[d.kind].cls === 'pickup';
-    mesh.position.set(d.x * S, pickup ? 0.45 * S : 0, d.y * S);
+    mesh.position.set(d.x * S, ((d.base || 0) + (pickup ? 0.45 : 0)) * S, d.y * S);
     group.add(mesh);
     state.items.set(key, { mesh, item, spaceId: d.spaceId, tile: tileAt[W.DE.key(Math.floor(d.x), Math.floor(d.y))] || null, fresh: !!fresh });
   }

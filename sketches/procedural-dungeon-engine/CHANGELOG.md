@@ -327,6 +327,57 @@ All notable changes to this sketch are logged here, per
   jars that catch and release with things that accept what's released,
   collectables placed with Y, and the X prompt floating over its target.
   Walk mode is now designed controller first; touch is legacy.
+- 2026-11-06: **Tables** (step 5 of `HANDS-PLAN.md`; `tables.js`). About 1
+  room in 5 has one: a plain programmer-art table that takes any
+  collectable, or (70%) an end table with a drawer and a placemat that takes
+  only kitchenware and comes with one piece on it. Y with a collectable in
+  hand places it on the table in front (via `ACCEPTS`), or sets it down in
+  front of you; X tapped takes the last one back into your hand, X held
+  grabs the table with what's on it. An end table with a teacup, a saucer
+  and a spoon is set: +1 entropy max while it stays so. The dev panel can
+  place both kinds and give kitchenware.
+- 2026-11-05: **The Y button over its target.** Y's text line under the
+  figure is gone. Its button floats over a thing, X's way, only when what's
+  in your hand would act on that thing (a locked door, a bare wall, a pixie,
+  a vessel, a dormant waystone, a lost path's door), and the thing flashes
+  if X has nothing in focus. A swing at the air or a spill shows nothing.
+  With both on one thing, they sit side by side, and a muted X gives way.
+- 2026-11-05: **Strips like Breath of the Wild's.** The open row is a fixed
+  window seven cells wide, its middle framed, the row sliding behind the
+  frame and fading out to either side, however much you carry. A bag's icon
+  is big while its row is folded and tucks into the frame's corner when open.
+- 2026-11-05: **Release and accept** (step 4 of `HANDS-PLAN.md`;
+  `release.js`). A full jar or the hourglass swung always releases what's in
+  it, at a point in front of you, and whatever there accepts it takes it
+  (`ACCEPTS`, in order): a lost path's door (the hourglass's pixie: the
+  retrace), a dormant waystone (it wakes), a vessel (same kind, with room).
+  Nothing there: entropy spills as a **puddle** your lamp drinks while you
+  stand in it, and a pixie flies off free. An empty jar or hourglass swung at
+  a vessel takes one out. A jar of entropy no longer pours straight into
+  your lamp.
+- 2026-11-05: **Two slots, one hand** (step 2 of `HANDS-PLAN.md`;
+  `items.js`, `input.js`, `gamepad.js`, `controls.js`). The carousel is
+  replaced by a tool slot and an item slot.
+  - RT (Q) draws the duster and swings it in one press.
+  - Y (F) takes out the item slot's thing on the first press and uses it on
+    the next; every use swings, even at nothing. LB / RB step the item slot
+    through its category (items, or collectables).
+  - B (G): a tap puts away; held 0.45 s (a ring over the figure), it drops
+    one in front of you, on the floor or a block's top. Things dropped on a
+    block's top are picked up by standing on it.
+  - Setting a block down, or letting go of one, gives back what you had out.
+  - A dormant waystone wakes from your lamp with a tap of X (held: grab it),
+    no longer with F; a full jar in hand still wakes it with Y.
+  - The hourglass is an item-slot stop.
+  - **The d-pad strips** (`strips.js`): hold ◀ (tools), ▼ (collectables)
+    or ▶ (items) and a strip of what you carry opens in the middle of the
+    screen, on what the slot holds, in cells the menu's size. Each bag is a
+    grid row under it (the backpack under items and collectables, the purse
+    under collectables), folded to one cell until you move into it. The
+    right stick or LB / RB moves along a row, down and up between rows. Let
+    go and the highlighted thing is in hand; B drops one of it in front of
+    you. Only Equip / Drop buttons, no other text. The world doesn't pause.
+    Keyboard: hold 3 / 4 / 5.
 - 2026-11-05: **Focus marker** (`hud.js`). The button for what X (E) would
   act on floats just over it, faint-ringed when it's a hold. It fades with
   reach (tracking the thing as it fades), gives way to the hold ring while

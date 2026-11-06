@@ -117,6 +117,7 @@
     }]),
     ['coin', () => { W.receive(state.run, { kind: 'coin', type: RULES.coinMetals[seq % RULES.coinMetals.length] + '-' + RULES.coinMarks[seq++ % RULES.coinMarks.length], n: 1 }, { force: true }); after('a coin'); }],
     ['curio', () => { W.receive(state.run, { kind: 'curio', type: RULES.curios[seq++ % RULES.curios.length], n: 1 }, { force: true }); after('a curio'); }],
+    ['kitchenware', () => { for (const t of W.TABLE.kitchen) W.receive(state.run, { kind: 'curio', type: t, n: 1 }, { force: true }); after('a teacup, a saucer and a spoon'); }],
     ['coin purse', () => { if (!state.run.equipment.purse) W.ITEMS.purse.take(state.run); after('a coin purse'); }],
     ['backpack', () => { state.run.equipment.backpack = {}; after('a backpack'); }],
   ];
@@ -181,6 +182,8 @@
       ['chest', (at) => placeObject('chest', { cells: TEST_CHEST() }, at), objectLook('chest', () => ({ cells: [] }))],
       ['block', (at) => placeObject('block', { color: nextColor() }, at), objectLook('block', () => ({ color: nextColor() }))],
       ['vessel', (at) => placeObject('vessel', { holds: null, n: 0 }, at), objectLook('vessel', () => ({ holds: null, n: 0 }))],
+      ['table', (at) => placeObject('table', { cells: [] }, at), objectLook('table', () => ({ cells: [] }))],
+      ['end table', (at) => placeObject('endtable', { cells: [] }, at), objectLook('endtable', () => ({ cells: [] }))],
       ['waystone', (at) => placeObject('waystone', { holds: null }, at), objectLook('waystone', () => ({ holds: null }))],
       ['waystone: awake', (at) => placeObject('waystone', { holds: 'entropy' }, at), objectLook('waystone', () => ({ holds: 'entropy' }))],
     ],
@@ -236,7 +239,7 @@
     return null;
   }
 
-  const kindOfBlock = (b) => (b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block');
+  const kindOfBlock = (b) => (b.table ? 'table' : b.crate ? 'crate' : b.vessel ? 'vessel' : b.waystone ? 'waystone' : 'block');
   /** Everything a click can pick: { kind, ref, mesh, remove() → false if it can't go }. */
   function pickables() {
     return [

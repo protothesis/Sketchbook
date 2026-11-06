@@ -5,10 +5,10 @@
 // LT held runs. The right stick peeks: it slides the view that
 // way, and it springs back when you let go (camera.js).
 //
-//   A  jump (Space; held for full height)       B  back out of anything; in the world, put away / take out the item in hand
-//   X  E (tap to act, hold to fill the ring)     Y  on the map, recenter (free in the world)
+//   A  jump (Space; held for full height)       B  back out of anything; in the world, G: put away what's in hand (held: drop it)
+//   X  E (tap to act, hold to fill the ring)     Y  F: the item slot (take it out, then use it); on the map, recenter
 //   L3  crouch (C)    R3  the lamp (R)
-//   LB / RB  the carousel: the item in hand, back / on   LT  run    RT  F (use the item in hand)
+//   LB / RB  the item slot: back / on in its category   LT  run    RT  Q: the duster (draw and swing)
 //   View  the menu (map, inventory)    Menu  pause (the title screen; Menu or B again resumes)
 //
 // In the menu (menu.js), LB / RB switch tabs and B closes it. On the map
@@ -36,14 +36,16 @@
 
   const B = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, menu: 9, l3: 10, r3: 11, up: 12, down: 13, left: 14, right: 15 };
   const GLYPH = {
-    xbox: { E: 'X', F: 'RT', Q: 'RT', R: 'R3', Space: 'A', C: 'L3', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT', bumpers: 'LB/RB' },
-    ps: { E: '□', F: 'R2', Q: 'R2', R: 'R3', Space: '✕', C: 'L3', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2', bumpers: 'L1/R1' },
+    xbox: { E: 'X', F: 'Y', Q: 'RT', G: 'B', R: 'R3', Space: 'A', C: 'L3', Esc: 'B', Tab: 'View', Menu: 'Menu', run: 'LT', bumpers: 'LB/RB' },
+    ps: { E: '□', F: '△', Q: 'R2', G: '○', R: 'R3', Space: '✕', C: 'L3', Esc: '○', Tab: 'Create', Menu: 'Options', run: 'L2', bumpers: 'L1/R1' },
   };
 
   let pad = false;       // the last input was the pad: prompts show its glyphs
   let style = 'xbox';
   let prev = [];         // last frame's pressed buttons
   let nav = { x: 0, y: 0, t: 0 };
+  let snav = { x: 0, y: 0, t: 0 }; // the right stick in a strip
+  let stripKind = null;   // the strip the d-pad holds open
   let move = { x: 0, y: 0, mag: 0, run: false };
   let tilted = false;    // the left stick was off rest last frame
   let aKey = null;       // the key A stood in for when it went down (let go of the same one)
@@ -125,18 +127,19 @@
         }
         return;
       }
-      case B.b: if (busy) key('keydown', 'escape'); else W.toggleHands(); return;
+      case B.b: if (busy) key('keydown', 'escape'); else if (W.stripOpen()) W.dropFromStrip(); else key('keydown', 'g'); return; // put away; held, drop
       case B.x: key('keydown', state.bigmap ? 'x' : 'e'); return;
-      case B.y:
+      case B.y: // the item slot (F); in a grid, take it in hand; on the map, recenter
         if (state.bigmap && state.bigmap.tab === 'map') { state.bigmap.cx = state.player.x; state.bigmap.cy = state.player.y; }
-        else if (state.bigmap) key('keydown', 'f');
+        else if (!state.paused && !state.choice) key('keydown', 'f');
         return;
       case B.l3: key('keydown', 'c'); return;
-      case B.rt: if (!state.bigmap) key('keydown', 'f'); return; // on the map it zooms (poll)
+      case B.rt: if (!busy) key('keydown', 'q'); return; // the duster; on the map it zooms (poll)
       case B.r3: key('keydown', 'r'); return;
       case B.lb: case B.rb:
         if (state.bigmap) key('keydown', i === B.rb ? '2' : '1'); // the menu's tabs
         else if (state.paused && W.controlsOpen() && !state.dialog) W.controlsSwitch(i === B.rb ? 1 : -1); // the controls' pages
+        else if (!busy && W.stripOpen()) W.moveStrip(i === B.rb ? 1 : -1);
         else if (!busy) W.cycle(i === B.rb ? 1 : -1);
         return;
       case B.view: if (!state.paused) key('keydown', 'tab'); return;
@@ -145,6 +148,7 @@
   }
   function release(i) {
     if (i === B.x) key('keyup', 'e');
+    if (i === B.b && !W.stripOpen()) key('keyup', 'g');
     if (i === B.a && aKey) { key('keyup', aKey); aKey = null; }
   }
 
@@ -212,6 +216,29 @@
     }
     move = { x: s.x, y: s.y, mag: s.mag, run: down[B.lt] };
     const r = stick(gp, 2);
+
+    // The d-pad strips (strips.js): held ◀ (tools), ▼ (collectables) or ▶
+    // (items) opens one; letting go takes the highlighted thing in hand. While one is open
+    // the right stick moves through it (with repeats) instead of peeking.
+    const free = !state.paused && !state.bigmap && !state.choice;
+    const want = free ? (down[B.left] ? 'tools' : down[B.down] ? 'coll' : down[B.right] ? 'items' : null) : null;
+    if (stripKind && (!want || want !== stripKind)) { if (W.stripOpen()) W.closeStrip(free && !want); stripKind = null; } // only the strip the d-pad opened
+    if (want && !W.stripOpen()) { W.openStrip(want); stripKind = want; }
+    if (W.stripOpen()) {
+      const ax = gp.axes[2] || 0, ay = gp.axes[3] || 0;
+      const sx = Math.abs(ax) > NAV && Math.abs(ax) >= Math.abs(ay) ? Math.sign(ax) : 0;
+      const sy = !sx && Math.abs(ay) > NAV ? Math.sign(ay) : 0;
+      if (sx !== snav.x || sy !== snav.y) {
+        snav = { x: sx, y: sy, t: REPEAT[0] };
+        if (sx) W.moveStrip(sx); else if (sy) W.rowStrip(sy);
+      } else if (sx) {
+        snav.t -= dt;
+        if (snav.t <= 0) { snav.t = REPEAT[1]; W.moveStrip(sx); }
+      }
+      W.padLook = null;
+      return;
+    }
+    snav = { x: 0, y: 0, t: 0 };
     W.padLook = { x: r.x * r.mag, y: r.y * r.mag };
   }
   global.requestAnimationFrame(poll);

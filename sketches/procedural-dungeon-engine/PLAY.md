@@ -238,7 +238,7 @@ designed for. The hands and items rework in progress is planned in
 
   The pool's size and glow show its level, on the maps too. Times are
   walking time.
-- **The lamp on the HUD** sits bottom left, the carousel just right of it (on a
+- **The lamp on the HUD** sits bottom left, the two slots just right of it (on a
   narrow screen, under it) (twice the size
   it was; smaller on phones): a lantern icon in the lamp's colour and a
   fluid meter, one section per charge, with the one that's burning shown
@@ -333,8 +333,8 @@ designed for. The hands and items rework in progress is planned in
   the world ("a block goes with it"), and kept in `run.despawned` for some
   later use. A room lost to a faint isn't rerolled: what's in it waits,
   and comes back if you retrace the path.
-- **Hands full.** With a block in your hands, E only sets it down; F does
-  nothing ("your hands are full"), the carousel won't switch (it shakes),
+- **Hands full.** With a block in your hands, E only sets it down; RT and Y
+  do nothing ("your hands are full"), the slots won't switch (they shake),
   and you can't run, and a jump is only a hop. The block you carry is saved with the run
   (`run.carry`).
 - **Sconces (restoration).** About 1 room in 3 (depth 1+) has an unlit iron
@@ -360,7 +360,7 @@ designed for. The hands and items rework in progress is planned in
     over one to collect it. They live in your **items grid** and work only
     in your hand, with F. Collected, a tool goes in the grid; what's in
     your hands never changes by itself. A full stack (6 jars, say) spills
-    into a new cell, so one kind can fill several cells; the carousel
+    into a new cell, so one kind can fill several cells; the item slot
     still shows it as one stop with the total. With no room for it (every
     cell of that kind full, and no empty cell), it stays on the floor and a
     caption says so.
@@ -372,39 +372,63 @@ designed for. The hands and items rework in progress is planned in
     it down again, with whatever's inside.
   - **Equipment** (the duster, the hourglass, the coin purse, the
     backpack) sits in the equipment grid. One of each, collected like a
-    tool, in the carousel if it has a use. On a faint it falls with your
+    tool, in a slot if it has a use. On a faint it falls with your
     pack, all but the duster and the hourglass (protected). **The hourglass**
-    (`app/walk/hourglass.js`) holds one pixie: F near a pixie catches it,
-    F at a vessel pours it in or takes one out of a vessel of pixies. A
-    pixie glows in its lower bulb (and its carousel glyph) when it's
-    charged. Charged, it's the key to a lost path: F with it in hand at
-    the path's door retraces it, and spends the pixie. **The feather
+    (`app/walk/hourglass.js`) is a jar for one pixie that you can't lose:
+    empty, Y catches a pixie close by or takes one out of a vessel of
+    pixies; charged, Y releases its pixie, like any full jar (see Release
+    and accept). A pixie glows in its lower bulb (and its slot's glyph)
+    when it's charged. A lost path's door accepts the hourglass's pixie
+    (only the hourglass's): released there, it retraces the path. **The feather
     duster** (`app/walk/dust.js`) is in your bag from the start, for now,
-    and a carousel stop after your items: take it out (step the carousel to it, or B on a pad) and F (RT on a gamepad) swipes it at the dust
+    and the tool slot: RT (Q) draws it and swipes it at the dust
     (see Dusting, below).
   - **Creatures** (ghosts, pixies) aren't items: they move on their own,
     by the ecology's rules.
-- **The carousel** (where the hotbar was, 2026-11-01) shows what's in
-  your hand, big, with the stop before and after it to either side. **1 /
-  2** (LB / RB, the mouse wheel, or a tap on a side) step through the
-  menu's own order, cell by cell: every stack in your items grid (then the
-  backpack's), then the equipment with a use (the duster, the hourglass)
-  in the equipment grid's order, then empty hands. The two side icons are
-  always the stops just before and after. It sits right of the lamp; on a
-  narrow screen, under it. A tap on the middle opens your inventory. **E** interacts
-  with the world (doors, lifting a jar, wiping a chalk mark
-  you're facing). **F** (RT on a gamepad, or "use" on touch) uses the
-  selected item: the one in your hand, with a fast side-to-side slash
-  and a dithered swoosh behind it (`SLASH`).
-- **One thing in your hand.** The selected slot is what you're holding,
-  and the figure shows it: a tool in its left hand (the lantern is in the
-  right), a jar held over its head. The lamp isn't a slot (since
-  2026-10-27): R (R3) covers or relights it. You start with **empty
-  hands**. On a gamepad, B puts it away or takes the last thing you held back out.
-  Lifting or grabbing a block puts it away too: both hands for the block. With nothing in
-  hand that wants it, F at a dormant waystone wakes it from your lamp.
-  Each chalk colour and each jar fill (empty, pixie, entropy) is its own
-  stop.
+- **Two slots, one hand** (since 2026-11-05, replacing the carousel; see
+  [`HANDS-PLAN.md`](HANDS-PLAN.md)). One thing in your hand at a time (the
+  lamp aside, in the other hand), from one of two slots, shown top left
+  under the lamp, the one in hand lit, what's in hand named under them:
+  - **The tool slot, RT (Q):** the duster. A press draws it if it isn't
+    out *and* swings it, so RT is never a dead press.
+  - **The item slot, Y (F):** an item stack (chalk, a jar fill, keys,
+    doorstones), the hourglass, or a collectable you took in hand from the
+    menu (its slot is round: it has no use yet). The first press takes it
+    out; the next uses it, and every use swings it (`SLASH`), whether or
+    not there's anything there for it. **LB / RB** (1 / 2, the wheel) step
+    the item slot through its category: items, or your collectables; if
+    it's in your hand, the new one is.
+  - **B (G):** a tap puts away what's in your hand. **Held** (0.45 s, a ring
+    over the figure), it drops one of it **in front of you**, where a
+    carried block would go: the quarter ahead on the floor, or on the top
+    of the block in front, else at your feet. Things dropped on one quarter
+    sit apart in a set pattern. The duster and the hourglass stay with you.
+    Something dropped on a block's top is picked up by standing on it.
+  - **E (X)** acts on the world, never on what's in hand: a dormant
+    waystone wakes from your lamp with a tap of it (held, you grab it). A
+    full jar in hand, Y at a dormant waystone, wakes it with what's in the
+    jar.
+  - **The d-pad strips** (`strips.js`): hold **◀** for your tools (the RT
+    slot), **▼** for your collectables or **▶** for your items, and a strip
+    of them opens in the middle of the screen, on what the slot holds now,
+    in cells as big as the menu's (an empty one if there's nothing). A row
+    for the main grid, then one per bag (the backpack under items and
+    collectables, the purse under collectables). The row you're on is a
+    fixed window seven cells wide: a frame holds still in its middle and
+    the row slides behind it, fading out to either side, however much you
+    carry. The others fold to one cell (a bag's own icon, big; in its open
+    row the bag tucks into the frame's corner). The right stick (or LB /
+    RB) moves along a row, down and up between rows.
+    **Let go** and the highlighted thing is in your hand (with a block in
+    your hands, just on its slot). **B** drops one of it in front of you,
+    and the strip stays open; the buttons under it say so, and nothing
+    else does. Nothing moves or sorts here (that's the menu), and the
+    world doesn't pause. Keyboard: hold 3 (tools), 4 (collectables) or 5
+    (items), 1 / 2 to move, G to drop (no bag rows).
+  - Lifting or grabbing a block empties your hands; setting it down (or
+    letting go of it) gives back what you had out. You start with empty
+    hands. The figure shows what you hold: a tool in its left hand (the
+    lantern is in the right).
 - **Focus and prompts.** E acts on one thing at a time: of everything in
   reach, the one you're most squarely facing (nearer breaks a tie; the
   score is distance + 0.6 × (1 − cos of the angle to it)). **The focus
@@ -420,11 +444,14 @@ designed for. The hands and items rework in progress is planned in
   flashes through whatever is in front of it (a side wall seen edge on),
   with its seam and arrows, from either side. E has no prompt line (on
   a keyboard), and a tap at something you can't do says why in a
-  caption. F keeps a prompt line below the figure for what the item in
-  hand would do (open a door with a doorstone, catch a pixie, pour into a
-  vessel), starting with its key; one that can't be done right now has no
-  key and reads muted. On touch the E line stays too (it's the E button):
-  press a line to do it. Drawing a mark never prompts.
+  caption. **Y has no text line** (since 2026-11-05): its button floats over
+  a thing the same way, only when what's in your hand would act on that
+  particular thing (a key at a locked door, a doorstone at a bare wall, an
+  empty jar at a pixie or a vessel, a full one at something that accepts
+  it), and that thing flashes when nothing has X's focus. A swing at the
+  air, a spill, a mark on the floor show nothing. On one thing at once the
+  two buttons sit side by side, and a muted X gives way to Y. On touch the
+  E line stays (it's the E button).
 - **Hold to act.** Anything that changes the world takes E held (or the E
   prompt pressed and held on touch) while a ring fills over the target,
   with the action's icon in it (on touch, the E prompt's key fills too,
@@ -459,18 +486,26 @@ designed for. The hands and items rework in progress is planned in
   as an orange bar.
 - **All your jars share one slot.** It's grouped by what they hold (empty,
   a pixie, a charge of entropy), with a count on each group; the group you
-  pick is the jar in your hands. **F swipes it** (a quick sweep forward
-  and down, always, so you see it): an empty jar catches a pixie within
-  0.75 cells, or scoops a full well you're standing in; a jar of entropy
-  pours into your lamp, all or nothing (it tops the lamp up to its max,
-  and the jar is empty after either way). At a **vessel** right in front
-  of you, F pours the jar into it, or (an empty jar) takes one back out.
-  A swipe at nothing just swipes.
+  pick is the jar in your hands. **Y swings it.** Empty, it catches what
+  the swing touches: one out of a vessel in front of you, a pixie within
+  0.75 cells, or a full well you're standing in. **Full, it always
+  releases** what's in it (since 2026-11-05).
+- **Release and accept** (`app/walk/release.js`). What a full jar (or the
+  hourglass) releases lands at a point in front of you, and whatever is
+  there that accepts it takes it. Each thing says what it accepts
+  (`ACCEPTS`), tried in order: a lost path's door (the hourglass's pixie:
+  the retrace), a dormant waystone (a pixie or entropy: it wakes), a
+  vessel (a pixie or entropy, if it's empty or holds that kind and has
+  room). Nothing there takes it: **entropy spills as a puddle**, a little
+  well on the floor (or a block's top) that your lamp drinks while you
+  stand in it, shrinking as it pours (`PUDDLE`; saved with the run, gone
+  with a rerolled room), and **a pixie flies off**, free again. The prompt
+  says which it'll be.
 - **Chalk marks.** Your own markup, drawn in the world, and it shows up on
   the maps. Chalk comes in five colours, each with its own simple mark:
   silver arrow (it points the way you faced), gold triangle, crimson
   cross, teal waves, violet crescent. A stick is good for **3 strokes**,
-  and its carousel icon loses a third per stroke. F draws a mark on the
+  and its slot icon loses a third per stroke. Y (F) draws a mark on the
   nearest free quarter-tile ahead (the floor, or the top of a one-unit
   block). E, facing a mark within 0.7 cells (or standing on it, facing
   ahead), wipes it. You start with one silver stick,
@@ -485,8 +520,9 @@ designed for. The hands and items rework in progress is planned in
   like a crate: hold E to grab and lift it, carry it anywhere, set it down
   (stacked too, but nothing stacks on a vessel, and you can't stand on it;
   ghosts float over it). It holds **up to 3 of one kind** (pixies, or
-  charges of entropy): F with a full jar pours it in, F with an empty jar
-  takes one back out (a jar of the other kind, or a full vessel, says
+  charges of entropy): a full jar released at it goes in, an empty jar
+  swung at it takes one back out (a jar of the other kind, or a full
+  vessel, doesn't take it: the jar spills instead, and the prompt says
   so). Pixies in it flit above its mouth; entropy glows in it, brighter
   the more there is. A vessel sitting in a rerolled room is despawned
   with what's inside (`run.despawned`).
@@ -544,7 +580,7 @@ designed for. The hands and items rework in progress is planned in
   on the maps. Nothing more yet: it's a hook. The expedition-record /
   leave-the-dungeon screen (`showRecord`) is still in the code, unused, for
   whatever a lock leads to later.
-- **The menu** (Tab; View on a pad; tap the minimap or the carousel)
+- **The menu** (Tab; View on a pad; tap the minimap)
   has three tabs, switched with 1 / 2 (LB / RB) or a tap: **Map**,
   **Inventory** and **Collectables** (`app/walk/menu.js`). It opens on
   the last tab you had, and walking pauses while it's open.
@@ -566,15 +602,32 @@ designed for. The hands and items rework in progress is planned in
     under it, and the line above them names it (or, while you're moving
     something, says what it would do: swap, place, put back).
     **Space** (A) picks up a stack and puts it down on another cell,
-    swapping (the order is the carousel's); equipment moves the same way,
+    swapping (the order is the item slot's); equipment moves the same way,
     within the equipment grid; on a bag it opens it. **F** (Y) takes it in
     your hand, and the menu stays open (a collectable too: it rides the
-    carousel until you scroll off it); on a bag in the equipment grid it
+    item slot until you step it to another or drop it); on a bag in the equipment grid it
     picks the bag up to move it. **X** (X) drops one where you stand, lying
     as it did before you took it (step off it before it can be picked up
     again); the duster and the hourglass can't be dropped for now.
     **Esc** (B) leaves a bag, else puts back what you picked up, else
     closes. On touch, tap a cell, or use the buttons.
+  - **Tables** (`app/walk/tables.js`, since 2026-11-05): surfaces you
+    place collectables on. About 1 room in 5 (depth 1+, not halls) has one,
+    seeded on its own stream (`tableChance`), where a vessel could stand. A
+    loose object like a chest, carried with what's on it, but too tall to
+    stand on, with nothing stacked on it. Four places each (`TABLE`).
+    - The **table** (30%, programmer art: plain wood) takes any collectable.
+    - The **end table** (70%: dark wood, a drawer, a red placemat) takes
+      only kitchenware: the teacup, the saucer, the spoon. One piece is on
+      it when you find it (`tableDressing`). With all three on it, it's
+      **set**: the placemat warms and it's **+1 entropy max** for as long
+      as it stays set and in the world (added to the sigils' buff).
+    - **Y** with a collectable in hand places one on the table in front of
+      you (it's in `ACCEPTS`, as a collectable); a full table, or an end
+      table and something that isn't kitchenware, refuses it (a muted Y,
+      and a caption). With no table there, Y sets it down in front of you,
+      like B held. **X** tapped at a table takes the last thing put on it
+      back into your hand; held, it grabs the table.
   - **Chests** (`app/walk/restore.js`): a crate with a lid. Tap E to open
     it (hold E grabs it, like any crate). The chest's grid (4×2) is on
     top, yours below. Space (A, or a tap) on a chest cell takes one (a
@@ -608,7 +661,7 @@ you pass out and wake by your save lantern.
 | Doorstone | a small white slab with a dark doorway in it; a ⌂ in the items grid; a "open a door here" prompt at a bare wall | the door looks like any other |
 | Inventory | the menu's grids: cells 46 px (40 on a phone), the cursor an orange ring, a picked-up stack shaded with a dashed outline, the thing in your hand marked ✋, cells past a grid's size red; the chest's screen shows yours smaller under it | coins: a disc in their metal, stamped with their mark; curios: a glyph in their colour |
 | Chest | a crate's size, dark boards, two iron bands and a brass latch | holds a 4×2 grid |
-| Chalk | sticks in five colours; in the items grid and the carousel, one stack per colour: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
+| Chalk | sticks in five colours; in the items grid and the item slot, one stack per colour: the colour's symbol over a three-segment stick (strokes left), ×n for more sticks | marks are chalky, faintly glowing decals a quarter-tile wide; on the maps a coloured dot, or the symbol when zoomed in |
 | Sigil energy | an additive beam (open cylinder with an upward fade), a brighter core from stage 2, rising motes, and at a full jar a floor ring radiating outward, a flash, and a violet point light (pooled, two at most, no shadows) | |
 | Carousel | bottom left, right of the lamp (under it on a narrow screen): the thing in hand big in the middle, the stops before and after it to either side, its name under it. Icons: the duster (lit violet while a swipe would find dust), ⚱ jars (empty, a violet pip for a pixie or a violet bar for entropy), chalk (the colour's symbol over its stick), ⌂ doorstones, ⚷ keys; a stack's count in a dark tab in the corner | a "use" button on touch screens |
 | Held item | the selected tool in the figure's left hand, tilted up; a jar or block over its head; all at their true size, and casting no shadow; nothing with empty hands | |
@@ -719,11 +772,11 @@ All in `RULES` (`engine/contents.js`) or at the top of `app/walk/core.js` (ghost
 | Chests | 1 room in 6 at depth 1+, not halls (`chestChance`, own `'chest'` stream, a vessel's kind of spot, never on the vessel); 1–4 cells filled on `'chest-loot'`: coins 40%, curios 35%, a stick of chalk, an empty jar, a doorstone |
 | Lost paths | a faint's rooms, grouped by the door they start from; retrace: a shard per room, at least 1 charge (`retracePerRoom`, `retraceMin`), F with a charged hourglass in hand, which spends its pixie; reroll: E held at the door (the path turns to corruption); `lostDoorChoice`: a choice between the two instead; unchosen: dim at the next faint, fade at the one after |
 | Dust | by room mood (`dustMood`): dusty 70% of free half-cells up to 3 layers; still, hollow 35% / 2; warm 30% / 2; echoing, tilted 15% / 1; humming 12% / 1; damp, cold, breathing none. On the floor and the tops of 1- and 2-unit blocks (not crates), in noise patches `dustScale` (3) half-cells across, block tops +0.15 (`dustTops`), thickest in a patch's middle; never on a sigil, well, waystone or save lantern cell, a tool's cell, or under a loose object's start, mark or a vessel. Seeded on the `'dust'` stream (`DP.dust`); saved as `run.dust` (layers taken off, per room and half-cell) |
-| Duster | equipment, protected, with you from the start, a carousel stop after your items; F (RT on a pad): one press, one swing (no sooner than 0.18 s, `DUST.swingEvery`). Hits every dusted half-cell whose centre is within 0.75 cells in front (a ±70° arc, `reach`, `arc`; within 0.32 any way you face), 0.5 below to 0.55 above your feet (`reachDown`, `reachUp`: a one-unit block's top from the floor, a two-unit one in a jump), and a crusted crystal the same way; one layer off each |
+| Duster | equipment, protected, with you from the start, the tool slot; RT (Q): one press, one swing (drawing it if it isn't out) (no sooner than 0.18 s, `DUST.swingEvery`). Hits every dusted half-cell whose centre is within 0.75 cells in front (a ±70° arc, `reach`, `arc`; within 0.32 any way you face), 0.5 below to 0.55 above your feet (`reachDown`, `reachUp`: a one-unit block's top from the floor, a two-unit one in a jump), and a crusted crystal the same way; one layer off each |
 | Chits | per layer taken off: 45% one chit, 10% a second (`chit`, `chitTwo`); after 3 swings in a row that hit dust and threw none, the next throws one (`pity`). Violet diamonds (points) 0.15 cells across (`chitSize`), thrown out at 1.78 cells/s (`launch`) and bouncing (`bounce` 0.42); within 0.9 cells (`magnet`) they drift to you, gathered within 0.28, each with a 0.32 s dithered violet flash over the figure (seen through anything). Saved where they lie (`run.chits`) |
 | Pre-pool | 6 chits (`perShard`) pour a shard into the lamp (the gain that starts `lampGrace`); full with no room in the lamp, it waits, and chits stay on the floor. Six pips under the lamp meter, shown once you've gathered one. A faint leaves it in your pack (`run.dustPool`) |
 | Crusted crystals | 80% of shards in a room with dust (`dustCrust`, drawn first on the `'dust'` stream) lie crusted over: today's shard, dull and tilted, half sunk among grey lumps, its cell dusted at least 2 layers deep; a glint every 1.7 s (`glintEvery`) where your lamp's pool reaches it. 3 swipes (`crustLayers`) wake it: the crust falls away, a violet flash, and it rises as an ordinary shard pickup. Saved as `run.crust` |
-| Hourglass | 1 room in 20 at depth 3+ (`hourglassChance`, `hourglassMinDepth`, last on the loot stream; loot id still `thread`), one per run; equipment, protected: kept through faints, never in your pack, pixie and all; holds one pixie (F: catch one, pour into / take from a vessel of pixies, or retrace a lost path at its door); a carousel stop, an hourglass glyph with the lower bulb lit when charged; in the world, two glass bulbs in a wooden frame, a pixie glowing in the lower one when charged |
+| Hourglass | 1 room in 20 at depth 3+ (`hourglassChance`, `hourglassMinDepth`, last on the loot stream; loot id still `thread`), one per run; equipment, protected: kept through faints, never in your pack, pixie and all; holds one pixie (Y: catch one, pour into / take from a vessel of pixies, or retrace a lost path at its door); an item-slot stop, an hourglass glyph with the lower bulb lit when charged; in the world, two glass bulbs in a wooden frame, a pixie glowing in the lower one when charged |
 | Doorstones | 4.5% of rooms at depth 2+ (seeded on the loot stream); F (doorstone selected) facing a bare wall within 0.4 cells, standing on the floor; never locked |
 | Jars | 1/15 of rooms at depth 1+ (seeded on the loot stream, drawn after chalk); a tool, collected by walking over it; holds one pixie or one charge |
 | Vessels | 1/10 of rooms at depth 1+, not dead ends (`vesselChance`, own `'vessel'` stream; a free half-cell, off doors, items, sigils, wells, waystones, props and push blocks' starts and marks); up to 3 of one kind (`vesselCapacity`); a loose object in `run.objects` |

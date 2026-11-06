@@ -293,6 +293,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       state.items.set(key, { mesh, item, spaceId: space.id, tile });
     }
     W.addDrops(space, group, tileAt); // what you dropped here (inventory.js)
+    W.addPuddles(space, group); // entropy you spilled here (release.js)
 
     W.addWater(space, rec, tileAt); // puddles and drip spots, from its moisture (water.js)
     W.addAtmos(space, rec, group); // motes, sparks and fog, from its conditions (atmos.js)

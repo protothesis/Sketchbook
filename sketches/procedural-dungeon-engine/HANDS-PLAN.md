@@ -111,8 +111,8 @@ the figure holds it out in an open hand rather than gripped at its side.
   assigned, in its place in the lineup. The right stick scrolls it (the
   camera peek is off while a strip is open). **Let go** and the
   highlighted thing is assigned to its slot (the item slot for ◀ and ▼).
-  - ◀ items. ▼ collectables. ▶ the tool slot (a list of one for now:
-    build it when there's a second tool). ▲ free.
+  - ◀ the tool slot (just the duster for now). ▼ collectables. ▶ items.
+    ▲ free. (Swapped on 2026-11-05, from ◀ items and ▶ tools.)
 - **Bags are a row below.** If you have one, its icon sits under the
   strip; push the stick down (still holding) to move into the bag's strip,
   up to come back. The backpack shows under both ◀ and ▼; the purse only
@@ -166,13 +166,37 @@ entropy). No item-specific press.
    **Not wanted:** brackets or a box drawn round the target's bounds
    (tried first, 2026-11-05). If a highlight is ever needed beyond the
    flash, it's a trace of the object's own outline, not its box.
-2. [ ] **Hands:** RT draws and swings the duster; Y draws, then uses; tap
+2. [x] **Hands:** RT draws and swings the duster; Y draws, then uses; tap
    B puts away, hold B drops in front; your hand comes back after a block;
    the waystone on X; the generic Y swing; the two-slot HUD; LB / RB in
    the item slot's category; the hourglass becomes an item.
-3. [ ] **The d-pad strips**, with bag rows and B to drop.
-4. [ ] **Release and accept:** jars and the hourglass fill and release;
+   (Keyboard: Q the duster, F the item slot, G put away / hold to drop.
+   For now: the hourglass is an item-slot stop but still lives in the
+   equipment grid; a collectable reaches the item slot only from the
+   menu (Y on it) until the strips; Y with one just swings until step 5;
+   dropped things sharing a quarter take seven set spots, no capacity
+   yet. The Y marker over a target is still to do.)
+3. [x] **The d-pad strips**, with bag rows and B to drop. (Let go takes
+   the thing in hand, not just onto the slot. Centred, cells the menu's
+   size, a grid row per bag with only the current row open, no text but
+   the Equip / Drop buttons. Keyboard: hold 3 / 4 / 5, 1 / 2, G; no bag
+   rows. Then, like Breath of the Wild's: the open row a fixed window,
+   its middle framed, the row sliding behind the frame and fading out to
+   either side; a bag's icon big when its row is folded, tucked into the
+   frame's corner when it's open.)
+   **Y marker:** done with this step too. No text line for Y; its button
+   over the thing, only where the item acts on a particular thing (see
+   The prompt over the target).
+4. [x] **Release and accept:** jars and the hourglass fill and release;
    vessels, waystones, lost-path doors, locked doors and walls accept;
-   entropy puddles your lamp soaks up.
-5. [ ] **Placing collectables**, and a prototype surface (a shelf or
-   table) that accepts them, with X to take back.
+   entropy puddles your lamp soaks up. (`release.js`, `ACCEPTS`: the
+   lost-path door, then a dormant waystone, then a vessel. Only the
+   hourglass's pixie retraces, to keep its role. Keys and doorstones still
+   find their door and wall in the item code, as before; they could join
+   `ACCEPTS` when there's a reason.)
+5. [x] **Placing collectables**, and a prototype surface (a shelf or
+   table) that accepts them, with X to take back. (`tables.js`: a plain
+   dev-art table for any collectable, and an end table with a placemat
+   for kitchenware, set with a teacup, a saucer and a spoon for +1 entropy
+   max. Y places, or sets it down in front; X tapped takes back the last.
+   Footprints and piles beyond four places, shelves and cabinets: later.)

@@ -96,6 +96,10 @@
     chestChance: 1 / 6,
     chestMinDepth: 1,
     chestCells: [1, 4],       // how many cells a chest has something in
+    tableChance: 1 / 5,       // a table (walk mode's tables.js), depth 1+, not halls
+    tableMinDepth: 1,
+    endTableShare: 0.7,       // of tables, the end tables (the rest: plain tables)
+    kitchenware: ['teacup', 'saucer', 'spoon'], // what an end table takes (one piece on it when found)
     curios: ['teacup', 'saucer', 'spoon', 'button', 'thimble', 'marble', 'moth', 'beetle'],
     // Props: blocks on a half-cell subgrid, stacked in half-cell-ish units
     // (3 units = floor to ceiling), plus flat floor detail.
@@ -262,7 +266,7 @@
       for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) solid.add(x + ',' + y);
     }
     for (const pb of pushBlocks(space)) { solid.add(pb.from.sx + ',' + pb.from.sy); solid.add(pb.to.sx + ',' + pb.to.sy); }
-    for (const q of [vessel(space), chest(space)]) if (q) solid.add(q.sx + ',' + q.sy);
+    for (const q of [vessel(space), chest(space), table(space)]) if (q) solid.add(q.sx + ',' + q.sy);
     const cells = r.shuffle(space.cells.slice().sort()).filter((k) => {
       if (avoid.has(k)) return false;
       const c = DE.parseKey(k);
@@ -337,6 +341,29 @@
     const v = vessel(space);
     const free = freeSubs(space).filter((q) => !v || q.sx !== v.sx || q.sy !== v.sy);
     return free.length ? free[Math.floor(r.next() * free.length)] : null;
+  }
+
+  /**
+   * A table standing in this space, if it has one: { sx, sy, kind } ('table'
+   * or 'endtable'), on its own stream, where a vessel could stand (and not on
+   * this room's vessel or chest).
+   */
+  function table(space) {
+    if (!space.parentId || space.archetype === 'hall' || space.depth < RULES.tableMinDepth) return null;
+    const r = DE.deriveRng(space.seed, 'table');
+    if (!r.chance(RULES.tableChance)) return null;
+    const kind = r.chance(RULES.endTableShare) ? 'endtable' : 'table';
+    const v = vessel(space), ch = chest(space);
+    const free = freeSubs(space).filter((q) => (!v || q.sx !== v.sx || q.sy !== v.sy) && (!ch || q.sx !== ch.sx || q.sy !== ch.sy));
+    const at = free.length ? free[Math.floor(r.next() * free.length)] : null;
+    return at ? { sx: at.sx, sy: at.sy, kind } : null;
+  }
+
+  /** What's on an end table when you first find it: one piece of its kitchenware, seeded ([cell]); a plain table, nothing. */
+  function tableDressing(space, kind) {
+    if (kind !== 'endtable') return [];
+    const r = DE.deriveRng(space.seed, 'table-dressing');
+    return [{ kind: 'curio', type: r.pick(RULES.kitchenware), n: 1 }];
   }
 
   /** What's in a chest when you first find it: its cells, [{ kind, n, ... } | null] (INV.chest's size is 8). */
@@ -942,7 +969,7 @@
       for (let y = b.y0 * 2; y < b.y1 * 2; y++) for (let x = b.x0 * 2; x < b.x1 * 2; x++) solid.add(x + ',' + y);
     }
     for (const pb of pushBlocks(space)) { solid.add(pb.from.sx + ',' + pb.from.sy); solid.add(pb.to.sx + ',' + pb.to.sy); }
-    for (const q of [vessel(space), chest(space)]) if (q) solid.add(q.sx + ',' + q.sy);
+    for (const q of [vessel(space), chest(space), table(space)]) if (q) solid.add(q.sx + ',' + q.sy);
     const free = [];
     for (const k of space.cells.slice().sort()) {
       if (avoid.has(k)) continue;
@@ -1050,5 +1077,5 @@
     });
   }
 
-  Object.assign(DP, { RULES, loot, vessel, chest, chestLoot, sigil, well, props, dust, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, saveLantern, hallKeepsStone, hallStone, stoneSpot, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
+  Object.assign(DP, { RULES, loot, vessel, chest, table, tableDressing, chestLoot, sigil, well, props, dust, ghostSpawn, pixieSpawn, creeperSpawn, isLocked, lockedBySeed, pastLock, childThrough, committed, rerollThrough, pushBlocks, sconces, waystone, saveLantern, hallKeepsStone, hallStone, stoneSpot, centerOf, waypointSet, waypointCount, branch, collapseCost, collapse, seedChain });
 })(typeof window !== 'undefined' ? window : globalThis);

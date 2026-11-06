@@ -97,36 +97,22 @@
       ic.innerHTML = icon(!!slot.item.holds);
       return ic;
     },
-    /** What F does with it: retrace a lost path at its door, or the jar's catch and vessel moves, for pixies only. */
+    /** What Y does with it: what a jar does, for one pixie. Charged, it releases the pixie (release.js: at a lost
+     *  path's door that's the retrace); empty, it takes one out of a vessel of pixies, or catches one close by. */
     use(p, slot) {
       const hg = hourglass();
-      const door = W.doorNear(p);
-      const lost = door && (door.action === 'letgo' || door.action === 'lostdoor') ? door : null;
-      if (lost && hg.holds) {
-        const n = lost.path.traces.length, why = W.retraceBlocked(lost);
-        return why ? { action: 'retraceno', slot, why, line: { cls: 'blocked', text: `retrace your lost path · ${why}` } }
-          : { action: 'retrace', slot, door: lost, line: { cls: 'collapse', text: `retrace your lost path · ${n} room${n === 1 ? '' : 's'} · ${chargeText(lost.price)} and the hourglass's pixie` } };
-      }
+      if (hg.holds) return { action: 'release', slot, line: W.releaseLine(p, hg, 'hourglass') };
       const v = W.vesselAhead(p);
-      if (v) {
-        if (hg.holds && (!v.n || (v.holds === 'pixie' && v.n < RULES.vesselCapacity))) {
-          return { action: 'deposit', slot, jar: hg, vessel: v, line: { cls: 'jar', text: `pour the hourglass's pixie into the vessel (${v.n || 0}/${RULES.vesselCapacity})` } };
-        }
-        if (!hg.holds && v.n && v.holds === 'pixie') {
-          return { action: 'withdraw', slot, jar: hg, vessel: v, line: { cls: 'jar', text: 'take a pixie out of the vessel into the hourglass' } };
-        }
-        const why = v.n >= RULES.vesselCapacity ? 'the vessel is full' : hg.holds ? 'the vessel holds entropy' : v.n ? 'the hourglass holds only a pixie' : 'the vessel is empty';
-        return { action: 'vesselno', slot, jar: hg, vessel: v, why, line: { cls: 'blocked', text: why } };
-      }
-      const px = !hg.holds && W.pixieNear(p);
+      if (v && v.n && v.holds === 'pixie') return { action: 'withdraw', slot, jar: hg, vessel: v, line: { cls: 'jar', text: 'take a pixie out of the vessel into the hourglass' } };
+      const px = W.pixieNear(p);
       if (px) return { action: 'catch', slot, jar: hg, pixie: px, line: { cls: 'jar', text: 'swipe the hourglass to catch the pixie' } };
-      if (lost) return { action: 'retraceno', slot, why: W.retraceWant(), line: { cls: 'blocked', text: `retrace your lost path · ${W.retraceWant()}` } };
+      const door = W.doorNear(p);
+      if (door && (door.action === 'letgo' || door.action === 'lostdoor')) return { action: 'retraceno', slot, why: W.retraceWant(), line: { cls: 'blocked', text: `retrace your lost path · ${W.retraceWant()}` } };
       return null;
     },
     act(u) {
-      if (u.action === 'retrace') W.retraceThrough(u.door, !u.door.own);
+      if (u.action === 'release') W.release(state.player, hourglass(), 'hourglass');
       else if (u.action === 'catch') W.catchPixie(u.pixie, u.jar, 'you catch the pixie in the hourglass · now it can find a lost path');
-      else if (u.action === 'deposit') W.deposit(u.jar, u.vessel, 'hourglass');
       else if (u.action === 'withdraw') W.withdraw(u.jar, u.vessel, 'hourglass');
       else W.showCaption(u.why);
     },

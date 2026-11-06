@@ -21,7 +21,7 @@
   const promptF = $('prompt-f') || document.createElement('button');
 
   /** "crate", "block", "vessel" (with what's in it). */
-  const objName = (b) => (b.chest ? 'chest' : b.crate ? 'crate' : b.waystone ? (b.holds ? 'waystone' : 'dormant waystone') : !b.vessel ? 'block'
+  const objName = (b) => (b.table ? (b.table === 'endtable' ? 'end table' : 'table') : b.chest ? 'chest' : b.crate ? 'crate' : b.waystone ? (b.holds ? 'waystone' : 'dormant waystone') : !b.vessel ? 'block'
     : !b.n ? 'empty vessel' : `vessel (${b.n} ${b.holds === 'pixie' ? (b.n === 1 ? 'pixie' : 'pixies') : (b.n === 1 ? 'charge' : 'charges')})`);
 
   /** E's line for the focused thing: { text, cls }. */
@@ -40,7 +40,9 @@
         : { cls: near.opt.lose ? 'lose' : 'collapse', text: `${near.opt.label} · ${near.opt.detail || ''}` };
       case 'surface': return { cls: 'surface', text: 'the door up to the surface' };
       case 'lift': return near.block.waystone && near.block.holds ? { cls: 'collapse', text: 'tap: travel from the waystone · hold: grab it' }
+        : near.block.waystone ? { cls: 'collapse', text: `tap: wake the waystone from your lamp · ${chargeText(RULES.waystoneCharges)} · hold: grab it` }
         : near.block.chest ? { cls: 'jar', text: 'tap: open the chest · hold: grab it' }
+        : near.block.table && W.topOf(near.block) ? { cls: 'jar', text: `tap: take back ${W.cellName(W.topOf(near.block))} · hold: grab the ${objName(near.block)}` }
         : { cls: 'jar', text: `grab the ${objName(near.block)}${near.block.done ? ' · lifting it off its mark takes its entropy back' : ''}` };
       case 'grabbed': return { cls: 'jar', text: state.grab && state.grab.moved
         ? `pushing or pulling the ${objName(near.block)} · let go of E to let go`
@@ -81,7 +83,6 @@
     if (near.action === 'withdraw') return { cls: 'jar', text: `take ${near.vessel.holds === 'pixie' ? 'a pixie' : 'a charge'} out of the vessel into the jar` };
     if (near.action === 'vesselno') return { cls: 'blocked', text: near.vessel.n >= RULES.vesselCapacity ? 'the vessel is full' : 'the vessel holds something else' };
     if (near.action === 'pour') return { cls: 'collapse', text: `pour the jar into your lamp · 1 charge${W.lampRoom() < 0.99 ? ' (your lamp takes only ' + chargeText(W.lampRoom()) + ')' : ''}` };
-    if (near.action === 'powerlamp') return { cls: 'collapse', text: `wake the waystone from your lamp · ${chargeText(RULES.waystoneCharges)}` };
     if (near.action === 'power') return { cls: 'jar', text: `pour the jar into the waystone · its ${near.jar.holds === 'pixie' ? 'pixie' : 'entropy'} wakes it` };
     if (near.action === 'unlock') return { cls: 'lock', text: `unlock the door · 1 of ${state.run.keys} key${state.run.keys === 1 ? '' : 's'}` };
     return null;
@@ -107,16 +108,16 @@
     // door, or a reroll that takes what's yours. On touch the E line stays:
     // it's the only E button.
     const warn = nearE && (nearE.path || (nearE.action === 'reroll' && nearE.lose));
-    const e = (touch() || warn) && nearE && eLine(nearE), f = nearF && fLine(nearF);
+    const e = (touch() || warn) && nearE && eLine(nearE);
     if (e && W.holdTime(nearE) && !nearE.refuse && !/^hold|· hold:/.test(e.text)) e.text += ' · hold';
     showLine(promptEl, 'E', e);
-    showLine(promptF, 'F', f);
+    showLine(promptF, 'F', null); // what Y would do shows as its button over the thing (updateMarker), never as text
     promptF.classList.toggle('alone', !e);
     updateFocus(nearE);
     W.updatePreview(nearE);
     updateRing(state.hold.ring);
-    updateMarker(nearE, nearE && eLine(nearE));
-    updateFlash(nearE, dt);
+    updateMarker(nearE, nearE && eLine(nearE), nearF);
+    updateFlash(nearE || (!touch() && !state.carry ? yFocus(nearF) : null), dt);
     W.updateChoice(focusRect);
     // What it costs, on the lamp's meter: E's action, else F's.
     const ce = nearE && costOf(nearE), cf = !ce && nearF && costOf(nearF);
@@ -131,7 +132,7 @@
       case 'snuff': return -RULES.sconceCost * shard;
       case 'reroll': return near.price ? near.price.charges : 0;
       case 'choose': return near.opt.cost || 0;
-      case 'powerlamp': return RULES.waystoneCharges;
+      case 'lift': return near.block.waystone && !near.block.holds ? RULES.waystoneCharges : 0;
       default: return 0;
     }
   }
@@ -192,37 +193,95 @@
     focusRect = b ? boxRect(b) : null;
   }
 
-  // The focus marker (HANDS-PLAN.md): the button for what X / E would act
-  // on, floating just over it. Only ever the one focused thing. It fades out
-  // when nothing is in reach, still tracking where that thing is on screen
-  // as the camera moves. It wears a faint ring when the action is a hold,
-  // and gives way to the hold ring while you hold. (Brackets round the
-  // target's box were tried on 2026-11-05 and dropped: not the look.)
-  const badgeEl = el('div', 'focusbadge');
-  const badgeKey = el('kbd', '', '');
-  badgeEl.append(badgeKey);
-  document.body.append(badgeEl);
-  let markBox = null; // the last focused thing's box: the badge keeps to it while it fades
-  let markOff = 0;    // state.time it went out of reach
+  // The focus markers (HANDS-PLAN.md): a button floating just over the
+  // thing it would act on. X / E for the one focused thing; Y / F only when
+  // what's in your hand would act on a particular thing in the world (yBox
+  // says which), never for a swing at the air, a spill, a mark on the floor.
+  // Each fades out when its target goes, still tracking it on screen as the
+  // camera moves. X wears a faint ring when its action is a hold, and gives
+  // way to the hold ring while you hold. On one thing at once, the two sit
+  // side by side, and a muted X gives way to Y. (Brackets round the target's
+  // box were tried on 2026-11-05 and dropped: not the look. So was a line of
+  // text for what Y would do.)
   const MARK_FADE = 0.25; // s, a little over the CSS fade
-  function updateMarker(near, line) {
-    const ring = state.hold.ring, ringOn = !!(ring && ring.v > 0.02 && !ring.idle);
-    const glyph = touch() ? '' : W.glyph('E');
-    const on = !!(near && near.box && !state.choice && glyph && !ringOn && near.action !== 'grabbed' && near.action !== 'setblock'); // not while you hold or carry something
-    badgeEl.classList.toggle('on', on);
+  function makeBadge(cls) {
+    const b = { el: el('div', 'focusbadge ' + cls), key: el('kbd', '', ''), box: null, off: 0 };
+    b.el.append(b.key);
+    document.body.append(b.el);
+    return b;
+  }
+  const xBadge = makeBadge('x'), yBadge = makeBadge('y');
+  /** Show (box set) or fade a badge; returns the point it's at, or null. */
+  function placeBadge(b, box, glyph, shift) {
+    const on = !!box;
+    b.el.classList.toggle('on', on);
     if (on) {
-      markBox = near.box;
-      const blocked = !!(line && line.cls === 'blocked') || near.action === 'locked';
-      badgeEl.classList.toggle('blocked', blocked);
-      badgeEl.classList.toggle('hold', !blocked && !!W.holdTime(near) && !near.refuse);
-      if (badgeKey.textContent !== glyph) badgeKey.textContent = glyph;
-    } else if (markBox && !markOff) markOff = state.time;
-    if (on) markOff = 0;
-    if (markBox && markOff && state.time - markOff > MARK_FADE) markBox = null;
-    const pt = markBox && overTop(markBox);
+      b.box = box;
+      b.off = 0;
+      if (b.key.textContent !== glyph) b.key.textContent = glyph;
+    } else if (b.box && !b.off) b.off = state.time;
+    if (b.box && b.off && state.time - b.off > MARK_FADE) b.box = null;
+    const pt = b.box && overTop(b.box);
     if (!pt) return;
-    badgeEl.style.left = pt[0].toFixed(1) + 'px';
-    badgeEl.style.top = pt[1].toFixed(1) + 'px';
+    b.el.style.left = (pt[0] + shift).toFixed(1) + 'px';
+    b.el.style.top = pt[1].toFixed(1) + 'px';
+  }
+  const blockBox = (b) => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, z0: b.base || 0, z1: b.top });
+  const doorBox = (cell, facing) => W.focusBox({ exit: { cell, facing } });
+  /** The thing Y would act on, as a box (and whether it can't, right now), or null. */
+  function yBox(u) {
+    if (!u) return null;
+    const p = state.player;
+    switch (u.action) {
+      case 'unlock': return { box: doorBox(u.door.exit.cell, u.door.exit.facing) };
+      case 'carve': return { box: doorBox(u.cell, u.facing) };
+      case 'withdraw': return { box: blockBox(u.vessel) };
+      case 'place': return { box: blockBox(u.table) };
+      case 'placeno': return { box: blockBox(u.table), blocked: true };
+      case 'catch': {
+        const h = W.PIXIE ? W.PIXIE.height : 0.62;
+        return { box: { x0: u.pixie.x - 0.06, x1: u.pixie.x + 0.06, y0: u.pixie.y - 0.06, y1: u.pixie.y + 0.06, z0: h - 0.06, z1: h + 0.06 } };
+      }
+      case 'release': {
+        const hg = u.slot && u.slot.kind === 'hourglass', from = hg ? state.run.equipment.hourglass : u.jar;
+        const t = from && from.holds && W.acceptorAt(p, from.holds, from, hg ? 'hourglass' : 'jar');
+        if (!t) return null; // a spill, or a pixie let go: nothing in particular takes it
+        const box = t.door ? doorBox(t.door.exit.cell, t.door.exit.facing) : t.stone ? blockBox(t.stone) : t.vessel ? blockBox(t.vessel) : null;
+        return box && { box, blocked: !!t.blocked };
+      }
+    }
+    return null;
+  }
+  /** Y's target as an X-style focus (for the flash), or null. */
+  function yFocus(u) {
+    if (!u) return null;
+    if (u.action === 'unlock') return u.door;
+    if (u.action === 'withdraw') return { action: 'lift', block: u.vessel };
+    if (u.action === 'place' || u.action === 'placeno') return { action: 'lift', block: u.table };
+    if (u.action === 'catch') return { action: 'pixie', pixie: u.pixie };
+    if (u.action === 'release') {
+      const hg = u.slot && u.slot.kind === 'hourglass', from = hg ? state.run.equipment.hourglass : u.jar;
+      const t = from && from.holds && W.acceptorAt(state.player, from.holds, from, hg ? 'hourglass' : 'jar');
+      if (!t) return null;
+      return t.door ? t.door : t.stone ? { action: 'lift', block: t.stone } : t.vessel ? { action: 'lift', block: t.vessel } : null;
+    }
+    return null;
+  }
+  const sameBox = (a, b) => !!(a && b) && Math.abs((a.x0 + a.x1) - (b.x0 + b.x1)) < 0.1 && Math.abs((a.y0 + a.y1) - (b.y0 + b.y1)) < 0.1;
+  function updateMarker(near, line, nearF) {
+    const ring = state.hold.ring, ringOn = !!(ring && ring.v > 0.02 && !ring.idle);
+    const pad = !touch();
+    const xOn = !!(pad && near && near.box && !state.choice && !ringOn && near.action !== 'grabbed' && near.action !== 'setblock'); // not while you hold or carry something
+    const xBlocked = xOn && (!!(line && line.cls === 'blocked') || near.action === 'locked');
+    const y = pad && !state.choice && !state.carry ? yBox(nearF) : null;
+    const same = xOn && y && sameBox(near.box, y.box);
+    const showX = xOn && !(same && xBlocked);
+    xBadge.el.classList.toggle('blocked', xBlocked);
+    xBadge.el.classList.toggle('hold', xOn && !xBlocked && !!W.holdTime(near) && !near.refuse);
+    yBadge.el.classList.toggle('blocked', !!(y && y.blocked));
+    const both = showX && same;
+    placeBadge(xBadge, showX ? near.box : null, W.glyph('E'), both ? -17 : 0);
+    placeBadge(yBadge, y ? y.box : null, W.glyph('F'), both ? 17 : 0);
   }
 
   // The focus flash: when something comes into reach, the thing itself
@@ -269,6 +328,7 @@
       case 'light': case 'snuff': return one(near.sconce.flame.parent);
       case 'save': return one(near.lantern.group);
       case 'erase': return one(near.mark.mesh);
+      case 'pixie': return one(near.pixie.mesh);
       case 'grabbed': case 'setblock': case 'choose': return null;
     }
     if (!near.exit) return null;
