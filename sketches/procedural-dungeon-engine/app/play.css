@@ -42,12 +42,16 @@ html, body {
   backdrop-filter: blur(4px);
 }
 
+/* Touch-only buttons show on a phone or tablet browser alone (html.mobile, core.js). */
+.pause-btn, .crouch-btn, .jump-btn, .use-btn { display: none; }
+html.mobile .crouch-btn, html.mobile .jump-btn, html.mobile .use-btn { display: block; }
+html.mobile .pause-btn { display: grid; }
+/* Bottom left: the pause button, on touch. */
 .pause-btn {
-  top: max(12px, env(safe-area-inset-top));
+  bottom: max(12px, env(safe-area-inset-bottom));
   left: max(12px, env(safe-area-inset-left));
-  width: 38px;
-  height: 38px;
-  display: grid;
+  width: 44px;
+  height: 44px;
   place-items: center;
   padding: 0;
   color: var(--muted);
@@ -133,9 +137,6 @@ html, body {
   cursor: pointer;
 }
 .crouch-btn.on { color: var(--text); border-color: rgba(159, 216, 168, 0.6); background: rgba(40, 60, 44, 0.7); }
-@media (hover: hover) {
-  .crouch-btn { width: auto; height: auto; padding: 5px 10px; border-radius: 6px; }
-}
 /* Touch only: jump, left of crouch. */
 .jump-btn {
   position: fixed;
@@ -152,18 +153,7 @@ html, body {
   font-size: 11px;
   touch-action: none;
 }
-@media (hover: hover) {
-  .jump-btn { display: none; }
-}
 
-.bottom-left {
-  bottom: max(12px, env(safe-area-inset-bottom));
-  left: max(12px, env(safe-area-inset-left));
-  padding: 6px 10px;
-  font-size: 13px;
-  color: var(--muted);
-  max-width: calc(100vw - 24px);
-}
 kbd {
   font: 11px ui-monospace, Consolas, monospace;
   padding: 0 4px;
@@ -417,28 +407,24 @@ kbd {
 .dialog .done-buttons { flex-direction: column; align-items: stretch; }
 
 /* The lamp: its icon (in the lamp's colour) and a fluid meter, one section
-   per charge. Bottom left, level with the hotbar. */
+   per charge. Top left, with the carousel under it; the two share one
+   height (--hud-h). */
+:root { --hud-h: 128px; --hud-top: max(12px, env(safe-area-inset-top)); --hud-left: max(12px, env(safe-area-inset-left)); }
+@media (max-width: 560px) { :root { --hud-h: 110px; } }
 .lamp-hud {
   position: fixed;
   z-index: 3;
-  left: max(12px, env(safe-area-inset-left));
-  bottom: max(12px, env(safe-area-inset-bottom));
+  left: var(--hud-left);
+  top: var(--hud-top);
+  height: var(--hud-h);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px 6px 6px;
+  padding: 6px 12px 6px 6px;
   border-radius: 10px;
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
 }
-/* Over the help line on a desktop. The carousel sits just right of it
-   (items.js placeHotbar); where that won't fit, under it, and the lamp rises. */
-:root { --hud-bottom: max(12px, env(safe-area-inset-bottom)); }
-@media (hover: hover) and (min-width: 561px) {
-  :root { --hud-bottom: calc(max(12px, env(safe-area-inset-bottom)) + 40px); }
-}
-.lamp-hud { bottom: var(--hud-bottom); border-width: 2px; }
-.hud-stacked .lamp-hud { bottom: calc(var(--hud-bottom) + var(--bar-h, 90px) + 8px); }
 .lamp-icon {
   width: 92px;
   height: 92px;
@@ -526,7 +512,7 @@ kbd {
 .stamina.low i { background: #ff5f8a; }
 .stamina.draining { border-color: rgba(255, 120, 190, 0.9); animation: stamina-pulse 0.6s ease-in-out infinite; }
 @keyframes stamina-pulse { 50% { box-shadow: 0 0 6px rgba(255, 110, 190, 0.9); } }
-/* Phones: a smaller lamp, so it clears the hotbar. */
+/* Phones: a smaller lamp, to fit the shorter --hud-h. */
 @media (max-width: 560px) {
   .lamp-icon { width: 64px; height: 64px; }
   .lamp-icon svg { width: 34px; height: 45px; }
@@ -618,13 +604,8 @@ kbd {
 
 @media (max-width: 560px) {
   .minimap { width: 120px; height: 120px; }
-  .help { display: none; }
-}
-@media (hover: none) {
-  .help { display: none; }
 }
 /* A gamepad in use (gamepad.js): its controls line shows, even on touch, and the d-pad's focus is visible. */
-body.pad .help { display: block; }
 body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Off-screen hash ghosts: status icon + arrow on the screen edge. */
@@ -684,8 +665,8 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hotbar {
   position: fixed;
   z-index: 3;
-  left: var(--bar-left, max(12px, env(safe-area-inset-left)));
-  bottom: var(--hud-bottom);
+  left: var(--hud-left);
+  top: calc(var(--hud-top) + var(--hud-h) + 8px);
   display: flex;
   gap: 6px;
   padding: 6px;
@@ -749,9 +730,6 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
   font: inherit;
   font-size: 11px;
   cursor: pointer;
-}
-@media (hover: hover) {
-  .use-btn { display: none; }
 }
 
 /* "That didn't work": a quick shake of the hotbar. */
@@ -818,7 +796,7 @@ body.pad .btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* The carousel (items.js), where the hotbar was: the item in hand big in
    the middle, the stops before and after it small to either side. */
-.hotbar.carousel { align-items: center; gap: 6px; padding: 8px 8px 28px; }
+.hotbar.carousel { height: var(--hud-h); align-items: center; gap: 6px; padding: 8px 8px 28px; }
 .carousel .slot.side { --s: 62px; opacity: 0.75; }
 .carousel .slot.side:disabled { opacity: 0.25; cursor: default; }
 .carousel .slot.mid { --s: 88px; }

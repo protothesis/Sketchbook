@@ -53,20 +53,11 @@
   /** A key's label for the hints: the pad's glyph in pad mode, else the key. */
   const glyph = (key) => (pad ? GLYPH[style][key] || key : key);
 
-  const help = document.querySelector('.help');
-  const keyHelp = help ? help.innerHTML : '';
-  function padHelp() {
-    const g = GLYPH[style], k = (s) => `<kbd>${s}</kbd>`;
-    return `${k('◖')} move · ${k('◗')} look · ${k(g.run)} run · ${k(g.Space)} jump · ${k(g.C)} crouch · ${k(g.E)} interact · ` +
-      `${k(g.F)} use item · ${k(g.Esc)} put away · ${k(g.R)} lamp · ${k(g.bumpers)} item in hand · ${k(g.Tab)} map & inventory · ${k(g.Menu)} pause`;
-  }
-
   function setPad(on, kind) {
     if (on === pad && (kind || style) === style) return;
     pad = on;
     if (kind) style = kind;
     document.body.classList.toggle('pad', on);
-    if (help) help.innerHTML = on ? padHelp() : keyHelp;
     if (state.choice) W.moveChoice(0); // redraw its hint
     if (state.run) W.refreshHotbar(); // the equipment slot's key
   }

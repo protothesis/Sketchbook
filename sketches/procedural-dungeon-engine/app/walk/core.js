@@ -32,6 +32,16 @@
 
   const W = (global.DungeonPlay.walk = {});
 
+  // A phone or tablet browser (not a narrow window): the touch-only buttons
+  // (pause, crouch, jump, use) show on these alone, via html.mobile in
+  // play.css. Client hints where the browser has them, else the user agent;
+  // iPadOS asks for desktop pages, so a "Mac" with a touch screen is an iPad.
+  const ua = navigator.userAgent || '';
+  W.mobile = !!(navigator.userAgentData && navigator.userAgentData.mobile) ||
+    /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|BlackBerry|Opera Mini|IEMobile/i.test(ua) ||
+    (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  document.documentElement.classList.toggle('mobile', W.mobile);
+
   const DE = global.DungeonEngine;
   const DP = global.DungeonPlay;
   const RULES = DP.RULES;
