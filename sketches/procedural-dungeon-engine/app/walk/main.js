@@ -146,6 +146,7 @@
     dither.uDitherPlayer.value.set(p.x * S, p.y * S);
 
     W.updateWells(dt);
+    W.updatePuddles(dt);
     W.updatePixies(dt);
     updateGhosts(dt);
     W.updateCreepers(dt);

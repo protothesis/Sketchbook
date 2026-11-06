@@ -254,6 +254,15 @@ All notable changes to this sketch are logged here, per
   jars that catch and release with things that accept what's released,
   collectables placed with Y, and the X prompt floating over its target.
   Walk mode is now designed controller first; touch is legacy.
+- 2026-11-05: **Release and accept** (step 4 of `HANDS-PLAN.md`;
+  `release.js`). A full jar or the hourglass swung always releases what's in
+  it, at a point in front of you, and whatever there accepts it takes it
+  (`ACCEPTS`, in order): a lost path's door (the hourglass's pixie: the
+  retrace), a dormant waystone (it wakes), a vessel (same kind, with room).
+  Nothing there: entropy spills as a **puddle** your lamp drinks while you
+  stand in it, and a pixie flies off free. An empty jar or hourglass swung at
+  a vessel takes one out. A jar of entropy no longer pours straight into
+  your lamp.
 - 2026-11-05: **Two slots, one hand** (step 2 of `HANDS-PLAN.md`;
   `items.js`, `input.js`, `gamepad.js`, `controls.js`). The carousel is
   replaced by a tool slot and an item slot.

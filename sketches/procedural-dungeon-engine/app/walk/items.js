@@ -774,34 +774,21 @@
   function useNear(p) {
     const slot = selectedSlot();
     if (state.paused || state.carry) return null; // a block fills your hands
-    // An unpowered waystone right in front of you comes first: a full jar in
-    // hand (its entropy or its pixie) wakes it, or else your lamp's flame (a charge).
-    // A dormant waystone right in front of you takes a full jar's entropy or
-    // pixie, and wakes. (From your lamp, it's X: actions.js.)
-    const st = slot && slot.kind === 'jar' && stoneAhead(p);
-    const sj = st && heldJar();
-    if (sj && sj.holds) return { action: 'power', slot, jar: sj, stone: st };
     if (!slot) return null;
     if (slot.kind === 'key') {
       const door = W.doorNear(p);
       return door && door.action === 'locked' ? { action: 'unlock', slot, door } : null;
     }
     if (slot.kind === 'jar') {
-      // F swipes the jar in your hands (setting it down is E). Empty, it
-      // catches a pixie close by, or scoops a full well you stand in; with
-      // entropy in it, it pours into your lamp. Anything else: a swipe at air.
+      // Y swings the jar in your hand. Full, it always releases what's in it,
+      // into whatever in front accepts it, or onto the floor (release.js).
+      // Empty, it catches what the swing touches: one out of a vessel in front,
+      // a pixie close by, a full well you stand in. Else a swing at air.
       const jar = heldJar();
       if (!jar) return null;
-      // A vessel right in front of you comes first: pour the jar in, or take one out.
+      if (jar.holds) return { action: 'release', slot, jar, line: W.releaseLine(p, jar, 'jar') };
       const v = vesselAhead(p);
-      if (v) {
-        const room = !v.n || (v.holds === jar.holds && v.n < RULES.vesselCapacity);
-        if (jar.holds && room) return { action: 'deposit', slot, jar, vessel: v };
-        if (!jar.holds && v.n) return { action: 'withdraw', slot, jar, vessel: v };
-        return { action: 'vesselno', slot, jar, vessel: v };
-      }
-      if (jar.holds === 'entropy') return { action: 'pour', slot, jar };
-      if (jar.holds) return { action: 'swipe', slot, jar };
+      if (v && v.n) return { action: 'withdraw', slot, jar, vessel: v };
       const px = W.pixieNear(p);
       if (px) return { action: 'catch', slot, pixie: px, jar };
       const w = W.wellHere();
@@ -830,13 +817,6 @@
       return;
     }
     if (u.slot && u.slot.kind !== 'duster') swipeAt = state.time; // the one swing, whatever's in hand (the duster's own act swings it)
-    if (u.action === 'power') {
-      swipeAt = state.time;
-      W.powerStone(u.stone, u.jar);
-      state.sel = 'jar:empty';
-      W.refreshHotbar();
-      return;
-    }
     if (u.action === 'unlock') { W.unlockDoor(u.door); return; }
     if (ITEMS[u.slot.kind] && ITEMS[u.slot.kind].act) { // its own file says what F does
       swipeAt = state.time;
@@ -851,11 +831,8 @@
       else if (u.action === 'scoop') {
         if (u.full) W.scoopWell(u.well, u.jar);
         else W.showCaption('the well isn\'t full enough to fill a jar');
-      } else if (u.action === 'pour') pourJar(u.jar);
-      else if (u.action === 'deposit') deposit(u.jar, u.vessel);
+      } else if (u.action === 'release') W.release(state.player, u.jar, 'jar');
       else if (u.action === 'withdraw') withdraw(u.jar, u.vessel);
-      else if (u.action === 'vesselno') W.showCaption(u.vessel.n >= RULES.vesselCapacity ? 'the vessel is full'
-        : `the vessel holds ${u.vessel.holds === 'pixie' ? 'pixies' : 'entropy'}, not ${u.jar.holds === 'pixie' ? 'a pixie' : 'entropy'}`);
       state.sel = 'jar:' + (u.jar.holds || 'empty'); // the same jar stays in your hands
       savePlayer();
       W.refreshHud();
@@ -1400,6 +1377,6 @@ void main() {
   Object.assign(W, { STROKES, maxCharges, ITEMS, itemMesh, updateItems, collectPickups,
     takeItem, selectedSlot, equipSlot, useEquip, SLASH, putAway, restoreHand, stowHand, pressTool, pressItem, pressHands, releaseHands, tickHands, dropHeld, dropSpot, hold, cycle, itemSlot, slotIcon, slotLabel, shakeHotbar, heldRig, vesselAhead, deposit, withdraw, resetHeld, quarterAhead, quarterReachable, updatePreview, SETDOWN, JAR_H, heldJar, jarName, lampRoom, makeVesselMesh, inDoorMouth, slots, refreshHotbar, addMarkToWorld,
     removeMarkFromWorld, clearMarks, markNear, wipeMarksIn,
-    useNear, useSelected, noteUnmade,
+    useNear, useSelected, noteUnmade, stoneAhead,
     updateJars, addSigil, updateSigils });
 })(window);

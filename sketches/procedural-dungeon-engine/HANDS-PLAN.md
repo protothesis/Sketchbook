@@ -181,8 +181,12 @@ entropy). No item-specific press.
    size, a grid row per bag with only the current row open, no text but
    the Equip / Drop buttons. Keyboard: hold 3 / 4 / 5, 1 / 2, G; no bag
    rows.)
-4. [ ] **Release and accept:** jars and the hourglass fill and release;
+4. [x] **Release and accept:** jars and the hourglass fill and release;
    vessels, waystones, lost-path doors, locked doors and walls accept;
-   entropy puddles your lamp soaks up.
+   entropy puddles your lamp soaks up. (`release.js`, `ACCEPTS`: the
+   lost-path door, then a dormant waystone, then a vessel. Only the
+   hourglass's pixie retraces, to keep its role. Keys and doorstones still
+   find their door and wall in the item code, as before; they could join
+   `ACCEPTS` when there's a reason.)
 5. [ ] **Placing collectables**, and a prototype surface (a shelf or
    table) that accepts them, with X to take back.

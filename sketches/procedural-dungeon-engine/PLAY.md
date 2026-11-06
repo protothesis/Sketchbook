@@ -374,11 +374,12 @@ designed for. The hands and items rework in progress is planned in
     backpack) sits in the equipment grid. One of each, collected like a
     tool, in a slot if it has a use. On a faint it falls with your
     pack, all but the duster and the hourglass (protected). **The hourglass**
-    (`app/walk/hourglass.js`) holds one pixie: F near a pixie catches it,
-    F at a vessel pours it in or takes one out of a vessel of pixies. A
-    pixie glows in its lower bulb (and its slot's glyph) when it's
-    charged. Charged, it's the key to a lost path: F with it in hand at
-    the path's door retraces it, and spends the pixie. **The feather
+    (`app/walk/hourglass.js`) is a jar for one pixie that you can't lose:
+    empty, Y catches a pixie close by or takes one out of a vessel of
+    pixies; charged, Y releases its pixie, like any full jar (see Release
+    and accept). A pixie glows in its lower bulb (and its slot's glyph)
+    when it's charged. A lost path's door accepts the hourglass's pixie
+    (only the hourglass's): released there, it retraces the path. **The feather
     duster** (`app/walk/dust.js`) is in your bag from the start, for now,
     and the tool slot: RT (Q) draws it and swipes it at the dust
     (see Dusting, below).
@@ -479,13 +480,21 @@ designed for. The hands and items rework in progress is planned in
   as an orange bar.
 - **All your jars share one slot.** It's grouped by what they hold (empty,
   a pixie, a charge of entropy), with a count on each group; the group you
-  pick is the jar in your hands. **F swipes it** (a quick sweep forward
-  and down, always, so you see it): an empty jar catches a pixie within
-  0.75 cells, or scoops a full well you're standing in; a jar of entropy
-  pours into your lamp, all or nothing (it tops the lamp up to its max,
-  and the jar is empty after either way). At a **vessel** right in front
-  of you, F pours the jar into it, or (an empty jar) takes one back out.
-  A swipe at nothing just swipes.
+  pick is the jar in your hands. **Y swings it.** Empty, it catches what
+  the swing touches: one out of a vessel in front of you, a pixie within
+  0.75 cells, or a full well you're standing in. **Full, it always
+  releases** what's in it (since 2026-11-05).
+- **Release and accept** (`app/walk/release.js`). What a full jar (or the
+  hourglass) releases lands at a point in front of you, and whatever is
+  there that accepts it takes it. Each thing says what it accepts
+  (`ACCEPTS`), tried in order: a lost path's door (the hourglass's pixie:
+  the retrace), a dormant waystone (a pixie or entropy: it wakes), a
+  vessel (a pixie or entropy, if it's empty or holds that kind and has
+  room). Nothing there takes it: **entropy spills as a puddle**, a little
+  well on the floor (or a block's top) that your lamp drinks while you
+  stand in it, shrinking as it pours (`PUDDLE`; saved with the run, gone
+  with a rerolled room), and **a pixie flies off**, free again. The prompt
+  says which it'll be.
 - **Chalk marks.** Your own markup, drawn in the world, and it shows up on
   the maps. Chalk comes in five colours, each with its own simple mark:
   silver arrow (it points the way you faced), gold triangle, crimson
@@ -505,8 +514,9 @@ designed for. The hands and items rework in progress is planned in
   like a crate: hold E to grab and lift it, carry it anywhere, set it down
   (stacked too, but nothing stacks on a vessel, and you can't stand on it;
   ghosts float over it). It holds **up to 3 of one kind** (pixies, or
-  charges of entropy): F with a full jar pours it in, F with an empty jar
-  takes one back out (a jar of the other kind, or a full vessel, says
+  charges of entropy): a full jar released at it goes in, an empty jar
+  swung at it takes one back out (a jar of the other kind, or a full
+  vessel, doesn't take it: the jar spills instead, and the prompt says
   so). Pixies in it flit above its mouth; entropy glows in it, brighter
   the more there is. A vessel sitting in a rerolled room is despawned
   with what's inside (`run.despawned`).
