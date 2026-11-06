@@ -98,7 +98,7 @@
     const k = DE.key(ls.cell.x, ls.cell.y);
     state.blockAt.set(k, (state.blockAt.get(k) || []).concat(blk));
     const ln = {
-      key, spaceId: space.id, ws: ls, x: cx, y: cy, tile, flame, glassMat, flameMat, blk,
+      key, spaceId: space.id, ws: ls, x: cx, y: cy, tile, group, flame, glassMat, flameMat, blk,
       color: flameColor.clone(), phase: ls.cell.x * 1.3 + ls.cell.y * 0.7, flare: 0,
     };
     state.lanterns = state.lanterns.filter((o) => o.key !== key).concat(ln);
