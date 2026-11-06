@@ -161,8 +161,14 @@ All notable changes to this sketch are logged here, per
     saves, replays and exports like any other.
   - `order` is which door opens next: `random` (any), `breadth` (shallowest
     first: bushy, fills in near the start) or `depth` (deepest first: long
-    winding branches). At 1,000 rooms, random reaches depth ~32, breadth
-    ~20 and depth-first ~400.
+    winding branches). At 400 rooms, random reaches depth ~44, breadth ~26
+    and depth-first ~240.
+  - Breadth and depth pick the shallowest or deepest room (the oldest or
+    newest of those), then one of its doors at random from the route. Taking
+    its first door, as at first, always took a corridor's far tip:
+    depth-first never turned off down a side door, and ran catacomb
+    galleries out in straight lines up to 54 long (now about 9, like the
+    other orders).
   - `from` grows only one room's branch. Door picks and entropy come from
     `seed` (by default the root seed and the history), so the same seed,
     count and order always grow the same dungeon.

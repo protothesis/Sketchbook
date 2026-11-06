@@ -80,14 +80,20 @@
       let pick;
       if (order === 'random') pick = doors[Math.floor(rng.next() * doors.length)];
       else {
-        // Shallowest (or deepest) space; ties go to the oldest (or newest).
-        pick = doors[0];
+        // The shallowest (breadth) or deepest (depth) space, the oldest or
+        // newest of those; then any of its doors, picked at random. (Taking
+        // its first door always took a corridor's far tip, so depth-first
+        // never turned off down a side door.)
+        let best = doors[0].space;
         for (const d of doors) {
+          const s = d.space;
           const better = order === 'breadth'
-            ? d.space.depth < pick.space.depth
-            : d.space.depth > pick.space.depth || (d.space.depth === pick.space.depth && num(d.space.id) > num(pick.space.id));
-          if (better) pick = d;
+            ? s.depth < best.depth || (s.depth === best.depth && num(s.id) < num(best.id))
+            : s.depth > best.depth || (s.depth === best.depth && num(s.id) > num(best.id));
+          if (better) best = s;
         }
+        const own = doors.filter((d) => d.space === best);
+        pick = own[Math.floor(rng.next() * own.length)];
       }
       const tag = pick.space.id + '/' + pick.exit.id;
       let cand = null;
