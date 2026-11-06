@@ -1,15 +1,18 @@
 // Walk mode: the d-pad strips (HANDS-PLAN.md, step 3). Hold a d-pad
-// direction and a strip of what you carry opens, on the thing the slot holds
-// now: ◀ items (the item slot), ▼ collectables (the item slot too). The
-// right stick (or LB / RB) moves along it; down and up move between its rows:
-// the main grid's, then each bag's (the backpack under both, the purse under
-// collectables only), each shown as just its icon until you move into it.
-// Let go of the d-pad and the highlighted thing is taken in hand (assigned to
-// the item slot, if your hands are full of a block). B drops the highlighted
-// one in front of you, one a press. Nothing here moves or sorts things: that's
-// the menu's job. The world doesn't pause.
+// direction and a strip of what you carry opens in the middle of the
+// screen, on the thing the slot holds now: ◀ tools (the RT slot), ▼
+// collectables and ▶ items (the item slot). The right stick (or LB / RB)
+// moves along it; down and up move between its rows, one grid row each:
+// the main grid's, then each bag's (the backpack under items and
+// collectables, the purse under collectables only). Only the row you're on
+// is open; the others fold to one cell (a bag's own icon). Let go of the
+// d-pad and the highlighted thing is taken in hand (just assigned, if your
+// hands are full of a block). B drops the highlighted one in front of you,
+// one a press. Nothing here moves or sorts things: that's the menu's job.
+// The world doesn't pause.
 //
-// Keyboard: hold 3 (items) or 4 (collectables); 1 / 2 move along; G drops.
+// Keyboard: hold 3 (tools), 4 (collectables) or 5 (items); 1 / 2 move
+// along; G drops.
 (function (global) {
   'use strict';
 
@@ -32,6 +35,7 @@
    */
   function rowsFor(kind) {
     const run = state.run, main = W.invSize('items'), lay = W.layoutItems(run);
+    if (kind === 'tools') return [{ bag: null, entries: W.slots().filter((s) => s.kind === 'duster').map((s) => ({ key: s.key, slot: s })) }];
     if (kind === 'items') {
       const slotOf = new Map(W.slots().filter((s) => s.kind !== 'duster' && !s.coll).map((s) => [s.key, s]));
       const ids = (from, to) => {
@@ -69,7 +73,7 @@
     const rows = rowsFor(kind);
     const h = state.handColl;
     rows.some((r, ri) => r.entries.some((e, ei) => {
-      const hit = kind === 'items' ? e.key === state.itemSel : !!h && e.grid === h.grid && e.i === h.i;
+      const hit = kind === 'tools' ? e.key === state.sel : kind === 'items' ? e.key === state.itemSel : !!h && e.grid === h.grid && e.i === h.i;
       if (hit) { strip.row = ri; strip.i = ei; }
       return hit;
     }));
@@ -82,7 +86,9 @@
     strip = null;
     stripEl.hidden = true;
     if (!e) return;
-    if (kind === 'items') {
+    if (kind === 'tools') {
+      if (state.sel !== e.key && !state.carry) W.hold(e.key);
+    } else if (kind === 'items') {
       state.itemCat = 'items';
       state.itemSel = e.key;
       if (state.sel !== e.key) W.hold(e.key);
@@ -116,6 +122,7 @@
     const run = state.run, rows = rowsFor(strip.kind), e = entryNow(rows);
     if (!e) { W.shakeHotbar(); return; }
     let out = null;
+    if (strip.kind === 'tools') { W.showCaption(`your ${W.slotLabel(e.slot)} stays with you`); return; }
     if (strip.kind === 'items') {
       if (e.slot.kind === 'hourglass') { W.showCaption('your hourglass stays with you'); return; }
       const main = W.invSize('items'), lay = W.layoutItems(run), inPack = rows[strip.row].bag === 'backpack';
@@ -135,51 +142,53 @@
     moveStrip(0); // keep the cursor on something
   }
 
-  const iconOf = (kind, e) => (kind === 'items' ? W.slotIcon(e.slot) : W.cellIcon(e.cell));
-  const nameOf = (kind, e) => (kind === 'items' ? W.slotLabel(e.slot) : W.cellName(e.cell));
-  const bagName = (b) => (b === 'purse' ? 'coin purse' : b);
+  const isSlotKind = (kind) => kind !== 'coll';
+  const iconOf = (kind, e) => (isSlotKind(kind) ? W.slotIcon(e.slot) : W.cellIcon(e.cell));
+  const DIR = { tools: '◀', coll: '▼', items: '▶' };
+
+  /** One cell, like the menu's: `e` an entry, or null for an empty one. */
+  function cellEl(kind, e, cls) {
+    const c = el('span', 'slot cell' + (e ? '' : ' empty') + (cls ? ' ' + cls : ''));
+    if (e) c.append(iconOf(kind, e));
+    return c;
+  }
+  /** A row folded to one cell: a bag's own icon, or the main row's thing (its highlighted one, if any). */
+  function foldedEl(kind, r) {
+    if (r.bag) {
+      const c = el('span', 'slot cell bag fold');
+      c.append(W.equipIcon(r.bag));
+      return c;
+    }
+    return cellEl(kind, r.entries[0] || null, 'fold');
+  }
 
   function render() {
     if (!strip) return;
-    const rows = rowsFor(strip.kind), row = rows[strip.row] || rows[0], g = (k) => W.glyph(k);
-    const pad = W.padMode && W.padMode();
+    const kind = strip.kind, rows = rowsFor(kind);
     stripEl.innerHTML = '';
     stripEl.hidden = false;
-    stripEl.className = 'strip ' + strip.kind;
-    const head = el('div', 'strip-head', (strip.kind === 'items' ? 'items' : 'collectables') + (row.bag ? ' · ' + bagName(row.bag) : ''));
-    if (strip.row > 0) head.prepend(el('span', 'strip-up', '▴ '));
-    stripEl.append(head);
-    const cells = el('div', 'strip-cells');
-    const n = row.entries.length;
-    if (!n) cells.append(el('span', 'strip-empty', row.bag ? 'nothing in it' : 'nothing here'));
-    const from = Math.max(0, Math.min(n - SHOW, strip.i - Math.floor(SHOW / 2)));
-    if (from > 0) cells.append(el('span', 'strip-more', '‹'));
-    for (let k = from; k < Math.min(n, from + SHOW); k++) {
-      const e = row.entries[k];
-      const inHand = strip.kind === 'items' ? state.sel === e.key
-        : state.sel === 'hand-coll' && state.handColl && state.handColl.grid === e.grid && state.handColl.i === e.i;
-      const c = el('span', 'slot strip-cell' + (k === strip.i ? ' cur' : '') + (inHand ? ' hand' : '') + (strip.kind === 'coll' ? ' coll' : ''));
-      c.append(iconOf(strip.kind, e));
-      cells.append(c);
-    }
-    if (from + SHOW < n) cells.append(el('span', 'strip-more', '›'));
-    stripEl.append(cells);
-    const cur = row.entries[strip.i];
-    stripEl.append(el('div', 'strip-name', cur ? nameOf(strip.kind, cur) : ''));
-    // The rows below, as their bags' icons: move down into one.
-    const below = rows.slice(strip.row + 1);
-    if (below.length) {
-      const bags = el('div', 'strip-bags');
-      below.forEach((r, k) => {
-        const b = el('span', 'strip-bag' + (k === 0 ? ' next' : ''));
-        b.append(W.equipIcon(r.bag), el('span', 'strip-bag-n', bagName(r.bag) + (r.entries.length ? ' · ' + r.entries.length : '')));
-        bags.append(b);
-      });
-      stripEl.append(bags);
-    }
-    stripEl.append(el('div', 'strip-hint', pad
-      ? `RS move${below.length ? ' · RS ▾ ' + bagName(below[0].bag) : ''}${strip.row ? ' · RS ▴ back' : ''} · ${g('G')} drop · let go to take it`
-      : `1 / 2 move · G drop · let go to take it`));
+    stripEl.className = 'strip ' + kind;
+    const grid = el('div', 'strip-rows');
+    rows.forEach((r, ri) => {
+      const line = el('div', 'strip-row' + (ri === strip.row ? ' on' : ''));
+      if (ri !== strip.row) { line.append(foldedEl(kind, r)); grid.append(line); return; }
+      if (r.bag) { const b = el('span', 'slot cell bag head'); b.append(W.equipIcon(r.bag)); line.append(b); }
+      const n = r.entries.length;
+      if (!n) line.append(cellEl(kind, null, 'cur'));
+      const from = Math.max(0, Math.min(n - SHOW, strip.i - Math.floor(SHOW / 2)));
+      for (let k = from; k < Math.min(n, from + SHOW); k++) {
+        const e = r.entries[k];
+        const inHand = isSlotKind(kind) ? state.sel === e.key
+          : state.sel === 'hand-coll' && state.handColl && state.handColl.grid === e.grid && state.handColl.i === e.i;
+        line.append(cellEl(kind, e, (k === strip.i ? 'cur' : '') + (inHand ? ' hand' : '') + (kind === 'coll' ? ' coll' : '')));
+      }
+      grid.append(line);
+    });
+    stripEl.append(grid);
+    const acts = el('div', 'strip-actions');
+    acts.append(el('span', 'btn', `Equip (let go ${DIR[kind]})`));
+    if (kind !== 'tools') acts.append(el('span', 'btn', `Drop (${W.glyph('G')})`));
+    stripEl.append(acts);
   }
 
   Object.assign(W, { openStrip, closeStrip, moveStrip, rowStrip, dropFromStrip, stripOpen: open });

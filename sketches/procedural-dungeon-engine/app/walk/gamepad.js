@@ -217,11 +217,11 @@
     move = { x: s.x, y: s.y, mag: s.mag, run: down[B.lt] };
     const r = stick(gp, 2);
 
-    // The d-pad strips (strips.js): held ◀ (items) or ▼ (collectables) opens
-    // one; letting go takes the highlighted thing in hand. While one is open
+    // The d-pad strips (strips.js): held ◀ (tools), ▼ (collectables) or ▶
+    // (items) opens one; letting go takes the highlighted thing in hand. While one is open
     // the right stick moves through it (with repeats) instead of peeking.
     const free = !state.paused && !state.bigmap && !state.choice;
-    const want = free ? (down[B.left] ? 'items' : down[B.down] ? 'coll' : null) : null;
+    const want = free ? (down[B.left] ? 'tools' : down[B.down] ? 'coll' : down[B.right] ? 'items' : null) : null;
     if (stripKind && (!want || want !== stripKind)) { if (W.stripOpen()) W.closeStrip(free && !want); stripKind = null; } // only the strip the d-pad opened
     if (want && !W.stripOpen()) { W.openStrip(want); stripKind = want; }
     if (W.stripOpen()) {

@@ -407,16 +407,20 @@ designed for. The hands and items rework in progress is planned in
     waystone wakes from your lamp with a tap of it (held, you grab it). A
     full jar in hand, Y at a dormant waystone, wakes it with what's in the
     jar.
-  - **The d-pad strips** (`strips.js`): hold **◀** for your items or **▼**
-    for your collectables, and a strip of them opens top centre, on what
-    the item slot holds now. The right stick (or LB / RB) moves along it;
-    down moves into a bag's row (the backpack under both, the purse under
-    collectables), shown until then as just its icon, and up comes back.
+  - **The d-pad strips** (`strips.js`): hold **◀** for your tools (the RT
+    slot), **▼** for your collectables or **▶** for your items, and a strip
+    of them opens in the middle of the screen, on what the slot holds now,
+    in cells as big as the menu's (an empty one if there's nothing). It's a
+    grid row a row: the main grid's, then a row per bag (the backpack under
+    items and collectables, the purse under collectables). Only the row
+    you're on is open; the others fold to one cell (a bag's own icon). The
+    right stick (or LB / RB) moves along a row, down and up between rows.
     **Let go** and the highlighted thing is in your hand (with a block in
-    your hands, just on the item slot). **B** drops one of the highlighted
-    thing in front of you, and the strip stays open. Nothing moves or
-    sorts here (that's the menu), and the world doesn't pause. Keyboard:
-    hold 3 or 4, 1 / 2 to move, G to drop (no bag rows).
+    your hands, just on its slot). **B** drops one of it in front of you,
+    and the strip stays open; the buttons under it say so, and nothing
+    else does. Nothing moves or sorts here (that's the menu), and the
+    world doesn't pause. Keyboard: hold 3 (tools), 4 (collectables) or 5
+    (items), 1 / 2 to move, G to drop (no bag rows).
   - Lifting or grabbing a block empties your hands; setting it down (or
     letting go of it) gives back what you had out. You start with empty
     hands. The figure shows what you hold: a tool in its left hand (the

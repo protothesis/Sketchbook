@@ -111,8 +111,8 @@ the figure holds it out in an open hand rather than gripped at its side.
   assigned, in its place in the lineup. The right stick scrolls it (the
   camera peek is off while a strip is open). **Let go** and the
   highlighted thing is assigned to its slot (the item slot for ◀ and ▼).
-  - ◀ items. ▼ collectables. ▶ the tool slot (a list of one for now:
-    build it when there's a second tool). ▲ free.
+  - ◀ the tool slot (just the duster for now). ▼ collectables. ▶ items.
+    ▲ free. (Swapped on 2026-11-05, from ◀ items and ▶ tools.)
 - **Bags are a row below.** If you have one, its icon sits under the
   strip; push the stick down (still holding) to move into the bag's strip,
   up to come back. The backpack shows under both ◀ and ▼; the purse only
@@ -177,8 +177,10 @@ entropy). No item-specific press.
    dropped things sharing a quarter take seven set spots, no capacity
    yet. The Y marker over a target is still to do.)
 3. [x] **The d-pad strips**, with bag rows and B to drop. (Let go takes
-   the thing in hand, not just onto the slot. ▶ for the tool slot waits
-   for a second tool. Keyboard: hold 3 / 4, 1 / 2, G; no bag rows.)
+   the thing in hand, not just onto the slot. Centred, cells the menu's
+   size, a grid row per bag with only the current row open, no text but
+   the Equip / Drop buttons. Keyboard: hold 3 / 4 / 5, 1 / 2, G; no bag
+   rows.)
 4. [ ] **Release and accept:** jars and the hourglass fill and release;
    vessels, waystones, lost-path doors, locked doors and walls accept;
    entropy puddles your lamp soaks up.
