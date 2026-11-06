@@ -1,21 +1,15 @@
 # Idea ledger, 2026-11-01
 
 Every distinct idea for walk mode found in the voice memos and design docs,
-checked against the code and CHANGELOG as of `21b0e9b` (2026-10-28). A
+checked against the code and CHANGELOG as of `a86d854` (2026-11-05). A
 snapshot for planning, not a living plan: GAME-DESIGN.md and PLAY.md stay
 the reference for what's decided and built.
 
-**Since the snapshot** (merged by 2026-11-05; the rows and tally below
-are left as they were):
-
-- Inventory (PR #45, #48): a menu with tabs, item, equipment and
-  collectable grids, coins and a coin purse, a backpack, and chests. This
-  covers the inventory menu, treasure chest, coins and purse, and part of
-  equipment slots and capacity.
-- Regions with structure, mood and size layers (PR #47), shown on the map.
-  This touches layered material regions and regions that know their size.
-- Dev panel places, picks and deletes with a click (PR #44), partway to a
-  test level.
+First written against `21b0e9b` (2026-10-28), when 23% was built (31% with
+partial). Updated 2026-11-05 for what merged in between: the inventory
+and chests (PR #45, #48), regions with structure, mood and size layers
+(PR #47), growing whole dungeons on the map (PR #49) and the dev panel's
+second pass (PR #44). The 2026-11-01 inventory chat is added as a source.
 
 **Status:** ✅ built · 🟡 partly built, or decided and designed but not
 built · ⬜ not started.
@@ -37,6 +31,7 @@ except Oct 22, which is in this repo):
 | DU | [`dusting-2026-10-27.md`](dusting-2026-10-27.md) |
 | MV | Movement chat, 2026-10-26 (PLAY.md future directions) |
 | DS | [`DESIGN.md`](../DESIGN.md) future directions |
+| IN | Inventory overview in chat, 2026-11-01 (GAME-DESIGN §20) |
 
 ## Tally
 
@@ -47,17 +42,20 @@ share is if anything understated.
 
 | | Rows | ✅ | 🟡 | ⬜ | Built |
 | --- | --: | --: | --: | --: | --: |
-| Oct 22 memo | 13 | 10 | 0 | 3 | 77% |
-| Oct 24 memo | 12 | 3 | 1 | 8 | 25% |
-| Oct 25 memo | 18 | 4 | 3 | 11 | 22% |
-| Oct 29 memo (new) | 26 | 0 | 1 | 25 | 0% |
-| Design docs only | 48 | 10 | 4 | 34 | 21% |
-| **All** | **114** | **26** | **9** | **79** | **23%** (31% with 🟡) |
+| Oct 22 memo | 13 | 10 | 1 | 2 | 77% |
+| Oct 24 memo | 13 | 4 | 2 | 7 | 31% |
+| Oct 25 memo | 18 | 5 | 5 | 8 | 28% |
+| Oct 29 memo | 27 | 0 | 2 | 25 | 0% |
+| Inventory chat (Nov 1) | 11 | 8 | 2 | 1 | 73% |
+| Design docs only | 47 | 10 | 3 | 34 | 21% |
+| **All** | **122** | **35** | **12** | **75** | **29%** (39% with 🟡) |
 
 Weighted by size it reads differently: nearly everything built is the core
 loop (lamp, rooms, restoration basics, travel, saves, two hostile
-creatures), and most of what's open is breadth (things to collect, places
-to put them, creatures and sound).
+creatures) and now the inventory. Most of what's open is breadth: places
+to put collectables, creatures and sound. With the grids and chests in,
+display furniture (shelves, cabinets, pedestals) is the next thing the
+collecting ideas wait on.
 
 ## Objects, containers and collecting
 
@@ -66,11 +64,18 @@ to put them, creatures and sound).
 | ✅ | Push blocks with marks, crates, carrying and stacking | GD §3, IP |
 | ✅ | Jars, vessels, hourglass as equipment | V22, GD §14, §17 |
 | ✅ | Waystones as carried blocks you power | V25, GD §19 |
-| 🟡 | Containers: rules decided (anything-goes slots; display cases react to sets), none built | V24, notes/action-list |
-| 🟡 | Equipment slots (only the hourglass so far) | GD §17, §19 |
-| ⬜ | Treasure chest: slots, seeded junk or useful | V24 |
-| ⬜ | Inventory menu | IP, action-list |
-| ⬜ | Inventory weight and capacity | V24 |
+| ✅ | Inventory menu with tabs (Map, Inventory, Collectables) on the map button, LB / RB between them | IP, action-list, IN |
+| ✅ | Item, equipment and collectable grids (4×4, 2×4, 4×4), all tunable in `INV` | IN |
+| ✅ | Equipment slots: duster, hourglass, coin purse, backpack | GD §17, §19, IN |
+| ✅ | Equipment that opens its own sub-grid (purse, backpack) | IN |
+| ✅ | Capacity grows by equipment (the backpack adds 4×4) | IN |
+| ✅ | Carousel in place of the hotbar | IN |
+| ✅ | Bags you can set down with what's in them | IN |
+| ✅ | Treasure chest: 2×4, seeded junk or useful, chest grid over yours, take / give | V24, IN |
+| 🟡 | Display furniture used directly, no menu (shelves, cabinets, pedestals): decided, not built | V24, IN, GD §20 |
+| ⬜ | Character page: figure with what's equipped, lantern and fuel | IN |
+| ⬜ | Inventory weight (parked unless one carried-load value can feed movement) | V24 |
+| ⬜ | Combining items; a hold-to-browse for big inventories | GD §20 |
 | ⬜ | Linked storage at waystones (ender-chest style) | V24 |
 | ⬜ | Dish cabinet and dish sets | V24, GD §3 |
 | ⬜ | Library shelves and books | V24, V25, GD §3 |
@@ -79,7 +84,8 @@ to put them, creatures and sound).
 | ⬜ | Open-ended display and decoration | V24 |
 | ⬜ | Storeroom that wakes when stocked with crates | V25 |
 | ⬜ | Crate stashes: configurations anywhere give a subtle bonus | V25 |
-| ⬜ | Coins (metals, sizes, markings) and a coin purse | V25 |
+| ✅ | Coins and a coin purse (a metal and a marking per coin so far) | V25 |
+| 🟡 | Curios (dishware, odds and ends, bug specimens) as collectables, with nowhere to put them yet | V24, V29, IN |
 | ⬜ | Vault where coin piles grow | V25 |
 | ⬜ | Safes: codes found elsewhere, or a lockpick minigame | V25 |
 | ⬜ | Movable power sources (light, warp gates, fans, sconces) | V25 |
@@ -115,12 +121,12 @@ to put them, creatures and sound).
 | ✅ | Commit on exit, rerolls, traces and corruption | GD §1 |
 | ✅ | Halls, waypoints, reserved footprints, rarer unmarked halls | GD §8, V22 |
 | ✅ | Save lanterns, faints that don't rewind, packs, lost paths | GD §17, §19 |
-| ✅ | Mood regions and junctions | V25, GD §18 |
+| ✅ | Regions: structure, mood and size as layers; rooms take their region's mood (replaced mood regions) | V25, GD §18 |
 | ✅ | Locks, keys, doorstones, chalk | PL |
 | 🟡 | Moods with mechanics (dusty → dust is the only one) | V25, GD §18 |
 | 🟡 | Soft gating by depth or progress (locks and doorstones by depth only) | V25 |
-| ⬜ | Layered material regions; regions that know their size | V25, GD §18 |
-| ⬜ | Room-shape engine pass (irregular shapes like halls) | V22, DS |
+| 🟡 | Layered regions: structure, mood and size built; materials not | V25, GD §18 |
+| 🟡 | Room generation pass: catacomb and cloister structures with room roles; irregular room shapes not | V22, DS |
 | ⬜ | Layers / impossible space behind pressed doors | GD §5, V25 |
 | ⬜ | One-way passages, the space inside the wall, false doors | GD §5 |
 | ⬜ | Two kinds of depth (along a layer vs down through layers) | V25 |
@@ -201,15 +207,17 @@ to put them, creatures and sound).
 
 | | Idea | Source |
 | --- | --- | --- |
-| ✅ | Dev panel: give items, teleport, spawn, live sliders | V25 |
-| 🟡 | Click a creature to tune it live (tables are global, not per creature) | V25 |
+| ✅ | Dev panel: give items, teleport, spawn, live sliders; tabs, tooltips; place, pick and delete by clicking the game | V25 |
+| 🟡 | Click a creature to tune it live (you can pick and delete one; tuning is per kind, not per creature) | V25 |
 | 🟡 | Doc sources: notes point to memos, but per-idea footnotes don't exist | V29 |
-| ⬜ | Test level, batch of rooms, hand-authored rooms | V25 |
+| 🟡 | Test level / batch of rooms: grow whole dungeons on the chart view with contents and regions shown; no hand-authored rooms, not in walk mode | V25 |
 | ⬜ | Cross-linked, wiki-style design docs with collapsible sections | V29 |
 | ⬜ | Chart view shows traces, marks, "beyond a lock" | CT |
 
 ## Doc drift spotted while reading
 
+- §18 still says "Mood regions (built)"; regions replaced them on
+  2026-11-05.
 - GAME-DESIGN.md "The loop" steps 7–8 still say "decided, not built" for
   save lanterns and waystone blocks; both were built 2026-10-26.
 - GAME-DESIGN §9 still describes waking dormant waystones in halls as
