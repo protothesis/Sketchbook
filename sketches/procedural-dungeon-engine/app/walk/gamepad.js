@@ -108,7 +108,7 @@
   function navigate(x, y) {
     if (state.choice) { if (x) W.moveChoice(x); return; }
     const o = state.paused && overlay();
-    if (o && o.id === 'title' && W.controlsOpen()) { if (y) W.controlsSwitch(); return; } // up / down: pad or keyboard
+    if (o && o.id === 'title' && W.controlsOpen()) { if (x) W.controlsSwitch(x); return; } // left / right: pad or keyboard
     if (o) { focusStep(o, x || y); return; }
     if (state.bigmap) {
       if (state.bigmap.tab !== 'map') W.menuMove(x, y);
@@ -145,6 +145,7 @@
       case B.r3: key('keydown', 'r'); return;
       case B.lb: case B.rb:
         if (state.bigmap) key('keydown', i === B.rb ? '2' : '1'); // the menu's tabs
+        else if (state.paused && W.controlsOpen() && !state.dialog) W.controlsSwitch(i === B.rb ? 1 : -1); // the controls' pages
         else if (!busy) W.cycle(i === B.rb ? 1 : -1);
         return;
       case B.view: if (!state.paused) key('keydown', 'tab'); return;

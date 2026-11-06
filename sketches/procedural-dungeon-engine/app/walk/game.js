@@ -347,9 +347,11 @@
   function titleKey(k, e) {
     if (state.dialog) return false;
     const up = k === 'arrowup' || k === 'w', down = k === 'arrowdown' || k === 's';
-    if (W.controlsOpen()) {
-      if (up || down) { W.controlsSwitch(); e.preventDefault(); }
+    if (W.controlsOpen()) { // its tabs sit side by side: left / right switch
+      const dir = { arrowleft: -1, a: -1, 1: -1, arrowright: 1, d: 1, 2: 1 }[k];
+      if (dir) { W.controlsSwitch(dir); e.preventDefault(); }
       else if (k === 'escape' && !e.repeat) W.closeControls();
+      else if (up || down) e.preventDefault();
       return true;
     }
     if (k === 'escape') {

@@ -375,37 +375,41 @@ kbd {
   .title-body { gap: 14px; }
 }
 
-/* The controls (controls.js): the page tabs down the left, the drawing on the right. */
-.controls { display: flex; gap: 20px; align-items: flex-start; }
-.controls-tabs { flex: none; width: 170px; display: flex; flex-direction: column; gap: 8px; }
-.controls-tabs .btn { padding: 9px 12px; font-size: 14px; text-align: left; }
-.controls-hint { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
-.controls-view { flex: 1; min-width: 0; }
-.controls-svg { display: block; width: 100%; height: auto; }
+/* The controls (controls.js): the page tabs side by side on top, the drawing
+   under them. Both pages share one frame (the SVGs' viewBox, and the notes'
+   height), so switching never moves anything. */
+.controls { display: flex; flex-direction: column; gap: 12px; }
+.controls-tabs { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.controls-tabs .btn { font-size: 16px; font-weight: 600; padding: 8px 18px; border-width: 2px; }
+.controls-hint { margin: 0 0 0 auto; color: var(--muted); font-size: 14px; }
+.controls-view { min-width: 0; }
+/* Its height is capped to fit the window (the drawing scales down inside, centred), the same on both pages. */
+.controls-svg { display: block; width: 100%; height: auto; aspect-ratio: 1600 / 830; max-height: calc(100vh - 400px); }
 .controls-svg .c-pad path, .controls-svg .c-pad circle, .controls-svg .c-pad rect {
-  fill: none; stroke: #cfc8ba; stroke-width: 2.4; stroke-linejoin: round; }
+  fill: none; stroke: #cfc8ba; stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; }
 .controls-svg .c-pad .c-hi { stroke-width: 4; stroke: var(--text); }
-.controls-svg .c-line { fill: none; stroke: #8f887b; stroke-width: 1.6; }
-.controls-svg .c-tag { fill: #1a1620; stroke: rgba(232, 147, 95, 0.7); stroke-width: 1.4; }
-.controls-svg .c-glyph { fill: var(--accent); font: 600 14px system-ui, sans-serif; }
-.controls-svg .c-btn { fill: #cfc8ba; font: 600 14px system-ui, sans-serif; }
-.controls-svg .c-act { fill: var(--text); font: 18px system-ui, sans-serif; }
-.controls-svg .c-sub { fill: var(--muted); font: 13.5px system-ui, sans-serif; }
-.controls-svg .k-cap { fill: rgba(233, 227, 214, 0.03); stroke: rgba(233, 227, 214, 0.22); stroke-width: 1.4; }
-.controls-svg .k-cap.on { fill: rgba(232, 147, 95, 0.1); stroke: rgba(232, 147, 95, 0.75); }
-.controls-svg .k-cap.on.dim, .controls-svg .k-cap.on.dev { stroke: rgba(233, 227, 214, 0.35); fill: none; }
-.controls-svg .k-cap.on.menu { stroke: rgba(181, 156, 255, 0.7); fill: rgba(181, 156, 255, 0.08); }
-.controls-svg .k-key { fill: var(--text); font: 15px system-ui, sans-serif; }
-.controls-svg .k-act { fill: var(--accent); font: 12.5px system-ui, sans-serif; }
-.controls-svg .k-act.dim, .controls-svg .k-act.dev { fill: var(--muted); }
+.controls-svg .c-pad .c-ridge { stroke-width: 6; stroke: var(--text); }
+.controls-svg .c-line { fill: none; stroke: #8f887b; stroke-width: 2; stroke-linejoin: round; }
+.controls-svg .c-tag { fill: #1a1620; stroke: rgba(232, 147, 95, 0.8); stroke-width: 2; }
+.controls-svg .c-glyph { fill: var(--accent); font: 700 22px system-ui, sans-serif; }
+.controls-svg .press { opacity: 0.6; }
+.controls-svg .c-click { fill: var(--muted); font: 17px system-ui, sans-serif; letter-spacing: 0.06em; }
+.controls-svg .c-btn { fill: #cfc8ba; font: 700 17px system-ui, sans-serif; }
+.controls-svg .c-act { fill: var(--text); font: 600 37px system-ui, sans-serif; }
+.controls-svg .c-sub { fill: var(--muted); font: 27px system-ui, sans-serif; }
+.controls-svg .k-cap { fill: rgba(233, 227, 214, 0.03); stroke: rgba(233, 227, 214, 0.22); stroke-width: 1.6; }
+.controls-svg .k-cap.on { fill: rgba(232, 147, 95, 0.1); stroke: rgba(232, 147, 95, 0.8); stroke-width: 2; }
+.controls-svg .k-cap.on.dim { stroke: rgba(233, 227, 214, 0.35); fill: none; }
+.controls-svg .k-cap.on.menu { stroke: rgba(181, 156, 255, 0.75); fill: rgba(181, 156, 255, 0.08); }
+.controls-svg .k-key { fill: var(--text); font: 600 26px system-ui, sans-serif; }
+.controls-svg .k-act { fill: var(--accent); font: 600 21px system-ui, sans-serif; }
+.controls-svg .k-act.dim { fill: var(--muted); }
 .controls-svg .k-act.menu { fill: var(--entropy); }
-.controls-notes { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 14px 0 0; font-size: 12.5px; }
-.controls-notes dt { color: var(--muted); }
+.controls-notes { display: grid; grid-template-columns: max-content 1fr; align-content: start; gap: 6px 16px;
+  margin: 10px 0 0; min-height: 9.5em; font-size: 16px; line-height: 1.35; }
+.controls-notes dt { color: var(--muted); font-weight: 600; }
+.controls-notes dt::after { content: ":"; }
 .controls-notes dd { margin: 0; }
-@media (max-width: 1000px) {
-  .controls { flex-direction: column; }
-  .controls-tabs { width: 100%; flex-direction: row; flex-wrap: wrap; }
-}
 .title-warn { color: #e8b35f; }
 .title-note { color: var(--muted); }
 .dialog { z-index: 13; } /* above the title screen (12): its confirm opens over it */

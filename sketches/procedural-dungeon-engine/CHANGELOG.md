@@ -1178,8 +1178,17 @@ All notable changes to this sketch are logged here, per
   - The top-left card (title, stats, Chart view, Menu) is gone. Its stats
     are on the pause screen, Chart view is a link on the title.
   - Controls (`app/walk/controls.js`): a line drawing of the pad with
-    every button called out, and a keyboard and mouse page. Up / down
-    switch between them, Esc (B) goes back.
+    every button called out, and a keyboard and mouse page, in one fixed
+    frame so switching never moves anything. Their tabs sit side by side:
+    left / right (A / D, 1 / 2; the d-pad, LB / RB) switch them, Esc (B)
+    goes back.
+  - The pad page, after a first look: type the size of the inventory's
+    (labels about twice as big, button glyphs bold); the sticks are LS / RS
+    with their click (L3 / R3, fainter, "click" under it) on a row of its
+    own; the bumpers are a ridge just above the body and the triggers an
+    arch; the lines are routed so none cross or run over a button (X
+    threads between B and A), and the sticks' lines bend well clear of the
+    body. Alt functions read "where: what" (hold: higher, map: zoom out).
   - **G puts away / takes out the item in hand**, B's job on a pad, which
     the keyboard had no key for. Peeking (the right stick) is still
     pad-only.
