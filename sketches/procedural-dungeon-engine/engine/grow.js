@@ -10,6 +10,10 @@
 //   random    any open door, all equally likely
 //   breadth   the shallowest door first (fills in near the start, bushy)
 //   depth     the deepest door first (pushes on, long winding branches)
+//   linear    depth-first, always straight on: the newest room's first door,
+//             which for a corridor is its far tip. A player who only ever
+//             walks forward; a test mode for how structures (a catacomb's
+//             galleries) hold up when walked in a line.
 //
 // Deterministic: the doors picked and each door's entropy come from `seed`
 // (by default the root seed and the history so far), so the same seed,
@@ -19,7 +23,7 @@
 
   const DE = (global.DungeonEngine = global.DungeonEngine || {});
 
-  const ORDERS = ['random', 'breadth', 'depth'];
+  const ORDERS = ['random', 'breadth', 'depth', 'linear'];
 
   /** Space ids at or beyond `fromId` in the generation tree (a Set), or null for everywhere. */
   function subtree(exp, fromId) {
@@ -58,7 +62,7 @@
   /**
    * Open doors until `rooms` new spaces stand (or no door is left).
    *   opts.rooms   new spaces to add (default 100)
-   *   opts.order   'random' | 'breadth' | 'depth' (default 'random')
+   *   opts.order   'random' | 'breadth' | 'depth' | 'linear' (default 'random')
    *   opts.from    a space id: only grow that space's branch
    *   opts.seed    picks doors and entropy (default: root seed + history length)
    * Loops (a door opening onto a space already there) are committed too,
@@ -93,7 +97,8 @@
           if (better) best = s;
         }
         const own = doors.filter((d) => d.space === best);
-        pick = own[Math.floor(rng.next() * own.length)];
+        // Linear: straight on, its first door (the frontier is in exit order).
+        pick = order === 'linear' ? own[0] : own[Math.floor(rng.next() * own.length)];
       }
       const tag = pick.space.id + '/' + pick.exit.id;
       let cand = null;

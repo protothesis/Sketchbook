@@ -169,6 +169,11 @@ All notable changes to this sketch are logged here, per
     depth-first never turned off down a side door, and ran catacomb
     galleries out in straight lines up to 54 long (now about 9, like the
     other orders).
+  - That old behaviour is kept as its own order, **Depth, linear** (`linear`):
+    always the newest room's first door, so a corridor's far tip. It's a
+    player who only walks straight on, a test mode for how structures hold
+    up when walked in a line (catacomb galleries burn a region's budget on
+    their spine).
   - `from` grows only one room's branch. Door picks and entropy come from
     `seed` (by default the root seed and the history), so the same seed,
     count and order always grow the same dungeon.
