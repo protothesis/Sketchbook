@@ -130,22 +130,12 @@ if (vDitherEW > 0.7 && south > 0.2) {
     map: crackTexture(i + ':' + strokes, strokes), transparent: true, depthWrite: false,
   })));
 
+  // A space's surfaces come from its material (materials.js), made once per space.
   const matCache = {};
   function spaceMats(space) {
-    if (matCache[space.id] && matCache[space.id].seed === space.seed) return matCache[space.id];
-    const sealed = DP.pastLock(state.exp, space);
-    const h = space.meta.hue / 360;
-    const m = {
-      seed: space.seed,
-      // Past a locked door the floor carries a faint gold warmth.
-      floor: [0.15, 0.17, 0.19].map((l) => new THREE.MeshLambertMaterial({
-        color: new THREE.Color().setHSL(h, 0.22, l), emissive: sealed ? 0x1c1404 : 0x000000,
-      })),
-      wall: withDither(new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.2, 0.32) })),
-      // Blocks never dissolve; the figure shows through them instead.
-      block: new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.16, 0.24) }),
-      detail: [0.12, 0.21].map((l) => new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(h, 0.18, l) })),
-    };
+    const c = matCache[space.id];
+    if (c && c.seed === space.seed && c.material === space.meta.material) return c;
+    const m = Object.assign({ seed: space.seed, material: space.meta.material }, W.spaceMaterials(space, DP.pastLock(state.exp, space)));
     matCache[space.id] = m;
     return m;
   }
@@ -176,6 +166,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
     const rec = { id: space.id, group, edges: [], tiles: [], revealStart: reveal ? state.time : null };
     const entry = space.exits[0] && space.parentId ? space.exits[0].cell : DE.parseKey(space.cells[0]);
     const tileAt = {}, edgeAt = {}; // edgeAt: "x,y,f" -> { eg, beyond } for every wall or door edge
+    const walls = []; // plain wall segments, for the material's wall dressing
 
     for (const k of space.cells) {
       const c = DE.parseKey(k);
@@ -219,6 +210,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
           const w = shadowed(new THREE.Mesh(geo.wall, mats.wall));
           w.position.y = WALL_H * S / 2;
           eg.add(w);
+          walls.push({ key: ekey(c.x, c.y, f), eg, beyond: fr.beyond });
         }
         // Inside corners: walls are inset into their own cell and stop at the
         // cell's edge, so where a wall turns around an inside corner the two
@@ -240,6 +232,7 @@ if (vDitherEW > 0.7 && south > 0.2) {
       }
     }
 
+    W.addWallDecor(space, walls);
     W.addSigil(space, tileAt);
     W.addWell(space, tileAt);
     W.addPushBlocks(space, rec, tileAt);
@@ -250,15 +243,11 @@ if (vDitherEW > 0.7 && south > 0.2) {
     // Props ride on their cell's tile, so they assemble and dissolve with it.
     const pr = DP.props(space);
     rec.blocks = [];
-    const onTile = (b, h, mat, cast) => {
-      const t = tileAt[DE.key(Math.floor((b.x0 + b.x1) / 2), Math.floor((b.y0 + b.y1) / 2))];
-      const m = new THREE.Mesh(geo.block, mat);
-      m.scale.set((b.x1 - b.x0) * S, h * S, (b.y1 - b.y0) * S);
-      m.position.set(((b.x0 + b.x1) / 2) * S - t.position.x, h * S / 2 + 0.05, ((b.y0 + b.y1) / 2) * S - t.position.z);
-      if (cast) shadowed(m); else m.receiveShadow = true;
-      t.add(m);
-    };
-    for (const d of pr.details) onTile(d, d.h, mats.detail[d.shade < 0.5 ? 0 : 1], false);
+    // Floor details take the shape of the room's material (materials.js).
+    pr.details.forEach((d, i) => {
+      const t = tileAt[DE.key(Math.floor((d.x0 + d.x1) / 2), Math.floor((d.y0 + d.y1) / 2))];
+      if (t) t.add(W.floorDecor(space, d, i, t));
+    });
     for (const b of pr.blocks) {
       if (b.crate) continue; // a push block (restore.js)
       // One seamless box per block, however many units tall.
@@ -305,6 +294,8 @@ if (vDitherEW > 0.7 && south > 0.2) {
     }
     W.addDrops(space, group, tileAt); // what you dropped here (inventory.js)
 
+    W.addWater(space, rec, tileAt); // puddles and drip spots, from its moisture (water.js)
+    W.addAtmos(space, rec, group); // motes, sparks and fog, from its conditions (atmos.js)
     world.add(group);
     state.spaces.set(space.id, rec);
     applyReveal(rec);
@@ -468,6 +459,7 @@ void main() {
     const rec = state.spaces.get(id);
     if (!rec) return;
     world.remove(rec.group);
+    W.disposeAtmos(rec);
     forgetSpace(id);
   }
 
@@ -493,7 +485,7 @@ void main() {
     W.clearCreepers();
     W.clearMarks();
     for (const id of Array.from(state.spaces.keys())) disposeSpace(id);
-    for (const rec of state.dying) world.remove(rec.group);
+    for (const rec of state.dying) { world.remove(rec.group); W.disposeAtmos(rec); }
     state.dying = [];
     rebuildExitIndex();
     for (const id in state.exp.spaces) buildSpace(state.exp.spaces[id], false);
@@ -534,6 +526,6 @@ void main() {
     return !!(hit && hit.exit.connectionId && !W.isClosed(hit.exit.connectionId));
   }
 
-  Object.assign(W, { dither, geo, lostFx, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows,
+  Object.assign(W, { dither, withDither, geo, lostFx, doorMat, doorOpenMat, seamMat, buildSpace, refreshArrows,
     dissolveSpace, buildWorld, easeOut, easeInOut, applyReveal, applyDissolve, passable });
 })(window);

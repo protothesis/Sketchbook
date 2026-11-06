@@ -7,6 +7,22 @@ All notable changes to this sketch are logged here, per
 
 ### Added
 
+- 2026-11-06: **Water and fog.** Damp rooms have the odd puddle, wet rooms
+  plenty (`app/walk/water.js`, `DungeonPlay.walk.WATER`): dark glossy
+  pools flat on the floor, seeded per room, never on a door, block or
+  feature. Walking through one splashes: droplets and a ripple ring at
+  your feet. Water drips from fixed spots on the ceiling (most over a
+  puddle), each on its own beat, and rings where it lands. Fog lies low
+  in damp and wet rooms, thickest when cold (a thinner warm mist when
+  warm): big soft puffs that drift with the room's air, show brighter in
+  your lamp, and part around you as you walk through.
+- 2026-11-06: **Room info** (dev): Cheats > Debug views > `ATMOS.roomInfo`
+  turns on a window with everything about the room you're in: its kind,
+  region, material, mood, each condition's value and band, and what they
+  made (air, motes, sparks, fog, dust, puddles, drip spots, wells,
+  sigils). It stays open when the dev panel closes and drags anywhere by
+  its title. The air and water tables (`ATMOS`, `WATER`) are in the dev
+  panel's World tab.
 - 2026-10-04: Initial sketch created from the "Procedural Dungeon Engine —
   Prototype Design Doc" (copied to `DESIGN.md`).
 - Engine (`engine/`): hash-chained seeds with fresh entropy, seeded per-space
@@ -247,6 +263,63 @@ All notable changes to this sketch are logged here, per
     structure type and mood (with region and room counts) and every
     region. Hovering any line highlights the matching regions on the map,
     and clicking a region selects it and centres the map on it.
+
+### Changed
+
+- 2026-11-06: Entering a room no longer shows a caption with its details
+  (they're in the room-info window now); only a save-lantern hall still
+  says you'd wake elsewhere. The temperature tint is much stronger (cold
+  ambient 0.42, warm 0.36).
+- 2026-11-05: **Conditions replace moods.** A region no longer rolls one of
+  ten moods. It rolls five conditions, each a value 0..1 read in three
+  bands (`DungeonEngine.CONDITIONS`): temperature (cold, mild, warm),
+  moisture (dry, damp, wet), air (still, draughty, breathing), age (fresh,
+  old, ancient) and potency (low, mid, high). Each axis has its own stream;
+  a new region keeps near its parent's value half the time
+  (`REGION_TUNING.condKeep`, `condJitter`), else rolls fresh. Its `mood` is
+  now a name read off its two strongest conditions ("cold, ancient";
+  "mild" if none stands out), and rooms carry `meta.cond`. Waypoints roll
+  their own. What follows from them:
+  - **Dust** comes from age (how much, how thick), times moisture (wet
+    washes it out) and air (moving air thins it): `RULES.dustAge`,
+    `dustMoisture`, `dustAir`, `dustMin`, replacing `dustMood`.
+  - **Potency** multiplies how often wells and sigils turn up
+    (`RULES.potencyWells`, `potencySigils`): rare in an inert region,
+    two to three times as common in a potent one.
+  - **Walk mode** (`app/walk/atmos.js`): the ambient light eases toward
+    the room's temperature (blue-grey when cold, amber when warm); motes
+    hang in the air (more the older and drier the room) and show where
+    your lamp catches them; firefly sparks blink on and off by potency
+    (none when low, a swarm when high); air moves both (hanging still,
+    carried by a draught that wraps round the room, or drawn in and out
+    on a slow breath). Damp floors are darker, wet ones shine. Tuning is
+    `DungeonPlay.walk.ATMOS`.
+  - **The map** colours regions by any condition axis; the Moods list is
+    now Conditions, every band of every axis (hover to highlight); the
+    inspector shows each axis with its value.
+  Echoing, hollow, tilted and humming are gone as moods. Layouts are
+  unchanged; moods, dust, wells and sigils differ in existing saves.
+
+- 2026-11-05: **Materials.** Every region is built of something: stone,
+  brick, timber, pearl, obsidian or earth (`DungeonEngine.MATERIALS`),
+  rolled on its own stream and leaning toward the structures it suits
+  (timber and earth toward meanders, brick toward cloisters, pearl and
+  obsidian toward catacombs), so any structure can come in any material.
+  Walk mode (`app/walk/materials.js`) gives each its own colours, a faint
+  canvas texture on walls and floor tiles (ashlar courses, running-bond
+  brick, planks, shell scallops, glassy fractures, mottled earth with
+  roots), glossy highlights for pearl and obsidian, and its own dressing:
+  the scattered floor details become rubble, loose bricks, boards, pearls,
+  shards or clods and roots, and now and then a wall carries a stone, a
+  patch of brick, a post or rail, pearls, a shard or hanging roots. Wall
+  pieces have world-scaled UVs so courses line up across segments. Rooms
+  carry `meta.material`; waypoints roll their own. The map can colour
+  regions by material and the inspector shows it. The minimap and chart
+  colour each room by its material (`chart` in `materials.js`, picked to
+  stay apart at a glance), with its region's own hue laid faintly over it;
+  the walk view's surfaces lean 12% toward that hue too. The engine map
+  keeps the region's hue (now a little more saturated). Layouts are
+  unchanged.
 - 2026-11-05: [`HANDS-PLAN.md`](HANDS-PLAN.md), the plan for reworking
   hands, items and prompts for controller play: the duster on RT (first
   press draws and swings), items and collectables on Y, tap B to put away

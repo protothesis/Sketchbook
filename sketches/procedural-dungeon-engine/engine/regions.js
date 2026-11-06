@@ -5,8 +5,11 @@
 // things, each from its own stream so they vary independently:
 //
 //   type   the structure: how its rooms are shaped and joined (REGION_TYPES)
-//   mood   the existing moods (dusty, damp, ...): a layer on top, so two
-//          catacombs in one run can feel nothing alike
+//   material  what it's built of (MATERIALS): its look in walk mode
+//   conditions  five axes, each 0..1 in three bands (CONDITIONS):
+//          temperature, moisture, air, age, potency. A new region leans
+//          on its parent's values. Its `mood` is a name read off them
+//          (moodName), so two catacombs in one run can feel nothing alike
 //   size   a room budget, long-tailed: mostly small, now and then one that
 //          goes on and on
 //
@@ -30,20 +33,85 @@
   const DE = (global.DungeonEngine = global.DungeonEngine || {});
   const { hash, deriveRng, key } = DE;
 
-  const MOODS = ['still', 'damp', 'humming', 'cold', 'echoing', 'dusty', 'breathing', 'tilted', 'warm', 'hollow'];
-  // A new region's mood is sometimes one the old mood leads into.
-  const MOOD_JUNCTIONS = {
-    still: ['hollow', 'cold', 'dusty'],
-    damp: ['cold', 'breathing', 'echoing'],
-    humming: ['warm', 'breathing', 'tilted'],
-    cold: ['still', 'damp', 'echoing'],
-    echoing: ['hollow', 'damp', 'still'],
-    dusty: ['still', 'warm', 'hollow'],
-    breathing: ['damp', 'humming', 'warm'],
-    tilted: ['humming', 'hollow', 'echoing'],
-    warm: ['humming', 'dusty', 'breathing'],
-    hollow: ['echoing', 'still', 'tilted'],
+  /**
+   * The conditions: an ecology under every region. Each axis is a value
+   * 0..1, read in three bands (low, mid, high: `bands`), so going to five
+   * bands later is only new cut-offs. `color` [low, mid, high]: the map's
+   * swatches when colouring by that axis.
+   */
+  const CONDITIONS = {
+    temperature: { bands: ['cold', 'mild', 'warm'], color: ['#6aa9e8', '#9aa3ad', '#e0763a'] },
+    moisture: { bands: ['dry', 'damp', 'wet'], color: ['#c9a96a', '#5fa08a', '#3a7fc0'] },
+    air: { bands: ['still', 'draughty', 'breathing'], color: ['#8f8f9a', '#9ccfd8', '#d0689a'] },
+    age: { bands: ['fresh', 'old', 'ancient'], color: ['#c8d0a0', '#a08a6a', '#6a5040'] },
+    potency: { bands: ['low', 'mid', 'high'], color: ['#555a66', '#9a86d8', '#e8d65a'] },
   };
+  const AXES = Object.keys(CONDITIONS);
+  // How a mood name says a high or low band (the mid band says nothing).
+  const MOOD_WORDS = { low: 'inert', mid: null, high: 'potent' };
+
+  /** An axis's band index (0, 1, 2) for a value. */
+  const bandIndex = (v) => (v < 1 / 3 ? 0 : v < 2 / 3 ? 1 : 2);
+  /** An axis's band name for a conditions object: bandOf(cond, 'temperature') -> 'cold'. */
+  function bandOf(cond, axis) {
+    return CONDITIONS[axis].bands[bandIndex(cond ? cond[axis] : 0.5)];
+  }
+
+  /**
+   * Conditions from a seed, each axis on its own stream. With a parent's,
+   * each axis keeps near the parent's value (`condKeep`, give or take
+   * `condJitter`), else rolls fresh, so neighbouring regions shade into
+   * each other but now and then something new begins.
+   */
+  function rollConditions(seed, parentCond) {
+    const out = {};
+    for (const axis of AXES) {
+      const r = deriveRng(seed, 'cond ' + axis);
+      const fresh = r.next(), keep = r.chance(REGION_TUNING.condKeep), jit = r.range(-1, 1) * REGION_TUNING.condJitter;
+      const v = parentCond && keep ? parentCond[axis] + jit : fresh;
+      out[axis] = Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
+    }
+    return out;
+  }
+
+  /**
+   * A mood's name, read off the conditions: the two axes furthest from the
+   * middle, if they're out of their mid band, in axis order ("cold,
+   * ancient"); "mild" if
+   * nothing stands out.
+   */
+  function moodName(cond) {
+    const out = AXES.map((a) => ({ a, d: Math.abs(cond[a] - 0.5), i: bandIndex(cond[a]) }))
+      .filter((x) => x.i !== 1).sort((x, y) => y.d - x.d).slice(0, 2)
+      .sort((x, y) => AXES.indexOf(x.a) - AXES.indexOf(y.a)) // always in axis order, so one pair has one name
+      .map((x) => (x.a === 'potency' ? MOOD_WORDS[x.i ? 'high' : 'low'] : CONDITIONS[x.a].bands[x.i]));
+    return out.length ? out.join(', ') : 'mild';
+  }
+
+  /**
+   * What a region is built of: the strongest "you've walked somewhere new"
+   * signal (walk mode gives each its own colours, surface texture and
+   * floor and wall dressing). Its own roll, so every structure can come in
+   * every material; `weight` is how often, and `leans` multiplies it for
+   * the structure types it suits. `swatch` is its colour on the map.
+   */
+  const MATERIALS = {
+    stone:    { weight: 1.4, leans: {}, swatch: '#8d8a84' },
+    brick:    { weight: 1, leans: { cloister: 2 }, swatch: '#b0583c' },
+    timber:   { weight: 0.9, leans: { meander: 2 }, swatch: '#a07646' },
+    pearl:    { weight: 0.6, leans: { cloister: 1.6, catacomb: 1.4 }, swatch: '#d8d4e4' },
+    obsidian: { weight: 0.5, leans: { catacomb: 1.5 }, swatch: '#3a3048' },
+    earth:    { weight: 0.8, leans: { meander: 1.6, catacomb: 1.3 }, swatch: '#7a6040' },
+  };
+
+  /** A material for a region of this type, from its own stream (`r`). */
+  function pickMaterial(r, type) {
+    const names = Object.keys(MATERIALS);
+    const w = names.map((n) => MATERIALS[n].weight * (MATERIALS[n].leans[type] || 1));
+    let x = r.next() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < names.length; i++) { x -= w[i]; if (x < 0) return names[i]; }
+    return names[names.length - 1];
+  }
 
   /**
    * Structure types. `weight`: how often a new region is this type.
@@ -63,7 +131,8 @@
     sameType: 0.4,     // weight multiplier for the parent region's own type
     leaveBase: 0.03,   // chance a door leads out of a region that has budget left...
     leaveRamp: 0.35,   // ...plus this times (spent / size)^2
-    junction: 0.6,     // chance a new mood is one the old one leads into
+    condKeep: 0.5,     // chance each condition axis keeps near its parent region's...
+    condJitter: 0.15,  // ...give or take this
     hueDrift: 14,      // how far a room's hue wanders from its region's
     maxSize: 120,
   };
@@ -83,10 +152,10 @@
     let type = types[types.length - 1];
     for (let i = 0; i < types.length; i++) { x -= weights[i]; if (x < 0) { type = types[i]; break; } }
 
-    const mr = deriveRng(seed, 'mood');
-    let mood = mr.pick(MOODS);
-    if (parent && mr.chance(REGION_TUNING.junction) && MOOD_JUNCTIONS[parent.mood]) mood = mr.pick(MOOD_JUNCTIONS[parent.mood]);
+    const cond = rollConditions(seed, parent && parent.cond);
+    const mood = moodName(cond);
     const hue = deriveRng(seed, 'hue').int(0, 359);
+    const material = pickMaterial(deriveRng(seed, 'material'), type);
 
     const sz = REGION_TYPES[type].size;
     const sr = deriveRng(seed, 'size');
@@ -94,7 +163,7 @@
     if (sr.chance(sz.huge)) size *= sz.hugeMul;
     size = Math.min(size, REGION_TUNING.maxSize);
 
-    return { seed, type, mood, hue, size, parentId: parent ? parent.id : null, anchor: { x: anchor.x, y: anchor.y } };
+    return { seed, type, cond, mood, material, hue, size, parentId: parent ? parent.id : null, anchor: { x: anchor.x, y: anchor.y } };
   }
 
   /** Rooms of this region that spend its budget. */
@@ -252,7 +321,7 @@
   }
 
   Object.assign(DE, {
-    MOODS, MOOD_JUNCTIONS, REGION_TYPES, REGION_TUNING,
+    CONDITIONS, AXES, bandOf, bandIndex, rollConditions, moodName, MATERIALS, pickMaterial, REGION_TYPES, REGION_TUNING,
     rollRegion, regionSpent, resolveRegion, childRole, roleTries, cloisterPlans, planClaims, onModule, loopChanceFor,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

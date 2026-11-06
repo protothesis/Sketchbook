@@ -888,6 +888,42 @@ changes the moods of saved expeditions (not their layouts).
 damp that dims the lamp), regions of material as well as mood, and
 regions that know their size (a region that has run long enough ends).
 
+## 18b. Materials and conditions (built 2026-11-05)
+
+A region is a bundle of layers, each its own roll: **structure** (layout),
+**size** (room budget), **material** (what it's built of) and, next,
+**conditions** (an ecology). Material is the strongest "you've walked
+somewhere new" signal: stone, brick, timber, pearl, obsidian, earth, each
+with its own colours, surface texture and floor and wall dressing (shape
+and texture carry it, since colour washes out under the lamp). It leans
+toward structures but any structure can come in any material.
+
+**Conditions (first pass built).** The flat mood list gave way to five axes, each
+rolled per region as a 0..1 value cut into three bands (five later, for
+freezing and hot at the ends), neighbours leaning alike:
+
+- temperature: cold · mild · warm (ambient light and fog tint)
+- moisture: dry · damp · wet (wet surfaces, puddles, drips)
+- air: still · draughty · breathing (motes, the lamp flame, wind sprites)
+- age: fresh · old · ancient (dust, cobwebs, rubble; dust becomes derived)
+- potency: low · mid · high (firefly sparks; drives entropy wells and
+  where hex marks appear)
+
+Built so far: dust from age, moisture and air; potency scaling wells and
+sigils; ambient light by temperature; motes (age, moisture) and firefly
+sparks (potency) moving with the air; damp and wet floors. "Mood" is a
+name read off the two strongest axes.
+
+Then water (2026-11-06): puddles that splash, drips with ripples, and low
+fog that drifts with the air and parts around you.
+
+Next: combinations make phenomena (cold+wet ice, warm+wet stagnant pools
+and mould, potent+wet glowing pools), the lamp flame leaning in a draught,
+and creatures get habitat tags in `ecology.js`. Echoing is derived from material and room size;
+hollow and tilted are dropped (tilted may return as real geometry).
+Regions keep their own random hue for the map and minimap; how colour
+ties in beyond that is open.
+
 ## 19. Save lanterns and waystone blocks (built 2026-10-26)
 
 The old waystone did three jobs: travel, checkpoint and goal. Touching it
