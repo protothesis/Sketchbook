@@ -290,6 +290,10 @@
     <p class="small muted" id="atlasmsg"></p>
 
     <h2>Layers</h2>
+    <div class="row" style="margin-bottom:6px">
+      <label for="mapstyle" class="small">Look</label>
+      <select id="mapstyle" title="How the map is drawn (V)"></select>
+    </div>
     <div class="layers">
       <label><input type="checkbox" data-layer="contours" checked /> Contours</label>
       <label><input type="checkbox" data-layer="trees" checked /> Trees</label>
@@ -321,6 +325,7 @@ VillageGen.findPath(s, fromNode, toNode)</pre>
 <script src="engine/atlas.js"></script>
 <script src="ui/render.js"></script>
 <script src="ui/styles/natural.js"></script>
+<script src="ui/styles/board.js"></script>
 <script src="ui/view.js"></script>
 <script src="ui/atlasmap.js"></script>
 <script src="ui/app.js"></script>

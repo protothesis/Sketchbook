@@ -195,6 +195,12 @@ buildings on big maps are drawn from baked images and switch back to full
 detail as you zoom in. The seed and every setting live in the URL hash, so
 **Copy link** brings back exactly the same place.
 
+**Look** (under Layers, or V to cycle) switches how the map is drawn:
+*Natural* (hillshaded terrain, crop and category colours) or *Board*, a
+crisp presentation-board look with flat terrain bands, patterned fields,
+white buildings and a hard frame circle (see `notes/visual-direction.md`).
+It's a view choice, kept in the link as `st`, not part of the place.
+
 ### Seeds, and what stays put
 
 A seed has three parts that can be kept independently with the **Keep**

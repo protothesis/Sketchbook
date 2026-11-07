@@ -5,6 +5,26 @@
   var canvas = $('map'), renderer = new VG.render.Renderer(canvas), S = null, dirty = true;
   var view = new VG.View(canvas, function () { dirty = true; });
 
+  // The map's look (a style in ui/styles/): a view choice kept in the URL as
+  // `st`, not part of the place.
+  var mapStyle = VG.styles[new URLSearchParams(location.hash.slice(1)).get('st')] ? new URLSearchParams(location.hash.slice(1)).get('st') : 'natural';
+  renderer.setStyle(mapStyle);
+  Object.keys(VG.styles).forEach(function (id) {
+    if (VG.styles[id].dev) return;
+    var o = document.createElement('option');
+    o.value = id; o.textContent = VG.styles[id].label || id;
+    $('mapstyle').appendChild(o);
+  });
+  $('mapstyle').value = mapStyle;
+  function setMapStyle(id) {
+    if (!VG.styles[id] || id === mapStyle) return;
+    mapStyle = id; $('mapstyle').value = id;
+    renderer.setStyle(id);
+    if (S) { describe(); writeHash(); }
+    dirty = true;
+  }
+  $('mapstyle').addEventListener('change', function () { setMapStyle(this.value); });
+
   // --- Controls ---------------------------------------------------------------
   // The Size select sets the population range; the slider moves within it
   // on a log scale, so every class gets the slider's full travel.
@@ -120,6 +140,7 @@
       if (placeId && placeId !== AT.idFor(c.name)) q += '&id=' + placeId;
       if (c.roads.length) q += '&rd=' + c.roads.map(function (r) { return encodeURIComponent(r.destination) + '~' + r.bearing; }).join(',');
     }
+    if (mapStyle !== 'natural') q += '&st=' + mapStyle;
     var push = pushNext;
     pushNext = false;
     try { history[push ? 'pushState' : 'replaceState'](null, '', '#' + q); } catch (e) { location.hash = q; }
@@ -494,6 +515,10 @@
     if (k === 'r' || k === 'R') randomize();
     else if (k === 'n' || k === 'N') reseed();
     else if (k === 'b' || k === 'B') goBack();
+    else if (k === 'v' || k === 'V') {
+      var ids = Object.keys(VG.styles).filter(function (id) { return !VG.styles[id].dev; });
+      setMapStyle(ids[(ids.indexOf(mapStyle) + 1) % ids.length]);
+    }
     else if (k === '+' || k === '=') view.zoomAt(1.4, view.w / 2, view.h / 2);
     else if (k === '-' || k === '_') view.zoomAt(1 / 1.4, view.w / 2, view.h / 2);
     else if (k === 'ArrowLeft') { view.cx -= pan; dirty = true; }
